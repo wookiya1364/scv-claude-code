@@ -1,7 +1,7 @@
 {
   "name": "scv",
   "version": "0.2.1",
-  "description": "SCV (Standard · Cowork · Verify) — 팀 협업 워크플로 플러그인. /scv:help 로 시작. scv/raw 자유 투입 → scv/promote/ 승격 → Ralph 구현 → Slack/Discord 보고 → /scv:regression 으로 누적 회귀 + 테스트 노후화(supersedes) 처리까지 한 번에. 플러그인 설치 시 template (hydrate + scv 디렉토리 일체) 가 번들됩니다.",
+  "description": "SCV (Standard · Cowork · Verify) — Claude Code plugin for team workflows. Every change becomes a plan + tests before merging, and those tests accumulate into a self-running regression suite. Built-in Slack/Discord reporting and supersedes-based test obsolescence. Run /scv:help to start.",
   "author": {
     "name": "wookiya1364",
     "email": "wookiya1364@gmail.com"
