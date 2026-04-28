@@ -67,23 +67,28 @@ Heuristic 결정 트리:
 분할 추천 조건이면 `AskUserQuestion`:
 
 ```
-Question: "raw 자료를 분석해 보니 5~7 개 feature 로 쪼갤 만한 규모입니다. 어떻게 진행할까요?"
+Question: "raw 자료를 분석해 보니 여러 feature 로 쪼갤 만한 규모입니다 (현재 raw 가 N 토픽 클러스터). 어떻게 진행할까요?"
 options:
 [1] "여러 feature 로 분할 (권장) — epic 으로 묶음"
     description:
-    "5~7 개 promote 폴더를 만들어 같은 epic: <epic-slug> 으로 묶습니다.
-     각 feature 는 작고 명확하게 떨어져서 테스트 범위가 좁아지고, 리뷰가
-     쉬워집니다. 모든 feature archive 후 SCV 가 통합 refactor PLAN 도
-     자동으로 안내합니다 (PROMOTE.md §8d, §8e 참조).
+    "raw 자료를 토픽별로 묶어 적절한 갯수의 promote 폴더를 만들고 같은
+     epic: <epic-slug> 으로 묶습니다. **분할 갯수는 raw 의 실제 내용에 맞춰
+     결정** — 작은 자료라면 2~3 개, 큰 자료라면 더 많이. Claude 가 후보 분할
+     안 (각 폴더의 slug + 어느 raw 가 어느 폴더에 들어갈지) 을 제시하면
+     사용자가 조정 가능.
 
-     예: '결제 v2 전면 개편' → 7개 feature
+     장점: 각 feature 가 작고 명확하게 떨어져서 테스트 범위가 좁아지고,
+     리뷰가 쉬워짐. 모든 feature archive 후 SCV 가 통합 refactor PLAN 도
+     자동 안내 (PROMOTE.md §8d, §8e 참조).
+
+     **예시 (꼭 이 갯수일 필요 없음)**: '결제 v2 전면 개편' → 약 7개 feature
        - 20260424-sspark-pay-overhaul-auth-v2
        - 20260424-sspark-pay-overhaul-charge-flow
        - 20260424-sspark-pay-overhaul-refund-flow
        - ... (모두 epic: 20260424-pay-overhaul)
        - 20260430-sspark-pay-overhaul-refactor (kind: refactor, 마지막)
 
-     SCV 가 분할 후보 슬러그를 제안하고 사용자가 조정 가능."
+     실제 갯수는 사용자 도메인과 raw 양에 따라 달라짐."
 
 [2] "단일 promote 로 진행"
     description:
@@ -127,7 +132,7 @@ author: <AUTHOR>
 created_at: <TODAY>
 status: planned
 kind: feature                          # feature | refactor | retirement (기본 feature, 분할 시 추가)
-# epic: <EPIC_SLUG>                    # 분할로 만든 5~7 개 promote 모두에 동일하게. 단일 polder 면 생략 가능
+# epic: <EPIC_SLUG>                    # 분할로 만든 여러 promote 모두에 동일하게. 단일 폴더면 생략 가능
 tags: []
 raw_sources:
   - <RAW_SOURCE_1>

@@ -13,7 +13,7 @@
 - **거대 feature 자동 분할 제안** (`/scv:promote`)
   - `promote-helper.sh` 가 raw 자료 양 (파일 수 > 7) + 토픽 다양성 (top-level cluster ≥ 3) 시그널 출력 (`SUGGEST_SPLIT`, `SPLIT_REASON`)
   - 시그널이 yes 면 `commands/promote.md` Step 3.0 에서 `AskUserQuestion` 로 분할 vs 단일 선택. 자동 분할은 절대 안 함 — 항상 사용자 확인.
-  - 분할 시 5~7 개 promote 폴더가 같은 `epic: <slug>` frontmatter 로 묶임.
+  - 분할 시 여러 promote 폴더가 같은 `epic: <slug>` frontmatter 로 묶임. **분할 갯수는 고정값이 아니라 raw 자료의 실제 내용에 맞춰 Claude 가 적절한 N 을 제안 + 사용자 조정** — 작은 자료면 2~3개, 큰 자료면 더 많이.
 
 - **PLAN.md frontmatter 확장** (공개 스키마)
   - `epic: <slug>` — 거대 요구를 N 개로 쪼갰을 때 동일 epic 으로 묶기

@@ -306,7 +306,7 @@ existing_refactor=$(grep -l "^epic: <epic-slug>$" scv/{archive,promote}/*/PLAN.m
         kind: refactor
         epic: <epic-slug>
         status: planned
-      Summary 섹션엔 epic 의 7개 feature 슬러그를 자동 나열.
+      Summary 섹션엔 epic 의 모든 archived feature 슬러그를 자동 나열 (개수 무관).
       이후 사용자와 대화로 통합 시점 발견된 정리 항목 채움."
 
  [2] "Later — 다음 기회에"

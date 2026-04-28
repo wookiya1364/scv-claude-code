@@ -125,9 +125,11 @@ else
 fi
 
 # Split-suggestion heuristic
-# Triggers when raw scope looks "big enough" to warrant 5~7 way split:
+# Triggers when raw scope looks "big enough" to warrant a multi-way split:
 #   raw_files > 7  OR  topic_clusters >= 3
-# This is a hint only — Claude must still confirm with AskUserQuestion (see commands/promote.md Step 3).
+# The actual split count is content-driven — Claude judges each topic cluster
+# and proposes a number (could be 2, 3, 8, whatever fits) via AskUserQuestion.
+# This is a hint only (see commands/promote.md Step 3).
 SUGGEST_SPLIT="no"
 SPLIT_REASON=""
 if [[ $RAW_FILE_COUNT -gt 7 ]]; then
