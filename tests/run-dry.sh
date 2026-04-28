@@ -1342,6 +1342,16 @@ EOF
 rm -rf "$CI_APP"
 
 echo
+echo "=== [11dd] PROMOTE.md — fast-path section (v0.2.1) ==="
+PROMOTE_DOC="$STANDARD_ROOT/template/scv/PROMOTE.md"
+assert_contains "$PROMOTE_DOC" "Fast-path"
+assert_contains "$PROMOTE_DOC" "promote 없이 직접 PR"
+assert_contains "$PROMOTE_DOC" "오타 수정"
+assert_contains "$PROMOTE_DOC" "의존성 패치 버전"
+assert_contains "$PROMOTE_DOC" "의심스러우면 정식 promote"
+assert_contains "$PROMOTE_DOC" "검증을 건너뛰는 게 아닙니다"
+
+echo
 echo "=== [11aa] PROMOTE.md — epic / refactor / retirement docs ==="
 PROMOTE_DOC="$STANDARD_ROOT/template/scv/PROMOTE.md"
 assert_contains "$PROMOTE_DOC" "Epic 브랜치 전략"

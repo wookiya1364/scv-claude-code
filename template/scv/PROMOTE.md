@@ -47,6 +47,46 @@ scv/raw/ 투입 → /scv:promote (Claude 가 대화로 정제)
 
 ---
 
+## 1.6. Fast-path — promote 없이 직접 PR (작은 변경 전용)
+
+**모든 변경에 promote 폴더를 만들 필요는 없습니다.** 다음 기준에 해당하는 작은 변경은 SCV 루프를 건너뛰고 GitHub PR 로 직접 가도 됩니다. fast-path 는 "형식 비용 vs 검증 가치" 의 균형 — 5 분짜리 수정에 18 분짜리 PLAN 작성을 강요하지 않기 위함입니다.
+
+### Fast-path 기준 (모두 만족할 때)
+
+- [ ] 변경이 한 가지 단순한 의도 (오타 수정 / 1~2 줄 hotfix / 의존성 패치 버전 bump / 문서 한 줄 추가 등)
+- [ ] 새 동작·새 API·새 기능 없음 — 기존 동작 보존이 명백
+- [ ] 기존 회귀 TESTS 가 커버하는 범위 안 (그래서 archived TESTS 가 머지 후 깨지지 않을 것이 합리적으로 예상됨)
+- [ ] PR description 한 단락이면 충분 (PLAN.md 의 Goals / Non-Goals / Steps 가 사실상 한 줄로 압축됨)
+
+위 4 개 중 하나라도 의심스러우면 정식 promote 루프로 가세요. **결정의 기본값은 "promote 정식 루프"** 이고 fast-path 는 명백한 케이스에만 의식적으로 선택하는 예외입니다.
+
+### Fast-path 예시
+
+| ✅ Fast-path OK | ❌ NOT OK — 정식 promote 루프 |
+|---|---|
+| README · 코드 주석 오타 수정 | 새 feature (1 시간짜리여도) |
+| 의존성 패치 버전 업 (security advisory 응답) | 명세 변경이 필요한 bug fix ("이 동작이 의도였나?" 가 검토 필요한 모든 경우) |
+| 운영에서 발견된 1~2 줄 null guard hotfix | refactor (1 파일이어도 — 이름 변경, helper 추출, 시그니처 조정 등) |
+| linter / formatter 자동 cleanup | DB schema 변경 / API 호환성 영향 |
+| 주석·문서 한 단락 추가 | "작아 보이지만 잘 모르겠는" 변경 — 모호하면 promote |
+
+### Fast-path PR 의 안전망 (검증을 건너뛰는 게 아닙니다)
+
+fast-path 는 **PLAN/TESTS 작성을 건너뛰는 것** 일 뿐 검증을 모두 건너뛰는 게 아닙니다. 다음 안전망은 그대로 작동:
+
+1. **GitHub PR 리뷰** — 정상 코드 리뷰 절차 그대로. SCV 가 PR 자체를 우회하는 게 아님.
+2. **`/scv:regression` 의 archived TESTS** — 머지 후 nightly 또는 다음 archive 시점에 자동 회귀 실행. fast-path 가 archived feature 를 깬다면 여기서 잡힘 → triage 절차 (regression / obsolete / flaky) 로 진입.
+3. **프로젝트의 일반 CI test suite** — pytest / jest / etc. 그대로 돌아감. PR merge gate 에 묶여 있으면 그대로 작동.
+4. **Git blame / `git log -p`** — fast-path PR 도 git history 에 남으므로 6 개월 후 "왜 이 줄이 추가됐지?" 추적 가능.
+
+즉 fast-path 는 **형식 비용을 줄이는 것** 이고 **검증을 줄이는 것이 아닙니다**.
+
+### 의심스러우면 promote
+
+이 가이드의 기본 원칙은 **"의심스러우면 정식 promote 루프"**. fast-path 는 명백히 작은 변경 전용이고, 경계가 모호하면 비용이 약간 더 들더라도 promote 가는 게 장기적으로 옳습니다. "이건 5 분이면 끝나는데" 라는 생각이 드는 1 시간짜리 작업이 가장 위험합니다 — 그건 정식 루프로.
+
+---
+
 ## 2. 폴더 이름 규칙 (절대 규칙)
 
 ```

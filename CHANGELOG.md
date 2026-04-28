@@ -2,6 +2,38 @@
 
 이 저장소의 변경사항을 기록합니다. [Semantic Versioning](https://semver.org/lang/ko/) 규칙을 따릅니다.
 
+## [0.2.1] — 2026-04-28
+
+### Added — Fast-path 가이드 (작은 변경 전용)
+
+`template/scv/PROMOTE.md` 에 새 **§1.6 Fast-path — promote 없이 직접 PR** 섹션 신설.
+
+배경: `DISCUSS.md` 의 6 페르소나 시뮬레이션 토론에서 **만장일치로 합의된 약점**. 옹호·반대 양쪽 모두 "5 분짜리 오타 수정에 18 분짜리 PLAN 작성을 강요하는 건 과한 의례" 라는 점에 동의했고, 이 fast-path 가 명문화되면 도구 시도 의지가 50% → 70% 로 오를 거라고 토론 중 박민수 (반대) 가 명시.
+
+### 추가된 내용
+
+- **Fast-path 기준 체크리스트 4개** — 모두 만족할 때만 정식 루프 우회 가능. 기본값은 항상 "정식 promote 루프".
+- **✅/❌ 구체 예시 표** — 오타 수정·의존성 패치·hotfix 같은 fast-path OK 사례 vs 새 feature·refactor·DB schema 변경 같은 정식 루프 사례.
+- **안전망 명시** — fast-path 는 **PLAN/TESTS 작성을 건너뛰는 것이지 검증을 건너뛰는 게 아니라는 점** 강조. GitHub PR 리뷰 + `/scv:regression` 의 archived TESTS + 프로젝트 CI 가 그대로 작동.
+- **"의심스러우면 promote" 기본 원칙** — 경계가 모호하면 비용이 약간 더 들더라도 정식 루프 가는 게 장기적으로 옳음.
+
+### Tests
+
+- `tests/run-dry.sh` `[11dd]` 섹션 신규. 324 → **330 PASS** (+6 assertion). 0 FAIL.
+
+### 비채택 (의도적 — DISCUSS.md 권장 #2~#5)
+
+토론에서 도출된 다른 4 개 권장은 데이터·privacy·우선순위 사유로 미채택:
+
+| 권장 | 사유 | 시점 |
+|---|---|---|
+| Onboarding 가이드 | 데이터 기반 작성을 위해 4 주 회고 후 | v0.3.0 후보 |
+| 회귀 evict 정책 | 6 개월 후 archive 누적 데이터 보고 결정 | 6 개월 후 재검토 |
+| Telemetry opt-in | privacy 검토 필요 | v0.4.0 또는 v1.0 |
+| Prototype 단계 모호-테스트 옵션 | 의견 분기 (1 강한 반대 + 2 강한 옹호). 더 사례 필요 | v0.3.0 후보 |
+
+자세한 토론 내용은 저장소 루트 `DISCUSS.md` 참조.
+
 ## [0.2.0] — 2026-04-28
 
 ### 핵심 — 거대 요구의 epic 분할 + 단위 PR + 통합 refactor
