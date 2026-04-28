@@ -105,13 +105,46 @@ SCV 는 두 축의 테스트 실행을 구분합니다.
 
 #### 3.2 CI 통합 예시
 
-CI 파이프라인 단계에서 `--ci` 모드로 호출하면 AskUserQuestion 없이 exit code 로 pass/fail 을 판정. 실패 시 exit 2, `test-results/regression-summary.json` 이 생성됩니다.
+CI 환경에서는 `regression.sh` 가 **`CI=true` 환경변수를 자동 감지**해서 non-interactive 모드로 동작합니다 (GitHub Actions · GitLab CI · CircleCI · Jenkins 모두 자동 세팅). `--ci` 같은 플래그를 명시할 필요 없음. 실패 시 exit 2, `test-results/regression-summary.json` 자동 생성.
+
+**GitHub Actions 예시** (`.github/workflows/scv-regression.yml`):
 
 ```yaml
-# 예: .github/workflows/regression.yml
-- name: SCV full regression
-  run: bash "$CLAUDE_PLUGIN_ROOT/scripts/regression.sh" --ci
+name: SCV regression
+
+on:
+  pull_request:
+  schedule:
+    - cron: '0 18 * * *'   # 매일 03:00 KST nightly
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4    # 또는 setup-python, setup-go 등
+        with:
+          node-version: 20
+      - run: npm ci
+      # SCV 플러그인을 CI 에 함께 두려면 git submodule 또는 cache add
+      - name: Run SCV accumulated regression
+        env:
+          # CI=true 는 GitHub Actions 가 자동 세팅 → --ci 모드 자동 활성화
+          # SCV 가 인식할 수 있게 플러그인 경로만 알려주면 끝
+          CLAUDE_PLUGIN_ROOT: ${{ github.workspace }}/.scv-plugin
+        run: |
+          bash "$CLAUDE_PLUGIN_ROOT/scripts/regression.sh"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: regression-summary
+          path: test-results/regression-summary.json
 ```
+
+PR 머지 게이트로 만들려면 위 workflow 의 `regression` job 을 GitHub branch protection rule 의 "Required status checks" 에 추가. 회귀 실패 시 머지 차단됨.
+
+**Tip — supersedes 의 효과**: 새 feature 가 옛 feature 를 의도적으로 바꾼 경우, 옛 feature 의 archived TESTS 가 자동으로 깨지는 게 정상입니다. PLAN.md 의 `supersedes: [<옛-slug>]` 한 줄로 회귀 runner 가 자동 skip — 이게 **시간 압박 머지** 를 막으면서도 **노후화** 는 명시적으로 처리하는 핵심.
 
 #### 3.3 테스트 노후화 처리 (회귀와의 구분)
 

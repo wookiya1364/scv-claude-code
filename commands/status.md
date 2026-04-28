@@ -1,6 +1,6 @@
 ---
 description: "Show raw changes since last index + list of active promote plans."
-argument-hint: "[--ack] [--verbose]"
+argument-hint: ""
 allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/status.sh:*)"]
 ---
 

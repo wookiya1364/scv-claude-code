@@ -75,6 +75,13 @@ if command -v git >/dev/null 2>&1; then
 fi
 [[ -z "$AUTHOR" ]] && AUTHOR="unknown"
 
+# Auto-detect CI environment when --ci is not explicit. Industry convention:
+# GitHub Actions / GitLab CI / CircleCI / Jenkins all set CI=true. Honoring
+# this means users (and SCV docs) don't need to remember --ci.
+if [[ $CI_MODE -eq 0 && "${CI:-}" == "true" ]]; then
+  CI_MODE=1
+fi
+
 if [[ $INCLUDE_PROMOTE -eq 1 ]]; then SCOPE="archive+promote"; else SCOPE="archive"; fi
 
 # ---- enumeration helpers ----

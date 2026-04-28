@@ -1,6 +1,6 @@
 ---
 description: "Sync the SCV template into this project, honoring frontmatter merge_policy. PROJECT:LOCAL blocks are always preserved."
-argument-hint: "[--dry-run] [--force FILE]"
+argument-hint: ""
 allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/sync.sh:*)"]
 ---
 

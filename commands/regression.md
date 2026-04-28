@@ -1,6 +1,6 @@
 ---
 description: "Run accumulated regression across scv/archive/**/TESTS.md (and optionally promote/) with supersede/obsolete skip graph. On failure, triage each slug via AskUserQuestion (regression / obsolete / flaky)."
-argument-hint: "[<slug-prefix>] [--tag <x>] [--include-promote] [--include-obsolete] [--ci]"
+argument-hint: "[<slug-prefix>]"
 allowed-tools:
   - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/regression.sh:*)"
   - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/report.sh:*)"

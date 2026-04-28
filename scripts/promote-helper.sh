@@ -95,19 +95,59 @@ fi
 
 echo ""
 echo "=== scv/raw inventory ==="
+RAW_FILE_COUNT=0
+RAW_TOPDIR_COUNT=0
+declare -A RAW_TOPDIRS=()
 if [[ -d "$RAW_DIR" ]]; then
   found=0
   while IFS= read -r f; do
     [[ -f "$f" ]] || continue
     [[ "$f" == "$RAW_DIR/README.md" ]] && continue
     found=1
+    RAW_FILE_COUNT=$((RAW_FILE_COUNT + 1))
+    # Track top-level subdirs of scv/raw/ as a cheap "topic cluster" signal.
+    # E.g. scv/raw/2026-04-24-meeting/notes.md → topic=2026-04-24-meeting
+    rel="${f#$RAW_DIR/}"
+    if [[ "$rel" == */* ]]; then
+      top="${rel%%/*}"
+      RAW_TOPDIRS["$top"]=1
+    else
+      RAW_TOPDIRS["__root__"]=1
+    fi
     size=$(wc -c <"$f" 2>/dev/null | tr -d ' ' || echo '?')
     mt=$(date -r "$f" +%Y-%m-%d 2>/dev/null || echo '?')
     echo "- $f  (${size}B, modified $mt)"
   done < <(find "$RAW_DIR" -type f 2>/dev/null | LC_ALL=C sort)
   [[ $found -eq 0 ]] && echo "(empty)"
+  RAW_TOPDIR_COUNT=${#RAW_TOPDIRS[@]}
 else
   echo "($RAW_DIR does not exist — nothing to promote)"
+fi
+
+# Split-suggestion heuristic
+# Triggers when raw scope looks "big enough" to warrant 5~7 way split:
+#   raw_files > 7  OR  topic_clusters >= 3
+# This is a hint only — Claude must still confirm with AskUserQuestion (see commands/promote.md Step 3).
+SUGGEST_SPLIT="no"
+SPLIT_REASON=""
+if [[ $RAW_FILE_COUNT -gt 7 ]]; then
+  SUGGEST_SPLIT="yes"
+  SPLIT_REASON="raw 파일 ${RAW_FILE_COUNT}개 (>7 임계치)"
+fi
+if [[ $RAW_TOPDIR_COUNT -ge 3 ]]; then
+  SUGGEST_SPLIT="yes"
+  if [[ -n "$SPLIT_REASON" ]]; then
+    SPLIT_REASON="$SPLIT_REASON, 토픽 클러스터 ${RAW_TOPDIR_COUNT}개 (>=3)"
+  else
+    SPLIT_REASON="토픽 클러스터 ${RAW_TOPDIR_COUNT}개 (>=3)"
+  fi
+fi
+echo ""
+echo "RAW_FILE_COUNT: $RAW_FILE_COUNT"
+echo "RAW_TOPIC_CLUSTERS: $RAW_TOPDIR_COUNT"
+echo "SUGGEST_SPLIT: $SUGGEST_SPLIT"
+if [[ -n "$SPLIT_REASON" ]]; then
+  echo "SPLIT_REASON: $SPLIT_REASON"
 fi
 
 echo ""

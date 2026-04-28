@@ -2,6 +2,75 @@
 
 이 저장소의 변경사항을 기록합니다. [Semantic Versioning](https://semver.org/lang/ko/) 규칙을 따릅니다.
 
+## [0.2.0] — 2026-04-28
+
+### 핵심 — 거대 요구의 epic 분할 + 단위 PR + 통합 refactor
+
+타 회사 팀의 실제 사례 (10명 중 6명이 미검증 코드를 PR, 하루 50개 PR 폭증, 시간 압박 머지로 회귀 폭주) 를 들으며 정리한 v0.2.0. **새 슬래시 커맨드 0개 · 새 사용자 표면 플래그 0개**. 모든 변화는 frontmatter 스키마 + AskUserQuestion 흐름 + 문서로.
+
+### Added
+
+- **거대 feature 자동 분할 제안** (`/scv:promote`)
+  - `promote-helper.sh` 가 raw 자료 양 (파일 수 > 7) + 토픽 다양성 (top-level cluster ≥ 3) 시그널 출력 (`SUGGEST_SPLIT`, `SPLIT_REASON`)
+  - 시그널이 yes 면 `commands/promote.md` Step 3.0 에서 `AskUserQuestion` 로 분할 vs 단일 선택. 자동 분할은 절대 안 함 — 항상 사용자 확인.
+  - 분할 시 5~7 개 promote 폴더가 같은 `epic: <slug>` frontmatter 로 묶임.
+
+- **PLAN.md frontmatter 확장** (공개 스키마)
+  - `epic: <slug>` — 거대 요구를 N 개로 쪼갰을 때 동일 epic 으로 묶기
+  - `kind: feature | refactor | retirement` — feature(기본) / 통합 정리 / 순수 제거
+
+- **`/scv:status` 에 epic 진척도 표시**
+  - `[epics]` 섹션이 archive + promote 의 PLAN.md 를 epic 별로 집계
+  - 출력: `… epic <slug>: 4/7 archived, 2 in promote, refactor pending`
+  - 상태 아이콘 — `…` (진행 중) · `!` (refactor 필요) · `✓` (epic 완료)
+
+- **`/scv:work` Step 9d — PR 자동 생성** (스크린샷 첨부)
+  - archive 후 `AskUserQuestion`: "PR 만들까요?" (default Yes)
+  - Yes 시 `scripts/pr-helper.sh` 가 PLAN/TESTS/ARCHIVED_AT 조립 → PR body markdown
+  - `test-results/` 의 PNG 스크린샷을 `.scv-pr-artifacts/<slug>/` 로 이동 (test-results 정리 + git committable 위치)
+  - PR body 에 markdown 이미지로 임베드 (GitHub blob URL)
+  - `epic` 있으면 base = `epic/<epic-slug>`, 없으면 origin/HEAD. epic 브랜치 없으면 origin/main 에서 자동 생성.
+  - `gh pr create` 호출 + PR URL 출력
+  - **비디오 첨부는 v0.3.0** 으로 (GitHub API 한계상 외부 스토리지 또는 사용자 drag-drop 필요 — 정식 자동화 설계 후 도입)
+
+- **`/scv:work` Step 9e — Epic 완료 시 refactor 자동 안내**
+  - epic 의 모든 feature 가 archive 되고 refactor 가 아직 없으면 `AskUserQuestion`: "refactor PLAN scaffold 만들까요?"
+  - Yes 시 `scv/promote/<TODAY>-<author>-<epic-slug>-refactor/` 자동 생성, frontmatter `kind: refactor` + `epic: <epic-slug>`
+
+- **`/scv:regression` — `CI=true` 환경변수 자동 감지**
+  - `--ci` 플래그 명시 없이도 GitHub Actions / GitLab CI / CircleCI / Jenkins 환경에서 자동으로 non-interactive 모드. 산업 표준 `CI=true` 를 따름.
+
+### Changed — 사용자 표면 플래그 숨김
+
+전체 22 플래그 중 사용자에게 노출되는 건 0 개로 줄임. 코드는 그대로 유지 (Claude ↔ 스크립트 내부 API). 사용자 멘탈 모델 = "슬래시 7개 + 대화" 만.
+
+- **`commands/*.md` 의 `argument-hint`** — 모든 플래그 제거. 위치 인자만 남김. 7 개 커맨드 일괄.
+- **README 3개 언어 슬래시 커맨드 표** — 플래그 노출 모두 제거. "외울 플래그 없음 / 覚えるフラグなし / No flags to memorize" 가이드 문구.
+- **TESTING.md §3 CI 통합** — `CI=true` 자동 감지 강조. 더 자세한 GitHub Actions 예시 (env, schedule, upload-artifact). PR merge gate 활용 안내.
+
+### Spec 문서 추가
+
+- **PROMOTE.md §8d** — Epic 브랜치 전략. PR base = epic/<slug>, main 직행 금지, refactor 가 epic 의 종료 조건.
+- **PROMOTE.md §8e** — Refactor PLAN 패턴. `kind: refactor` + epic 동일. 통합 시점 발견된 정리 항목들을 한 PR 로.
+- **PROMOTE.md §4 frontmatter 표** — `epic` · `kind` 필드 행 추가, YAML 예시도 갱신.
+- **PROMOTE.md §9 status 전이** — kind 별 흐름 명시.
+
+### Tests
+
+- `tests/run-dry.sh` 새 섹션 [11v–11cc] 8개. 277 → **324 PASS** (+47 assertion). 0 FAIL.
+- 검증 영역: split heuristic 시그널 (`SUGGEST_SPLIT`/`RAW_TOPIC_CLUSTERS`) · `kind` validator (수락/거절) · `/scv:status` epic 진척도 · `pr-helper.sh` dry-run body 조립 + kind 별 title prefix · `regression.sh` `CI=true` 자동 감지 · PROMOTE.md `§8d`/`§8e` content · work.md `Step 9d`/`9e` content · 모든 `argument-hint` 가 flag-free.
+
+### 비채택 (의도적)
+
+- **CI gate turnkey 워크플로 파일 자동 시드** — 팀마다 CI 환경 차이가 커서 generic 템플릿이 fit 안 함. 대신 TESTING.md §3 의 자세한 GitHub Actions 예시로 충분.
+- **`/scv:pr` 신설 슬래시 커맨드** — `/scv:work` Step 9d AskUserQuestion 으로 충분. 슬래시 카운트 7 유지.
+- **`/scv:work --pr` 같은 신설 플래그** — 같은 이유로 미채택. AskUserQuestion 패스.
+- **비디오 첨부 자동화** — GitHub PR 첨부 공식 API 부재. v0.3.0 에서 외부 스토리지 등 정식 설계.
+
+### 마이그레이션
+
+기존 PLAN.md 는 `epic`/`kind` 없이도 그대로 작동 (둘 다 optional). 새 분할/refactor 흐름은 `/scv:promote` 가 raw 분석 후 자동 제안하므로 사용자 행동 변화 없음.
+
 ## [0.1.0] — 2026-04-28
 
 ### 첫 공개 릴리즈

@@ -115,6 +115,9 @@ refs:
     url: https://confluence.example.com/x/design-v2
   - type: pr
     url: https://github.com/org/repo/pull/567
+# 거대 요구를 5~7 개 feature 로 쪼갰을 때 같은 epic 으로 묶음 (자세한 건 §8d)
+epic: 20260424-payment-overhaul
+kind: feature                          # feature | refactor | retirement (기본 feature)
 # 회귀 테스트에서 이 계획이 폐기하는 과거 slug/시나리오 (자세한 건 §8b)
 supersedes:
   - 20260115-sspark-user-auth-v1      # v1 전체 대체 → v1 의 TESTS 는 회귀에서 영구 skip
@@ -178,6 +181,8 @@ supersedes_scenarios:
 | `refs` | — | 외부 참조 배열 (Jira / Linear / Confluence / PR 등). 아래 스펙 참조 |
 | `supersedes` | — | 이 계획이 폐기(supersede)하는 **과거 slug 배열**. `/scv:regression` 이 해당 archived TESTS 전체를 영구 skip. 아래 §8b 참조 |
 | `supersedes_scenarios` | — | **scenario 단위** 폐기. `<slug>:T<n>` 형식 문자열 배열. 예: `["20260115-sspark-auth-v1:T2"]` |
+| `epic` | — | 거대한 사용자 요구를 5~7 개 feature 로 쪼갰을 때 같은 epic slug 로 묶음. `/scv:status` 가 epic 진척도 표시, `/scv:work` 의 PR 자동 생성이 epic 브랜치 기본값. 아래 §8d 참조 |
+| `kind` | — | `feature` (기본) / `refactor` (epic 마무리 통합 정리) / `retirement` (순수 제거 — §8c). Claude 가 epic 흐름·refactor 안내에 사용 |
 
 ### `refs:` 스펙 — 벤더-중립 외부 참조
 
@@ -420,6 +425,7 @@ slug: 20260424-sspark-retire-payment-v1
 author: sspark
 created_at: 2026-04-24
 status: planned
+kind: retirement                       # feature 가 아니라 retirement
 tags: [retirement]
 supersedes:
   - 20240101-kmlee-payment-v1
@@ -448,6 +454,107 @@ curl -sf -o /dev/null -w "%{http_code}" "$API/api/v1/pay/charge" | grep -q 410
 ```
 
 `/scv:work` 가 이 retirement 계획을 통과 처리하면 Step 9c 에서 `payment-v1` 을 obsolete 로 마킹하도록 안내합니다. 새 커맨드 불요.
+
+---
+
+## 8d. Epic 브랜치 전략 (거대 요구를 5~7 개 feature 로 쪼갰을 때)
+
+사용자의 거대 요구를 한 promote 폴더로 받으면 **혼란스럽고 급격한 변화**가 됩니다. SCV 는 `/scv:promote` 단계에서 raw 자료를 분석해 "이건 5~7 개 feature 로 나눌 만하다" 고 판단하면 분할을 제안합니다 (자동 분할 금지, 항상 사용자 확인).
+
+분할된 feature 들은 같은 **`epic: <epic-slug>`** frontmatter 로 묶입니다.
+
+### 작동 흐름
+
+```
+거대 요구 (raw 투입)
+   │
+   ▼  /scv:promote 가 분할 제안 → 사용자 승인
+5~7 개 promote 폴더 생성, 모두 같은 epic
+   │
+   ▼  /scv:work <slug> 각각
+feature 1 → archive → PR (base = epic/<epic-slug>)
+feature 2 → archive → PR (base = epic/<epic-slug>)
+...
+feature N → archive → PR (base = epic/<epic-slug>)
+   │
+   ▼  (epic 의 모든 feature archive 시 SCV 가 자동 안내)
+"epic <slug> feature 전부 완료. 통합 refactor PLAN 만들까요?"
+   │
+   ▼  refactor PLAN scaffold (kind: refactor) → /scv:work
+   │
+   ▼  archive → PR (base = epic/<epic-slug>)
+   │
+   ▼  사용자가 epic/<epic-slug> → main merge
+```
+
+### 핵심 규약
+
+- **PR 의 base 브랜치는 `main` 이 아니라 `epic/<epic-slug>`**. 5~7 개 PR 이 한 통합 브랜치로 모임. main/stg/dev 직행 금지 — 단위 브랜치에서는 좋았지만 합치니 별로인 경우를 막기 위함.
+- `epic/<epic-slug>` 브랜치는 첫 feature 의 PR 생성 시 SCV 가 자동 생성 권장 (`gh api` 또는 `git push origin main:epic/<slug>`). 이후 PR 들은 이 브랜치를 base 로.
+- Epic 의 **마지막은 항상 refactor PLAN** (`kind: refactor`). 단위 기능 통합 후 코드 정리·중복 제거·이름 통일 단계. 이게 archive 돼야 epic 완료로 간주.
+- Refactor PLAN 의 TESTS 는 보통 "기존 회귀가 여전히 green" + "통합 후 새 시나리오 (있으면)" 으로 구성.
+
+### `/scv:status` 의 epic 진척도
+
+```
+[epics]
+  epic 20260424-payment-overhaul: 4/7 archived, 2 in promote, refactor pending
+  epic 20260415-search-revamp:    7/7 archived + refactor done → ready to merge
+```
+
+### 사용자가 직접 epic 으로 묶는 경우
+
+`/scv:promote` 가 분할 제안을 안 했어도 사용자가 명시적으로 "이 promote 들은 같은 epic" 이라고 하면 PLAN.md frontmatter 에 `epic: <slug>` 를 직접 추가. SCV 가 그 시점부터 epic 으로 인식.
+
+---
+
+## 8e. Refactor PLAN 패턴
+
+epic 의 모든 feature 가 archive 된 뒤 마지막에 **반드시** refactor PLAN 을 만듭니다 (epic 종료 조건).
+
+```yaml
+# scv/promote/20260430-sspark-payment-overhaul-refactor/PLAN.md
+---
+title: Payment overhaul — integration refactor
+slug: 20260430-sspark-payment-overhaul-refactor
+author: sspark
+created_at: 2026-04-30
+status: planned
+kind: refactor                          # 핵심 — feature 가 아님
+epic: 20260424-payment-overhaul         # 같은 epic 의 마지막 항목
+tags: [refactor, integration]
+---
+
+## Summary
+
+epic `payment-overhaul` 의 7 개 feature (auth-v2, charge-flow, refund-flow,
+webhook-relay, audit-log, settlement-batch, partner-callback) 통합 후의
+정리 단계. 단위 PR 시점엔 OK 였지만 합치고 보니 다음 항목들이 보임.
+
+## Steps
+
+1. 7 feature 간 중복 helper 통합 (`utils/payment.ts`)
+2. 명명 일관성 (`charge_id` vs `paymentId` 통일)
+3. 공통 에러 코드 enum 추출
+4. 통합 시점 발견된 race condition 1건 수정
+5. 통합 회귀 테스트 (`/scv:regression --include-promote`)
+
+## Related Documents
+
+<!-- epic 폴더 7개의 PLAN.md 들 모두 참조 가능 -->
+```
+
+**TESTS.md** 는 보통 "기존 회귀 + 통합 시나리오 1~2개" 로 단순:
+
+```markdown
+## 실행 방법
+\`\`\`bash
+bash $CLAUDE_PLUGIN_ROOT/scripts/regression.sh --tag payment
+npm run test:integration -- payment
+\`\`\`
+```
+
+이 refactor 가 archive 돼야 SCV 가 "epic 완료" 로 간주합니다. archive 후 사용자가 `epic/<slug>` 브랜치를 main 에 merge.
 
 ---
 

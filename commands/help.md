@@ -1,6 +1,6 @@
 ---
 description: "Show the SCV workflow, commands, current project status, and the recommended next step. Run this first when you don't know what to do."
-argument-hint: "[--verbose]"
+argument-hint: ""
 allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/help.sh:*)"]
 ---
 

@@ -1,6 +1,6 @@
 ---
 description: "Refine scv/raw/ material into a scv/promote/<YYYYMMDD>-<author>-<slug>/ folder with PLAN.md + TESTS.md. Optionally updates the docs knowledge graph. Interactive; no files written without user approval."
-argument-hint: "[--dry-run] [--graph-only] [--topic SLUG]"
+argument-hint: ""
 allowed-tools:
   - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/promote-helper.sh:*)"
   - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/readpath.sh:*)"
@@ -28,7 +28,7 @@ First, gather context:
 "${CLAUDE_PLUGIN_ROOT}/scripts/promote-helper.sh" $ARGUMENTS
 ```
 
-Parse the helper output — the lines `MODE:`, `TODAY:`, `AUTHOR:`, `STANDARD_VERSION:`, `GRAPHIFY_SKILL:`, `GRAPH_STATUS:` are the primary signals; section blocks (`=== scv/raw inventory ===` etc.) give you the content to work with.
+Parse the helper output — the lines `MODE:`, `TODAY:`, `AUTHOR:`, `STANDARD_VERSION:`, `GRAPHIFY_SKILL:`, `GRAPH_STATUS:`, `RAW_FILE_COUNT:`, `RAW_TOPIC_CLUSTERS:`, `SUGGEST_SPLIT:`, `SPLIT_REASON:` are the primary signals; section blocks (`=== scv/raw inventory ===` etc.) give you the content to work with.
 
 ## Protocol
 
@@ -52,6 +52,52 @@ Summarize to the user:
 - What existing promote folders / archive folders already exist.
 
 ### Step 3 — Dialog (for each candidate promote folder)
+
+#### Step 3.0 — Split suggestion (epic 묶음)
+
+Heuristic 결정 트리:
+
+| Helper signal | LLM 판단 | 대응 |
+|---|---|---|
+| `SUGGEST_SPLIT: yes` (raw 파일 > 7 또는 토픽 클러스터 ≥ 3) | raw 본문도 다양한 책임 (auth + payment + UI 등) 으로 보임 | **분할 강력 추천** |
+| `SUGGEST_SPLIT: yes` | LLM 보기에 사실 한 주제 (큰 회의록 1개 등) | 분할은 제안하되 "묶어 가도 됩니다" 도 옵션으로 |
+| `SUGGEST_SPLIT: no` | LLM 보기에 본문이 5+ 주제 혼재 | 분할 제안 (LLM 우선) |
+| `SUGGEST_SPLIT: no` | LLM 도 단일 주제 | 분할 안 제안. Step 3.1 의 단일 폴더 흐름으로 |
+
+분할 추천 조건이면 `AskUserQuestion`:
+
+```
+Question: "raw 자료를 분석해 보니 5~7 개 feature 로 쪼갤 만한 규모입니다. 어떻게 진행할까요?"
+options:
+[1] "여러 feature 로 분할 (권장) — epic 으로 묶음"
+    description:
+    "5~7 개 promote 폴더를 만들어 같은 epic: <epic-slug> 으로 묶습니다.
+     각 feature 는 작고 명확하게 떨어져서 테스트 범위가 좁아지고, 리뷰가
+     쉬워집니다. 모든 feature archive 후 SCV 가 통합 refactor PLAN 도
+     자동으로 안내합니다 (PROMOTE.md §8d, §8e 참조).
+
+     예: '결제 v2 전면 개편' → 7개 feature
+       - 20260424-sspark-pay-overhaul-auth-v2
+       - 20260424-sspark-pay-overhaul-charge-flow
+       - 20260424-sspark-pay-overhaul-refund-flow
+       - ... (모두 epic: 20260424-pay-overhaul)
+       - 20260430-sspark-pay-overhaul-refactor (kind: refactor, 마지막)
+
+     SCV 가 분할 후보 슬러그를 제안하고 사용자가 조정 가능."
+
+[2] "단일 promote 로 진행"
+    description:
+    "한 폴더로 받습니다. 라벨이 작거나 사실상 한 가지 주제일 때만 권장.
+     단일 폴더로 가면 epic 묶음 효과 (브랜치 전략 · refactor 자동 안내) 는
+     없습니다."
+```
+
+User 선택 후:
+
+- **[1] 분할**: `AskUserQuestion` 한 번 더 — "epic slug 는 무엇으로 할까요? (예: `20260424-pay-overhaul`)". 그 후 raw 토픽 클러스터별로 슬러그 제안 → 사용자 승인 → N 개 폴더 생성, 모두 동일 `epic` frontmatter.
+- **[2] 단일**: 아래 Step 3.1 로.
+
+#### Step 3.1 — Single-folder dialog (분할 안 한 경우)
 
 Use `AskUserQuestion` to confirm with the user. Typical batch:
 
@@ -80,6 +126,8 @@ slug: <FOLDER_NAME>
 author: <AUTHOR>
 created_at: <TODAY>
 status: planned
+kind: feature                          # feature | refactor | retirement (기본 feature, 분할 시 추가)
+# epic: <EPIC_SLUG>                    # 분할로 만든 5~7 개 promote 모두에 동일하게. 단일 polder 면 생략 가능
 tags: []
 raw_sources:
   - <RAW_SOURCE_1>

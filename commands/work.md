@@ -1,9 +1,10 @@
 ---
 description: "Implement a scv/promote/<slug>/ plan. Reads PLAN.md + TESTS.md, proposes/loads Related Documents as needed, runs the tests, and optionally archives on success."
-argument-hint: "[<slug>] [--archive] [--reason=\"...\"]"
+argument-hint: "[<slug>]"
 allowed-tools:
   - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/work.sh:*)"
   - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/readpath.sh:*)"
+  - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/pr-helper.sh:*)"
   - "Bash"
   - "Skill(graphify)"
   - "AskUserQuestion"
@@ -226,6 +227,97 @@ Propagated obsolete marking:
   — <C-slug>    (user chose Skip)
   ? <D-slug>    (user chose Review — not marked)
 ```
+
+### Step 9d — PR 자동 생성 (선택, v0.2.0)
+
+조건: Step 9b 에서 archive 가 실제로 일어났음.
+
+**AskUserQuestion** (default Yes):
+
+```
+Question: "방금 archive 한 '<slug>' 를 PR 로 올릴까요?"
+options:
+[1] "Yes — PR 자동 생성 (권장)"
+    description:
+    "다음 단계가 자동으로 진행됩니다:
+    - PLAN.md / TESTS.md / ARCHIVED_AT.md 의 핵심 섹션을 PR body 로 조립
+    - test-results/ 의 스크린샷 (PNG/JPG) 을 .scv-pr-artifacts/<slug>/ 로 이동
+      (test-results/ 폴더에서 빠짐 — 디스크 정리)
+    - PR body 에 markdown 이미지로 임베드 (GitHub blob URL)
+    - epic 이 있으면 base 브랜치 = epic/<epic-slug> (없으면 main).
+      epic 브랜치가 origin 에 없으면 origin/main 에서 자동 생성.
+    - 현재 feature 브랜치를 push + gh pr create 호출
+    - PR URL 출력
+
+    전제:
+    - 현재 git 브랜치가 main 이 아닌 feature 브랜치
+    - gh CLI 인증됨 (gh auth status)
+    - test-results/ 의 스크린샷은 사용자가 미리 준비 (Playwright/CDP 등)
+
+    비디오 첨부는 v0.3 으로 미뤄졌습니다 — 지금은 스크린샷만."
+
+[2] "Skip — PR 은 따로 만들겠다"
+    description:
+    "SCV 가 PR 을 만들지 않습니다. 사용자가 나중에 직접 git/gh 로 만들거나,
+    /scv:work 를 다시 호출해 이 단계만 재진입할 수 있습니다."
+```
+
+**[1] Yes 선택 시**:
+
+```
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/pr-helper.sh <slug>
+```
+
+위 호출이 archive/<slug>/PLAN.md 의 `epic:` / `kind:` 를 읽어 base 브랜치를 결정하고 commit + push + gh pr create 까지 수행합니다. 출력 마지막 줄에 `PR created: <URL>` 이 나오면 사용자에게 그 URL 을 보고하세요.
+
+실패 case:
+- 현재 브랜치가 base 브랜치와 같음 (e.g., main 에서 호출) → 사용자에게 "feature 브랜치로 전환하세요" 안내. 이때 SCV 가 자동으로 브랜치 전환은 하지 않음 (사용자의 작업 컨텍스트 보호).
+- gh CLI 미인증 → 사용자에게 `gh auth login` 안내.
+- 변경사항 없음 (이미 commit·push 완료된 상태) → 그대로 gh pr create 만 수행.
+
+**[2] Skip 선택 시**: 그대로 종료. epic refactor 안내 (Step 9e) 는 계속 진행.
+
+### Step 9e — Epic 완료 시 refactor 안내 (선택)
+
+방금 archive 한 PLAN 이 `epic:` 을 가지고 있고 `kind: feature` 일 때만 수행. 이 epic 의 모든 feature 가 archive 됐는지 검사:
+
+```bash
+# Glob 으로 scv/promote/*/PLAN.md 와 scv/archive/*/PLAN.md 의 epic 일치 + kind=feature 카운트
+remaining_features_in_promote=$(grep -l "^epic: <epic-slug>$" scv/promote/*/PLAN.md 2>/dev/null | xargs -I{} grep -L "^kind: refactor$" {} 2>/dev/null | wc -l)
+existing_refactor=$(grep -l "^epic: <epic-slug>$" scv/{archive,promote}/*/PLAN.md 2>/dev/null | xargs grep -l "^kind: refactor$" 2>/dev/null | wc -l)
+```
+
+조건이 모두 충족되면:
+- `remaining_features_in_promote == 0` (epic 의 모든 feature 가 archive 됨)
+- `existing_refactor == 0` (refactor PLAN 이 아직 없음)
+
+→ 사용자에게 한 줄 알림 + AskUserQuestion:
+
+```
+"epic <epic-slug> 의 모든 feature 가 archive 됐습니다.
+ PROMOTE.md §8e 에 따라 통합 refactor PLAN 을 만들 차례입니다.
+
+ Question: "지금 refactor PLAN scaffold 를 만들까요?"
+ options:
+ [1] "Yes — refactor PLAN 만들기 (권장)"
+     description:
+     "scv/promote/<TODAY>-<author>-<epic-slug>-refactor/ 폴더에 PLAN.md +
+      TESTS.md scaffold 생성. PLAN.md 에는 다음 frontmatter 가 자동 세팅:
+        kind: refactor
+        epic: <epic-slug>
+        status: planned
+      Summary 섹션엔 epic 의 7개 feature 슬러그를 자동 나열.
+      이후 사용자와 대화로 통합 시점 발견된 정리 항목 채움."
+
+ [2] "Later — 다음 기회에"
+     description:
+     "지금은 만들지 않습니다. 나중에 /scv:promote 로 만들거나 직접 폴더
+      만들면 됩니다. epic 은 'refactor pending' 상태로 /scv:status 에 표시."
+```
+
+**[1] Yes 선택 시**: Claude 가 직접 폴더 + PLAN.md + TESTS.md scaffold 를 `Write` 도구로 생성. epic 의 archived feature 슬러그들을 자동으로 PLAN.md Summary 섹션에 포함.
+
+**[2] Later**: 그대로 종료.
 
 ## Flag semantics
 

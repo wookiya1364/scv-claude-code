@@ -23,6 +23,9 @@ REQUIRED_KEYS=(name version status last_updated standard_version merge_policy)
 # obsolete marks a plan that has been superseded and is skipped by /scv:regression.
 VALID_STATUS="draft active deprecated N/A planned in_progress testing done obsolete"
 VALID_POLICY="overwrite preserve merge-on-markers"
+# PLAN.md frontmatter `kind` (optional; defaults to feature when absent).
+# See PROMOTE.md §8d/§8e for epic/refactor flow, §8c for retirement.
+VALID_KIND="feature refactor retirement"
 VIOLATIONS=0
 
 check_file() {
@@ -43,9 +46,10 @@ check_file() {
     fi
   done
 
-  local status policy
+  local status policy kind
   status=$(yaml_get "$file" "status")
   policy=$(yaml_get "$file" "merge_policy")
+  kind=$(yaml_get "$file" "kind")
 
   # Use space-padded exact match so values with "/" (e.g. N/A) work correctly
   if [[ -n "$status" ]] && ! printf ' %s ' "$VALID_STATUS" | grep -qF " $status "; then
@@ -54,6 +58,11 @@ check_file() {
   fi
   if [[ -n "$policy" ]] && ! echo "$VALID_POLICY" | grep -qw "$policy"; then
     echo "✖ $rel: invalid merge_policy '$policy' (expected: $VALID_POLICY)"
+    VIOLATIONS=$((VIOLATIONS + 1))
+  fi
+  # kind is optional; only validate when present (PLAN.md frontmatter only)
+  if [[ -n "$kind" ]] && ! echo "$VALID_KIND" | grep -qw "$kind"; then
+    echo "✖ $rel: invalid kind '$kind' (expected: $VALID_KIND)"
     VIOLATIONS=$((VIOLATIONS + 1))
   fi
 }

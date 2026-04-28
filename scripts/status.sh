@@ -17,6 +17,8 @@ set -uo pipefail
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 READPATH="$SCRIPT_DIR/readpath.sh"
+# shellcheck source=lib/yaml.sh
+source "$SCRIPT_DIR/lib/yaml.sh"
 
 ACK=0
 VERBOSE=0
@@ -204,6 +206,89 @@ else
   else
     echo "  $archived entry(ies)"
   fi
+fi
+
+echo ""
+
+# ---------- [5] epic progress ----------
+# Aggregate every PLAN.md under archive + promote by `epic:` field.
+# Reports per-epic counters: archived (kind=feature), in promote (kind=feature),
+# refactor status (any kind=refactor present?), retirement count (kind=retirement).
+# Skips plans without epic.
+
+echo "[epics — progress]"
+
+declare -A EPIC_FEAT_ARCHIVED=()
+declare -A EPIC_FEAT_PROMOTE=()
+declare -A EPIC_REFACTOR_ARCHIVED=()
+declare -A EPIC_REFACTOR_PROMOTE=()
+declare -A EPIC_RETIREMENT_DONE=()
+declare -A EPIC_SLUGS=()
+
+scan_plan() {
+  local plan="$1" loc="$2"
+  [[ -f "$plan" ]] || return
+  local epic kind
+  epic=$(yaml_get "$plan" epic)
+  [[ -z "$epic" ]] && return
+  kind=$(yaml_get "$plan" kind)
+  [[ -z "$kind" ]] && kind="feature"
+  EPIC_SLUGS["$epic"]=1
+  case "$kind:$loc" in
+    feature:archive)    EPIC_FEAT_ARCHIVED["$epic"]=$((${EPIC_FEAT_ARCHIVED["$epic"]:-0}+1)) ;;
+    feature:promote)    EPIC_FEAT_PROMOTE["$epic"]=$((${EPIC_FEAT_PROMOTE["$epic"]:-0}+1)) ;;
+    refactor:archive)   EPIC_REFACTOR_ARCHIVED["$epic"]=$((${EPIC_REFACTOR_ARCHIVED["$epic"]:-0}+1)) ;;
+    refactor:promote)   EPIC_REFACTOR_PROMOTE["$epic"]=$((${EPIC_REFACTOR_PROMOTE["$epic"]:-0}+1)) ;;
+    retirement:archive) EPIC_RETIREMENT_DONE["$epic"]=$((${EPIC_RETIREMENT_DONE["$epic"]:-0}+1)) ;;
+  esac
+}
+
+shopt -s nullglob
+for d in "$ARCHIVE_DIR"/*/; do scan_plan "${d}PLAN.md" "archive"; done
+for d in "$PROMOTE_DIR"/*/; do scan_plan "${d}PLAN.md" "promote"; done
+shopt -u nullglob
+
+if [[ ${#EPIC_SLUGS[@]} -eq 0 ]]; then
+  echo "  (no epics — no PLAN.md frontmatter has 'epic:' field)"
+else
+  # Sort epic slugs for stable output
+  for epic in $(printf '%s\n' "${!EPIC_SLUGS[@]}" | LC_ALL=C sort); do
+    feat_arc=${EPIC_FEAT_ARCHIVED["$epic"]:-0}
+    feat_prm=${EPIC_FEAT_PROMOTE["$epic"]:-0}
+    feat_total=$((feat_arc + feat_prm))
+    refac_arc=${EPIC_REFACTOR_ARCHIVED["$epic"]:-0}
+    refac_prm=${EPIC_REFACTOR_PROMOTE["$epic"]:-0}
+    ret_done=${EPIC_RETIREMENT_DONE["$epic"]:-0}
+
+    # State summary
+    state=""
+    if [[ $feat_prm -gt 0 ]]; then
+      state="${feat_arc}/${feat_total} archived, ${feat_prm} in promote"
+    else
+      state="${feat_arc}/${feat_total} archived"
+    fi
+    if [[ $refac_arc -gt 0 ]]; then
+      state="${state}, refactor done"
+    elif [[ $refac_prm -gt 0 ]]; then
+      state="${state}, refactor in progress"
+    elif [[ $feat_arc -gt 0 && $feat_prm -eq 0 ]]; then
+      state="${state}, refactor pending"
+    fi
+    if [[ $ret_done -gt 0 ]]; then
+      state="${state}, ${ret_done} retirement"
+    fi
+
+    # Status icon
+    icon="·"
+    if [[ $refac_arc -gt 0 && $feat_prm -eq 0 ]]; then
+      icon="✓"     # epic complete (all features archived + refactor done)
+    elif [[ $feat_prm -gt 0 || $refac_prm -gt 0 ]]; then
+      icon="…"     # in progress
+    elif [[ $feat_arc -gt 0 && $refac_arc -eq 0 ]]; then
+      icon="!"     # features all archived but refactor pending
+    fi
+    echo "  $icon epic $epic: $state"
+  done
 fi
 
 echo ""

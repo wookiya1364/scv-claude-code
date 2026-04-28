@@ -22,6 +22,8 @@ WORK_SH="$STANDARD_ROOT/scripts/work.sh"
 WORK_CMD="$STANDARD_ROOT/commands/work.md"
 REGRESSION_SH="$STANDARD_ROOT/scripts/regression.sh"
 REGRESSION_CMD="$STANDARD_ROOT/commands/regression.md"
+PR_HELPER="$STANDARD_ROOT/scripts/pr-helper.sh"
+STATUS_SH="$STANDARD_ROOT/scripts/status.sh"
 
 # Counter files (so subshell pass/fail calls still aggregate correctly).
 PASS_FILE=$(mktemp)
@@ -1061,6 +1063,316 @@ EOF
     || fail "work --archive: second supersedes entry missing"
 )
 rm -rf "$REG_APP"
+
+echo
+echo "=== [11v] promote-helper.sh — split heuristic signals ==="
+SPLIT_APP=$(mktemp -d)
+mkdir -p "$SPLIT_APP/scv/raw/topic-a" "$SPLIT_APP/scv/raw/topic-b" "$SPLIT_APP/scv/raw/topic-c"
+for i in 1 2 3 4; do echo "x" > "$SPLIT_APP/scv/raw/topic-a/f$i.md"; done
+echo "y" > "$SPLIT_APP/scv/raw/topic-b/g.md"
+echo "z" > "$SPLIT_APP/scv/raw/topic-c/h.md"
+
+(
+  cd "$SPLIT_APP"
+  OUT=$(bash "$PROMOTE_HELPER" --dry-run 2>&1)
+  assert_out_contains "RAW_FILE_COUNT: 6" "$OUT"      "promote-helper: RAW_FILE_COUNT counted"
+  assert_out_contains "RAW_TOPIC_CLUSTERS: 3" "$OUT"  "promote-helper: 3 top-level dirs counted as clusters"
+  assert_out_contains "SUGGEST_SPLIT: yes" "$OUT"     "promote-helper: SUGGEST_SPLIT yes when clusters>=3"
+  assert_out_contains "SPLIT_REASON:" "$OUT"          "promote-helper: SPLIT_REASON line present"
+)
+rm -rf "$SPLIT_APP"
+
+# negative: small raw → no split suggested
+SPLIT_APP=$(mktemp -d)
+mkdir -p "$SPLIT_APP/scv/raw"
+echo "x" > "$SPLIT_APP/scv/raw/single.md"
+(
+  cd "$SPLIT_APP"
+  OUT=$(bash "$PROMOTE_HELPER" --dry-run 2>&1)
+  assert_out_contains "SUGGEST_SPLIT: no" "$OUT"      "promote-helper: SUGGEST_SPLIT no for small raw"
+)
+rm -rf "$SPLIT_APP"
+
+echo
+echo "=== [11w] check-frontmatter.sh — kind validation ==="
+FRONT_APP=$(mktemp -d)
+"$HYDRATE" init "$FRONT_APP" >/dev/null 2>&1
+mkdir -p "$FRONT_APP/scv/promote/20260424-tester-good"
+cat > "$FRONT_APP/scv/promote/20260424-tester-good/PLAN.md" <<'EOF'
+---
+name: plan
+version: 1.0.0
+status: planned
+last_updated: 2026-04-24
+standard_version: 1.0.0
+merge_policy: preserve
+title: good
+slug: 20260424-tester-good
+kind: refactor
+epic: epic-test
+---
+EOF
+"$CHECK_FRONT" --project-dir "$FRONT_APP" >/dev/null 2>&1 \
+  && pass "check-frontmatter: kind=refactor accepted" \
+  || fail "check-frontmatter: rejected valid kind=refactor"
+
+# bad kind
+mkdir -p "$FRONT_APP/scv/promote/20260424-tester-bad"
+cat > "$FRONT_APP/scv/promote/20260424-tester-bad/PLAN.md" <<'EOF'
+---
+name: plan
+version: 1.0.0
+status: planned
+last_updated: 2026-04-24
+standard_version: 1.0.0
+merge_policy: preserve
+title: bad
+slug: 20260424-tester-bad
+kind: nonsense
+---
+EOF
+if "$CHECK_FRONT" --project-dir "$FRONT_APP" >/dev/null 2>&1; then
+  fail "check-frontmatter: should reject kind=nonsense"
+else
+  pass "check-frontmatter: kind=nonsense rejected"
+fi
+rm -rf "$FRONT_APP"
+
+echo
+echo "=== [11x] /scv:status — epic progress section ==="
+EPIC_APP=$(mktemp -d)
+mkdir -p "$EPIC_APP/scv/archive/20260101-a-feat1" "$EPIC_APP/scv/archive/20260101-a-feat2" \
+         "$EPIC_APP/scv/archive/20260101-a-refact" "$EPIC_APP/scv/promote/20260202-a-feat3" \
+         "$EPIC_APP/scv/promote/20260301-b-feat1" "$EPIC_APP/scv/raw"
+
+for f in 20260101-a-feat1 20260101-a-feat2; do
+  cat > "$EPIC_APP/scv/archive/$f/PLAN.md" <<EOF
+---
+title: $f
+slug: $f
+status: done
+epic: epic-payment
+kind: feature
+---
+EOF
+done
+cat > "$EPIC_APP/scv/archive/20260101-a-refact/PLAN.md" <<'EOF'
+---
+title: refact
+slug: 20260101-a-refact
+status: done
+epic: epic-payment
+kind: refactor
+---
+EOF
+cat > "$EPIC_APP/scv/promote/20260202-a-feat3/PLAN.md" <<'EOF'
+---
+title: feat3
+slug: 20260202-a-feat3
+status: planned
+epic: epic-payment
+kind: feature
+---
+EOF
+cat > "$EPIC_APP/scv/promote/20260301-b-feat1/PLAN.md" <<'EOF'
+---
+title: search
+slug: 20260301-b-feat1
+status: planned
+epic: epic-search
+kind: feature
+---
+EOF
+
+(
+  cd "$EPIC_APP"
+  OUT=$(bash "$STATUS_SH" 2>&1)
+  assert_out_contains "[epics" "$OUT"                                   "status: epic section header present"
+  assert_out_contains "epic epic-payment" "$OUT"                        "status: lists epic-payment"
+  assert_out_contains "2/3 archived" "$OUT"                             "status: epic-payment shows 2/3 archived"
+  assert_out_contains "1 in promote" "$OUT"                             "status: epic-payment shows 1 in promote"
+  assert_out_contains "refactor done" "$OUT"                            "status: epic-payment refactor done"
+  assert_out_contains "epic epic-search" "$OUT"                         "status: lists epic-search"
+  assert_out_contains "0/1 archived" "$OUT"                             "status: epic-search shows 0/1 archived"
+)
+
+# no-epic case
+NOEPIC_APP=$(mktemp -d)
+mkdir -p "$NOEPIC_APP/scv/raw" "$NOEPIC_APP/scv/promote" "$NOEPIC_APP/scv/archive"
+(
+  cd "$NOEPIC_APP"
+  OUT=$(bash "$STATUS_SH" 2>&1)
+  assert_out_contains "no epics" "$OUT"                                 "status: empty epic list shows '(no epics)'"
+)
+rm -rf "$EPIC_APP" "$NOEPIC_APP"
+
+echo
+echo "=== [11y] pr-helper.sh — dry-run body assembly ==="
+PR_APP=$(mktemp -d)
+mkdir -p "$PR_APP/scv/archive/20260424-tester-feat" "$PR_APP/test-results"
+cat > "$PR_APP/scv/archive/20260424-tester-feat/PLAN.md" <<'EOF'
+---
+title: Sample feature
+slug: 20260424-tester-feat
+author: tester
+created_at: 2026-04-24
+status: done
+kind: feature
+epic: epic-sample
+---
+
+## Summary
+
+A small sample feature for PR helper testing.
+
+## Goals / Non-Goals
+
+- Goals: validate body assembly
+- Non-Goals: real gh
+
+## Steps
+
+1. step one
+2. step two
+
+## Related Documents
+EOF
+cat > "$PR_APP/scv/archive/20260424-tester-feat/TESTS.md" <<'EOF'
+# T
+## 실행 방법
+```bash
+exit 0
+```
+## 통과 판정
+- always passes
+EOF
+cat > "$PR_APP/scv/archive/20260424-tester-feat/ARCHIVED_AT.md" <<'EOF'
+---
+archived_at: 2026-04-28
+archived_by: tester
+reason: tests passed
+---
+EOF
+echo "fakepng" > "$PR_APP/test-results/screenshot.png"
+
+(
+  cd "$PR_APP"
+  OUT=$(bash "$PR_HELPER" 20260424-tester-feat --dry-run 2>&1)
+  assert_out_contains "feat: Sample feature" "$OUT"            "pr-helper: title prefix=feat"
+  assert_out_contains "epic/epic-sample" "$OUT"                "pr-helper: base branch is epic/<slug>"
+  assert_out_contains "screenshot.png" "$OUT"                  "pr-helper: screenshot listed"
+  assert_out_contains ".scv-pr-artifacts/20260424-tester-feat/screenshot.png" "$OUT" \
+                                                                "pr-helper: body has artifact path"
+  assert_out_contains "A small sample feature for PR helper testing" "$OUT" \
+                                                                "pr-helper: PLAN summary embedded"
+  assert_out_contains "Archived 2026-04-28 by tester" "$OUT"   "pr-helper: ARCHIVED_AT footer"
+  assert_out_contains "Epic: \`epic-sample\`" "$OUT"           "pr-helper: epic footer"
+)
+
+# kind=refactor → title prefix "refactor:"
+mkdir -p "$PR_APP/scv/archive/20260430-tester-refact"
+cat > "$PR_APP/scv/archive/20260430-tester-refact/PLAN.md" <<'EOF'
+---
+title: Integration cleanup
+slug: 20260430-tester-refact
+status: done
+kind: refactor
+epic: epic-sample
+---
+## Summary
+refactor only
+## Steps
+1. clean up
+EOF
+(
+  cd "$PR_APP"
+  OUT=$(bash "$PR_HELPER" tester-refact --dry-run 2>&1)
+  assert_out_contains "refactor: Integration cleanup" "$OUT"   "pr-helper: kind=refactor → title prefix"
+)
+
+# kind=retirement → title prefix "chore:"
+mkdir -p "$PR_APP/scv/archive/20260424-tester-retire"
+cat > "$PR_APP/scv/archive/20260424-tester-retire/PLAN.md" <<'EOF'
+---
+title: Retire old API
+slug: 20260424-tester-retire
+status: done
+kind: retirement
+---
+## Summary
+remove old api
+## Steps
+1. delete
+EOF
+(
+  cd "$PR_APP"
+  OUT=$(bash "$PR_HELPER" tester-retire --dry-run 2>&1)
+  assert_out_contains "chore: Retire old API" "$OUT"           "pr-helper: kind=retirement → chore prefix"
+)
+rm -rf "$PR_APP"
+
+echo
+echo "=== [11z] regression.sh — CI=true env auto-detect ==="
+CI_APP=$(mktemp -d)
+mkdir -p "$CI_APP/scv/archive/20260101-failing"
+cat > "$CI_APP/scv/archive/20260101-failing/PLAN.md" <<'EOF'
+---
+title: failing
+slug: 20260101-failing
+status: done
+---
+EOF
+cat > "$CI_APP/scv/archive/20260101-failing/TESTS.md" <<'EOF'
+## 실행 방법
+```bash
+exit 7
+```
+EOF
+
+(
+  cd "$CI_APP"
+  # CI=true alone (no --ci flag) should trigger CI mode:
+  #  - exit 2 (not 1)
+  #  - test-results/regression-summary.json created
+  CI=true bash "$REGRESSION_SH" >/dev/null 2>&1
+  rc=$?
+  [[ $rc -eq 2 ]] && pass "regression: CI=true → exit 2 (CI mode auto-detected)" || fail "regression: CI=true expected exit 2, got $rc"
+  [[ -f test-results/regression-summary.json ]] && pass "regression: CI=true → JSON summary auto-created" || fail "regression: JSON summary missing under CI=true"
+)
+rm -rf "$CI_APP"
+
+echo
+echo "=== [11aa] PROMOTE.md — epic / refactor / retirement docs ==="
+PROMOTE_DOC="$STANDARD_ROOT/template/scv/PROMOTE.md"
+assert_contains "$PROMOTE_DOC" "Epic 브랜치 전략"
+assert_contains "$PROMOTE_DOC" "Refactor PLAN"
+assert_contains "$PROMOTE_DOC" "epic/<epic-slug>"
+assert_contains "$PROMOTE_DOC" "kind: refactor"
+assert_contains "$PROMOTE_DOC" "kind: retirement"
+assert_contains "$PROMOTE_DOC" "epic 의 모든 feature"
+assert_contains "$PROMOTE_DOC" "supersedes_scenarios"
+
+echo
+echo "=== [11bb] commands/work.md — Step 9d/9e content ==="
+assert_contains "$WORK_CMD" "Step 9d"
+assert_contains "$WORK_CMD" "Step 9e"
+assert_contains "$WORK_CMD" "PR 자동 생성"
+assert_contains "$WORK_CMD" "pr-helper.sh"
+assert_contains "$WORK_CMD" "epic 의 모든 feature 가 archive"
+assert_contains "$WORK_CMD" "refactor PLAN scaffold"
+assert_contains "$WORK_CMD" ".scv-pr-artifacts"
+
+echo
+echo "=== [11cc] commands/*.md — argument-hint minimization ==="
+# After v0.2.0 cleanup, no --flag should appear in any argument-hint frontmatter line.
+for f in "$STANDARD_ROOT/commands"/*.md; do
+  hint=$(awk '/^argument-hint:/ {sub(/^argument-hint:[[:space:]]*/, ""); print; exit}' "$f")
+  if printf '%s' "$hint" | grep -qE -- '--[a-z]'; then
+    fail "command $(basename "$f"): argument-hint still exposes flag: $hint"
+  else
+    pass "command $(basename "$f"): argument-hint flag-free"
+  fi
+done
 
 echo
 echo "=== [10] sync --dry-run (version detection) ==="
