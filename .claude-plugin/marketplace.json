@@ -1,0 +1,30 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "scv-claude-code",
+  "owner": {
+    "name": "wookiya1364",
+    "email": "wookiya1364@gmail.com"
+  },
+  "description": "SCV (Standard · Cowork · Verify) Claude Code plugin — 대화형 표준 문서 작성, scv/raw 자유 투입, scv/promote/ 승격, /scv:regression 누적 회귀 + 노후화 처리, Slack/Discord 협업툴 보고를 하나의 플러그인으로 통합",
+  "plugins": [
+    {
+      "name": "scv",
+      "description": "SCV 팀 표준 워크플로 통합 플러그인. /scv:help 로 시작하면 현재 상태 진단 + 다음 액션을 안내합니다. Raw 투입 → promote 승격 → Ralph 구현 → /scv:regression 으로 archived 회귀 · supersedes 처리 → Slack/Discord 보고까지 한 번에.",
+      "source": "./",
+      "category": "productivity",
+      "tags": [
+        "scv",
+        "team-standard",
+        "cowork",
+        "verify",
+        "workflow",
+        "reporting",
+        "slack",
+        "discord",
+        "template",
+        "ralph-loop"
+      ],
+      "homepage": "https://github.com/wookiya1364/scv-claude-code"
+    }
+  ]
+}

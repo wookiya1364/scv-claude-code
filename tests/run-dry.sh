@@ -1,0 +1,1091 @@
+#!/usr/bin/env bash
+# Dry-run regression for the SCV template.
+# Hydrates a fresh project, exercises report (slack+discord), help, promote,
+# and sync --dry-run. Asserts properties and exits non-zero on any failure.
+#
+# Usage: tests/run-dry.sh
+set -uo pipefail
+
+STANDARD_ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
+HYDRATE="$STANDARD_ROOT/scripts/hydrate.sh"
+SYNC="$STANDARD_ROOT/scripts/sync.sh"
+CHECK_FRONT="$STANDARD_ROOT/scripts/check-frontmatter.sh"
+REPORT="$STANDARD_ROOT/scripts/report.sh"
+HELP_SH="$STANDARD_ROOT/scripts/help.sh"
+HELP_CMD="$STANDARD_ROOT/commands/help.md"
+READPATH_SH="$STANDARD_ROOT/scripts/readpath.sh"
+STATUS_SH="$STANDARD_ROOT/scripts/status.sh"
+STATUS_CMD="$STANDARD_ROOT/commands/status.md"
+PROMOTE_HELPER="$STANDARD_ROOT/scripts/promote-helper.sh"
+PROMOTE_CMD="$STANDARD_ROOT/commands/promote.md"
+WORK_SH="$STANDARD_ROOT/scripts/work.sh"
+WORK_CMD="$STANDARD_ROOT/commands/work.md"
+REGRESSION_SH="$STANDARD_ROOT/scripts/regression.sh"
+REGRESSION_CMD="$STANDARD_ROOT/commands/regression.md"
+
+# Counter files (so subshell pass/fail calls still aggregate correctly).
+PASS_FILE=$(mktemp)
+FAIL_FILE=$(mktemp)
+FAILED_NAMES_FILE=$(mktemp)
+
+pass() {
+  printf '1\n' >> "$PASS_FILE"
+  printf '  \033[32m✓\033[0m %s\n' "$1"
+}
+fail() {
+  printf '1\n' >> "$FAIL_FILE"
+  printf '%s\n' "$1" >> "$FAILED_NAMES_FILE"
+  printf '  \033[31m✗\033[0m %s\n' "$1"
+}
+
+assert_file()        { [[ -f "$1" ]] && pass "file exists: ${1#"$APP/"}" || fail "file missing: ${1#"$APP/"}"; }
+assert_contains()    { grep -qF -- "$2" "$1" && pass "contains: ${1#"$APP/"} ← '${2:0:60}'" || fail "does NOT contain: ${1#"$APP/"} ← '${2:0:60}'"; }
+assert_out_contains(){ printf '%s' "$2" | grep -qF -- "$1" && pass "$3" || fail "$3 — got: $(printf '%s' "$2" | head -3)"; }
+assert_ok_exit()     { [[ "$1" -eq 0 ]] && pass "$2" || fail "$2 (exit=$1)"; }
+
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"; rm -f "$PASS_FILE" "$FAIL_FILE" "$FAILED_NAMES_FILE"' EXIT
+APP="$TMP/app"
+
+echo "=== [1] Hydration ==="
+"$HYDRATE" init "$APP" >/dev/null 2>&1
+
+# Root files — SCV only creates scv/ + .env.example.scv + .gitignore merge
+for f in .env.example.scv .gitignore; do
+  assert_file "$APP/$f"
+done
+[[ ! -f "$APP/CLAUDE.md" ]] && pass "root CLAUDE.md NOT created (pure separation)" || fail "root CLAUDE.md was created — should be user-owned"
+[[ ! -f "$APP/.env.example" ]] && pass "root .env.example NOT created (was never in template)" || fail "root .env.example leaked — should be .env.example.scv only"
+
+# Non-destructive over existing user .env.example
+EXIST_APP="$TMP/existing-app"
+mkdir -p "$EXIST_APP"
+cat > "$EXIST_APP/.env.example" <<'USEREX'
+DATABASE_URL=postgresql://...
+API_KEY=keep-this
+USEREX
+"$HYDRATE" init "$EXIST_APP" >/dev/null 2>&1
+grep -qF "DATABASE_URL=postgresql" "$EXIST_APP/.env.example" \
+  && pass "hydrate: existing user .env.example preserved (non-destructive)" \
+  || fail "hydrate overwrote user's .env.example"
+assert_file "$EXIST_APP/.env.example.scv"
+grep -qF "NOTIFIER_PROVIDER" "$EXIST_APP/.env.example.scv" \
+  && pass "hydrate: SCV env template created at .env.example.scv" \
+  || fail "hydrate: .env.example.scv missing SCV vars"
+# SCV env file must NOT reference the legacy /standard-report command name
+grep -qF "/standard-report" "$EXIST_APP/.env.example.scv" \
+  && fail ".env.example.scv still references legacy /standard-report" \
+  || pass ".env.example.scv no longer references /standard-report (uses /scv:report)"
+
+# scv/ hierarchy (now includes CLAUDE.md)
+for f in CLAUDE.md INTAKE.md PROMOTE.md RALPH_PROMPT.md ARCHITECTURE.md DESIGN.md DOMAIN.md AGENTS.md TESTING.md REPORTING.md; do
+  assert_file "$APP/scv/$f"
+done
+assert_file "$APP/scv/raw/README.md"
+[[ -d "$APP/scv/archive" ]] && pass "scv/archive directory hydrated" || fail "scv/archive directory missing"
+[[ -d "$APP/scv/promote" ]] && pass "scv/promote directory hydrated" || fail "scv/promote directory missing"
+
+VERSION_NOW=$(tr -d '[:space:]' < "$STANDARD_ROOT/VERSION")
+assert_contains "$APP/scv/CLAUDE.md" "<!-- STANDARD:VERSION -->${VERSION_NOW}<!-- /STANDARD:VERSION -->"
+assert_contains "$APP/scv/CLAUDE.md" "<!-- STANDARD:SYNCED_AT -->$(date +%Y-%m-%d)<!-- /STANDARD:SYNCED_AT -->"
+[[ ! -f "$APP/.gitignore.fragment" ]] && pass ".gitignore.fragment merged into .gitignore" || fail ".gitignore.fragment leaked"
+
+echo
+echo "=== [1b] Zero-base 템플릿 순수성 ==="
+# 각 표준 문서에 How to elicit + Completion criteria 섹션 존재
+for f in DOMAIN ARCHITECTURE DESIGN AGENTS TESTING REPORTING; do
+  assert_contains "$APP/scv/$f.md" "How to elicit"
+  assert_contains "$APP/scv/$f.md" "Completion criteria"
+done
+# INTAKE.md 의 프로세스 섹션
+assert_contains "$APP/scv/INTAKE.md" "불변 원칙"
+assert_contains "$APP/scv/INTAKE.md" "단계 0"
+# 구체 예시가 핵심 표준 문서에서 제거됐는지
+for term in Livekit Temporal "UC-001" Utterance dialog-llm; do
+  hits=""
+  for f in DOMAIN ARCHITECTURE DESIGN AGENTS TESTING REPORTING; do
+    if grep -qF "$term" "$APP/scv/$f.md" 2>/dev/null; then
+      hits+="scv/$f.md "
+    fi
+  done
+  if [[ -z "$hits" ]]; then
+    pass "example term absent from core docs: $term"
+  else
+    fail "example term '$term' still in: $hits"
+  fi
+done
+# 상태: INTAKE/PROMOTE 는 active (process docs), 나머지는 default(adoption) 모드에서 N/A
+intake_status=$(grep -E "^status:" "$APP/scv/INTAKE.md" | head -1 | awk '{print $2}')
+[[ "$intake_status" == "active" ]] && pass "INTAKE status=active" || fail "INTAKE status should be active, got '$intake_status'"
+promote_status=$(grep -E "^status:" "$APP/scv/PROMOTE.md" | head -1 | awk '{print $2}')
+[[ "$promote_status" == "active" ]] && pass "PROMOTE status=active" || fail "PROMOTE status should be active, got '$promote_status'"
+domain_status=$(grep -E "^status:" "$APP/scv/DOMAIN.md" | head -1 | awk '{print $2}')
+[[ "$domain_status" == "N/A" ]] && pass "DOMAIN starts as N/A (adoption default)" || fail "DOMAIN should be N/A in adoption mode, got '$domain_status'"
+
+echo
+echo "=== [1c] Greenfield (--new) hydrate mode ==="
+NEW_APP="$TMP/new-app"
+"$HYDRATE" init "$NEW_APP" --new >/dev/null 2>&1
+# In --new mode, standard docs stay as draft (INTAKE drives the flow)
+for doc in DOMAIN ARCHITECTURE DESIGN AGENTS TESTING REPORTING RALPH_PROMPT; do
+  st=$(grep -E "^status:" "$NEW_APP/scv/$doc.md" | head -1 | awk '{print $2}')
+  [[ "$st" == "draft" ]] && pass "--new: $doc status=draft" || fail "--new: $doc should be draft, got '$st'"
+done
+# INTAKE/PROMOTE stay active in both modes (process docs)
+intake_st=$(grep -E "^status:" "$NEW_APP/scv/INTAKE.md" | head -1 | awk '{print $2}')
+[[ "$intake_st" == "active" ]] && pass "--new: INTAKE still active" || fail "--new: INTAKE should be active"
+# Frontmatter validator must accept both N/A and draft
+"$CHECK_FRONT" --project-dir "$APP" >/dev/null 2>&1     && pass "check-frontmatter passes adoption mode (N/A)"   || fail "check-frontmatter rejects adoption mode"
+"$CHECK_FRONT" --project-dir "$NEW_APP" >/dev/null 2>&1 && pass "check-frontmatter passes greenfield mode (draft)" || fail "check-frontmatter rejects greenfield mode"
+
+echo
+echo "=== [1d] /scv:help hydrate recommendation shows BOTH modes ==="
+EMPTY_DIR2=$(mktemp -d)
+(
+  cd "$EMPTY_DIR2"
+  OUT=$(bash "$HELP_SH" 2>&1)
+  assert_out_contains "기본 · adoption" "$OUT" "help(un-hydrated): shows default/adoption option"
+  assert_out_contains "--new"       "$OUT"  "help(un-hydrated): shows --new option"
+  assert_out_contains "adoption mode" "$OUT" "help(un-hydrated): mentions adoption mode"
+  assert_out_contains "INTAKE"      "$OUT"  "help(un-hydrated): mentions INTAKE for --new"
+)
+rm -rf "$EMPTY_DIR2"
+
+echo
+echo "=== [2] Frontmatter validity ==="
+if "$CHECK_FRONT" --project-dir "$APP" >/dev/null 2>&1; then
+  pass "all template frontmatter valid"
+else
+  fail "template frontmatter invalid"
+fi
+
+echo
+echo "=== [5] report dry-run (Slack) ==="
+cat > "$APP/.env" <<'ENV'
+PROJECT_NAME=test-proj
+NOTIFIER_PROVIDER=slack
+SLACK_BOT_TOKEN=xoxb-fake
+SLACK_CHANNEL_ID=C0DEFAULT
+SLACK_CHANNEL_ID_PHASE_COMPLETE=C0PASS
+SLACK_CHANNEL_ID_E2E_FAILURE=C0FAIL
+NOTIFIER_DRY_RUN=1
+ENV
+mkdir -p "$APP/test-results/E2E-001" "$APP/test-results/logs"
+printf 'PNG' > "$APP/test-results/E2E-001/ss.png"
+printf 'WEBM' > "$APP/test-results/E2E-001/video.webm"
+yes "log line" 2>/dev/null | head -c 25000 > "$APP/test-results/logs/run.log"
+
+(
+  cd "$APP"
+  OUT=$(bash "$REPORT" "Phase 2" passed --summary "all green" --attempt 1 2>&1)
+  rc=$?
+  assert_ok_exit "$rc" "slack/passed: exit 0"
+  assert_out_contains "OK DRY-RUN-TS-" "$OUT" "slack/passed: thread_ref prefix"
+  assert_out_contains "C0PASS" "$OUT" "slack/passed: routed to phase-complete channel"
+  assert_out_contains "files.getUploadURLExternal" "$OUT" "slack/passed: file upload logged"
+  assert_out_contains "uploaded 2 artifact(s)" "$OUT" "slack/passed: 2 artifacts uploaded (screenshot+video)"
+
+  OUT=$(bash "$REPORT" "Phase 2" failed --summary "first-byte 1.2s" --attempt 3 2>&1)
+  rc=$?
+  assert_ok_exit "$rc" "slack/failed: exit 0"
+  assert_out_contains "C0FAIL" "$OUT" "slack/failed: routed to e2e-failure channel"
+  assert_out_contains "uploaded 3 artifact(s)" "$OUT" "slack/failed: 3 artifacts uploaded (+log tail)"
+)
+
+echo
+echo "=== [6] report dry-run (Discord switch) ==="
+sed -i 's/^NOTIFIER_PROVIDER=.*/NOTIFIER_PROVIDER=discord/' "$APP/.env"
+cat >> "$APP/.env" <<'ENV'
+DISCORD_BOT_TOKEN=fake-discord
+DISCORD_CHANNEL_ID=111111111111111111
+DISCORD_CHANNEL_ID_PHASE_COMPLETE=222222222222222222
+ENV
+
+(
+  cd "$APP"
+  OUT=$(bash "$REPORT" "Phase 1" info --summary "mid" 2>&1)
+  rc=$?
+  assert_ok_exit "$rc" "discord/info: exit 0"
+  assert_out_contains "OK DRY-RUN-MID-" "$OUT" "discord/info: message id prefix"
+  assert_out_contains "discord:messages" "$OUT" "discord/info: messages endpoint logged"
+)
+
+echo
+echo "=== [7] Error handling ==="
+(
+  cd "$APP"
+  grep -v "^NOTIFIER_PROVIDER=" "$APP/.env" > "$APP/.env.tmp" && mv "$APP/.env.tmp" "$APP/.env"
+  OUT=$(bash "$REPORT" "X" passed 2>&1)
+  rc=$?
+  [[ "$rc" -ne 0 ]] && pass "missing NOTIFIER_PROVIDER: non-zero exit" || fail "missing NOTIFIER_PROVIDER should have failed"
+  assert_out_contains "NOTIFIER_PROVIDER not set" "$OUT" "missing NOTIFIER_PROVIDER: stderr message"
+
+  OUT=$(bash "$REPORT" "X" bogus 2>&1)
+  rc=$?
+  [[ "$rc" -ne 0 ]] && pass "invalid status: non-zero exit" || fail "invalid status should have failed"
+  assert_out_contains "Invalid status: bogus" "$OUT" "invalid status: stderr message"
+)
+
+echo
+echo "=== [9a] /scv:help self-onboarding ==="
+HELP_CMD="$STANDARD_ROOT/commands/help.md"
+HELP_SH="$STANDARD_ROOT/scripts/help.sh"
+assert_file "$HELP_CMD"
+assert_file "$HELP_SH"
+[[ -x "$HELP_SH" ]] && pass "help script executable" || fail "help script not executable"
+
+EMPTY_DIR=$(mktemp -d)
+(
+  cd "$EMPTY_DIR"
+  OUT=$(bash "$HELP_SH" 2>&1)
+  assert_out_contains "hydrate 안됨" "$OUT" "help: detects un-hydrated dir"
+  assert_out_contains "추천 다음 액션" "$OUT" "help: prints recommended next action"
+  assert_out_contains "hydrate.sh" "$OUT" "help: suggests hydrate.sh"
+)
+rm -rf "$EMPTY_DIR"
+
+(
+  cd "$APP"
+  OUT=$(bash "$HELP_SH" 2>&1)
+  assert_out_contains "hydrate 완료" "$OUT" "help: detects hydrated dir"
+  assert_out_contains "N/A" "$OUT" "help: lists N/A documents (adoption default)"
+  assert_out_contains "/scv:status" "$OUT" "help: includes status"
+  assert_out_contains "/scv:promote" "$OUT" "help: includes promote"
+  assert_out_contains "/scv:work" "$OUT" "help: includes work"
+  assert_out_contains "/scv:report" "$OUT" "help: includes report"
+  assert_out_contains "/scv:sync" "$OUT" "help: includes sync"
+)
+
+echo
+echo "=== [9b] /scv:promote helper ==="
+PROMOTE_HELPER="$STANDARD_ROOT/scripts/promote-helper.sh"
+PROMOTE_CMD="$STANDARD_ROOT/commands/promote.md"
+assert_file "$PROMOTE_CMD"
+assert_file "$PROMOTE_HELPER"
+[[ -x "$PROMOTE_HELPER" ]] && pass "helper is executable" || fail "helper not executable"
+
+# Seed raw materials in the new location
+mkdir -p "$APP/scv/raw/2026-04-17-workshop"
+cat > "$APP/scv/raw/2026-04-17-workshop/notes.md" <<'RAW'
+# 워크숍 메모
+온보딩 플로우 논의. 사용자가 가입 후 첫 15분에 무엇을 해야 하는가.
+RAW
+printf 'fakeimage' > "$APP/scv/raw/2026-04-17-workshop/whiteboard-01.jpg"
+printf 'fakepdf' > "$APP/scv/raw/customer-interview.pdf"
+
+(
+  cd "$APP"
+  OUT=$(bash "$PROMOTE_HELPER" --dry-run 2>&1)
+  rc=$?
+  assert_ok_exit "$rc" "promote-helper --dry-run exits 0"
+  assert_out_contains "MODE: dry-run" "$OUT"       "helper surfaces --dry-run flag"
+  assert_out_contains "TODAY:" "$OUT"              "helper prints TODAY"
+  assert_out_contains "AUTHOR:" "$OUT"             "helper prints AUTHOR"
+  assert_out_contains "STANDARD_VERSION:" "$OUT"   "helper prints STANDARD_VERSION"
+  assert_out_contains "GRAPHIFY_SKILL:" "$OUT"     "helper prints GRAPHIFY_SKILL"
+  assert_out_contains "GRAPH_STATUS:" "$OUT"       "helper prints GRAPH_STATUS"
+  assert_out_contains "scv/raw changes since last index" "$OUT" "helper prints raw diff section"
+  assert_out_contains "existing archive folders" "$OUT" "helper prints archive section"
+  assert_out_contains "notes.md" "$OUT"            "helper lists raw .md file"
+  assert_out_contains "whiteboard-01.jpg" "$OUT"   "helper lists raw image file"
+  assert_out_contains "customer-interview.pdf" "$OUT" "helper lists raw pdf file"
+
+  # --graph-only short-circuits (no inventory section)
+  OUT=$(bash "$PROMOTE_HELPER" --graph-only 2>&1)
+  assert_out_contains "MODE: graph-only" "$OUT"    "helper surfaces --graph-only flag"
+  assert_out_contains "GRAPH_STATUS:" "$OUT"       "helper still prints GRAPH_STATUS in graph-only"
+  printf '%s' "$OUT" | grep -qF "scv/raw inventory" \
+    && fail "helper --graph-only should skip inventory section" \
+    || pass "helper --graph-only skips inventory"
+)
+
+echo
+echo "=== [11] readpath.sh (scan / diff / update) ==="
+READPATH_SH="$STANDARD_ROOT/scripts/readpath.sh"
+assert_file "$READPATH_SH"
+[[ -x "$READPATH_SH" ]] && pass "readpath executable" || fail "readpath not executable"
+
+# Use a dedicated raw sandbox to avoid disturbing APP's existing files
+RP_APP="$TMP/rp-app"
+mkdir -p "$RP_APP/scv/raw/subdir"
+echo "readme guide" > "$RP_APP/scv/raw/README.md"
+echo "notes v1"     > "$RP_APP/scv/raw/notes.md"
+echo "sub content"  > "$RP_APP/scv/raw/subdir/inside.md"
+
+(
+  cd "$RP_APP"
+  # scan emits valid-looking JSON
+  OUT=$(bash "$READPATH_SH" scan 2>&1)
+  assert_out_contains '"version": 1' "$OUT"                                  "readpath scan: version field"
+  assert_out_contains '"files":'     "$OUT"                                  "readpath scan: files field"
+  assert_out_contains 'scv/raw/notes.md' "$OUT"                              "readpath scan: includes notes.md"
+  assert_out_contains 'scv/raw/subdir/inside.md' "$OUT"                      "readpath scan: recurses into subdir"
+  printf '%s' "$OUT" | grep -qF 'scv/raw/README.md' \
+    && fail "readpath scan: README.md should be skipped" \
+    || pass "readpath scan: README.md skipped"
+
+  # update creates state file
+  bash "$READPATH_SH" update >/dev/null
+  [[ -f scv/readpath.json ]] && pass "readpath update: state file created" || fail "readpath update: state file missing"
+
+  # diff after update → no changes, exit 0
+  bash "$READPATH_SH" diff >/dev/null
+  rc=$?
+  [[ "$rc" -eq 0 ]] && pass "readpath diff: no changes after update (exit 0)" || fail "readpath diff: expected exit 0, got $rc"
+
+  # Add a file → A line + exit 2
+  echo "newcontent" > scv/raw/new.pdf
+  OUT=$(bash "$READPATH_SH" diff 2>&1)
+  rc=$?
+  [[ "$rc" -eq 2 ]] && pass "readpath diff: exit 2 on changes" || fail "readpath diff: expected exit 2, got $rc"
+  assert_out_contains $'A\tscv/raw/new.pdf' "$OUT" "readpath diff: reports Added"
+
+  # Modify existing file → M line
+  echo "notes v2 extended" > scv/raw/notes.md
+  OUT=$(bash "$READPATH_SH" diff 2>&1)
+  assert_out_contains $'M\tscv/raw/notes.md' "$OUT" "readpath diff: reports Modified"
+
+  # Remove a file → R line
+  rm scv/raw/subdir/inside.md
+  OUT=$(bash "$READPATH_SH" diff 2>&1)
+  assert_out_contains $'R\tscv/raw/subdir/inside.md' "$OUT" "readpath diff: reports Removed"
+
+  # status-counts
+  OUT=$(bash "$READPATH_SH" status-counts 2>&1)
+  assert_out_contains 'added=1 modified=1 removed=1 total=3' "$OUT" "readpath status-counts: correct tally"
+)
+
+echo
+echo "=== [11b] /scv:status command ==="
+STATUS_SH="$STANDARD_ROOT/scripts/status.sh"
+STATUS_CMD="$STANDARD_ROOT/commands/status.md"
+assert_file "$STATUS_SH"
+assert_file "$STATUS_CMD"
+[[ -x "$STATUS_SH" ]] && pass "status script executable" || fail "status script not executable"
+
+(
+  cd "$RP_APP"
+  # Running /scv:status without --ack (state still has added/modified/removed)
+  OUT=$(bash "$STATUS_SH" 2>&1)
+  assert_out_contains "SCV Status" "$OUT"                   "status: header present"
+  assert_out_contains "added   :" "$OUT"                    "status: added bucket"
+  assert_out_contains "modified:" "$OUT"                    "status: modified bucket"
+  assert_out_contains "removed :" "$OUT"                    "status: removed bucket"
+  assert_out_contains "/scv:promote" "$OUT"                 "status: suggests /scv:promote"
+
+  # --ack updates baseline
+  bash "$STATUS_SH" --ack >/dev/null 2>&1
+  OUT=$(bash "$STATUS_SH" 2>&1)
+  assert_out_contains "no changes since last index" "$OUT"  "status --ack: baseline updated (subsequent run clean)"
+
+  # Add a promote plan and verify it's listed
+  mkdir -p scv/promote/sample-plan
+  echo "# sample PLAN" > scv/promote/sample-plan/PLAN.md
+  echo "# flat note"   > scv/promote/quick-note.md
+  OUT=$(bash "$STATUS_SH" 2>&1)
+  assert_out_contains "scv/promote/sample-plan/PLAN.md" "$OUT" "status: lists dir-based PLAN.md"
+  assert_out_contains "scv/promote/quick-note.md" "$OUT"       "status: lists flat .md entry"
+  assert_out_contains "[scv/archive" "$OUT"                    "status: includes archive section"
+)
+
+echo
+echo "=== [11g] /scv:work command + helper ==="
+WORK_SH="$STANDARD_ROOT/scripts/work.sh"
+WORK_CMD="$STANDARD_ROOT/commands/work.md"
+assert_file "$WORK_SH"
+assert_file "$WORK_CMD"
+[[ -x "$WORK_SH" ]] && pass "work.sh executable" || fail "work.sh not executable"
+
+# command protocol content checks
+assert_contains "$WORK_CMD" "PLAN.md"
+assert_contains "$WORK_CMD" "TESTS.md"
+assert_contains "$WORK_CMD" "Related Documents"
+assert_contains "$WORK_CMD" "AskUserQuestion"
+assert_contains "$WORK_CMD" "--archive"
+assert_contains "$WORK_CMD" "in_progress"
+assert_contains "$WORK_CMD" "document-split"
+
+# Build a minimal promote plan in the hydrated APP and exercise work.sh
+mkdir -p "$APP/scv/promote/20260420-wookiya1364-sample-feature"
+cat > "$APP/scv/promote/20260420-wookiya1364-sample-feature/PLAN.md" <<'PLAN'
+---
+title: Sample Feature
+slug: 20260420-wookiya1364-sample-feature
+author: wookiya1364
+created_at: 2026-04-20
+status: planned
+tags: [sample]
+---
+
+# Sample Feature
+
+## Summary
+minimal plan for tests.
+
+## Steps
+1. do a thing
+
+## Related Documents
+- [ARCH.md](./ARCH.md) — arch notes
+PLAN
+cat > "$APP/scv/promote/20260420-wookiya1364-sample-feature/TESTS.md" <<'TESTS'
+# Test Plan
+## 실행 방법
+echo "ok"
+## 통과 판정
+- prints ok
+TESTS
+
+(
+  cd "$APP"
+  # [1] list plans (no slug)
+  OUT=$(bash "$WORK_SH" 2>&1)
+  assert_out_contains "MODE: prepare" "$OUT"                     "work: emits MODE prepare"
+  assert_out_contains "TARGET_SLUG: (none" "$OUT"                "work: no slug → prompt expected"
+  assert_out_contains "20260420-wookiya1364-sample-feature" "$OUT" "work: lists the sample plan"
+
+  # [2] prepare with exact slug
+  OUT=$(bash "$WORK_SH" 20260420-wookiya1364-sample-feature 2>&1)
+  assert_out_contains "TARGET_SLUG: 20260420-wookiya1364-sample-feature" "$OUT" "work: resolves exact slug"
+  assert_out_contains "PLAN_FILE:"  "$OUT"                        "work: emits PLAN_FILE"
+  assert_out_contains "TESTS_FILE:" "$OUT"                        "work: emits TESTS_FILE"
+  assert_out_contains "ARCH.md" "$OUT"                            "work: lists Related Document entry"
+  assert_out_contains "(MISSING)" "$OUT"                          "work: flags missing Related Document"
+
+  # [3] fuzzy slug match
+  OUT=$(bash "$WORK_SH" sample-feature 2>&1)
+  assert_out_contains "TARGET_SLUG: 20260420-wookiya1364-sample-feature" "$OUT" "work: fuzzy resolves slug suffix"
+
+  # [4] unknown slug → exit 1
+  bash "$WORK_SH" totally-missing-slug >/dev/null 2>&1
+  [[ $? -eq 1 ]] && pass "work: unknown slug exits 1" || fail "work: unknown slug should exit 1"
+
+  # [5] archive
+  OUT=$(bash "$WORK_SH" sample-feature --archive --reason="tests passed" 2>&1)
+  assert_out_contains "ARCHIVED:" "$OUT"                          "work --archive: reports ARCHIVED line"
+  [[ -d scv/archive/20260420-wookiya1364-sample-feature ]]  && pass "work --archive: folder moved to archive" || fail "work --archive: folder not moved"
+  [[ ! -d scv/promote/20260420-wookiya1364-sample-feature ]] && pass "work --archive: promote folder removed" || fail "work --archive: promote folder still present"
+  [[ -f scv/archive/20260420-wookiya1364-sample-feature/ARCHIVED_AT.md ]] && pass "work --archive: ARCHIVED_AT.md written" || fail "work --archive: ARCHIVED_AT.md missing"
+  assert_contains "$APP/scv/archive/20260420-wookiya1364-sample-feature/ARCHIVED_AT.md" "tests passed"
+
+  # [6] archive again should fail (destination exists or no source)
+  bash "$WORK_SH" sample-feature --archive >/dev/null 2>&1
+  [[ $? -ne 0 ]] && pass "work --archive: idempotent reject" || fail "work --archive: should fail when already archived"
+)
+
+echo
+echo "=== [11i] /scv:work refs: parsing & grouping ==="
+mkdir -p "$APP/scv/promote/20260421-wookiya1364-refs-test"
+cat > "$APP/scv/promote/20260421-wookiya1364-refs-test/PLAN.md" <<'PLAN'
+---
+title: Refs Schema Test
+slug: 20260421-wookiya1364-refs-test
+author: wookiya1364
+created_at: 2026-04-21
+status: planned
+tags: [test]
+refs:
+  - type: jira
+    id: PAY-1234
+  - type: jira
+    id: PAY-1235
+  - type: confluence
+    url: https://confluence.example.com/x/spec
+  - type: pr
+    url: https://github.com/org/repo/pull/567
+---
+# Refs Schema Test
+## Steps
+1. n/a
+## Related Documents
+PLAN
+cat > "$APP/scv/promote/20260421-wookiya1364-refs-test/TESTS.md" <<'T'
+# Test Plan
+## 통과 판정
+- ok
+T
+
+(
+  cd "$APP"
+  OUT=$(bash "$WORK_SH" refs-test 2>&1)
+  assert_out_contains "external refs" "$OUT" "work: emits external refs section"
+  assert_out_contains "[jira] 2"      "$OUT" "work refs: jira count = 2"
+  assert_out_contains "id=PAY-1234"   "$OUT" "work refs: jira id PAY-1234"
+  assert_out_contains "id=PAY-1235"   "$OUT" "work refs: jira id PAY-1235"
+  assert_out_contains "[confluence] 1" "$OUT" "work refs: confluence count = 1"
+  assert_out_contains "https://confluence.example.com/x/spec" "$OUT" "work refs: confluence url"
+  assert_out_contains "[pr] 1"        "$OUT" "work refs: pr count = 1"
+  # Verify no 'id=https://' prefix bug (url-only entries should show url cleanly)
+  printf '%s' "$OUT" | grep -qF "id=https://" \
+    && fail "work refs: url-only entry incorrectly prefixed with 'id='" \
+    || pass "work refs: url-only entries rendered without id= prefix"
+)
+
+# Plan with no refs: section should produce "(none)"
+mkdir -p "$APP/scv/promote/20260421-wookiya1364-no-refs"
+cat > "$APP/scv/promote/20260421-wookiya1364-no-refs/PLAN.md" <<'PLAN'
+---
+title: No Refs
+slug: 20260421-wookiya1364-no-refs
+author: wookiya1364
+created_at: 2026-04-21
+status: planned
+tags: []
+---
+# No Refs
+## Related Documents
+PLAN
+cat > "$APP/scv/promote/20260421-wookiya1364-no-refs/TESTS.md" <<'T'
+# Test Plan
+T
+(
+  cd "$APP"
+  OUT=$(bash "$WORK_SH" no-refs 2>&1)
+  assert_out_contains "no refs: entries" "$OUT" "work refs: empty refs case rendered"
+)
+
+echo
+echo "=== [11e] /scv:promote command protocol ==="
+PROMOTE_CMD_FILE="$STANDARD_ROOT/commands/promote.md"
+assert_contains "$PROMOTE_CMD_FILE" "Skill(graphify)"
+assert_contains "$PROMOTE_CMD_FILE" "readpath.sh"
+assert_contains "$PROMOTE_CMD_FILE" "GRAPH_STATUS"
+assert_contains "$PROMOTE_CMD_FILE" "--graph-only"
+assert_contains "$PROMOTE_CMD_FILE" "--dry-run"
+assert_contains "$PROMOTE_CMD_FILE" "AskUserQuestion"
+assert_contains "$PROMOTE_CMD_FILE" "<YYYYMMDD>-<AUTHOR>-<slug>"
+assert_contains "$PROMOTE_CMD_FILE" "status: planned"
+
+echo
+echo "=== [11f] /scv:status docs graph section ==="
+(
+  cd "$RP_APP"
+  OUT=$(bash "$STATUS_SH" 2>&1)
+  assert_out_contains "[docs graph" "$OUT" "status: includes docs graph section"
+  # Should show exactly one of: missing, built, stale, or skill-missing message
+  printf '%s' "$OUT" | grep -qE 'status: (missing|built|stale)|skill not installed' \
+    && pass "status: graph state reported (one of missing/built/stale/skill-missing)" \
+    || fail "status: graph state not reported"
+)
+
+echo
+echo "=== [11j] ARCHITECTURE.md perspective checklist + diagrams support ==="
+ARCH="$APP/scv/ARCHITECTURE.md"
+assert_contains "$ARCH" "관점 체크리스트"
+assert_contains "$ARCH" "Logical"
+assert_contains "$ARCH" "Deployment"
+assert_contains "$ARCH" "Network"
+assert_contains "$ARCH" "Security"
+assert_contains "$ARCH" "Compliance"
+assert_contains "$ARCH" "DR/BCP"
+assert_contains "$ARCH" "AI/ML"
+assert_contains "$ARCH" "Observability"
+assert_contains "$ARCH" "폐쇄망"
+assert_contains "$ARCH" "Mermaid"
+assert_contains "$ARCH" "scv/architecture/assets/"
+assert_contains "$ARCH" "Related Architecture Documents"
+assert_contains "$ARCH" "RTO"
+
+echo
+echo "=== [11d] PROMOTE.md protocol doc ==="
+assert_file "$APP/scv/PROMOTE.md"
+assert_contains "$APP/scv/PROMOTE.md" "PROMOTE — 승격 문서 작성 규약"
+assert_contains "$APP/scv/PROMOTE.md" "YYYYMMDD"
+assert_contains "$APP/scv/PROMOTE.md" "PLAN.md"
+assert_contains "$APP/scv/PROMOTE.md" "TESTS.md"
+assert_contains "$APP/scv/PROMOTE.md" "Related Documents"
+assert_contains "$APP/scv/PROMOTE.md" "Archive"
+
+echo
+echo "=== [11h] /scv:help stage-aware recommendations ==="
+# Build a fresh hydrated sandbox with all docs active to exercise the
+# recommendation priority: draft > raw-changes > active-plans > all-clean.
+HA=$(mktemp -d)
+bash "$HYDRATE" init "$HA" >/dev/null 2>&1
+# Mark env + docs as active to pass those gates
+cp "$HA/.env.example.scv" "$HA/.env"
+sed -i 's/^NOTIFIER_PROVIDER=.*/NOTIFIER_PROVIDER=slack/' "$HA/.env"
+sed -i 's|^SLACK_BOT_TOKEN=.*|SLACK_BOT_TOKEN=xoxb-fake|' "$HA/.env"
+# Default hydrate = adoption mode (N/A). Force all to active for this test so
+# downstream states (raw changes, plan priority) can be exercised without the
+# draft-docs branch taking priority.
+for d in DOMAIN ARCHITECTURE DESIGN AGENTS TESTING REPORTING RALPH_PROMPT; do
+  sed -i '0,/^status:/{s#^status: .*#status: active#}' "$HA/scv/$d.md"
+done
+
+(
+  cd "$HA"
+
+  # [1] all clean → "준비 완료"
+  OUT=$(bash "$HELP_SH" 2>&1)
+  assert_out_contains "준비 완료" "$OUT"                         "help/state-clean: 준비 완료 message"
+
+  # [2] add raw file → recommends /scv:promote
+  echo "note" > scv/raw/note.md
+  OUT=$(bash "$HELP_SH" 2>&1)
+  assert_out_contains "scv/raw/ 에 감지된 변경" "$OUT"            "help/state-raw: detects raw changes"
+  assert_out_contains "/scv:promote" "$OUT"                      "help/state-raw: suggests /scv:promote"
+
+  # [3] ack baseline + add active plan → recommends /scv:work <slug>
+  bash "$READPATH_SH" update >/dev/null
+  mkdir -p scv/promote/20260420-wookiya1364-feature-x
+  printf -- "---\ntitle: Feature X\nslug: 20260420-wookiya1364-feature-x\n---\n# X\n" \
+    > scv/promote/20260420-wookiya1364-feature-x/PLAN.md
+  OUT=$(bash "$HELP_SH" 2>&1)
+  assert_out_contains "활성 promote 계획" "$OUT"                  "help/state-plan: detects active plans"
+  assert_out_contains "/scv:work 20260420-wookiya1364-feature-x" "$OUT" \
+                                                                  "help/state-plan: suggests /scv:work <slug>"
+  assert_out_contains "scv/promote 에 1 개 활성 계획" "$OUT"       "help: diagnosis includes plan count"
+
+  # [4] archive entry shows in diagnosis
+  mkdir -p scv/archive/20260418-wookiya1364-old-plan
+  printf 'done' > scv/archive/20260418-wookiya1364-old-plan/ARCHIVED_AT.md
+  OUT=$(bash "$HELP_SH" 2>&1)
+  assert_out_contains "scv/archive 에 1 개 완료 계획" "$OUT"       "help: diagnosis includes archive count"
+
+  # [5] priority: draft docs override raw/plan detection
+  sed -i '0,/^status:/{s#^status: .*#status: draft#}' scv/DOMAIN.md
+  OUT=$(bash "$HELP_SH" 2>&1)
+  assert_out_contains "이어서/처음부터"   "$OUT"                    "help/state-priority: draft docs take precedence (A/B prompt)"
+  assert_out_contains "DOMAIN"             "$OUT"                   "help/state-priority: mentions specific draft doc"
+  assert_out_contains "resume check"       "$OUT"                   "help/state-priority: references INTAKE resume procedure"
+  printf '%s' "$OUT" | grep -qF "활성 promote 계획이" \
+    && fail "help: draft priority violated (also showed active plan message)" \
+    || pass "help: draft state suppresses active-plan recommendation"
+)
+rm -rf "$HA"
+
+echo
+echo "=== [11c] /scv:help banner for raw changes ==="
+(
+  cd "$RP_APP"
+  # No changes right now → banner absent
+  OUT=$(bash "$HELP_SH" 2>&1)
+  printf '%s' "$OUT" | grep -qF '[scv/raw]' \
+    && fail "help: banner should be absent when no changes" \
+    || pass "help: no banner when raw clean"
+
+  # Introduce a change → banner appears
+  echo "brand new" > scv/raw/brand-new.md
+  OUT=$(bash "$HELP_SH" 2>&1)
+  assert_out_contains "[scv/raw]" "$OUT"           "help: banner appears when raw has changes"
+  assert_out_contains "added"     "$OUT"           "help: banner reports added count"
+)
+
+echo
+echo "=== [11k] /scv:regression — supersedes graph slug-level skip ==="
+assert_file "$REGRESSION_SH"
+[[ -x "$REGRESSION_SH" ]] && pass "regression.sh executable" || fail "regression.sh not executable"
+
+REG_APP=$(mktemp -d)
+mkdir -p "$REG_APP/scv/archive/20260101-tester-v1"
+cat > "$REG_APP/scv/archive/20260101-tester-v1/PLAN.md" <<'EOF'
+---
+title: v1
+slug: 20260101-tester-v1
+status: done
+tags: [core]
+---
+EOF
+# v1's TESTS will exit 1 — if the sentinel ever runs, regression fails
+cat > "$REG_APP/scv/archive/20260101-tester-v1/TESTS.md" <<'EOF'
+## 실행 방법
+```bash
+exit 1
+```
+EOF
+
+mkdir -p "$REG_APP/scv/archive/20260201-tester-v2"
+cat > "$REG_APP/scv/archive/20260201-tester-v2/PLAN.md" <<'EOF'
+---
+title: v2
+slug: 20260201-tester-v2
+status: done
+tags: [core]
+supersedes:
+  - 20260101-tester-v1
+---
+EOF
+cat > "$REG_APP/scv/archive/20260201-tester-v2/TESTS.md" <<'EOF'
+## 실행 방법
+```bash
+exit 0
+```
+EOF
+
+(
+  cd "$REG_APP"
+  OUT=$(bash "$REGRESSION_SH" 2>&1)
+  rc=$?
+  assert_ok_exit "$rc" "regression: supersede graph skip → rc 0 (sentinel v1 never ran)"
+  assert_out_contains "SKIPPED_SUPERSEDED: 1" "$OUT" "regression: SKIPPED_SUPERSEDED = 1"
+  assert_out_contains "[superseded] 20260101-tester-v1" "$OUT" "regression: skip list names victim"
+  assert_out_contains "by 20260201-tester-v2" "$OUT" "regression: skip list names the by-slug"
+  assert_out_contains "PASSED_SLUGS: 1" "$OUT" "regression: only v2 executed (and passed)"
+  assert_out_contains "EXECUTED_SLUGS: 1" "$OUT" "regression: executed count = 1"
+)
+rm -rf "$REG_APP"
+
+echo
+echo "=== [11l] /scv:regression — scenario-level skip ==="
+REG_APP=$(mktemp -d)
+mkdir -p "$REG_APP/scv/archive/20260101-a"
+cat > "$REG_APP/scv/archive/20260101-a/PLAN.md" <<'EOF'
+---
+title: a
+slug: 20260101-a
+status: done
+---
+EOF
+cat > "$REG_APP/scv/archive/20260101-a/TESTS.md" <<'EOF'
+## 실행 방법
+```bash
+exit 0
+```
+EOF
+mkdir -p "$REG_APP/scv/archive/20260201-b"
+cat > "$REG_APP/scv/archive/20260201-b/PLAN.md" <<'EOF'
+---
+title: b
+slug: 20260201-b
+status: done
+supersedes_scenarios:
+  - 20260101-a:T2
+  - 20260101-a:T3
+---
+EOF
+cat > "$REG_APP/scv/archive/20260201-b/TESTS.md" <<'EOF'
+## 실행 방법
+```bash
+exit 0
+```
+EOF
+
+(
+  cd "$REG_APP"
+  OUT=$(bash "$REGRESSION_SH" 2>&1)
+  assert_out_contains "SKIPPED_SCENARIOS: 2" "$OUT" "regression: SKIPPED_SCENARIOS = 2"
+  assert_out_contains "[scenario-skipped] 20260101-a:T2" "$OUT" "regression: T2 skip line"
+  assert_out_contains "[scenario-skipped] 20260101-a:T3" "$OUT" "regression: T3 skip line"
+  # Slug-level execution proceeds (scenario skip is a hint via env var, slug still runs)
+  assert_out_contains "EXECUTED_SLUGS: 2" "$OUT" "regression: both slugs still executed (scenario skip is env-hint only)"
+)
+rm -rf "$REG_APP"
+
+echo
+echo "=== [11m] /scv:regression — obsolete marking + --include-obsolete ==="
+REG_APP=$(mktemp -d)
+mkdir -p "$REG_APP/scv/archive/20260101-keep" "$REG_APP/scv/archive/20260201-old"
+cat > "$REG_APP/scv/archive/20260101-keep/PLAN.md" <<'EOF'
+---
+title: keep
+slug: 20260101-keep
+status: done
+---
+EOF
+cat > "$REG_APP/scv/archive/20260101-keep/TESTS.md" <<'EOF'
+## 실행 방법
+```bash
+exit 0
+```
+EOF
+cat > "$REG_APP/scv/archive/20260201-old/PLAN.md" <<'EOF'
+---
+title: old
+slug: 20260201-old
+status: obsolete
+obsoleted_at: 2026-03-01
+obsoleted_by: manual
+---
+EOF
+# Sentinel: if obsolete-skip fails, this exit 1 would surface
+cat > "$REG_APP/scv/archive/20260201-old/TESTS.md" <<'EOF'
+## 실행 방법
+```bash
+exit 1
+```
+EOF
+
+(
+  cd "$REG_APP"
+  OUT=$(bash "$REGRESSION_SH" 2>&1)
+  rc=$?
+  assert_ok_exit "$rc" "regression: obsolete auto-skip → rc 0"
+  assert_out_contains "SKIPPED_OBSOLETE: 1" "$OUT" "regression: SKIPPED_OBSOLETE = 1"
+  assert_out_contains "[obsolete] 20260201-old" "$OUT" "regression: obsolete skip list entry"
+
+  # --include-obsolete brings it back; sentinel now fails
+  OUT=$(bash "$REGRESSION_SH" --include-obsolete 2>&1)
+  rc=$?
+  [[ $rc -ne 0 ]] && pass "regression --include-obsolete: obsolete runs → rc != 0 (sentinel fail)" || fail "regression --include-obsolete: should surface obsolete failure"
+  assert_out_contains "SKIPPED_OBSOLETE: 0" "$OUT" "regression --include-obsolete: SKIPPED_OBSOLETE = 0"
+  assert_out_contains "FAILED_SLUGS: 1" "$OUT" "regression --include-obsolete: fail count surfaces"
+)
+rm -rf "$REG_APP"
+
+echo
+echo "=== [11n] /scv:regression — --tag filter ==="
+REG_APP=$(mktemp -d)
+for name in a b c; do
+  mkdir -p "$REG_APP/scv/archive/$name"
+  case "$name" in
+    a) tags_block="tags:\n  - core" ;;
+    b) tags_block="tags:\n  - core\n  - auth" ;;
+    c) tags_block="tags:\n  - ui" ;;
+  esac
+  printf -- "---\ntitle: %s\nslug: %s\nstatus: done\n%s\n---\n" "$name" "$name" "$(printf "$tags_block")" > "$REG_APP/scv/archive/$name/PLAN.md"
+  printf -- "## 실행 방법\n\`\`\`bash\nexit 0\n\`\`\`\n" > "$REG_APP/scv/archive/$name/TESTS.md"
+done
+
+(
+  cd "$REG_APP"
+  OUT=$(bash "$REGRESSION_SH" --tag core 2>&1)
+  assert_out_contains "TOTAL_SLUGS: 2" "$OUT" "regression --tag core: narrows to 2 slugs"
+  assert_out_contains "TAG_FILTER: core" "$OUT" "regression --tag core: header reflects filter"
+  assert_out_contains "EXECUTED_SLUGS: 2" "$OUT" "regression --tag core: both executed"
+)
+rm -rf "$REG_APP"
+
+echo
+echo "=== [11o] /scv:regression — --include-promote ==="
+REG_APP=$(mktemp -d)
+mkdir -p "$REG_APP/scv/archive/20260101-arc" "$REG_APP/scv/promote/20260301-prm"
+for dir in "$REG_APP/scv/archive/20260101-arc" "$REG_APP/scv/promote/20260301-prm"; do
+  slug=$(basename "$dir")
+  cat > "$dir/PLAN.md" <<EOF
+---
+title: $slug
+slug: $slug
+status: done
+---
+EOF
+  cat > "$dir/TESTS.md" <<'EOF'
+## 실행 방법
+```bash
+exit 0
+```
+EOF
+done
+
+(
+  cd "$REG_APP"
+  OUT=$(bash "$REGRESSION_SH" 2>&1)
+  assert_out_contains "TOTAL_SLUGS: 1" "$OUT" "regression: default archive-only → 1 slug"
+  assert_out_contains "SCOPE: archive" "$OUT" "regression: SCOPE header = archive"
+
+  OUT=$(bash "$REGRESSION_SH" --include-promote 2>&1)
+  assert_out_contains "TOTAL_SLUGS: 2" "$OUT" "regression --include-promote: now 2 slugs"
+  assert_out_contains "SCOPE: archive+promote" "$OUT" "regression --include-promote: SCOPE reflects"
+)
+rm -rf "$REG_APP"
+
+echo
+echo "=== [11p] /scv:regression — --ci exit 2 + JSON summary ==="
+REG_APP=$(mktemp -d)
+mkdir -p "$REG_APP/scv/archive/20260101-fail"
+cat > "$REG_APP/scv/archive/20260101-fail/PLAN.md" <<'EOF'
+---
+title: fail
+slug: 20260101-fail
+status: done
+---
+EOF
+cat > "$REG_APP/scv/archive/20260101-fail/TESTS.md" <<'EOF'
+## 실행 방법
+```bash
+exit 7
+```
+EOF
+
+(
+  cd "$REG_APP"
+  bash "$REGRESSION_SH" --ci >/dev/null 2>&1
+  rc=$?
+  [[ $rc -eq 2 ]] && pass "regression --ci: exit 2 on failure" || fail "regression --ci: expected exit 2, got $rc"
+  [[ -f test-results/regression-summary.json ]] && pass "regression --ci: JSON summary created at test-results/" || fail "regression --ci: JSON summary missing"
+  grep -qF '"failed_slugs": ["20260101-fail"]' test-results/regression-summary.json \
+    && pass "regression --ci: JSON names failed slug" \
+    || fail "regression --ci: JSON missing failed slug"
+  grep -qF '"failed_slugs_count": 1' test-results/regression-summary.json \
+    && pass "regression --ci: JSON failed count" \
+    || fail "regression --ci: JSON failed count wrong"
+)
+rm -rf "$REG_APP"
+
+echo
+echo "=== [11q] /scv:regression — TESTS.md 실행 방법 parsing (fenced-bash / fenced-plain / 평문) ==="
+REG_APP=$(mktemp -d)
+# Case 1: fenced-bash
+mkdir -p "$REG_APP/scv/archive/c1-fenced-bash"
+cat > "$REG_APP/scv/archive/c1-fenced-bash/PLAN.md" <<'EOF'
+---
+title: c1
+slug: c1-fenced-bash
+status: done
+---
+EOF
+cat > "$REG_APP/scv/archive/c1-fenced-bash/TESTS.md" <<'EOF'
+## 실행 방법
+```bash
+echo "c1 ran"
+exit 0
+```
+EOF
+# Case 2: fenced-plain (no language)
+mkdir -p "$REG_APP/scv/archive/c2-fenced-plain"
+cat > "$REG_APP/scv/archive/c2-fenced-plain/PLAN.md" <<'EOF'
+---
+title: c2
+slug: c2-fenced-plain
+status: done
+---
+EOF
+cat > "$REG_APP/scv/archive/c2-fenced-plain/TESTS.md" <<'EOF'
+## 실행 방법
+```
+echo "c2 ran"
+exit 0
+```
+EOF
+# Case 3: plain text (no fence)
+mkdir -p "$REG_APP/scv/archive/c3-plain"
+cat > "$REG_APP/scv/archive/c3-plain/PLAN.md" <<'EOF'
+---
+title: c3
+slug: c3-plain
+status: done
+---
+EOF
+cat > "$REG_APP/scv/archive/c3-plain/TESTS.md" <<'EOF'
+## 실행 방법
+
+echo "c3 ran"
+exit 0
+
+## 통과 판정
+- done
+EOF
+
+(
+  cd "$REG_APP"
+  OUT=$(bash "$REGRESSION_SH" 2>&1)
+  assert_out_contains "PASSED_SLUGS: 3" "$OUT" "regression parse: all three TESTS.md variants parsed + passed"
+  assert_out_contains "EXECUTED_SLUGS: 3" "$OUT" "regression parse: all executed"
+)
+rm -rf "$REG_APP"
+
+echo
+echo "=== [11r] /scv:regression — legacy archive without PLAN.md (fallback) ==="
+REG_APP=$(mktemp -d)
+mkdir -p "$REG_APP/scv/archive/legacy-no-plan"
+# No PLAN.md — just TESTS.md (legacy pre-SCV archive)
+cat > "$REG_APP/scv/archive/legacy-no-plan/TESTS.md" <<'EOF'
+## 실행 방법
+```bash
+exit 0
+```
+EOF
+
+(
+  cd "$REG_APP"
+  OUT=$(bash "$REGRESSION_SH" 2>&1)
+  rc=$?
+  assert_ok_exit "$rc" "regression legacy: runs even with no PLAN.md (exit 0)"
+  assert_out_contains "legacy-no-plan" "$OUT" "regression legacy: slug appears in execution"
+  assert_out_contains "PASSED_SLUGS: 1" "$OUT" "regression legacy: counted as pass"
+)
+rm -rf "$REG_APP"
+
+echo
+echo "=== [11s] commands/regression.md protocol content ==="
+assert_file "$REGRESSION_CMD"
+assert_contains "$REGRESSION_CMD" "AskUserQuestion"
+assert_contains "$REGRESSION_CMD" "supersedes"
+assert_contains "$REGRESSION_CMD" "obsolete"
+assert_contains "$REGRESSION_CMD" "--ci"
+assert_contains "$REGRESSION_CMD" "--include-promote"
+assert_contains "$REGRESSION_CMD" "--include-obsolete"
+assert_contains "$REGRESSION_CMD" "regression-summary"
+assert_contains "$REGRESSION_CMD" "regression-failure"
+assert_contains "$REGRESSION_CMD" "Archived TESTS.md 본문은 절대 수정하지 않는다"
+assert_contains "$REGRESSION_CMD" "regression — 진짜 회귀"
+assert_contains "$REGRESSION_CMD" "flaky — 환경 문제"
+
+echo
+echo "=== [11t] commands/work.md Step 9c supersede propagation content ==="
+assert_contains "$WORK_CMD" "Step 9a"
+assert_contains "$WORK_CMD" "Step 9b"
+assert_contains "$WORK_CMD" "Step 9c"
+assert_contains "$WORK_CMD" "supersede propagation"
+assert_contains "$WORK_CMD" "Regression pre-flight"
+assert_contains "$WORK_CMD" "Yes — obsolete 로 마킹 (권장)"
+assert_contains "$WORK_CMD" "Skip — runtime skip 만"
+assert_contains "$WORK_CMD" "status: done → obsolete"
+assert_contains "$WORK_CMD" "TESTS.md · ARCHIVED_AT.md · 다른 파일은 절대 건드리지 않음"
+assert_contains "$WORK_CMD" "영구 skip"
+assert_contains "$WORK_CMD" "Default: [1] Yes"
+
+echo
+echo "=== [11u] work.sh — ARCHIVED_AT propagates supersedes ==="
+REG_APP=$(mktemp -d)
+mkdir -p "$REG_APP/scv/promote/20260424-me-super" "$REG_APP/scv/archive"
+cat > "$REG_APP/scv/promote/20260424-me-super/PLAN.md" <<'EOF'
+---
+title: super
+slug: 20260424-me-super
+author: me
+created_at: 2026-04-24
+status: planned
+supersedes:
+  - 20260101-old-one
+  - 20260102-old-two
+---
+EOF
+cat > "$REG_APP/scv/promote/20260424-me-super/TESTS.md" <<'EOF'
+## 실행 방법
+exit 0
+EOF
+
+(
+  cd "$REG_APP"
+  bash "$WORK_SH" 20260424-me-super --archive --reason="tests passed" >/dev/null 2>&1
+  [[ -f scv/archive/20260424-me-super/ARCHIVED_AT.md ]] && pass "work --archive: ARCHIVED_AT.md present" || fail "work --archive: ARCHIVED_AT.md missing"
+  grep -qF "supersedes:" scv/archive/20260424-me-super/ARCHIVED_AT.md \
+    && pass "work --archive: ARCHIVED_AT has supersedes block" \
+    || fail "work --archive: supersedes propagation missing"
+  grep -qF -- "- 20260101-old-one" scv/archive/20260424-me-super/ARCHIVED_AT.md \
+    && pass "work --archive: supersedes item 1 copied" \
+    || fail "work --archive: first supersedes entry missing"
+  grep -qF -- "- 20260102-old-two" scv/archive/20260424-me-super/ARCHIVED_AT.md \
+    && pass "work --archive: supersedes item 2 copied" \
+    || fail "work --archive: second supersedes entry missing"
+)
+rm -rf "$REG_APP"
+
+echo
+echo "=== [10] sync --dry-run (version detection) ==="
+# Force a local divergence on a preserve-policy file so sync reports SKIP
+printf '\n<!-- local note: force divergence -->\n' >> "$APP/scv/AGENTS.md"
+OUT=$("$SYNC" --project-dir "$APP" --dry-run 2>&1)
+rc=$?
+assert_ok_exit "$rc" "sync --dry-run: exit 0"
+assert_out_contains "local=${VERSION_NOW} → remote=${VERSION_NOW}" "$OUT" "sync: version parity detected"
+assert_out_contains "SKIP      scv/AGENTS.md" "$OUT" "sync: preserve policy honored (scv/ prefix)"
+
+# Aggregate counters from temp files
+PASS=$(wc -l < "$PASS_FILE" | tr -d ' ')
+FAIL=$(wc -l < "$FAIL_FILE" | tr -d ' ')
+
+echo
+echo "============================================"
+printf " \033[32mPASS: %d\033[0m   " "$PASS"
+if [[ "$FAIL" -gt 0 ]]; then printf '\033[31mFAIL: %d\033[0m\n' "$FAIL"; else printf 'FAIL: 0\n'; fi
+echo "============================================"
+
+if [[ "$FAIL" -gt 0 ]]; then
+  echo
+  echo "Failed:"
+  while IFS= read -r t; do printf '  - %s\n' "$t"; done < "$FAILED_NAMES_FILE"
+  exit 1
+fi
+exit 0
