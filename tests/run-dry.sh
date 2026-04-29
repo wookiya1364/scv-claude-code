@@ -1744,6 +1744,26 @@ grep -qF "Step 5c — Cypress 비디오 자동 설정" "$WORK_CMD" \
   || pass "work.md: Cypress 5c step 제거됨 (안내만 stance 일관)"
 
 echo
+echo "=== [11qq] commands/*.md — Language preference instruction (v0.4+) ==="
+for cmd in help work promote regression status report sync; do
+  CMD_FILE="$STANDARD_ROOT/commands/${cmd}.md"
+  assert_contains "$CMD_FILE" "Language preference"
+  assert_contains "$CMD_FILE" "SCV_LANG"
+  assert_contains "$CMD_FILE" "Default to English"
+done
+
+# /scv:help 의 4지선다 first-time setup 흐름 검증
+HELP_CMD="$STANDARD_ROOT/commands/help.md"
+assert_contains "$HELP_CMD" "First-time language setup"
+assert_contains "$HELP_CMD" "한국어 (Korean)"
+assert_contains "$HELP_CMD" "日本語 (Japanese)"
+assert_contains "$HELP_CMD" "Other — type a language"
+assert_contains "$HELP_CMD" "Which language do you prefer for SCV output?"
+
+# .env.example.scv 에 SCV_LANG 주석 존재
+assert_contains "$STANDARD_ROOT/template/.env.example.scv" "SCV_LANG"
+
+echo
 echo "=== [11dd] PROMOTE.md — fast-path section (v0.2.1) ==="
 PROMOTE_DOC="$STANDARD_ROOT/template/scv/PROMOTE.md"
 assert_contains "$PROMOTE_DOC" "Fast-path"

@@ -6,7 +6,20 @@ allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/sync.sh:*)"]
 
 # /scv:sync
 
-Run sync. Use `--dry-run` first to preview what will change:
+Run sync. Use `--dry-run` first to preview what will change.
+
+## Language preference
+
+Resolve the user's preferred language with this priority, then use it for any user-facing summary or warnings you print:
+
+1. `~/.claude/settings.json` (or project `.claude/settings.json` / `.claude/settings.local.json`) — `language` key (Claude Code official).
+2. Project `.env` — `SCV_LANG` (set by `/scv:help`'s first-time setup).
+3. Auto-detect from the user's most recent message language.
+4. Default to English.
+
+Technical identifiers (file paths, frontmatter keys like `merge_policy`, slash command names, marker tokens like `PROJECT:LOCAL`) stay as-is.
+
+To run:
 
 ```!
 "${CLAUDE_PLUGIN_ROOT}/scripts/sync.sh" --project-dir "$(pwd)" $ARGUMENTS

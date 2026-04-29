@@ -19,6 +19,19 @@ allowed-tools:
 
 You — Claude — drive a promote plan to completion: **read PLAN.md + TESTS.md → implement → run tests → archive on success**. Full protocol in `scv/PROMOTE.md`.
 
+## Language preference
+
+Resolve the user's preferred language with this priority, then use it for ALL user-facing output (AskUserQuestion text, status messages, summaries, the non-Playwright notice in Step 5b, etc.):
+
+1. `~/.claude/settings.json` (or project `.claude/settings.json` / `.claude/settings.local.json`) — `language` key (Claude Code official, e.g. `"korean"`, `"english"`).
+2. Project `.env` — `SCV_LANG` (set by `/scv:help`'s first-time setup).
+3. Auto-detect from the user's most recent message language.
+4. Default to English.
+
+Technical identifiers stay as-is in every language: file paths, slash command names (`/scv:work`), frontmatter keys (`status`, `kind`, `epic`, `supersedes`), env var names (`SCV_LANG`, `SCV_ATTACHMENTS_*`), and SCV terms (`promote`, `archive`, `orphan branch`, `epic`).
+
+If both `settings.json language` and `.env SCV_LANG` are unset, you may suggest the user run `/scv:help` once to lock the preference (don't block the current task on it — fall back to auto-detect / English for now).
+
 **Non-negotiable rules:**
 - Never delete or move files outside the scope of this plan.
 - Never archive without either (a) tests passing AND user approval in this conversation, or (b) the user's earlier declarative pre-approval ("tests 통과하면 알아서 archive 해" 같은 형태).

@@ -13,6 +13,17 @@ Inspects the project's SCV state (four sections):
 - **Docs graph**: graphify skill presence + docs graph freshness (`missing` / `built` / `stale` / skill-not-installed).
 - **Archive**: count of completed plans under `scv/archive/`.
 
+## Language preference
+
+Resolve the user's preferred language with this priority, then use it for ALL user-facing output (section headings, descriptions, summaries):
+
+1. `~/.claude/settings.json` (or project `.claude/settings.json` / `.claude/settings.local.json`) — `language` key (Claude Code official).
+2. Project `.env` — `SCV_LANG` (set by `/scv:help`'s first-time setup).
+3. Auto-detect from the user's most recent message language.
+4. Default to English.
+
+Technical identifiers stay as-is: file paths, slash command names, env var names, SCV terms (`raw`, `promote`, `archive`, `orphan branch`).
+
 ```!
 "${CLAUDE_PLUGIN_ROOT}/scripts/status.sh" $ARGUMENTS
 ```

@@ -14,6 +14,17 @@ allowed-tools:
 
 You — Claude — drive the accumulated regression: **run every archived TESTS that hasn't been superseded or marked obsolete, then triage any failures with the user**.
 
+## Language preference
+
+Resolve the user's preferred language with this priority, then use it for ALL user-facing output (AskUserQuestion text, triage prompts, summaries):
+
+1. `~/.claude/settings.json` (or project `.claude/settings.json` / `.claude/settings.local.json`) — `language` key (Claude Code official).
+2. Project `.env` — `SCV_LANG` (set by `/scv:help`'s first-time setup).
+3. Auto-detect from the user's most recent message language.
+4. Default to English.
+
+Technical identifiers stay as-is: file paths, slash command names, frontmatter keys (`status`, `obsoleted_at`, `obsoleted_by`, `supersedes`), env var names, SCV terms (`promote`, `archive`, `obsolete`, `flaky`). If both `settings.json language` and `.env SCV_LANG` are unset, suggest `/scv:help` once to lock the preference (don't block — fall back to auto-detect / English for now).
+
 **Non-negotiable rules:**
 - **Archived TESTS.md 본문은 절대 수정하지 않는다.** Obsolete 마킹은 오직 해당 archived 폴더의 PLAN.md frontmatter (`status`, `obsoleted_at`, `obsoleted_by`) 3 필드로만.
 - **supersedes 선언된 slug 를 강제 실행하지 않는다** — 이미 사전에 의도된 skip 이다.

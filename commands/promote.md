@@ -17,6 +17,17 @@ allowed-tools:
 
 You — Claude — will help the user refine material from `scv/raw/` into a structured promote folder at `scv/promote/<YYYYMMDD>-<author>-<slug>/` with `PLAN.md` + `TESTS.md`. See the full convention in `scv/PROMOTE.md`.
 
+## Language preference
+
+Resolve the user's preferred language with this priority, then use it for ALL user-facing output (AskUserQuestion text, status messages, summaries):
+
+1. `~/.claude/settings.json` (or project `.claude/settings.json` / `.claude/settings.local.json`) — `language` key (Claude Code official).
+2. Project `.env` — `SCV_LANG` (set by `/scv:help`'s first-time setup).
+3. Auto-detect from the user's most recent message language.
+4. Default to English.
+
+Technical identifiers stay as-is: file paths, slash command names, frontmatter keys (`status`, `kind`, `epic`, `supersedes`), env var names, SCV terms (`promote`, `archive`, `orphan branch`, `epic`). If both `settings.json language` and `.env SCV_LANG` are unset, suggest `/scv:help` once to lock the preference (don't block — fall back to auto-detect / English for now).
+
 **Non-negotiable rules:**
 - Never create / move / delete files without the user's explicit per-candidate approval.
 - Raw originals under `scv/raw/` are **never** deleted or moved.
