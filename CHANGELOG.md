@@ -2,6 +2,64 @@
 
 이 저장소의 변경사항을 기록합니다. [Semantic Versioning](https://semver.org/lang/ko/) 규칙을 따릅니다.
 
+## [0.5.0] — 2026-04-29
+
+### 핵심 — GitLab MR 자동 생성 + PR/MR backend 추상화
+
+v0.3+ 의 GitHub-only PR 자동 생성을 GitLab MR 까지 확장. PR/MR 생성·업데이트·raw URL 을 platform-agnostic 추상화 layer (`scripts/lib/pr-platform.sh`) 로 분리. GitHub 사용자는 동작 변화 없음, GitLab 사용자는 본인 token + Personal Access Token 으로 자동 동작.
+
+**검증 완료**: 실 GitLab repo (`gitlab.com/wookiya1364/scv-test-pr-flow`) 로 MR 자동 생성 end-to-end 검증. iid 1 정상 생성, title / target_branch / source_branch / description 모두 정확.
+
+### Added
+
+- **`scripts/lib/pr-platform.sh`** (신규, ~250 줄) — PR/MR backend 추상화 layer.
+  - **Public API**:
+    - `pr_create <title> <body_file> <base_branch> <head_branch>` → echo URL
+    - `pr_update_body <pr_number> <body_file>` → silent
+    - `pr_get_owner_repo` → `"owner/repo"` (GH) 또는 URL-encoded `"ns%2Fproject"` (GL)
+    - `pr_raw_url <branch> <path>` → raw content URL (attachments 가 사용)
+  - **Backend dispatch**:
+    - 명시: `SCV_PR_PLATFORM=github|gitlab` env
+    - 자동 감지: `git remote get-url origin` host (`github.com` / `gitlab.com`)
+    - 알 수 없는 값 → `github` fallback
+  - **GitHub backend** (`gh` CLI): `gh pr create` + `gh api -X PATCH` (기존 `pr-helper.sh` 패턴 옮김).
+  - **GitLab backend** (`curl` + REST API v4): `POST /projects/<ns%2Fproject>/merge_requests`, `PUT /merge_requests/<iid>`. 인증: `PRIVATE-TOKEN` 헤더. **`glab` CLI 불요** — `curl` + `jq` 만 의존 (사용자 환경 의존도 최소화). self-hosted: `GITLAB_HOST` env.
+
+### Changed
+
+- **`scripts/pr-helper.sh`** — `gh pr create` / `gh api -X PATCH` 직접 호출 → `pr_create` / `pr_update_body` 추상화 호출. GitHub 사용자 동작 동일. GitLab origin 시 자동으로 GitLab API 사용.
+- **`scripts/lib/attachments.sh`** — `_attachments_git_orphan_upload` 의 raw URL 생성을 `pr_raw_url` 호출로:
+  - GitHub: `https://github.com/<owner>/<repo>/raw/<branch>/<path>` (기존 동일)
+  - GitLab: `<host>/<ns>/<project>/-/raw/<branch>/<path>` (신규, `/-/raw/` 접두)
+  - `pr-platform.sh` 자동 source (idempotent). defensive fallback (`pr_raw_url` 미정의 시 GitHub 하드코딩).
+- **`template/.env.example.scv`** — `SCV_PR_PLATFORM` / `GITLAB_TOKEN` / `GITLAB_HOST` 주석 단락 추가.
+
+### Tests
+
+- 신규 섹션 **[11ss]** 9 assertion (platform 자동 감지 + env override + raw URL):
+  1. `github.com` origin → `github`
+  2. `github` owner_repo `wookiya1364/foo`
+  3. `github` raw URL 형식 (`https://github.com/...raw/...`)
+  4. `SCV_PR_PLATFORM=gitlab` env override (origin 무관)
+  5. `gitlab.com` origin → `gitlab`
+  6. `gitlab` project path URL-encoded (`wookiya1364%2Fscv-test-pr-flow`)
+  7. `gitlab` raw URL 형식 (`/-/raw/`)
+  8. self-hosted: `SCV_PR_PLATFORM=gitlab` + `GITLAB_HOST` env
+  9. unknown `SCV_PR_PLATFORM` 값 → `github` fallback
+- **실 환경 검증**: 본 저장소 dev 환경에서 GitLab `gitlab.com/wookiya1364/scv-test-pr-flow` 로 `pr-helper.sh` 호출 → MR 1 정상 생성 (description 에 PLAN + TESTS + ARCHIVED footer 모두 정확). GitLab REST API v4 응답 파싱 + web_url 추출 + 인증 헤더 모두 동작.
+- 회귀: 412 → **421 PASS** (+9 assertion) / 0 FAIL.
+
+### Backwards compat
+
+- GitHub 사용자: 동작 변화 0. `pr-helper.sh` 가 `gh` CLI 사용하는 부분이 추상화로 옮겨졌을 뿐, 호출 결과 동일.
+- 기존 archived TESTS.md (v0.3.x) 의 `## 실행 방법` / `## 통과 판정` 섹션 호환은 v0.4 alternation 으로 그대로 유지.
+
+### 비채택 (v0.5.x+ 후보)
+
+- **`s3` / `r2` 백엔드 본문**: storage 영역. 별 minor (v0.5.1 또는 v0.6) 로 분리. LocalStack + 사용자 R2 계정으로 검증 가능.
+- **Bitbucket / Gitea PR 자동 생성**: `lib/pr-platform.sh` 추상화에 `_pr_bitbucket_*` / `_pr_gitea_*` backend 추가. 사용 빈도 낮아 community beta 또는 사용자 도움 검증으로.
+- **Cypress / Puppeteer → Playwright 자동 마이그레이션**: 별 도구 영역. v0.5.x+ 또는 별 plugin 후보.
+
 ## [0.4.1] — 2026-04-29
 
 ### 핵심 — i18n internal cleanup (commands 본문 + template 영어화 + Notifier dynamic)
