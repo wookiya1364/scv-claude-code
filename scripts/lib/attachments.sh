@@ -33,6 +33,16 @@
 #
 # Dependencies: git, gh CLI (for cleanup), python3 (manifest JSON manipulation).
 
+# Source pr-platform abstraction (v0.5+). Used for raw URL construction —
+# GitHub uses /raw/, GitLab uses /-/raw/. Idempotent if already sourced.
+if ! declare -F pr_raw_url >/dev/null 2>&1; then
+  _SCV_LIB_DIR_ATT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+  if [[ -f "$_SCV_LIB_DIR_ATT/pr-platform.sh" ]]; then
+    # shellcheck source=pr-platform.sh
+    source "$_SCV_LIB_DIR_ATT/pr-platform.sh"
+  fi
+fi
+
 # Defaults — note these are captured at SOURCE time. Functions below re-read
 # the SCV_ATTACHMENTS_* vars at CALL time so .env loaded after sourcing this
 # library still takes effect (e.g., pr-helper.sh sources lib then env_load).
@@ -258,7 +268,13 @@ _attachments_git_orphan_upload() {
     #  - For .webm/.mp4: clicking opens browser native HTML5 player in new tab
     #    (blob URL only shows "View raw" link, GitHub doesn't render inline
     #    video player for repo content — only user-attachments domain does)
-    urls+=("https://github.com/${owner_repo}/raw/${ATTACHMENTS_BRANCH}/scv/${slug}/${base}")
+    # Raw URL via platform abstraction (v0.5+). Falls back to GitHub-hardcoded
+    # form if pr_raw_url isn't available (defensive — should always be sourced).
+    if declare -F pr_raw_url >/dev/null 2>&1; then
+      urls+=("$(pr_raw_url "$ATTACHMENTS_BRANCH" "scv/${slug}/${base}")")
+    else
+      urls+=("https://github.com/${owner_repo}/raw/${ATTACHMENTS_BRANCH}/scv/${slug}/${base}")
+    fi
   done
 
   if [[ ${#copied_files[@]} -eq 0 ]]; then

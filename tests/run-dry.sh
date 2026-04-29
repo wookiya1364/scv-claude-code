@@ -1807,6 +1807,88 @@ printf '%s' "$OUT_KO_CAP" | grep -qF "완료" \
   || fail "render-template: SCV_LANG case-sensitive (should be insensitive)"
 
 echo
+echo "=== [11ss] lib/pr-platform.sh — platform dispatch + auto-detect + raw URL (v0.5+) ==="
+PR_PLATFORM_OUT=$(bash <<'INNER_EOF'
+WORK=$(mktemp -d)
+cd "$WORK"
+git init -q .
+
+source /home/zpsuk/바탕화면/work/labs/scv-claude-code/scripts/lib/pr-platform.sh
+
+# 1. GitHub origin → auto-detect = github
+git remote add origin git@github.com:wookiya1364/foo.git
+echo "---DETECT-GH---"
+_pr_resolve_platform
+echo "---OWNER-GH---"
+pr_get_owner_repo
+echo "---RAWURL-GH---"
+pr_raw_url scv-attachments scv/slug-x/file.webm
+
+# 2. env override → gitlab (origin still GitHub)
+echo "---OVERRIDE-GL---"
+SCV_PR_PLATFORM=gitlab _pr_resolve_platform
+
+# 3. swap origin to GitLab → auto-detect = gitlab
+git remote set-url origin git@gitlab.com:wookiya1364/scv-test-pr-flow.git
+echo "---DETECT-GL---"
+_pr_resolve_platform
+echo "---PROJPATH-GL---"
+pr_get_owner_repo
+echo "---RAWURL-GL---"
+pr_raw_url scv-attachments scv/slug-y/clip.gif
+
+# 4. self-hosted GitLab via env (origin doesn't match gitlab.com)
+git remote set-url origin git@gitlab.example.com:team/proj.git
+echo "---DETECT-SELFHOSTED---"
+_pr_resolve_platform
+echo "---RAWURL-SELFHOSTED---"
+SCV_PR_PLATFORM=gitlab GITLAB_HOST=https://gitlab.example.com pr_raw_url main scv/slug-z/file.mp4
+
+# 5. unknown env value falls back to github
+echo "---UNKNOWN-ENV---"
+SCV_PR_PLATFORM=bitbucket _pr_resolve_platform
+
+cd /; rm -rf "$WORK"
+INNER_EOF
+)
+
+printf '%s' "$PR_PLATFORM_OUT" | awk '/---DETECT-GH---/{f=1;next} /---OWNER-GH---/{f=0} f' | grep -qx 'github' \
+  && pass "pr-platform: github.com origin → github" \
+  || fail "pr-platform: github auto-detect failed"
+
+printf '%s' "$PR_PLATFORM_OUT" | awk '/---OWNER-GH---/{f=1;next} /---RAWURL-GH---/{f=0} f' | grep -qx 'wookiya1364/foo' \
+  && pass "pr-platform: github owner_repo = 'wookiya1364/foo'" \
+  || fail "pr-platform: github owner_repo wrong"
+
+printf '%s' "$PR_PLATFORM_OUT" | awk '/---RAWURL-GH---/{f=1;next} /---OVERRIDE-GL---/{f=0} f' | grep -qx 'https://github.com/wookiya1364/foo/raw/scv-attachments/scv/slug-x/file.webm' \
+  && pass "pr-platform: github raw URL format" \
+  || fail "pr-platform: github raw URL wrong"
+
+printf '%s' "$PR_PLATFORM_OUT" | awk '/---OVERRIDE-GL---/{f=1;next} /---DETECT-GL---/{f=0} f' | grep -qx 'gitlab' \
+  && pass "pr-platform: SCV_PR_PLATFORM env override beats auto-detect" \
+  || fail "pr-platform: env override failed"
+
+printf '%s' "$PR_PLATFORM_OUT" | awk '/---DETECT-GL---/{f=1;next} /---PROJPATH-GL---/{f=0} f' | grep -qx 'gitlab' \
+  && pass "pr-platform: gitlab.com origin → gitlab" \
+  || fail "pr-platform: gitlab auto-detect failed"
+
+printf '%s' "$PR_PLATFORM_OUT" | awk '/---PROJPATH-GL---/{f=1;next} /---RAWURL-GL---/{f=0} f' | grep -qx 'wookiya1364%2Fscv-test-pr-flow' \
+  && pass "pr-platform: gitlab project path URL-encoded" \
+  || fail "pr-platform: gitlab project path encoding wrong"
+
+printf '%s' "$PR_PLATFORM_OUT" | awk '/---RAWURL-GL---/{f=1;next} /---DETECT-SELFHOSTED---/{f=0} f' | grep -qx 'https://gitlab.com/wookiya1364/scv-test-pr-flow/-/raw/scv-attachments/scv/slug-y/clip.gif' \
+  && pass "pr-platform: gitlab raw URL format (with /-/raw/)" \
+  || fail "pr-platform: gitlab raw URL wrong"
+
+printf '%s' "$PR_PLATFORM_OUT" | awk '/---RAWURL-SELFHOSTED---/{f=1;next} /---UNKNOWN-ENV---/{f=0} f' | grep -qx 'https://gitlab.example.com/team/proj/-/raw/main/scv/slug-z/file.mp4' \
+  && pass "pr-platform: self-hosted GitLab via GITLAB_HOST env" \
+  || fail "pr-platform: self-hosted host override wrong"
+
+printf '%s' "$PR_PLATFORM_OUT" | awk '/---UNKNOWN-ENV---/{f=1;next} f' | grep -qx 'github' \
+  && pass "pr-platform: unknown SCV_PR_PLATFORM falls back to github" \
+  || fail "pr-platform: unknown env value not falling back"
+
+echo
 echo "=== [11dd] PROMOTE.md — fast-path section (v0.2.1) ==="
 PROMOTE_DOC="$STANDARD_ROOT/template/scv/PROMOTE.md"
 assert_contains "$PROMOTE_DOC" "Fast-path"

@@ -31,6 +31,8 @@ source "$SCRIPT_DIR/lib/yaml.sh"
 source "$SCRIPT_DIR/lib/env.sh"
 # shellcheck source=lib/attachments.sh
 source "$SCRIPT_DIR/lib/attachments.sh"
+# shellcheck source=lib/pr-platform.sh
+source "$SCRIPT_DIR/lib/pr-platform.sh"
 
 # Load project .env so SCV_ATTACHMENTS_* vars are visible
 env_load 2>/dev/null || true
@@ -437,11 +439,10 @@ if [[ $NO_CREATE -eq 0 ]]; then
   TITLE_PREFIX="feat"
   [[ "$KIND" == "refactor" ]] && TITLE_PREFIX="refactor"
   [[ "$KIND" == "retirement" ]] && TITLE_PREFIX="chore"
-  if PR_URL=$(gh pr create --base "$BASE_BRANCH" --head "$CURRENT_BRANCH" \
-       --title "$TITLE_PREFIX: $TITLE" --body-file "$TMP_BODY" 2>&1); then
+  if PR_URL=$(pr_create "$TITLE_PREFIX: $TITLE" "$TMP_BODY" "$BASE_BRANCH" "$CURRENT_BRANCH" 2>&1); then
     echo "PR created: $PR_URL"
   else
-    echo "ERROR: gh pr create failed:" >&2
+    echo "ERROR: PR creation failed:" >&2
     echo "$PR_URL" >&2
     echo "PR body saved at: $TMP_BODY"
     exit 1
@@ -506,13 +507,10 @@ with open(src) as f: body = f.read()
 body = body.replace(placeholder, replacement.rstrip("\n"))
 with open(dst, "w") as f: f.write(body)
 PY
-        # Use `gh api PATCH` directly — `gh pr edit` returns exit 1 due to
-        # GraphQL Projects (classic) deprecation warning, even when body
-        # update succeeds.
-        OWNER_REPO=$(_get_github_owner_repo 2>/dev/null || echo "")
-        if [[ -n "$OWNER_REPO" ]] && \
-           gh api -X PATCH "repos/${OWNER_REPO}/pulls/${PR_NUMBER}" \
-             -F body=@"$UPDATED_BODY" --silent 2>/dev/null; then
+        # Update PR/MR body via platform abstraction. For GitHub: gh api PATCH
+        # (avoids gh pr edit's exit 1 from GraphQL Projects deprecation). For
+        # GitLab: curl PUT /merge_requests/<iid>.
+        if pr_update_body "$PR_NUMBER" "$UPDATED_BODY" 2>/dev/null; then
           echo "PR body updated with ${#VIDEOS[@]} video link(s)"
         else
           echo "WARN: failed to update PR body with video links" >&2
