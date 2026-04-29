@@ -11,67 +11,67 @@ merge_policy: preserve
 optional_when: "no user-facing UI"
 ---
 
-# DESIGN — UI/UX 스펙
+# DESIGN — UI/UX spec
 
-> **이 문서는 사용자 대면 UI(웹/앱)가 있는 프로젝트에만 필요**합니다. CLI/백엔드 전용 프로젝트는 `status: N/A` 로 표시하고 건너뜁니다.
-> Claude 는 `INTAKE.md` 단계 3 과 아래 `How to elicit` 를 따라 사용자에게 물어 채웁니다.
+> **This document is only needed for projects with a user-facing UI (web/app).** CLI/backend-only projects mark `status: N/A` and skip it.
+> Claude follows `INTAKE.md` Step 3 plus the `How to elicit` section below to fill this through dialogue with the user.
 
-## How to elicit (Claude 가 물어볼 순서)
+## How to elicit (order of questions)
 
-1. **적용 여부**: "UI 가 있나요? 없으면 이 문서를 건너뜁니다." (없으면 `status: N/A` 기록)
-2. **페르소나**: "주 사용자 페르소나는 누구인가요? (1~3명, 목표·제약·사용 빈도)"
-3. **핵심 플로우**: "페르소나가 이 시스템에서 수행하는 **가장 중요한 여정**은? (관찰 가능한 시작·끝 사이의 단계)"
-4. **화면 목록**: "각 플로우는 어떤 화면들을 거치나요? (경로·제목·목적)"
-5. **상태머신**: "화면 중 **여러 상태가 있는 복잡한 화면**이 있나요? 각 상태 전이는?"
-6. **디자인 토큰**: "색상·간격·타이포 토큰이 이미 있나요? 없으면 이 프로젝트에서 정의할 건가요?"
-7. **접근성**: "접근성 기준이 있나요? (WCAG 등급, 키보드 전용, 스크린리더)"
-8. **에러·빈 상태**: "오류·권한 거부·빈 데이터 상황의 UX 원칙은?"
+1. **Applicability**: "Does this have a UI? If not we'll skip this document." (If no, record `status: N/A`.)
+2. **Personas**: "Who are the primary user personas? (1–3 people; goals, constraints, usage frequency.)"
+3. **Core flows**: "What is the **most important journey** the personas perform here? (observable steps between a clear start and end.)"
+4. **Screen list**: "Which screens does each flow pass through? (path, title, purpose.)"
+5. **State machines**: "Are there **complex screens with multiple states**? What are the transitions between them?"
+6. **Design tokens**: "Do you have color/spacing/typography tokens already? If not, will you define them in this project?"
+7. **Accessibility**: "Are there accessibility standards? (WCAG level, keyboard-only, screen reader.)"
+8. **Error / empty states**: "What's the UX principle for errors, permission denials, empty data?"
 
 ## Completion criteria
 
-- [ ] 적용 여부 결정 (`status: active` 또는 `N/A`)
-- [ ] (해당 시) 페르소나 최소 1명
-- [ ] (해당 시) 핵심 플로우 최소 1개
-- [ ] (해당 시) 화면 목록 최소 1개 + 각 화면 목적
-- [ ] (해당 시) 디자인 토큰 출처 명시
-- [ ] (해당 시) 접근성 기준 합의
-- [ ] 사용자가 "이 설계로 진행해도 좋음" 확인
+- [ ] Applicability decided (`status: active` or `N/A`)
+- [ ] (if applicable) At least 1 persona
+- [ ] (if applicable) At least 1 core flow
+- [ ] (if applicable) At least 1 screen + each screen's purpose
+- [ ] (if applicable) Design token source declared
+- [ ] (if applicable) Accessibility standards agreed
+- [ ] User confirms "this design is good to proceed with"
 
 ## Structure
 
-### 1. 페르소나
+### 1. Personas
 
-<TODO: 1~3명. P1, P2 형태로 코드 부여.>
+<TODO: 1–3 personas, coded as P1, P2, …>
 
-### 2. 핵심 플로우
+### 2. Core flows
 
-<TODO: F1, F2 … Mermaid sequenceDiagram 권장.>
+<TODO: F1, F2, … Mermaid sequenceDiagram recommended.>
 
-### 3. 화면 목록
+### 3. Screen list
 
-| ID | 경로 | 제목 | 목적 | 주 페르소나 |
+| ID | Path | Title | Purpose | Primary persona |
 |---|---|---|---|---|
 | <TODO> | ... | ... | ... | ... |
 
-### 4. 화면 상태머신
+### 4. Screen state machines
 
-<TODO: 상태가 복잡한 화면만. Mermaid stateDiagram.>
+<TODO: Only for screens with complex state. Mermaid stateDiagram.>
 
-### 5. 디자인 토큰
+### 5. Design tokens
 
-<TODO: Figma URL / 토큰 패키지 경로. 주요 카테고리만 요약.>
+<TODO: Figma URL / token package path. Just the primary categories.>
 
-### 6. 접근성
+### 6. Accessibility
 
-<TODO: WCAG 등급, 키보드, 스크린리더, 마이크·카메라 권한 대체 플로우(해당 시).>
+<TODO: WCAG level, keyboard, screen reader, alternative flows for mic/camera permission denials (if applicable).>
 
-### 7. 에러·빈 상태 UX
+### 7. Error / empty state UX
 
-| 상황 | 표기 | 행동 유도 |
+| Situation | Display | Call to action |
 |---|---|---|
 | <TODO> | ... | ... |
 
-## 관련 모듈
+## Related modules
 
 <!-- MODULES:AUTO START applies_to=design -->
 <!-- MODULES:AUTO END -->

@@ -10,45 +10,45 @@ standard_version: 1.0.0
 merge_policy: preserve
 ---
 
-# RALPH_PROMPT — <프로젝트 이름>
+# RALPH_PROMPT — <project name>
 
-> Ralph Loop 의 얇은 진입점. 이 파일은 **프로젝트별** 로 채워야 합니다. 명세 원천은 `INTAKE.md` 를 통해 완성된 표준 문서들입니다.
-> **선행 조건**: 이 파일을 채우기 전에 `INTAKE.md` 의 단계 1~7 이 완료되어 모든 필수 표준 문서가 `status: active` 여야 합니다.
+> Thin entry point for Ralph Loop. This file is **project-specific** and must be filled in. The spec source is the standard documents completed via `INTAKE.md`.
+> **Prerequisite**: before filling this in, INTAKE.md Steps 1–7 must be complete and all required standard docs must have `status: active`.
 
 ## How to elicit
 
-1. "현재 이터레이션에서 집중할 **Phase 이름**은?" (예: "Phase 2 — 음성 코어")
-2. "패키지 매니저는?" (npm / pnpm / yarn / pip / uv / cargo …)
-3. "개발 서버 실행 명령?" / "빌드 명령?" / "테스트 명령?" / "E2E 명령?" / "의존성 설치 명령?"
-4. "이번 이터레이션에서 특별히 주의할 점·이전 실패 원인·우회 전략은?"
+1. "What's the **Phase name** to focus on in the current iteration?" (e.g., "Phase 2 — voice core")
+2. "Package manager?" (npm / pnpm / yarn / pip / uv / cargo …)
+3. "Dev server command?" / "Build command?" / "Test command?" / "E2E command?" / "Install command?"
+4. "Anything to be especially careful about this iteration — past failure causes, workarounds?"
 
 ## Completion criteria
 
-- [ ] `focus_phase` 가 한 줄로 명시됨
-- [ ] 모든 명령어 필드가 실제 동작하는 명령으로 채워짐 (또는 "해당 없음" 명시)
-- [ ] `iteration_notes` 에 현재 컨텍스트 기록
+- [ ] `focus_phase` written as a single line
+- [ ] Every command field filled with a working command (or marked "n/a")
+- [ ] `iteration_notes` records the current context
 
 ---
 
-## 표준 문서 위치
+## Standard document locations
 
-- `./INTAKE.md` — 대화 프로토콜 (수정 안 함)
-- `./DOMAIN.md` — 도메인
-- `./ARCHITECTURE.md` — 구조
-- `./DESIGN.md` — UI/UX (해당 시)
-- `./AGENTS.md` — AI 에이전트 (해당 시)
-- `./TESTING.md` — 검증
-- `./REPORTING.md` — 협업툴
-- `./promote/*` — 승격된 주제·계획 문서
+- `./INTAKE.md` — Dialogue protocol (don't modify)
+- `./DOMAIN.md` — Domain
+- `./ARCHITECTURE.md` — Architecture
+- `./DESIGN.md` — UI/UX (if applicable)
+- `./AGENTS.md` — AI agents (if applicable)
+- `./TESTING.md` — Testing
+- `./REPORTING.md` — Collab tool
+- `./promote/*` — Promoted topic / plan documents
 
-## 이번 실행에서 집중할 것
+## Focus for this run
 
-focus_phase: <TODO: 예: "Phase 1 — 인프라">
+focus_phase: <TODO: e.g., "Phase 1 — Infrastructure">
 
 iteration_notes: |
-  <TODO: 이번 이터레이션의 맥락·주의사항·이전 실패 요약>
+  <TODO: this iteration's context, gotchas, summary of past failures>
 
-## 프로젝트 고유 설정
+## Project-specific settings
 
 package_manager: <TODO>
 install_command: <TODO>
@@ -57,23 +57,23 @@ build_command: <TODO>
 test_command: <TODO>
 e2e_command: <TODO>
 
-## 검증 도구
+## Verification tools
 
-- Playwright 설정 규약·아티팩트 경로는 `./TESTING.md` 참조
-- Chrome DevTools MCP 사용 규약도 `./TESTING.md` 참조
+- Playwright config conventions and artifact paths — see `./TESTING.md`
+- Chrome DevTools MCP conventions — also see `./TESTING.md`
 
-## 보고
+## Reporting
 
-- 협업툴은 `.env` 의 `NOTIFIER_PROVIDER` 로 선택
-- 보고는 **반드시 `/scv:report <phase> <status>` 슬래시 커맨드**로만 수행
-- 채널 매핑은 `./REPORTING.md` 기준
+- Pick collab tool via `.env` `NOTIFIER_PROVIDER`
+- Reporting **must go through the `/scv:report <phase> <status>` slash command** only
+- Channel mapping per `./REPORTING.md`
 
-## 종료 조건 (DONE 선언 기준)
+## Done criteria
 
-1. 모든 Phase 가 `./TESTING.md` 의 성공 기준 통과
-2. 각 Phase 완료 직후 `/scv:report "<phase>" passed` 응답이 `OK <thread_ref>`
-3. 해당 시 `AGENTS.md` 의 분포 테스트·골든셋 통과율 임계치 이상
+1. Every Phase passes `./TESTING.md`'s success criteria
+2. Right after each Phase, `/scv:report "<phase>" passed` returns `OK <thread_ref>`
+3. (If applicable) AGENTS.md distribution-test / golden-set pass rate above threshold
 
-## 추가 참고
+## Additional references
 
-<TODO: 링크·이슈·이전 결정사항·외부 문서>
+<TODO: links, issues, prior decisions, external docs>

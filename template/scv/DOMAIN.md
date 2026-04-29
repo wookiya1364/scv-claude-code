@@ -10,73 +10,73 @@ standard_version: 1.0.0
 merge_policy: preserve
 ---
 
-# DOMAIN — 비즈니스 도메인
+# DOMAIN — Business domain
 
-> 이 문서는 **비어 있는 상태로 시작**합니다. Claude 는 `INTAKE.md` 단계 1 과 아래 `How to elicit` 를 따라 사용자에게 물어 채웁니다. 사용자의 명시적 답 없이 추측해서 쓰지 마세요.
+> This document **starts empty**. Claude follows `INTAKE.md` Step 1 plus the `How to elicit` section below to fill it through dialogue with the user. Don't speculate without the user's explicit answer.
 
-## How to elicit (Claude 가 물어볼 순서)
+## How to elicit (order of questions)
 
-1. **미션·범위**: "이 시스템이 해결하는 비즈니스 문제를 한 문장으로?" → 분명해질 때까지 재질문
-2. **용어집(Ubiquitous Language)**: "팀이 늘 쓰는 핵심 명사·동사는 무엇인가요? 영어 혼용이 있으면 한국어로 통일하고 싶나요?"
-3. **엔티티**: "각 용어가 시스템 안에 **상태로 존재**하나요? 식별자는 무엇인가요?" (개수 제한 없음, 하나씩 확정)
-4. **불변 규칙**: "각 엔티티가 언제나 만족해야 하는 규칙은?" (위반 시 버그 판정이 되는 것만)
-5. **유스케이스**: "이 시스템에서 가장 중요한 사용자 행동을 **관찰 가능한 순서**로 3~7개만 나열해주세요." (UC-코드는 Claude 가 부여)
-6. **비즈니스 규칙**: "유스케이스 중 거부/차단/우회 분기가 있나요?" (BR-코드 부여)
-7. **외부 정책·규제**: "규제/법/컴플라이언스 관련 제약이 있나요?"
-8. **바운디드 컨텍스트**: "다른 도메인(결제/로그/분석 등)과의 경계는?" (없으면 생략)
+1. **Mission & scope**: "In one sentence, what business problem does this system solve?" — re-ask until clear.
+2. **Ubiquitous language**: "What are the core nouns and verbs your team always uses? If English/native are mixed, do you want to unify into one?"
+3. **Entities**: "Does each term **exist as state** inside the system? What's its identifier?" (no upper bound, confirm one at a time)
+4. **Invariants**: "What rules must each entity always satisfy?" (only those whose violation we'd treat as a bug)
+5. **Use cases**: "List the 3–7 most important user actions in this system as **observable sequences**." (UC codes assigned by Claude)
+6. **Business rules**: "Are there any reject / block / detour branches in the use cases?" (BR codes assigned)
+7. **External policy / regulation**: "Any regulatory / legal / compliance constraints?"
+8. **Bounded contexts**: "What are the boundaries with other domains (payments / logs / analytics, etc.)?" (omit if not applicable)
 
-각 답변마다 Claude 는 **"이대로 기록해도 될까요?"** 로 확인 후에만 다음 질문.
+After each answer, Claude must confirm with **"Shall I record it like this?"** before moving to the next question.
 
 ## Completion criteria
 
-- [ ] 미션 한 문장 기록
-- [ ] 용어집에 최소 5개 핵심 용어
-- [ ] 엔티티 최소 1개 + 해당 불변 규칙 최소 1개
-- [ ] 유스케이스 최소 1개 (UC-코드 부여)
-- [ ] 외부 정책/규제 항목 기록 또는 "해당 없음" 명시
-- [ ] 사용자가 "이 도메인 문서로 진행해도 좋음" 확인
+- [ ] Mission written as one sentence
+- [ ] Glossary has at least 5 core terms
+- [ ] At least 1 entity + at least 1 invariant for it
+- [ ] At least 1 use case (with UC code)
+- [ ] External policy / regulation either listed or explicitly marked "n/a"
+- [ ] User confirms "this domain doc is good to proceed with"
 
-충족되면 사용자 승인 후 frontmatter `status: draft` → `active`.
+When met, with user approval, change frontmatter `status: draft` → `active`.
 
 ## Structure
 
-### 1. 미션·범위
+### 1. Mission & scope
 
-<TODO: How to elicit 1 의 결과를 한두 문단으로>
+<TODO: Output of "How to elicit" Q1, in 1–2 paragraphs.>
 
-### 2. 용어집 (Ubiquitous Language)
+### 2. Ubiquitous language
 
-<TODO: 표 형식으로. 동의어 금지 항목도 기록.>
+<TODO: Use a table. Also list disallowed synonyms.>
 
-| 용어 | 정의 | 동의어 금지 |
+| Term | Definition | Disallowed synonyms |
 |---|---|---|
 | ... | ... | ... |
 
-### 3. 엔티티
+### 3. Entities
 
-<TODO: Mermaid classDiagram 또는 표. 식별자·필드·관계.>
+<TODO: Mermaid classDiagram or a table. Identifier, fields, relationships.>
 
-### 4. 불변 규칙 (Invariants)
+### 4. Invariants
 
-<TODO: INV-01, INV-02 형태. 위반 시 동작 명시.>
+<TODO: INV-01, INV-02 form. State the behavior on violation.>
 
-### 5. 유스케이스
+### 5. Use cases
 
-<TODO: UC-xxx 코드, 행위자, 선행조건, 성공/실패 시나리오.>
+<TODO: UC-xxx code, actor, preconditions, success/failure scenarios.>
 
-### 6. 비즈니스 규칙
+### 6. Business rules
 
-<TODO: BR-xxx 코드와 위반 시 동작.>
+<TODO: BR-xxx code with behavior on violation.>
 
-### 7. 외부 정책·규제
+### 7. External policy / regulation
 
-<TODO: 해당하는 법·내부 컴플라이언스. 없으면 "해당 없음" 명시.>
+<TODO: Applicable laws / internal compliance. Mark "n/a" if none.>
 
-### 8. 바운디드 컨텍스트
+### 8. Bounded contexts
 
-<TODO: 다른 도메인과의 경계. 단일 컨텍스트면 생략.>
+<TODO: Boundaries with other domains. Omit for a single-context system.>
 
-## 관련 모듈
+## Related modules
 
 <!-- MODULES:AUTO START applies_to=domain -->
 <!-- MODULES:AUTO END -->
