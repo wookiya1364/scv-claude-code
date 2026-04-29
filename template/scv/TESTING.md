@@ -153,14 +153,19 @@ PR 머지 게이트로 만들려면 위 workflow 의 `regression` job 을 GitHub
 **자동화되는 것**:
 - Playwright 프로젝트라면 SCV 가 `playwright.config.{ts,js,mjs,cjs}` 자동 감지 + `video: 'on'` 자동 추가 권장 (Step 5b 의 AskUserQuestion). 한 번 Yes 하면 영구 적용.
 - 테스트 시 .webm 이 `test-results/` 에 자동 생성됨 (Playwright 표준 동작).
-- Step 9d 에서 PR 생성 시 그 비디오들이 **`scv-attachments` orphan 브랜치** 로 push (작업 브랜치 git history 영향 0). PR body 에 GitHub raw URL 로 markdown 임베드 → PR 페이지에서 inline 재생.
-- 로컬 비디오 파일은 push 후 즉시 삭제 (디스크 정리).
+- Step 9d 에서 PR 생성 시 그 비디오들이 **`scv-attachments` orphan 브랜치** 로 push (작업 브랜치 git history 영향 0). 시스템에 `ffmpeg` 가 있으면 .webm 을 .gif (default 480px / 10fps / 60s cap) 로 동시 변환해서 함께 push.
+- PR body 는 **GIF inline (자동 재생, 무음) + .webm 클릭 링크 (새 탭에서 native player + 음성)** 의 hybrid markdown. GitHub 가 PR body 의 `<video>` 태그를 strip 하므로 GIF 로 인라인 미리보기, .webm 으로 음성/풀화질을 모두 충족하는 방식.
+- `ffmpeg` 가 없으면 graceful degrade — .webm 링크만 첨부 + "install ffmpeg for inline GIF previews" 안내. SCV 자체 동작에 영향은 없음.
+- 로컬 비디오/GIF 파일은 push 후 즉시 삭제 (디스크 정리).
 - PR 머지 + 사용자 지정 N 일 (default 3) 후 orphan 브랜치에서 자동 삭제 (manifest.json + `gh pr view` 기반 self-amortizing cleanup).
 
 **.env 설정** (선택, 기본값 그대로 두면 OK):
 ```
 SCV_ATTACHMENTS_BACKEND=git-orphan         # 기본. v0.4 부터 s3 · r2 추가 예정
 SCV_ATTACHMENTS_RETENTION_DAYS=3           # 머지 후 보관 일수. 'never' 가능
+SCV_GIF_WIDTH=480                          # GIF 가로 픽셀. 기본 480
+SCV_GIF_FPS=10                             # GIF 프레임레이트. 기본 10
+SCV_GIF_MAX_SECONDS=60                     # GIF 길이 cap (초). 기본 60
 ```
 
 비-Playwright 프로젝트 (Cypress / 백엔드 테스트만) 는 비디오 없이 진행 — PR 에 스크린샷만 첨부됨.

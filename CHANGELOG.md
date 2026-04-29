@@ -25,17 +25,23 @@
 
 - **PR 비디오 자동 첨부 흐름** — `commands/work.md` Step 9d 확장
   - **Step 9d-prep** — `.env` 에 `SCV_ATTACHMENTS_RETENTION_DAYS` 가 없으면 한 번만 AskUserQuestion: 3일 (기본) / 7일 / 30일 / Never. 답변을 `.env` 에 저장.
-  - **Step 9d-main** — `gh pr create` 후 `attachments_upload` → `gh pr edit` 으로 placeholder 교체 패턴. PR body 에 GitHub raw URL markdown 임베드 → PR 페이지에서 inline 재생.
+  - **Step 9d-main** — `gh pr create` 후 `attachments_upload` → `gh api -X PATCH` 으로 placeholder 교체 (gh pr edit 의 GraphQL Projects classic deprecation 경고로 인한 exit 1 회피). orphan 브랜치에는 `.webm` 과 ffmpeg 으로 동시 변환된 `.gif` 를 함께 push. PR body 는 **GIF inline (자동 재생, 무음) + .webm 클릭 링크 (새 탭에서 native player + 음성 재생)** 의 hybrid markdown.
+
+- **ffmpeg 기반 GIF 미리보기** (Path C hybrid) — `scripts/pr-helper.sh`
+  - 2-pass palette 변환 (`palettegen` + `paletteuse dither=bayer:bayer_scale=5`) 으로 256 색 GIF 생성. default `480px` 가로 / `10fps` / `60s` cap.
+  - GitHub PR body 는 `<video>` 태그를 strip 하고 `/blob/.webm` 도 inline 안 함 — 그래서 GIF 인라인 미리보기 + .webm 클릭 native player 로 양쪽 다 충족 (음성 + 풀 화질은 .webm, 인라인 자동 재생은 GIF).
+  - ffmpeg 미설치 시 graceful degrade: webm 링크만 첨부 + "install ffmpeg for inline GIF previews" 안내. 변환 실패 시도 동일.
+  - env override: `SCV_GIF_WIDTH` / `SCV_GIF_FPS` / `SCV_GIF_MAX_SECONDS`.
 
 - **`/scv:status` 에 `[scv-attachments]` 섹션** — backend, retention, active/stale/total size 표시
 
 ### Changed
 
-- **`scripts/pr-helper.sh`** — `lib/attachments.sh` 호출 + 비디오 수집 (.webm/.mp4) + Test evidence 섹션 (Videos + Screenshots) + create-then-edit 흐름. dry-run 출력에도 비디오 경로 + 예상 raw URL 패턴 표시.
+- **`scripts/pr-helper.sh`** — `lib/attachments.sh` 호출 + 비디오 수집 (.webm/.mp4) + Test evidence 섹션 (Videos + Screenshots) + create-then-edit 흐름. orphan 브랜치 URL 은 `/raw/` 사용 (`/blob/` 은 image 만 inline 렌더, video / GIF 는 안 됨). dry-run 출력에도 비디오 경로 + 예상 raw URL + ffmpeg 변환 가능 여부 표시.
 - **`scripts/status.sh`** — `[scv-attachments]` 신규 섹션. `lib/attachments.sh::attachments_status` 호출.
 - **`template/scv/TESTING.md §3.3`** (신설) — PR 비디오 자동 첨부 안내 + .env 설정 예시.
 - **`template/scv/PROMOTE.md`** — TESTS.md 작성 가이드에 비디오 증거 자동 첨부 한 단락.
-- **`template/.env.example.scv`** — `SCV_ATTACHMENTS_BACKEND` · `SCV_ATTACHMENTS_RETENTION_DAYS` · `SCV_ATTACHMENTS_BRANCH` env vars 추가.
+- **`template/.env.example.scv`** — `SCV_ATTACHMENTS_BACKEND` · `SCV_ATTACHMENTS_RETENTION_DAYS` · `SCV_ATTACHMENTS_BRANCH` · `SCV_GIF_WIDTH` · `SCV_GIF_FPS` · `SCV_GIF_MAX_SECONDS` env vars 추가.
 
 ### Tests
 
@@ -48,7 +54,6 @@
 - **`s3` / `r2` 백엔드 실제 구현**: v0.3 은 abstraction + stub 만. v0.4 에서 `_attachments_s3_*` / `_attachments_r2_*` 본문.
 - **GitLab / Bitbucket / Gitea 지원**: v0.4. `lib/pr-platform.sh` 추상화 도입 예정.
 - **`attachments_status` 의 stale 정확 카운트**: v0.3 에선 `?` (gh API 호출 부담). v0.4 캐싱 후 정확 표시.
-- **자동 GIF 합성 (스크린샷 시퀀스 → GIF)**: v0.5+ 후보.
 
 ## [0.2.1] — 2026-04-28
 
