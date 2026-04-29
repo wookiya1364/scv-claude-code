@@ -1,4 +1,34 @@
-# SCV — Standard · Cowork · Verify
+<div align="center">
+
+<img src="assets/scv.jpg" width="160" height="160" alt="SCV mascot" />
+
+<h1>SCV</h1>
+
+<p><b>Standard · Cowork · Verify</b></p>
+
+<p>
+A Claude Code plugin for team workflows.<br>
+Every change becomes a plan + tests before merging, and those tests accumulate into a self-running regression suite.
+</p>
+
+<p>
+<a href="https://github.com/wookiya1364/scv-claude-code/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/wookiya1364/scv-claude-code?label=release&color=blue" /></a>
+<img alt="License" src="https://img.shields.io/badge/license-MIT-green" />
+<img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude%20Code-plugin-D97757" />
+<img alt="Regression" src="https://img.shields.io/badge/tests-412_PASS-brightgreen" />
+<img alt="i18n" src="https://img.shields.io/badge/i18n-EN_·_KO_·_JA-purple" />
+</p>
+
+<p>
+<a href="#quick-start--four-steps">Quick Start</a> ·
+<a href="#slash-commands--seven-total">Commands</a> ·
+<a href="#end-to-end-flow">End-to-end flow</a> ·
+<a href="CHANGELOG.md">Changelog</a>
+</p>
+
+</div>
+
+---
 
 > **Team collaboration plugin for Claude Code · Claude Code 팀 협업 플러그인 · Claude Code のチーム協業プラグイン**
 
