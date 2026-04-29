@@ -1010,9 +1010,9 @@ assert_contains "$REGRESSION_CMD" "--include-promote"
 assert_contains "$REGRESSION_CMD" "--include-obsolete"
 assert_contains "$REGRESSION_CMD" "regression-summary"
 assert_contains "$REGRESSION_CMD" "regression-failure"
-assert_contains "$REGRESSION_CMD" "Archived TESTS.md 본문은 절대 수정하지 않는다"
-assert_contains "$REGRESSION_CMD" "regression — 진짜 회귀"
-assert_contains "$REGRESSION_CMD" "flaky — 환경 문제"
+assert_contains "$REGRESSION_CMD" "Never modify the body of an archived TESTS.md"
+assert_contains "$REGRESSION_CMD" "regression — true regression"
+assert_contains "$REGRESSION_CMD" "flaky — environmental issue"
 
 echo
 echo "=== [11t] commands/work.md Step 9c supersede propagation content ==="
@@ -1021,11 +1021,11 @@ assert_contains "$WORK_CMD" "Step 9b"
 assert_contains "$WORK_CMD" "Step 9c"
 assert_contains "$WORK_CMD" "supersede propagation"
 assert_contains "$WORK_CMD" "Regression pre-flight"
-assert_contains "$WORK_CMD" "Yes — obsolete 로 마킹 (권장)"
-assert_contains "$WORK_CMD" "Skip — runtime skip 만"
+assert_contains "$WORK_CMD" "Yes — mark as obsolete"
+assert_contains "$WORK_CMD" "Skip — runtime skip only"
 assert_contains "$WORK_CMD" "status: done → obsolete"
-assert_contains "$WORK_CMD" "TESTS.md · ARCHIVED_AT.md · 다른 파일은 절대 건드리지 않음"
-assert_contains "$WORK_CMD" "영구 skip"
+assert_contains "$WORK_CMD" "TESTS.md, ARCHIVED_AT.md, and other files are never touched"
+assert_contains "$WORK_CMD" "permanently skip"
 assert_contains "$WORK_CMD" "Default: [1] Yes"
 
 echo
@@ -1528,9 +1528,9 @@ printf '%s' "$CLEAN_OUT" | grep -qF "merged-old/v1.webm" && fail "attachments cl
 echo
 echo "=== [11jj] commands/work.md — Step 9d retention AskUserQuestion content ==="
 assert_contains "$WORK_CMD" "SCV_ATTACHMENTS_RETENTION_DAYS"
-assert_contains "$WORK_CMD" "3 일 (기본"
-assert_contains "$WORK_CMD" "7 일"
-assert_contains "$WORK_CMD" "30 일"
+assert_contains "$WORK_CMD" "3 days (default"
+assert_contains "$WORK_CMD" "7 days"
+assert_contains "$WORK_CMD" "30 days"
 assert_contains "$WORK_CMD" "Never"
 
 echo
@@ -1541,9 +1541,9 @@ assert_contains "$WORK_CMD" "video: 'on'"
 
 echo
 echo "=== [11ll] commands/work.md — Step 9d video flow content ==="
-assert_contains "$WORK_CMD" "scv-attachments orphan 브랜치"
-assert_contains "$WORK_CMD" "git history 영향 0"
-assert_contains "$WORK_CMD" "inline 재생"
+assert_contains "$WORK_CMD" "scv-attachments orphan branch"
+assert_contains "$WORK_CMD" "zero impact on the"
+assert_contains "$WORK_CMD" "inline playback"
 
 echo
 echo "=== [11mm] lib/attachments.sh — v0.3.0 layout → v0.3.1 scv/ subdirectory 자동 migration ==="
@@ -1731,7 +1731,7 @@ printf '%s' "$STATUS_OUT" | awk '/---INVALIDATED-3---/{f=1;next} f' | grep -qE '
 
 echo
 echo "=== [11oo] commands/work.md — Step 5b Playwright 표준화 + non-Playwright 안내 ==="
-assert_contains "$WORK_CMD" "SCV 표준 E2E"
+assert_contains "$WORK_CMD" "standard E2E framework is Playwright"
 assert_contains "$WORK_CMD" "playwright.config.{ts,js,mjs,cjs}"
 assert_contains "$WORK_CMD" "non-Playwright notice"
 assert_contains "$WORK_CMD" "Cypress → Playwright"
@@ -1788,9 +1788,9 @@ echo
 echo "=== [11bb] commands/work.md — Step 9d/9e content ==="
 assert_contains "$WORK_CMD" "Step 9d"
 assert_contains "$WORK_CMD" "Step 9e"
-assert_contains "$WORK_CMD" "PR 자동 생성"
+assert_contains "$WORK_CMD" "auto-create PR"
 assert_contains "$WORK_CMD" "pr-helper.sh"
-assert_contains "$WORK_CMD" "epic 의 모든 feature 가 archive"
+assert_contains "$WORK_CMD" "All features of epic"
 assert_contains "$WORK_CMD" "refactor PLAN scaffold"
 assert_contains "$WORK_CMD" ".scv-pr-artifacts"
 

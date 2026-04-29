@@ -34,11 +34,11 @@ If both `settings.json language` and `.env SCV_LANG` are unset, you may suggest 
 
 **Non-negotiable rules:**
 - Never delete or move files outside the scope of this plan.
-- Never archive without either (a) tests passing AND user approval in this conversation, or (b) the user's earlier declarative pre-approval ("tests 통과하면 알아서 archive 해" 같은 형태).
+- Never archive without either (a) tests passing AND user approval in this conversation, or (b) the user's earlier declarative pre-approval (e.g., "auto-archive when tests pass" / "tests 통과하면 알아서 archive 해").
 - When implementing, respect the user's document-split guidance (see Step 3 below).
 - Always run the tests — do not declare "done" based on reasoning alone.
-- **Archived TESTS.md 본문은 절대 수정하지 않는다.** Obsolete 마킹은 오직 해당 archived 폴더의 PLAN.md frontmatter 3 필드 (`status: obsolete` · `obsoleted_at` · `obsoleted_by`) 로만.
-- **supersede propagation 시 자동 마킹 금지** — 반드시 Step 9c 의 AskUserQuestion 경유, default 만 Yes 로 사전선택.
+- **Never modify the body of an archived TESTS.md.** Obsolete marking is done only via 3 frontmatter fields on that archived folder's PLAN.md (`status: obsolete`, `obsoleted_at`, `obsoleted_by`).
+- **Never auto-mark on supersede propagation** — always go through Step 9c's AskUserQuestion (default Yes pre-selected).
 
 First, gather context:
 
@@ -79,8 +79,8 @@ Also surface any **external refs** from the helper's `=== external refs ===` blo
 
 | Signal | Claude's action |
 |---|---|
-| User explicit: "분리해" / "split into ARCH.md" / `REQUIREMENTS.md 로 빼줘" | **Always split** — write the new file and trim PLAN.md accordingly. Ask before the actual write. |
-| User explicit: "분리 마" / "keep it in one file" / "no split" | **Do not propose split**. Continue in PLAN.md even if it grows. |
+| User explicit: "split it" / "split into ARCH.md" / "extract into REQUIREMENTS.md" (or any-language equivalent like 분리해 / REQUIREMENTS.md 로 빼줘) | **Always split** — write the new file and trim PLAN.md accordingly. Ask before the actual write. |
+| User explicit: "don't split" / "keep it in one file" / "no split" (or 분리 마) | **Do not propose split**. Continue in PLAN.md even if it grows. |
 | Neither (default) | Claude judges. If `Approach Overview` > ~50 lines, `Steps` > ~15, or implementation reveals a dense sub-topic (ARCH / REQUIREMENTS / API / MIGRATION / tests) — **propose** split via `AskUserQuestion`. User accepts or declines. |
 
 ### Step 4 — Load Related Documents (as needed)
@@ -90,54 +90,50 @@ Look at the helper's `=== related documents (from PLAN.md) ===` list.
 - If empty → skip.
 - If listed: **don't read them all by default** (token guard).
 - Read individual entries only when:
-  1. The user explicitly requests (e.g., "ARCH.md 도 보고 구현해"), **or**
+  1. The user explicitly requests (e.g., "also read ARCH.md when implementing" / "ARCH.md 도 보고 구현해"), **or**
   2. Claude judges the content of the current step needs that context (e.g., Step says "per API.md contract" — then Read API.md).
 - Any file marked `(MISSING)` by the helper → note it in summary; ask user if they want it created.
 
 ### Step 5 — Load TESTS.md (required)
 
 `Read` the `TESTS_FILE`. Extract:
-- 실행 방법 (the actual test command(s))
-- 통과 판정 criteria
+- The `## How to run` (or legacy `## 실행 방법`) section — actual test command(s).
+- The `## Pass criteria` (or legacy `## 통과 판정`) section — pass/fail rules.
 
-If TESTS.md is missing or the 실행 방법 block is empty / ambiguous → **stop and ask**. Do not guess a test command.
+If TESTS.md is missing or the run section is empty / ambiguous → **stop and ask**. Do not guess a test command.
 
-#### Step 5b — Playwright 비디오 자동 설정 (SCV 표준 E2E, v0.3+)
+#### Step 5b — Playwright video auto-setup (SCV's standard E2E framework, v0.3+)
 
-After loading TESTS.md, decide whether to set up E2E video recording. **SCV 의 표준 E2E framework 는 Playwright 입니다** — 자동 감지·자동 video 설정·PR 자동 첨부의 보장 대상은 Playwright 단일.
+After loading TESTS.md, decide whether to set up E2E video recording. **SCV's standard E2E framework is Playwright** — automatic detection, auto video config, and PR auto-attach are guaranteed only for Playwright.
 
 1. Use `Glob` to look for `playwright.config.{ts,js,mjs,cjs}` at project root.
 2. **If `playwright.config.*` found**: continue with the Playwright video config flow below.
-3. **If `playwright.config.*` not found, but other E2E indicators are present** (any of:
-   `cypress.config.{ts,js,mjs}` exists, or `package.json` 의 `dependencies` /
-   `devDependencies` 에 `cypress` 또는 `puppeteer` 가 들어있음):
-   emit the **non-Playwright notice** (see end of this step) **once**, then
-   proceed to Step 6 without modifying any config.
+3. **If `playwright.config.*` not found, but other E2E indicators are present** (any of: `cypress.config.{ts,js,mjs}` exists, or `package.json`'s `dependencies` / `devDependencies` contains `cypress` or `puppeteer`): emit the **non-Playwright notice** (see end of this step) **once**, then proceed to Step 6 without modifying any config.
 4. **If neither**: skip this step entirely (non-E2E project — proceed to Step 6).
 
 ##### Playwright video config flow (only when `playwright.config.*` found)
 
-`Read` the config file and check for `video:` configuration inside `use:` block.
+`Read` the config file and check for `video:` configuration inside the `use:` block.
 
 If `video:` is **missing** or set to `'off'`:
 
    ```
    AskUserQuestion (default Yes):
-     Question: "Playwright 비디오 녹화가 꺼져 있습니다. SCV 가 자동으로 켤까요?"
+     Question: "Playwright video recording is off. Should SCV turn it on automatically?"
      options:
-     [1] "Yes — video: 'on' 자동 추가 (권장)"
+     [1] "Yes — auto-add video: 'on' (recommended)"
          description:
-         "playwright.config 의 use: 블록에 video: 'on' 한 줄 추가합니다.
-          이후 모든 Playwright 테스트가 .webm 을 test-results/ 에 생성하고,
-          /scv:work Step 9d 의 PR 생성이 그 비디오를 자동으로 PR body 에
-          inline 임베드합니다 (scv-attachments orphan 브랜치 경유, 작업
-          브랜치 git history 영향 0).
+         "Adds a single `video: 'on'` line into the `use:` block of playwright.config.
+          From then on, every Playwright test produces .webm under test-results/, and
+          /scv:work Step 9d's PR creation auto-embeds those videos into the PR body
+          (via the scv-attachments orphan branch — zero impact on the working branch's
+          git history).
 
-          PR 머지 후 사용자 지정 N 일 (default 3) 후 자동 삭제됩니다."
+          Videos are auto-deleted N days after PR merge (default 3, configurable)."
 
-     [2] "No — 비디오 없이 진행"
+     [2] "No — proceed without video"
          description:
-         "config 를 수정하지 않습니다. PR 에는 스크린샷만 첨부됩니다."
+         "Leaves playwright.config alone. Only screenshots will be attached to the PR."
    ```
 
 If user picks **[1] Yes**: use `Edit` to insert `video: 'on'` into the `use:` block.
@@ -151,19 +147,19 @@ If `video:` is already `'on'` / `'retain-on-failure'` / `'retry-with-video'`: sk
 
 This flow runs **once per project** in practice — after first Yes, video config is permanent.
 
-##### Non-Playwright notice (Cypress / Puppeteer / 기타)
+##### Non-Playwright notice (Cypress / Puppeteer / others)
 
 When emitted, print this as a single info block (not an AskUserQuestion — work proceeds normally):
 
-> ⚠ **SCV 표준 E2E 는 Playwright 입니다.**
+> ⚠ **SCV's standard E2E framework is Playwright.**
 >
-> 이 프로젝트에서 Cypress / Puppeteer 등 다른 도구가 감지됐습니다. SCV 가 자동 감지·자동 video 설정·PR 비디오 자동 첨부를 완전 보장하는 건 Playwright 뿐입니다. 다른 도구도 `.webm` / `.mp4` 출력을 `test-results/` 에 두면 PR 첨부는 동작하지만, video config 자동 설정 (Step 5b) 은 적용되지 않습니다.
+> This project shows signs of Cypress / Puppeteer / another tool. SCV guarantees automatic detection, auto video config, and PR auto-attach only for Playwright. Other tools still get PR attachment if their `.webm` / `.mp4` outputs land in `test-results/`, but auto video config (Step 5b) does not apply.
 >
-> Playwright 로 마이그레이션 권장:
+> Recommended migration to Playwright:
 > - Cypress → Playwright: https://playwright.dev/docs/migrating-from-cypress
 > - Puppeteer → Playwright: https://playwright.dev/docs/puppeteer
 >
-> (SCV 작업은 정상 진행됩니다 — 안내만 출력.)
+> (SCV work continues as normal — this is a notice only.)
 
 ### Step 6 — Implement
 
@@ -178,9 +174,9 @@ Update `PLAN.md` frontmatter `status:` as you progress:
 
 ### Step 7 — Run TESTS
 
-Execute the command(s) from `TESTS.md` 실행 방법 via the `Bash` tool. Capture output. Evaluate against 통과 판정.
+Execute the command(s) from the TESTS.md run section via the `Bash` tool. Capture output. Evaluate against pass criteria.
 
-- All scenarios pass + 통과 판정 met → proceed to Step 8.
+- All scenarios pass + criteria met → proceed to Step 8.
 - Any scenario fails → loop back to Step 6 to fix. **Do not archive.** Set frontmatter `status:` back to `in_progress`.
 
 ### Step 8 — Report results to the user
@@ -190,31 +186,31 @@ Summarize:
 - Test results: each scenario pass/fail + overall verdict.
 - Plan's `status:` now `testing` (or back to `in_progress` if failures).
 
-### Step 9a — Regression pre-flight (선택)
+### Step 9a — Regression pre-flight (optional)
 
-조건: Step 7 에서 모든 TESTS 통과 + pre-declared archive 모드가 아님.
+Condition: All TESTS passed in Step 7 and not in pre-declared archive mode.
 
-`AskUserQuestion`: "Archive 전에 누적 회귀(`scv/archive/` 전체) 를 돌려볼까요? PLAN 에 `supersedes` 선언된 slug 는 자동 skip 됩니다."
+`AskUserQuestion`: "Run accumulated regression (entire `scv/archive/`) before archiving? Slugs declared in PLAN's `supersedes:` are auto-skipped."
 
 Options:
-- **Yes, run `/scv:regression` now** (default) — 아래 커맨드 즉시 실행
-- **Skip — just archive** — 바로 Step 9b 로
-- **Let me review first** — 사용자 대기 (커맨드 중지)
+- **Yes, run `/scv:regression` now** (default) — invoke the command immediately
+- **Skip — just archive** — go straight to Step 9b
+- **Let me review first** — pause (stop the command flow)
 
-Yes 선택 시:
+If Yes:
 
 ```
 bash ${CLAUDE_PLUGIN_ROOT}/scripts/regression.sh --quiet
 ```
 
-결과 처리:
-- `FAILED_SLUGS: 0` → "회귀 녹색" 한 줄 보고 후 Step 9b 로.
-- `FAILED_SLUGS: >0` → 실패 개수·slug 목록을 사용자에게 먼저 보고하고 **Step 9b 진행 여부를 재질의**:
-  - "회귀가 실패했습니다. archive 를 중단하고 `/scv:regression` 으로 triage 먼저 진행" (권장)
-  - "실패 무시하고 archive" (위험 — 사용자가 명시 승인한 경우만)
-  - "지금은 archive 보류"
+Result handling:
+- `FAILED_SLUGS: 0` → one-line "regression green" report, then Step 9b.
+- `FAILED_SLUGS: >0` → report failure count + slug list to the user first, then **re-ask whether to proceed to Step 9b**:
+  - "Regression failed. Halt archive and triage with `/scv:regression` first" (recommended)
+  - "Ignore failures and archive" (risky — only if user explicitly approves)
+  - "Hold off on archiving for now"
 
-**pre-declared 모드** ("tests 통과하면 알아서 archive 해") 에서도 pre-flight 는 자동 실행하되, `FAILED_SLUGS: 0` 이면 질문 없이 Step 9b 로 계속.
+**Pre-declared mode** (e.g., user said earlier "auto-archive when tests pass" / "tests 통과하면 알아서 archive 해"): pre-flight still runs automatically, but if `FAILED_SLUGS: 0` it proceeds to Step 9b without asking.
 
 ### Step 9b — Archive decision
 
@@ -222,7 +218,7 @@ Only if tests fully passed in Step 7 (and Step 9a passed or was skipped):
 
 | User posture | Action |
 |---|---|
-| Pre-declared ("tests 통과하면 알아서 archive 해" or similar, spoken earlier in this conversation) | Auto-invoke: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/work.sh <slug> --archive --reason="tests passed"`. Report the ARCHIVED: line. |
+| Pre-declared (e.g., "auto-archive when tests pass" / "tests 통과하면 알아서 archive 해", spoken earlier in this conversation) | Auto-invoke: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/work.sh <slug> --archive --reason="tests passed"`. Report the ARCHIVED: line. |
 | No pre-declaration | Use `AskUserQuestion`: "All tests passed. Archive `<slug>` now?" with options: **Archive now** / **Keep in promote** / **Let me review first**. Proceed per answer. |
 | User says no (keep in promote) | Update PLAN.md frontmatter `status: done` but leave the folder in `scv/promote/`. |
 
@@ -230,73 +226,74 @@ After a successful archive, remind the user:
 - `scv/archive/<slug>/ARCHIVED_AT.md` has the archive record.
 - Future `/scv:status` will no longer flag this plan.
 
-### Step 9c — supersede propagation (새 · adopts A's supersedes 선언)
+### Step 9c — supersede propagation (new · adopts A's `supersedes` declaration)
 
-조건: Step 9b 에서 archive 가 **실제로** 일어났고, 방금 archive 된 PLAN.md 의 `supersedes:` 배열이 비어있지 않을 때.
+Condition: archive **actually happened** in Step 9b, and the just-archived PLAN.md's `supersedes:` array is non-empty.
 
-절차:
-1. `Read` `scv/archive/<A-slug>/PLAN.md` 의 frontmatter. `supersedes:` 배열을 파싱.
-2. 각 B-slug 에 대해 **순차 처리**:
-   - `scv/archive/<B-slug>/PLAN.md` 존재 확인. 없으면 stderr 경고 후 skip.
-   - 이미 `status: obsolete` 면 skip (중복 마킹 방지).
-   - 그 외에는 **AskUserQuestion 하나** (슬러그별 1회, default Yes):
+Procedure:
+1. `Read` `scv/archive/<A-slug>/PLAN.md` frontmatter. Parse the `supersedes:` array.
+2. For each B-slug, **process sequentially**:
+   - Verify `scv/archive/<B-slug>/PLAN.md` exists. If not, warn to stderr and skip.
+   - If already `status: obsolete`, skip (avoid double-marking).
+   - Otherwise, **one AskUserQuestion** (per slug, default Yes):
 
-**AskUserQuestion 양식 (그대로 사용)**
+**AskUserQuestion template (use as-is)**
 
 ```
-Question: "방금 archive 한 '<A-slug>' 가 supersedes 로 '<B-slug>' 를 선언했습니다.
-           '<B-slug>' 를 obsolete 로 마킹할까요?"
+Question: "The plan you just archived ('<A-slug>') declared '<B-slug>' in its supersedes.
+           Mark '<B-slug>' as obsolete?"
 
 Options:
-[1] "Yes — obsolete 로 마킹 (권장)"
+[1] "Yes — mark as obsolete (recommended)"
     description:
-    "'<B-slug>' 은 더 이상 운영되는 feature 가 아니며 방금 작업한 '<A-slug>' 에 의해
-     대체됐음을 기록합니다.
+    "Records that '<B-slug>' is no longer an actively maintained feature and was replaced
+     by the just-archived '<A-slug>'.
 
-     구체적으로 무엇이 변경되나요?
-     - scv/archive/<B-slug>/PLAN.md frontmatter 에만 3 필드가 추가됩니다:
+     What exactly changes?
+     - Only 3 fields are added to scv/archive/<B-slug>/PLAN.md frontmatter:
          status: done → obsolete
-         obsoleted_at: <오늘 날짜>
+         obsoleted_at: <today's date>
          obsoleted_by: <A-slug>
-     - TESTS.md · ARCHIVED_AT.md · 다른 파일은 절대 건드리지 않음 (불변 archive 원칙).
+     - TESTS.md, ARCHIVED_AT.md, and other files are never touched (immutable archive principle).
 
-     이 마킹이 왜 필요한가요?
-     - /scv:regression 이 앞으로 '<B-slug>' 의 TESTS 를 영구 skip 합니다 (회귀 스위트에서 제외).
-     - 1년 뒤 archive 를 열람해도 '왜 B 가 더 이상 안 돌아가나?' 가 PLAN 본문에 남아
-       git history 없이도 맥락 추적 가능.
-     - status 가 'done' 인 채로 남으면 '완료된 현역 feature' 로 오해 받을 수 있어서
-       상태를 명확히 하기 위함.
+     Why is this needed?
+     - /scv:regression will permanently skip '<B-slug>'s TESTS from now on (excluded from
+       the regression suite).
+     - A year later, even when browsing the archive, the 'why isn't B running anymore?'
+       answer remains in PLAN's body, traceable without git history.
+     - If status stays 'done', it could be misread as 'completed and still live' — this
+       marking clarifies the lifecycle.
 
-     언제 Yes 를 고르면 안 되나요?
-     - supersedes 선언을 실수로 한 것이면 [2] Skip 을 고르고, 이후 <A-slug>.PLAN.md 의
-       supersedes 배열에서 '<B-slug>' 를 지우세요."
+     When NOT to pick Yes?
+     - If the supersedes declaration was a mistake, pick [2] Skip and remove '<B-slug>'
+       from <A-slug>.PLAN.md's supersedes array."
 
-[2] "Skip — runtime skip 만"
+[2] "Skip — runtime skip only"
     description:
-    "'<B-slug>' 의 파일을 전혀 건드리지 않습니다. /scv:regression 은 여전히
-     <A-slug>.supersedes 를 읽어 '<B-slug>' 를 skip 하지만, '<B-slug>'.status 는 'done'
-     으로 남아서 archive 목록에서 '현역 feature' 처럼 보입니다. supersedes 선언을
-     실수로 했거나, 나중에 다시 판단하고 싶을 때 고르세요."
+    "Don't touch '<B-slug>'s files at all. /scv:regression still reads <A-slug>.supersedes
+     and skips '<B-slug>', but '<B-slug>'.status stays 'done', so in archive listings it
+     looks like a 'live feature'. Pick this if the supersedes declaration was a mistake or
+     you want to decide later."
 
 [3] "Let me review archive/<B-slug>/ first"
     description:
-    "이 전파 결정을 보류합니다. /scv:work 는 여기서 멈추지 않고 다음 supersede 대상으로
-     계속 진행합니다. 이 slug 에 대한 마킹은 나중에 수동으로 하거나 /scv:regression
-     triage 로 재진입하면 됩니다."
+    "Defer this propagation decision. /scv:work does NOT stop here — it continues to the
+     next supersede target. You can manually mark this slug later, or re-enter via
+     /scv:regression triage."
 
-Default: [1] Yes (사전 선택)
+Default: [1] Yes (pre-selected)
 ```
 
-답변 처리:
+Answer handling:
 - **[1] Yes**: `Read` → `Edit` `scv/archive/<B-slug>/PLAN.md` frontmatter:
   - `status: done` → `status: obsolete`
-  - 없으면 `obsoleted_at: <TODAY>` 추가
-  - 없으면 `obsoleted_by: <A-slug>` 추가
-  - 그 외 필드는 손대지 않음. TESTS.md · ARCHIVED_AT.md · 다른 파일 절대 touch 금지.
-- **[2] Skip**: 아무 것도 수정하지 않음. 다음 slug 로 진행.
-- **[3] Review**: 이 slug 는 보류. 다음 slug 로 진행.
+  - Add `obsoleted_at: <TODAY>` if missing
+  - Add `obsoleted_by: <A-slug>` if missing
+  - Don't touch any other field. Never touch TESTS.md, ARCHIVED_AT.md, or any other file.
+- **[2] Skip**: Modify nothing. Move to the next slug.
+- **[3] Review**: Defer this slug. Move to the next slug.
 
-모든 supersede 대상 처리 후 사용자에게 요약:
+After processing all supersede targets, summarize to the user:
 ```
 Propagated obsolete marking:
   ✓ <B-slug>    (marked obsolete, obsoleted_by: <A-slug>)
@@ -304,135 +301,136 @@ Propagated obsolete marking:
   ? <D-slug>    (user chose Review — not marked)
 ```
 
-### Step 9d — PR 자동 생성 (선택, v0.3+)
+### Step 9d — PR auto-creation (optional, v0.3+)
 
-조건: Step 9b 에서 archive 가 실제로 일어났음.
+Condition: archive actually happened in Step 9b.
 
-#### Step 9d-prep — 비디오 보존 기간 (한 번만)
+#### Step 9d-prep — Video retention period (one-time)
 
-`/scv:work` 가 처음 PR 을 만들 때 `.env` 에 `SCV_ATTACHMENTS_RETENTION_DAYS` 가 없으면 **한 번** 다음 AskUserQuestion 발동 (이후엔 안 뜸):
+When `/scv:work` is creating its first PR and `.env` does not have `SCV_ATTACHMENTS_RETENTION_DAYS`, fire **one** AskUserQuestion (and never again):
 
 ```
-Question: "PR 머지 후 비디오 첨부를 며칠 보관할까요?
-           (scv-attachments orphan 브랜치에서 자동 삭제)"
+Question: "How long to keep video attachments after PR merge?
+           (Auto-deleted from the scv-attachments orphan branch.)"
 options:
-[1] "3 일 (기본 · 권장)"
+[1] "3 days (default · recommended)"
     description:
-    "머지 후 빠른 정리. 머지 직후 짧은 추가 검토 정도만 대비. 보통 충분.
-     storage 누적 부담 최소."
-[2] "7 일"
+    "Quick cleanup after merge. Just enough buffer for a brief post-merge review.
+     Usually sufficient. Minimum storage accumulation."
+[2] "7 days"
     description:
-    "한 주. 머지 후 다음 sprint 동안 referencable. 약간 더 보수적."
-[3] "30 일"
+    "One week. Referenceable through the next sprint after merge. Slightly more
+     conservative."
+[3] "30 days"
     description:
-    "한 달. 분기별 회고 시점까지 보존. 비디오 storage 가 더 누적되지만
-     장기 추적 가능."
-[4] "Never — 삭제 안 함"
+    "One month. Retained through quarterly retros. Video storage accumulates more
+     but supports long-term traceability."
+[4] "Never — don't delete"
     description:
-    "영구 보존. orphan 브랜치 storage 가 계속 자람 — long-term archive
-     의도 시에만."
+    "Permanent retention. The orphan branch's storage will keep growing — choose
+     this only if you want a long-term archive."
 ```
 
-답변 후 Claude 가 `Edit` 으로 `.env` 끝에 한 줄 추가 (없으면 .env 새로 생성):
+After the answer, Claude uses `Edit` to append one line to `.env` (creating `.env` if absent):
 ```
-SCV_ATTACHMENTS_RETENTION_DAYS=<N>   # 또는 'never'
+SCV_ATTACHMENTS_RETENTION_DAYS=<N>   # or 'never'
 ```
 
-#### Step 9d-main — PR 생성 AskUserQuestion
+#### Step 9d-main — PR creation AskUserQuestion
 
 **AskUserQuestion** (default Yes):
 
 ```
-Question: "방금 archive 한 '<slug>' 를 PR 로 올릴까요?"
+Question: "Open a PR for the just-archived '<slug>' now?"
 options:
-[1] "Yes — PR 자동 생성 (권장)"
+[1] "Yes — auto-create PR (recommended)"
     description:
-    "다음 단계가 자동으로 진행됩니다:
-    - PLAN.md / TESTS.md / ARCHIVED_AT.md 의 핵심 섹션을 PR body 로 조립
-    - test-results/ 의 스크린샷 (PNG/JPG) 을 .scv-pr-artifacts/<slug>/ 로
-      이동 (test-results/ 폴더에서 빠짐 — 디스크 정리). PR 브랜치에 commit.
-    - test-results/ 의 비디오 (.webm/.mp4) 를 lib/attachments.sh 의
-      git-orphan 백엔드로 scv-attachments orphan 브랜치에 push (PR 브랜치
-      git history 영향 0). 로컬 비디오 파일은 push 후 즉시 삭제.
-    - PR body 에 GitHub raw URL 로 비디오 markdown 임베드 → PR 페이지에서
-      inline 재생. manifest 갱신.
-    - PR 머지 + 사용자 지정 N 일 후 자동 삭제 (self-amortizing — 다음
-      pr-helper 호출 시 진행).
-    - epic 이 있으면 base 브랜치 = epic/<epic-slug> (없으면 main).
-      epic 브랜치가 origin 에 없으면 origin/main 에서 자동 생성.
-    - 현재 feature 브랜치를 push + gh pr create 후 attachments_upload +
-      gh pr edit 으로 placeholder 교체.
-    - PR URL 출력
+    "The following happens automatically:
+    - Assemble PR body from key sections of PLAN.md / TESTS.md / ARCHIVED_AT.md
+    - Move test-results/ screenshots (PNG/JPG) into .scv-pr-artifacts/<slug>/
+      (cleared from test-results/ to keep disk clean). Commit them on the PR branch.
+    - Push test-results/ videos (.webm/.mp4) via lib/attachments.sh's git-orphan
+      backend onto the scv-attachments orphan branch (zero impact on the PR
+      branch's git history). Local video files are deleted right after push.
+    - PR body embeds video markdown via GitHub raw URL → inline playback in the
+      PR page. Manifest updated.
+    - Auto-deletion N days after PR merge (self-amortizing — runs on next
+      pr-helper invocation).
+    - If the plan has an epic, base branch = epic/<epic-slug> (otherwise main).
+      If the epic branch doesn't exist on origin, it's auto-created from origin/main.
+    - Push current feature branch + gh pr create + attachments_upload + gh api
+      PATCH to replace the placeholder.
+    - Print PR URL.
 
-    전제:
-    - 현재 git 브랜치가 main 이 아닌 feature 브랜치
-    - gh CLI 인증됨 (gh auth status)
-    - test-results/ 의 스크린샷·비디오는 사용자 테스트 도구가 준비
-      (Playwright video: 'on' 자동 설정 권장 — Step 5b)
-    - 비디오는 GitHub 만 지원 (GitLab 등은 v0.4)"
+    Prerequisites:
+    - Current git branch is a feature branch (not main).
+    - gh CLI authenticated (gh auth status).
+    - test-results/ screenshots and videos prepared by your test tooling
+      (Playwright video: 'on' auto-config recommended — Step 5b).
+    - GitHub-only for video attachments (GitLab etc. coming in v0.5)."
 
-[2] "Skip — PR 은 따로 만들겠다"
+[2] "Skip — I'll open the PR manually"
     description:
-    "SCV 가 PR 을 만들지 않습니다. 사용자가 나중에 직접 git/gh 로 만들거나,
-    /scv:work 를 다시 호출해 이 단계만 재진입할 수 있습니다."
+    "SCV doesn't open a PR. You can create it later via git/gh, or re-enter
+     this step by re-invoking /scv:work."
 ```
 
-**[1] Yes 선택 시**:
+**On [1] Yes**:
 
 ```
 bash ${CLAUDE_PLUGIN_ROOT}/scripts/pr-helper.sh <slug>
 ```
 
-위 호출이 archive/<slug>/PLAN.md 의 `epic:` / `kind:` 를 읽어 base 브랜치를 결정하고 commit + push + gh pr create 까지 수행합니다. 출력 마지막 줄에 `PR created: <URL>` 이 나오면 사용자에게 그 URL 을 보고하세요.
+The helper reads `archive/<slug>/PLAN.md`'s `epic:` / `kind:` to determine the base branch and performs commit + push + gh pr create. The last line of the output should be `PR created: <URL>` — report that URL to the user.
 
-실패 case:
-- 현재 브랜치가 base 브랜치와 같음 (e.g., main 에서 호출) → 사용자에게 "feature 브랜치로 전환하세요" 안내. 이때 SCV 가 자동으로 브랜치 전환은 하지 않음 (사용자의 작업 컨텍스트 보호).
-- gh CLI 미인증 → 사용자에게 `gh auth login` 안내.
-- 변경사항 없음 (이미 commit·push 완료된 상태) → 그대로 gh pr create 만 수행.
+Failure cases:
+- Current branch equals the base branch (e.g., invoked on main) → tell the user to switch to a feature branch. SCV does NOT auto-switch (preserves the user's working context).
+- gh CLI not authenticated → tell the user to run `gh auth login`.
+- No changes to commit (already committed/pushed) → just runs gh pr create.
 
-**[2] Skip 선택 시**: 그대로 종료. epic refactor 안내 (Step 9e) 는 계속 진행.
+**On [2] Skip**: terminate quietly. Continue to Step 9e (epic refactor notice).
 
-### Step 9e — Epic 완료 시 refactor 안내 (선택)
+### Step 9e — Epic completion refactor notice (optional)
 
-방금 archive 한 PLAN 이 `epic:` 을 가지고 있고 `kind: feature` 일 때만 수행. 이 epic 의 모든 feature 가 archive 됐는지 검사:
+Only when the just-archived PLAN has `epic:` and `kind: feature`. Check whether all features of this epic are archived:
 
 ```bash
-# Glob 으로 scv/promote/*/PLAN.md 와 scv/archive/*/PLAN.md 의 epic 일치 + kind=feature 카운트
+# Glob scv/promote/*/PLAN.md and scv/archive/*/PLAN.md, count epic match + kind=feature
 remaining_features_in_promote=$(grep -l "^epic: <epic-slug>$" scv/promote/*/PLAN.md 2>/dev/null | xargs -I{} grep -L "^kind: refactor$" {} 2>/dev/null | wc -l)
 existing_refactor=$(grep -l "^epic: <epic-slug>$" scv/{archive,promote}/*/PLAN.md 2>/dev/null | xargs grep -l "^kind: refactor$" 2>/dev/null | wc -l)
 ```
 
-조건이 모두 충족되면:
-- `remaining_features_in_promote == 0` (epic 의 모든 feature 가 archive 됨)
-- `existing_refactor == 0` (refactor PLAN 이 아직 없음)
+If both:
+- `remaining_features_in_promote == 0` (all features of the epic are archived)
+- `existing_refactor == 0` (no refactor PLAN exists yet)
 
-→ 사용자에게 한 줄 알림 + AskUserQuestion:
+→ One-line user notice + AskUserQuestion:
 
 ```
-"epic <epic-slug> 의 모든 feature 가 archive 됐습니다.
- PROMOTE.md §8e 에 따라 통합 refactor PLAN 을 만들 차례입니다.
+"All features of epic <epic-slug> are archived.
+ Per PROMOTE.md §8e, it's time to create the integration refactor PLAN.
 
- Question: "지금 refactor PLAN scaffold 를 만들까요?"
+ Question: "Create the refactor PLAN scaffold now?"
  options:
- [1] "Yes — refactor PLAN 만들기 (권장)"
+ [1] "Yes — create refactor PLAN (recommended)"
      description:
-     "scv/promote/<TODAY>-<author>-<epic-slug>-refactor/ 폴더에 PLAN.md +
-      TESTS.md scaffold 생성. PLAN.md 에는 다음 frontmatter 가 자동 세팅:
+     "Generates scv/promote/<TODAY>-<author>-<epic-slug>-refactor/ with PLAN.md +
+      TESTS.md scaffold. PLAN.md has frontmatter pre-set:
         kind: refactor
         epic: <epic-slug>
         status: planned
-      Summary 섹션엔 epic 의 모든 archived feature 슬러그를 자동 나열 (개수 무관).
-      이후 사용자와 대화로 통합 시점 발견된 정리 항목 채움."
+      Summary section auto-lists every archived feature slug of the epic (any count).
+      Fill in cleanup items observed during integration via the user dialogue."
 
- [2] "Later — 다음 기회에"
+ [2] "Later — next time"
      description:
-     "지금은 만들지 않습니다. 나중에 /scv:promote 로 만들거나 직접 폴더
-      만들면 됩니다. epic 은 'refactor pending' 상태로 /scv:status 에 표시."
+     "Don't create now. You can create it later via /scv:promote or by hand. The epic
+      is shown as 'refactor pending' in /scv:status."
 ```
 
-**[1] Yes 선택 시**: Claude 가 직접 폴더 + PLAN.md + TESTS.md scaffold 를 `Write` 도구로 생성. epic 의 archived feature 슬러그들을 자동으로 PLAN.md Summary 섹션에 포함.
+**On [1] Yes**: Claude directly creates the folder + PLAN.md + TESTS.md scaffold via `Write`. Auto-include the epic's archived feature slugs in the PLAN.md Summary section.
 
-**[2] Later**: 그대로 종료.
+**On [2] Later**: Terminate quietly.
 
 ## Flag semantics
 

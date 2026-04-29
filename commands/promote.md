@@ -64,56 +64,56 @@ Summarize to the user:
 
 ### Step 3 — Dialog (for each candidate promote folder)
 
-#### Step 3.0 — Split suggestion (epic 묶음)
+#### Step 3.0 — Split suggestion (epic grouping)
 
-Heuristic 결정 트리:
+Heuristic decision tree:
 
-| Helper signal | LLM 판단 | 대응 |
+| Helper signal | LLM judgment | Action |
 |---|---|---|
-| `SUGGEST_SPLIT: yes` (raw 파일 > 7 또는 토픽 클러스터 ≥ 3) | raw 본문도 다양한 책임 (auth + payment + UI 등) 으로 보임 | **분할 강력 추천** |
-| `SUGGEST_SPLIT: yes` | LLM 보기에 사실 한 주제 (큰 회의록 1개 등) | 분할은 제안하되 "묶어 가도 됩니다" 도 옵션으로 |
-| `SUGGEST_SPLIT: no` | LLM 보기에 본문이 5+ 주제 혼재 | 분할 제안 (LLM 우선) |
-| `SUGGEST_SPLIT: no` | LLM 도 단일 주제 | 분할 안 제안. Step 3.1 의 단일 폴더 흐름으로 |
+| `SUGGEST_SPLIT: yes` (raw files > 7 or topic clusters ≥ 3) | Raw content also looks multi-responsibility (auth + payment + UI etc.) | **Strongly recommend split** |
+| `SUGGEST_SPLIT: yes` | LLM sees it as a single topic in practice (e.g., one large meeting log) | Suggest split but offer "single is fine" as an option |
+| `SUGGEST_SPLIT: no` | LLM sees 5+ topics mixed in the body | Suggest split (LLM judgment wins) |
+| `SUGGEST_SPLIT: no` | LLM also sees a single topic | Don't suggest split. Flow to Step 3.1 single-folder dialog |
 
-분할 추천 조건이면 `AskUserQuestion`:
+If split is recommended, fire `AskUserQuestion`:
 
 ```
-Question: "raw 자료를 분석해 보니 여러 feature 로 쪼갤 만한 규모입니다 (현재 raw 가 N 토픽 클러스터). 어떻게 진행할까요?"
+Question: "Looking at the raw material, this seems sized for multiple features (current raw spans N topic clusters). How would you like to proceed?"
 options:
-[1] "여러 feature 로 분할 (권장) — epic 으로 묶음"
+[1] "Split into multiple features (recommended) — group as an epic"
     description:
-    "raw 자료를 토픽별로 묶어 적절한 갯수의 promote 폴더를 만들고 같은
-     epic: <epic-slug> 으로 묶습니다. **분할 갯수는 raw 의 실제 내용에 맞춰
-     결정** — 작은 자료라면 2~3 개, 큰 자료라면 더 많이. Claude 가 후보 분할
-     안 (각 폴더의 slug + 어느 raw 가 어느 폴더에 들어갈지) 을 제시하면
-     사용자가 조정 가능.
+    "Group the raw material by topic into an appropriate number of promote folders, all
+     sharing the same epic: <epic-slug>. **The number of splits is content-driven** —
+     small material may need 2–3, larger material more. Claude proposes a candidate split
+     (each folder's slug + which raw goes where), and you can adjust.
 
-     장점: 각 feature 가 작고 명확하게 떨어져서 테스트 범위가 좁아지고,
-     리뷰가 쉬워짐. 모든 feature archive 후 SCV 가 통합 refactor PLAN 도
-     자동 안내 (PROMOTE.md §8d, §8e 참조).
+     Benefits: each feature is small and well-scoped, narrowing test scope and easing
+     review. After all features are archived, SCV auto-suggests an integration refactor
+     PLAN (see PROMOTE.md §8d, §8e).
 
-     **예시 (꼭 이 갯수일 필요 없음)**: '결제 v2 전면 개편' → 약 7개 feature
+     **Example (the count is illustrative, not prescriptive)**: 'Payment v2 overhaul' →
+       roughly 7 features
        - 20260424-sspark-pay-overhaul-auth-v2
        - 20260424-sspark-pay-overhaul-charge-flow
        - 20260424-sspark-pay-overhaul-refund-flow
-       - ... (모두 epic: 20260424-pay-overhaul)
-       - 20260430-sspark-pay-overhaul-refactor (kind: refactor, 마지막)
+       - ... (all sharing epic: 20260424-pay-overhaul)
+       - 20260430-sspark-pay-overhaul-refactor (kind: refactor, last)
 
-     실제 갯수는 사용자 도메인과 raw 양에 따라 달라짐."
+     Real count varies with your domain and raw volume."
 
-[2] "단일 promote 로 진행"
+[2] "Proceed as a single promote"
     description:
-    "한 폴더로 받습니다. 라벨이 작거나 사실상 한 가지 주제일 때만 권장.
-     단일 폴더로 가면 epic 묶음 효과 (브랜치 전략 · refactor 자동 안내) 는
-     없습니다."
+    "Take it as one folder. Recommended only when the scope is small or genuinely
+     single-topic. With a single folder, you lose epic grouping benefits (branch strategy,
+     auto-suggested refactor)."
 ```
 
-User 선택 후:
+After user picks:
 
-- **[1] 분할**: `AskUserQuestion` 한 번 더 — "epic slug 는 무엇으로 할까요? (예: `20260424-pay-overhaul`)". 그 후 raw 토픽 클러스터별로 슬러그 제안 → 사용자 승인 → N 개 폴더 생성, 모두 동일 `epic` frontmatter.
-- **[2] 단일**: 아래 Step 3.1 로.
+- **[1] Split**: One more `AskUserQuestion` — "What epic slug should we use? (e.g., `20260424-pay-overhaul`)". Then propose slugs per topic cluster from the raw → user approves → create N folders, all with the same `epic` frontmatter.
+- **[2] Single**: proceed to Step 3.1 below.
 
-#### Step 3.1 — Single-folder dialog (분할 안 한 경우)
+#### Step 3.1 — Single-folder dialog (no split)
 
 Use `AskUserQuestion` to confirm with the user. Typical batch:
 
@@ -142,8 +142,8 @@ slug: <FOLDER_NAME>
 author: <AUTHOR>
 created_at: <TODAY>
 status: planned
-kind: feature                          # feature | refactor | retirement (기본 feature, 분할 시 추가)
-# epic: <EPIC_SLUG>                    # 분할로 만든 여러 promote 모두에 동일하게. 단일 폴더면 생략 가능
+kind: feature                          # feature | refactor | retirement (default feature; specify when splitting)
+# epic: <EPIC_SLUG>                    # Same value across all folders of a split. Omit for single-folder.
 tags: []
 raw_sources:
   - <RAW_SOURCE_1>
@@ -162,7 +162,7 @@ refs: []
 
 ## Summary
 
-<TODO: 1~3 sentences — what & why>
+<TODO: 1–3 sentences — what & why>
 
 ## Goals / Non-Goals
 
@@ -173,7 +173,7 @@ refs: []
 
 ## Approach Overview
 
-<TODO: 5~15 lines. If this grows beyond ~50 lines, `/scv:work` will suggest splitting into ARCH.md.>
+<TODO: 5–15 lines. If this grows beyond ~50 lines, `/scv:work` will suggest splitting into ARCH.md.>
 
 ## Steps
 
@@ -183,7 +183,7 @@ refs: []
 ## Related Documents
 
 <!-- If the plan grows, link supporting files here.
-     /scv:work only loads Related-Documents entries by default (token guard). -->
+     /scv:work only loads Related-Documents entries on demand (token guard). -->
 
 ## Risks / Open Questions
 
@@ -191,8 +191,8 @@ refs: []
 
 ## Links
 
-- raw 원본: (listed in frontmatter)
-- 관련 PR:
+- Raw originals: (listed in frontmatter)
+- Related PRs:
 ```
 
 **`scv/promote/<folder>/TESTS.md`**:
@@ -200,27 +200,27 @@ refs: []
 ```markdown
 # Test Plan — <TITLE>
 
-## 개요
+## Overview
 
 <TODO: one paragraph — what you're verifying and why>
 
-## 테스트 시나리오
+## Test scenarios
 
 ### T1. <Scenario name>
 
-- **전제**: <TODO>
-- **실행**: <TODO>
-- **기대**: <TODO>
-- **Pass 기준**: <observable condition>
+- **Setup**: <TODO>
+- **Run**: <TODO>
+- **Expected**: <TODO>
+- **Pass criterion**: <observable condition>
 
-## 실행 방법
+## How to run
 
 <!-- concrete command(s) like `npm run test:auth` or `pnpm test -- --grep X` -->
 ```bash
 <TODO>
 ```
 
-## 통과 판정
+## Pass criteria
 
 - <TODO: DONE criteria — when do we declare the whole plan done?>
 
@@ -248,7 +248,7 @@ Summarize:
 - Graph update status
 - Baseline updated? (yes)
 - Next suggested command: `/scv:work <slug>` for the first new plan.
-- Reminder: PLAN.md and TESTS.md are **starting skeletons** — user fills the `<TODO>` spots. Run `/scv:status` any time to see pending changes.
+- Reminder: PLAN.md and TESTS.md are **starting skeletons** — fill in the `<TODO>` spots. Run `/scv:status` any time to see pending changes.
 
 ## Flag semantics
 
