@@ -2,6 +2,46 @@
 
 이 저장소의 변경사항을 기록합니다. [Semantic Versioning](https://semver.org/lang/ko/) 규칙을 따릅니다.
 
+## [0.4.1] — 2026-04-29
+
+### 핵심 — i18n internal cleanup (commands 본문 + template 영어화 + Notifier dynamic)
+
+v0.4.0 의 사용자 가시 동작은 그대로 유지하면서, instruction / template 의 hardcoded 한국어를 영어로 통째 정리. 추가로 Notifier 메시지 (Slack/Discord) 가 `SCV_LANG` 따라 동적으로 한국어/일본어/영어 분기.
+
+### Changed
+
+- **`commands/*.md` 본문 영어화** (A3 step) — 7 commands 의 instruction 본문이 영어로:
+  - `work.md` (162 → 8 한국어 라인) — Step 5b Playwright video config + Non-Playwright notice / Step 9a 회귀 pre-flight / 9b archive decision / 9c supersede 3-way / 9d retention 4지선다 + PR 자동 생성. 사용자 발화 예시 (예: `tests 통과하면 알아서 archive 해`, `분리해`, `ARCH.md 도 보고 구현해`) 는 영어 + 한국어 hybrid 로 backwards compat 유지.
+  - `regression.md` (72 → 1) — Non-negotiable rules / Step 0 / Step 1 (all-pass) / Step 2 (3-way triage AskUserQuestion) / Step 3 final summary / flag semantics / Never.
+  - `promote.md` (42 → 1) — Non-negotiable rules / Step 1-7 / Step 3.0 split suggestion heuristic + AskUserQuestion / Step 5 의 PLAN.md / TESTS.md scaffold (영어 헤더: `## How to run` / `## Pass criteria`).
+
+- **`template/scv/*.md` 영어화** (B-1 + B-2 step) — hydrate 시 사용자 프로젝트로 복사되는 표준 문서 10 개 (총 827 한국어 라인) 모두 영어로:
+  - **B-1**: `DESIGN.md` / `DOMAIN.md` / `RALPH_PROMPT.md` / `REPORTING.md` / `AGENTS.md` / `CLAUDE.md`
+  - **B-2**: `TESTING.md` / `INTAKE.md` / `ARCHITECTURE.md` / `PROMOTE.md` (627 라인 통째)
+  - 새 v0.4 hydrate 는 영어 표준 문서로 시작. 기존 hydrated 프로젝트는 `/scv:sync` 가 `merge_policy` 따라 안전 병합.
+
+### Added (v0.4.3 step)
+
+- **`scripts/render-template.sh` — `SCV_LANG` dynamic 분기**:
+  - 영어 (default + fallback) / 한국어 / 일본어 status label, meta line (`Project:` / `Commit:` / `Attempt:` / `Duration:` 또는 한·일 등가), failure cause label (`*Cause*` / `*원인*` / `*原因*`), retry message, summary fallback.
+  - Case-insensitive 매칭 (`KOREAN` == `korean`). 알 수 없는 언어 (예: `esperanto`) → 영어 fallback.
+- **`scripts/report.sh`** — `SCV_LANG` 환경 변수 export 추가. `.env` 의 `SCV_LANG` (env_load 로 로드) 이 `render-template.sh` 에 전달돼서 Slack/Discord 메시지 자체가 사용자 언어로 출력됨.
+
+### Backwards compat
+
+- archived `TESTS.md` (v0.3.x 사용자) 의 `## 실행 방법` / `## 통과 판정` 섹션은 그대로 동작 — `regression.sh` 와 `pr-helper.sh` 의 awk regex `(How to run|실행 방법)` / `(Pass criteria|통과 판정)` 알터네이션이 영어 + 한국어 양쪽 매치.
+- 사용자 main branch 에 hydrate 된 한국어 표준 문서들도 **그대로 보존됨** (`/scv:sync` 가 `merge_policy: preserve` / `merge-on-markers` 로 처리). v0.4.1 의 영어 template 은 새 hydrate / merge 시점부터 적용.
+
+### Tests
+
+- 신규 섹션 **[11rr]** 8 assertion (`render-template.sh` SCV_LANG dynamic branching: english passed/Project / korean 완료/프로젝트 / japanese 失敗/原因 / unknown lang → english fallback / case-insensitive).
+- 한국어 → 영어 매치 갱신 약 30+ 곳 (commands `work` / `regression` / `promote` + template `TESTING` / `INTAKE` / `ARCHITECTURE` / `PROMOTE`).
+- 회귀: 404 → **412 PASS** (+8 assertion) / 0 FAIL.
+
+### Internal cleanup remaining
+
+없음 — i18n core 마무리. 후속은 v0.5+ 의 새 기능 영역 (s3/r2 백엔드, GitLab/Bitbucket/Gitea, Cypress/Puppeteer → Playwright 자동 마이그레이션 등).
+
 ## [0.4.0] — 2026-04-29
 
 ### 핵심 — i18n core 인프라 (Language preference + sh 메시지 영어화)
