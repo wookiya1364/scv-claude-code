@@ -229,10 +229,20 @@ _attachments_git_orphan_upload() {
   local files=("$@")
   [[ ${#files[@]} -eq 0 ]] && return 0
 
-  local owner_repo
-  if ! owner_repo=$(_get_github_owner_repo); then
-    echo "ERROR: not a GitHub remote — git-orphan backend requires github.com origin" >&2
+  # Sanity check: origin must be configured. Owner_repo extraction is
+  # delegated to pr-platform abstraction (v0.5+ supports GitHub + GitLab) at
+  # the raw-URL site below — extraction failure here is non-fatal because
+  # tests / sandbox runs may use bare repos where the URL doesn't match
+  # github/gitlab patterns.
+  if ! git remote get-url origin >/dev/null 2>&1; then
+    echo "ERROR: git remote 'origin' not configured" >&2
     return 1
+  fi
+  local owner_repo=""
+  if declare -F pr_get_owner_repo >/dev/null 2>&1; then
+    owner_repo=$(pr_get_owner_repo 2>/dev/null) || true
+  else
+    owner_repo=$(_get_github_owner_repo 2>/dev/null) || true
   fi
 
   if ! command -v python3 >/dev/null 2>&1; then

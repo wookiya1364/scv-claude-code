@@ -262,10 +262,18 @@ TMP_BODY=$(mktemp)
       echo "### Screenshots"
       echo
       # Screenshots stay in .scv-pr-artifacts/<slug>/ committed to PR branch
-      # (small files, OK to live in git history).
+      # (small files, OK to live in git history). Use absolute raw URL so
+      # GitLab MR rendering also resolves the image (GitHub auto-resolves
+      # relative paths in PR body but GitLab doesn't — v0.5+).
+      _ss_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
       for src in "${SCREENSHOTS[@]}"; do
         base=$(basename "$src")
-        echo "![${base}]($ARTIFACTS_DIR/$SLUG_NAME/$base)"
+        ss_url=""
+        if declare -F pr_raw_url >/dev/null 2>&1 && [[ -n "$_ss_branch" && "$_ss_branch" != "HEAD" ]]; then
+          ss_url=$(pr_raw_url "$_ss_branch" "$ARTIFACTS_DIR/$SLUG_NAME/$base" 2>/dev/null) || ss_url=""
+        fi
+        [[ -z "$ss_url" ]] && ss_url="$ARTIFACTS_DIR/$SLUG_NAME/$base"
+        echo "![${base}](${ss_url})"
         echo
       done
     fi
