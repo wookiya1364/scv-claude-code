@@ -2,6 +2,64 @@
 
 이 저장소의 변경사항을 기록합니다. [Semantic Versioning](https://semver.org/lang/ko/) 규칙을 따릅니다.
 
+## [0.4.0] — 2026-04-29
+
+### 핵심 — i18n core 인프라 (Language preference + sh 메시지 영어화)
+
+SCV 의 사용자 가시 텍스트가 사용자 선호 언어로 출력되도록 인프라 추가. 모든 슬래시 명령어가 다음 우선순위로 언어를 결정해서 응답합니다:
+
+1. `~/.claude/settings.json` (또는 project `.claude/settings.json` / `.claude/settings.local.json`) 의 `language` 키 (Claude Code official — 값 예: `"korean"`, `"english"`, `"japanese"`).
+2. 프로젝트 `.env` 의 `SCV_LANG` (= `/scv:help` 4지선다 답변이 저장되는 곳).
+3. 사용자 가장 최근 메시지 언어 자동 감지.
+4. default 영어.
+
+기술 식별자 (file paths, 슬래시 명령어 이름, frontmatter 키, env var 이름, SCV 용어 `promote` / `archive` / `orphan branch` / `epic` / `supersedes`) 는 모든 언어에서 그대로 유지.
+
+### Added
+
+- **`commands/help.md` — first-time language setup**: `settings.json` `language` + `.env` `SCV_LANG` 모두 비어있으면 4지선다 AskUserQuestion (default [1] English):
+  - [1] **English** — 글로벌 default
+  - [2] **한국어 (Korean)**
+  - [3] **日本語 (Japanese)**
+  - [4] **Other — type a language** — Spanish, French, German 등 follow-up 텍스트 입력
+
+  답을 `.env` 의 `SCV_LANG=<value>` 로 저장. `.env` 가 없으면 생성.
+- **모든 `commands/*.md` 에 "Language preference" instruction 단락** — 7 commands (`help` / `work` / `promote` / `regression` / `status` / `report` / `sync`) 모두 우선순위 instruction 따라 사용자 언어로 응답.
+- **`template/.env.example.scv`** — `SCV_LANG=english` 주석 한 단락 (사용자가 직접 편집해서 lock 가능).
+
+### Changed
+
+- **`scripts/help.sh`** — 모든 사용자 가시 메시지 영어화: overview heredoc (S/C/V 핵심 아이디어, 워크플로 ①-⑤, 커맨드 목록), 동적 진단 (hydrate / .env / 문서 상태 / raw / promote / archive 카운트), 추천 next-action heredoc 6 가지, footer.
+- **`scripts/render-template.sh`** — Notifier 메시지 (Slack/Discord) 영어화: Passed / Failed / In progress label, meta line (`Project:` / `Commit:` / `Attempt:` / `Duration:`), failure reason (`*Cause*` / `→ Retry in progress`), info fallback (`(progress report)`).
+- **`scripts/hydrate.sh`** — hydrate 완료 안내 영어로.
+- **`scripts/work.sh`** — `ARCHIVED_AT.md` body (`# Archive record` / `## Reason`), REASON default ("All TESTS scenarios passed") 영어로.
+- **`scripts/regression.sh`** — TESTS.md 섹션 헤더 매치 awk pattern 을 `(How to run|실행 방법)` 알터네이션으로 (영어 + 한국어 backwards compat). skip 메시지 영어로.
+- **`scripts/pr-helper.sh`** — PR body 의 `**How to run**:` / `**Pass criteria**:` 섹션 헤더, `extract_section` 패턴도 알터네이션 backwards compat. 주석 영어로.
+- **`scripts/promote-helper.sh`** — SPLIT_REASON 문구 영어로 ("3 raw files (>7 threshold)", "5 topic clusters (>=3)").
+- **`scripts/sync.sh`** / **`scripts/report.sh`** / **`scripts/lib/attachments.sh`** — 한국어 주석 영어로.
+
+### Backwards compat (v0.3.x archived TESTS.md 호환)
+
+archived `TESTS.md` (v0.3.x 사용자) 의 `## 실행 방법` / `## 통과 판정` 섹션은 그대로 동작 — `regression.sh` 와 `pr-helper.sh` 의 awk regex 가 `(How to run|실행 방법)` / `(Pass criteria|통과 판정)` 알터네이션으로 양쪽 매치. v0.4 의 새 TESTS.md template 영어화는 후속 minor 에서.
+
+### Tests
+
+- `tests/run-dry.sh` 신규 섹션 **[11qq]** 27 assertion (모든 commands 의 Language preference instruction 존재 + `/scv:help` 4지선다 옵션 + `.env.example.scv` SCV_LANG 검증) + [1d] / [11b] / [11h] 의 한국어 매치 영어로 갱신. 377 → **404 PASS** (+27 assertion). 0 FAIL.
+
+### Internal cleanup deferred (v0.4.1+ 후보)
+
+다음은 사용자 가시 동작에 영향 없는 internal cleanup — Claude 가 이미 Language preference 우선순위에 따라 사용자 언어로 응답하므로 instruction / template 의 한국어가 남아있어도 동작 OK.
+
+- **`commands/*.md` 본문 한국어 → 영어화** (work.md 162 / regression.md 72 / promote.md 42 = ~278 라인). v0.4.1 후보.
+- **`template/scv/*.md` 영어화** (PROMOTE / INTAKE / TESTING / CLAUDE 등). hydrate 시 사용자 프로젝트로 복사되는 표준 문서. v0.4.x 후속 minor 에서.
+- **Notifier 메시지의 SCV_LANG dynamic 분기**: 현재 `render-template.sh` 가 영어 단일. Slack/Discord 가 사용자 화면에 직접 가니 SCV_LANG 따라 동적 번역이 이상적. v0.4.x / v0.5.
+
+### 비채택 (v0.4+ 명단 그대로 유지)
+
+- **`s3` / `r2` 백엔드 본문**: v0.5 후보 (이전 v0.4 후보였으나 i18n 이 v0.4.0 차지).
+- **GitLab / Bitbucket / Gitea PR**: v0.5+ 후보, `lib/pr-platform.sh` 추상화 도입 예정.
+- **Cypress / Puppeteer → Playwright 자동 마이그레이션**: 별도 minor / 별 plugin 후보.
+
 ## [0.3.1] — 2026-04-29
 
 ### 핵심 — orphan branch layout 단정화, `attachments_status` 정확화, Playwright 표준화 stance
