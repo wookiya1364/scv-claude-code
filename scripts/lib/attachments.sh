@@ -132,6 +132,33 @@ _orphan_worktree_open() {
     git branch -D "$ATTACHMENTS_BRANCH" >/dev/null 2>&1 || true
     git worktree add "$wt" "origin/$ATTACHMENTS_BRANCH" >/dev/null 2>&1
     (cd "$wt" && git checkout -B "$ATTACHMENTS_BRANCH" "origin/$ATTACHMENTS_BRANCH" >/dev/null 2>&1)
+
+    # Auto-migrate v0.3.0 layout → v0.3.1 layout:
+    #   root/manifest.json + root/<slug>/  →  scv/manifest.json + scv/<slug>/
+    # Centralizes all SCV-managed files under the scv/ subdirectory so the
+    # orphan branch root stays empty (only README.md), matching how SCV
+    # organizes things on the user's main branch (everything under scv/).
+    # Idempotent — skipped once scv/manifest.json exists.
+    if [[ -f "$wt/manifest.json" && ! -f "$wt/scv/manifest.json" ]]; then
+      if (
+        cd "$wt"
+        mkdir -p scv
+        git mv manifest.json scv/manifest.json >/dev/null 2>&1 || exit 1
+        # Move every root-level directory (slug folders) into scv/.
+        # Skip 'scv' itself, README.md, and dot-entries.
+        for entry in *; do
+          [[ "$entry" == "scv" ]] && continue
+          [[ "$entry" == "README.md" ]] && continue
+          if [[ -d "$entry" ]]; then
+            git mv "$entry" "scv/$entry" >/dev/null 2>&1 || exit 1
+          fi
+        done
+        git commit -q -m "Migrate v0.3.0 layout → scv/ subdirectory (v0.3.1)"
+        git push origin "$ATTACHMENTS_BRANCH" >/dev/null 2>&1
+      ); then
+        echo "Migrated v0.3.0 layout → scv/ on $ATTACHMENTS_BRANCH" >&2
+      fi
+    fi
   else
     # Origin doesn't have it — create fresh orphan. Delete any stale local
     # branch first (it would block `git checkout --orphan`).
@@ -156,15 +183,19 @@ are stored here, embedded into PR bodies via raw URLs.
 After PR merge + N days (configurable in `.env` `SCV_ATTACHMENTS_RETENTION_DAYS`,
 default 3), each slug folder is deleted automatically.
 
+All SCV-managed state lives under the `scv/` subdirectory (`scv/manifest.json`
++ `scv/<slug>/...`). Root stays clean except for this README.
+
 **Do not commit to this branch manually** — `scripts/pr-helper.sh` handles it.
 README_EOF
-      cat > manifest.json <<'MANIFEST_EOF'
+      mkdir -p scv
+      cat > scv/manifest.json <<'MANIFEST_EOF'
 {
   "version": 1,
   "entries": {}
 }
 MANIFEST_EOF
-      git add README.md manifest.json
+      git add README.md scv/manifest.json
       git commit -q -m "Initialize scv-attachments orphan branch"
     ) || {
       _orphan_worktree_close "$wt"
@@ -202,7 +233,7 @@ _attachments_git_orphan_upload() {
   local wt; wt=$(_orphan_worktree_open)
 
   # Copy files into <slug>/
-  local dst="$wt/$slug"
+  local dst="$wt/scv/$slug"
   mkdir -p "$dst"
   local urls=()
   local copied_files=()
@@ -227,7 +258,7 @@ _attachments_git_orphan_upload() {
     #  - For .webm/.mp4: clicking opens browser native HTML5 player in new tab
     #    (blob URL only shows "View raw" link, GitHub doesn't render inline
     #    video player for repo content — only user-attachments domain does)
-    urls+=("https://github.com/${owner_repo}/raw/${ATTACHMENTS_BRANCH}/${slug}/${base}")
+    urls+=("https://github.com/${owner_repo}/raw/${ATTACHMENTS_BRANCH}/scv/${slug}/${base}")
   done
 
   if [[ ${#copied_files[@]} -eq 0 ]]; then
@@ -238,7 +269,7 @@ _attachments_git_orphan_upload() {
 
   # Update manifest via python3 (handles JSON safely)
   local now_iso; now_iso=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-  python3 - "$wt/manifest.json" "$slug" "$pr_number" "$now_iso" <<'PY'
+  python3 - "$wt/scv/manifest.json" "$slug" "$pr_number" "$now_iso" <<'PY'
 import json, sys
 mf, slug, pr, now = sys.argv[1:]
 try:
@@ -253,7 +284,7 @@ PY
   local mf_rc=$?
   if [[ $mf_rc -ne 0 ]]; then
     _orphan_worktree_close "$wt"
-    echo "ERROR: failed to update manifest.json" >&2
+    echo "ERROR: failed to update scv/manifest.json" >&2
     return 1
   fi
 
@@ -261,7 +292,7 @@ PY
   local push_ok=1
   (
     cd "$wt"
-    git add "$slug/" manifest.json
+    git add "scv/$slug/" scv/manifest.json
     if git diff --cached --quiet; then
       echo "(no new attachments to push)"
       exit 0
@@ -288,6 +319,53 @@ PY
   return 0
 }
 
+# Count stale entries in an scv/manifest.json by querying gh API per pr_number.
+# Echoes the integer count on stdout. Returns:
+#   - 0 (printed "0") if retention is 'never' or non-integer (nothing stale by definition).
+#   - empty stdout if gh / python3 / manifest unavailable (caller treats as unknown).
+_compute_stale_count() {
+  local manifest="$1" retention="$2"
+  command -v gh >/dev/null 2>&1 || return 0
+  command -v python3 >/dev/null 2>&1 || return 0
+  [[ -f "$manifest" ]] || return 0
+  python3 - "$manifest" "$retention" <<'PY'
+import json, sys, subprocess, datetime as dt
+mf, retention_str = sys.argv[1], sys.argv[2]
+try:
+    retention = int(retention_str)
+except ValueError:
+    print(0); sys.exit(0)
+with open(mf) as f:
+    m = json.load(f)
+now = dt.datetime.now(dt.timezone.utc)
+count = 0
+for slug, e in m.get("entries", {}).items():
+    pr = e.get("pr_number")
+    if not pr:
+        continue
+    try:
+        out = subprocess.run(
+            ["gh", "pr", "view", str(pr), "--json", "state,closedAt"],
+            capture_output=True, text=True, check=True, timeout=10
+        ).stdout
+        pr_info = json.loads(out)
+    except Exception:
+        continue
+    if pr_info.get("state") == "OPEN":
+        continue
+    closed_at = pr_info.get("closedAt")
+    if not closed_at:
+        continue
+    try:
+        closed_dt = dt.datetime.fromisoformat(closed_at.replace("Z", "+00:00"))
+    except Exception:
+        continue
+    if (now - closed_dt).days >= retention:
+        count += 1
+print(count)
+PY
+}
+
 _attachments_git_orphan_cleanup_stale() {
   local ATTACHMENTS_BRANCH="${SCV_ATTACHMENTS_BRANCH:-$ATTACHMENTS_BRANCH_DEFAULT}"
   local RETENTION_DAYS="${SCV_ATTACHMENTS_RETENTION_DAYS:-$RETENTION_DAYS_DEFAULT}"
@@ -303,14 +381,14 @@ _attachments_git_orphan_cleanup_stale() {
 
   local wt; wt=$(_orphan_worktree_open)
 
-  if [[ ! -f "$wt/manifest.json" ]]; then
+  if [[ ! -f "$wt/scv/manifest.json" ]]; then
     _orphan_worktree_close "$wt"
     return 0
   fi
 
   # Read manifest, compute stale slugs (state ≠ OPEN AND closedAt + N일 < now)
   local stale_slugs
-  stale_slugs=$(python3 - "$wt/manifest.json" "$RETENTION_DAYS" <<'PY'
+  stale_slugs=$(python3 - "$wt/scv/manifest.json" "$RETENTION_DAYS" <<'PY'
 import json, sys, subprocess, datetime as dt
 mf, retention_str = sys.argv[1], sys.argv[2]
 try:
@@ -358,9 +436,9 @@ PY
   # Delete stale folders + manifest entries
   while IFS= read -r slug; do
     [[ -z "$slug" ]] && continue
-    rm -rf "$wt/$slug"
+    rm -rf "$wt/scv/$slug"
     echo "DELETED $slug"
-    python3 - "$wt/manifest.json" "$slug" <<'PY'
+    python3 - "$wt/scv/manifest.json" "$slug" <<'PY'
 import json, sys
 mf, slug = sys.argv[1:]
 with open(mf) as f: m = json.load(f)
@@ -387,19 +465,54 @@ PY
 
 _attachments_git_orphan_status() {
   local ATTACHMENTS_BRANCH="${SCV_ATTACHMENTS_BRANCH:-$ATTACHMENTS_BRANCH_DEFAULT}"
+  local RETENTION_DAYS="${SCV_ATTACHMENTS_RETENTION_DAYS:-$RETENTION_DAYS_DEFAULT}"
   if ! git ls-remote --exit-code --heads origin "$ATTACHMENTS_BRANCH" >/dev/null 2>&1; then
     echo "active=0 stale=0 total_size_bytes=0"
     return 0
   fi
+
+  # Cache lookup. Key = owner/repo + retention (different retention →
+  # different stale count). Invalidated on SHA mismatch (push happened) or
+  # TTL expiry. Graceful degrade to "?" if gh / python3 missing or any error.
+  local stale_count="?"
+  local owner_repo head_sha cache_file
+  local ttl="${SCV_STATUS_CACHE_TTL:-300}"
+  owner_repo=$(_get_github_owner_repo 2>/dev/null || echo "")
+  head_sha=$(git ls-remote origin "$ATTACHMENTS_BRANCH" 2>/dev/null | awk '{print $1}')
+  if [[ -n "$head_sha" && -n "$owner_repo" ]]; then
+    cache_file="/tmp/scv-attachments-status-${owner_repo//\//_}-${RETENTION_DAYS}.json"
+    if [[ -f "$cache_file" ]] && command -v python3 >/dev/null 2>&1; then
+      local cached_age cached_sha cached_stale
+      cached_age=$(( $(date +%s) - $(stat -c %Y "$cache_file" 2>/dev/null || echo 0) ))
+      cached_sha=$(python3 -c "import json,sys;sys.stdout.write(str(json.load(open('$cache_file')).get('head_sha','')))" 2>/dev/null)
+      cached_stale=$(python3 -c "import json,sys;sys.stdout.write(str(json.load(open('$cache_file')).get('stale','?')))" 2>/dev/null)
+      if [[ "$cached_sha" == "$head_sha" && "$cached_age" -lt "$ttl" && "$cached_stale" =~ ^[0-9]+$ ]]; then
+        stale_count="$cached_stale"
+      fi
+    fi
+  fi
+
   local wt; wt=$(_orphan_worktree_open)
 
   local active=0
-  if [[ -f "$wt/manifest.json" ]] && command -v python3 >/dev/null 2>&1; then
-    active=$(python3 -c "import json; print(len(json.load(open('$wt/manifest.json')).get('entries', {})))")
+  if [[ -f "$wt/scv/manifest.json" ]] && command -v python3 >/dev/null 2>&1; then
+    active=$(python3 -c "import json; print(len(json.load(open('$wt/scv/manifest.json')).get('entries', {})))")
   fi
   local size; size=$(du -sb "$wt" 2>/dev/null | awk '{print $1}')
-  # stale count: requires gh API per-entry; deferred to v0.4 caching.
-  echo "active=${active:-0} stale=? total_size_bytes=${size:-0}"
 
+  # Cache miss → compute fresh count via gh API + write cache.
+  if [[ "$stale_count" == "?" ]]; then
+    local fresh_count
+    fresh_count=$(_compute_stale_count "$wt/scv/manifest.json" "$RETENTION_DAYS" 2>/dev/null)
+    if [[ "$fresh_count" =~ ^[0-9]+$ ]]; then
+      stale_count="$fresh_count"
+      if [[ -n "$cache_file" && -n "$head_sha" ]]; then
+        printf '{"head_sha":"%s","stale":%d}\n' "$head_sha" "$stale_count" \
+          > "$cache_file" 2>/dev/null || true
+      fi
+    fi
+  fi
+
+  echo "active=${active:-0} stale=${stale_count} total_size_bytes=${size:-0}"
   _orphan_worktree_close "$wt"
 }

@@ -141,7 +141,11 @@ if [[ -d "$TEST_RESULTS_DIR" ]]; then
   done < <(find "$TEST_RESULTS_DIR" -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' \) 2>/dev/null | LC_ALL=C sort)
 fi
 
-# ---- collect videos from test-results/ ----
+# ---- collect videos from test-results/ (SCV 표준 비디오 폴더) ----
+# SCV 의 표준 E2E 도구는 Playwright (Step 5b). Playwright 의 default
+# 출력 폴더가 test-results/. 다른 도구 (Cypress 등) 도 video 만 여기에
+# 두면 자동 첨부됨 — Cypress 사용자는 cypress.config 에 videosFolder
+# 옵션으로 redirect 필요. 자세한 stance 는 work.md Step 5b 참조.
 VIDEOS=()
 if [[ -d "$TEST_RESULTS_DIR" ]]; then
   while IFS= read -r f; do

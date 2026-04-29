@@ -89,14 +89,24 @@ Look at the helper's `=== related documents (from PLAN.md) ===` list.
 
 If TESTS.md is missing or the 실행 방법 block is empty / ambiguous → **stop and ask**. Do not guess a test command.
 
-#### Step 5b — Playwright 비디오 자동 설정 (선택, v0.3+)
+#### Step 5b — Playwright 비디오 자동 설정 (SCV 표준 E2E, v0.3+)
 
-After loading TESTS.md, check whether this is a Playwright project:
+After loading TESTS.md, decide whether to set up E2E video recording. **SCV 의 표준 E2E framework 는 Playwright 입니다** — 자동 감지·자동 video 설정·PR 자동 첨부의 보장 대상은 Playwright 단일.
 
 1. Use `Glob` to look for `playwright.config.{ts,js,mjs,cjs}` at project root.
-2. If **none found**: skip this step (non-Playwright project — proceed to Step 6).
-3. If **found**: `Read` the file and check for `video:` configuration inside `use:` block.
-4. If `video:` is **missing** or set to `'off'`:
+2. **If `playwright.config.*` found**: continue with the Playwright video config flow below.
+3. **If `playwright.config.*` not found, but other E2E indicators are present** (any of:
+   `cypress.config.{ts,js,mjs}` exists, or `package.json` 의 `dependencies` /
+   `devDependencies` 에 `cypress` 또는 `puppeteer` 가 들어있음):
+   emit the **non-Playwright notice** (see end of this step) **once**, then
+   proceed to Step 6 without modifying any config.
+4. **If neither**: skip this step entirely (non-E2E project — proceed to Step 6).
+
+##### Playwright video config flow (only when `playwright.config.*` found)
+
+`Read` the config file and check for `video:` configuration inside `use:` block.
+
+If `video:` is **missing** or set to `'off'`:
 
    ```
    AskUserQuestion (default Yes):
@@ -117,14 +127,30 @@ After loading TESTS.md, check whether this is a Playwright project:
          "config 를 수정하지 않습니다. PR 에는 스크린샷만 첨부됩니다."
    ```
 
-5. If user picks **[1] Yes**: use `Edit` to insert `video: 'on'` into the `use:` block.
+If user picks **[1] Yes**: use `Edit` to insert `video: 'on'` into the `use:` block.
    - If `use:` block exists: insert `video: 'on'` line.
    - If no `use:` block: add `use: { video: 'on' },` at top-level config object.
    - Confirm the edit is consistent with file's TypeScript/JavaScript syntax.
-6. If user picks **[2] No**: continue without modifying config.
-7. If `video:` is already `'on'` / `'retain-on-failure'` / `'retry-with-video'`: skip silently (already configured).
 
-This step runs **once per project** in practice — after first Yes, video config is permanent.
+If user picks **[2] No**: continue without modifying config.
+
+If `video:` is already `'on'` / `'retain-on-failure'` / `'retry-with-video'`: skip silently (already configured).
+
+This flow runs **once per project** in practice — after first Yes, video config is permanent.
+
+##### Non-Playwright notice (Cypress / Puppeteer / 기타)
+
+When emitted, print this as a single info block (not an AskUserQuestion — work proceeds normally):
+
+> ⚠ **SCV 표준 E2E 는 Playwright 입니다.**
+>
+> 이 프로젝트에서 Cypress / Puppeteer 등 다른 도구가 감지됐습니다. SCV 가 자동 감지·자동 video 설정·PR 비디오 자동 첨부를 완전 보장하는 건 Playwright 뿐입니다. 다른 도구도 `.webm` / `.mp4` 출력을 `test-results/` 에 두면 PR 첨부는 동작하지만, video config 자동 설정 (Step 5b) 은 적용되지 않습니다.
+>
+> Playwright 로 마이그레이션 권장:
+> - Cypress → Playwright: https://playwright.dev/docs/migrating-from-cypress
+> - Puppeteer → Playwright: https://playwright.dev/docs/puppeteer
+>
+> (SCV 작업은 정상 진행됩니다 — 안내만 출력.)
 
 ### Step 6 — Implement
 

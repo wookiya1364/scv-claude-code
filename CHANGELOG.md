@@ -2,6 +2,55 @@
 
 이 저장소의 변경사항을 기록합니다. [Semantic Versioning](https://semver.org/lang/ko/) 규칙을 따릅니다.
 
+## [0.3.1] — 2026-04-29
+
+### 핵심 — orphan branch layout 단정화, `attachments_status` 정확화, Playwright 표준화 stance
+
+v0.3.0 출시 후 보강. **사용자 표면 변화 없음**, 세 축의 내부 정리:
+
+1. **Orphan branch 의 모든 SCV 파일을 `scv/` subdirectory 안으로**: 사용자 main branch 와 동일한 정신 모델 ("SCV 가 만든 건 항상 `scv/` 안") 로 일관. orphan branch root 는 README 만 남고, manifest 와 slug 폴더는 모두 `scv/` 안에. v0.3.0 사용자의 기존 layout (root `manifest.json` + root `<slug>/`) 은 자동 migration.
+2. **`attachments_status` stale 카운트 정확화** + 5 분 TTL 캐시.
+3. **Playwright 표준화 stance 명시** — Cypress / Puppeteer 는 자동 감지 대상에서 빼고, 발견 시 마이그레이션 안내만 (자동 변경 없음).
+
+### Changed
+
+- **`scripts/lib/attachments.sh`** — orphan branch 의 새 layout:
+  - **Init** (origin 에 branch 없을 때): `README.md` (root) + `scv/manifest.json` 으로 시작. slug 폴더들도 `scv/<slug>/` 안에 commit.
+  - **Auto-migration** (origin 에 v0.3.0 branch 있을 때): `_orphan_worktree_open` 이 root `manifest.json` 발견 시 `mkdir scv` + `git mv manifest.json scv/manifest.json` + 모든 root-level `<slug>/` 디렉토리들을 `scv/<slug>/` 로 이동 → commit ("Migrate v0.3.0 layout → scv/ subdirectory (v0.3.1)") + push. **Idempotent** — `scv/manifest.json` 이 이미 있으면 no-op. stderr 에 한 번 안내 메시지 ("Migrated v0.3.0 layout → scv/ on scv-attachments").
+  - **URL 형식**: `/raw/scv-attachments/<slug>/<file>` → `/raw/scv-attachments/scv/<slug>/<file>` (한 단계 추가, functional 영향 0).
+  - `attachments_status` 의 `stale=?` deferred 를 **정확 숫자**로. 새 helper `_compute_stale_count` 가 manifest 의 `pr_number` 별로 `gh pr view --json state,closedAt` 호출 + state ≠ OPEN AND `closed_at + retention_days ≤ now` 로 판정.
+  - **5 분 TTL 캐시** (`/tmp/scv-attachments-status-<owner>_<repo>-<retention>.json`). cache key = orphan branch HEAD SHA + retention. push 발생 시 SHA 변경으로 **자연 invalidate**. retention 다르면 별도 cache key. graceful degrade — gh / python3 부재 등 모든 실패 경로에서 `?` fallback.
+
+- **`scripts/pr-helper.sh`** — 비디오 수집은 **`test-results/` 만** (Playwright 표준 폴더). Cypress 의 `cypress/videos/` 별도 스캔 없음. Cypress 사용자가 PR 첨부 받으려면 `cypress.config` 에서 `videosFolder: 'test-results/...'` 로 redirect 필요. Playwright 표준화 stance 와 일관.
+
+- **`commands/work.md` Step 5b** — "Playwright 비디오 자동 설정" 의 stance 명시:
+  - **SCV 의 표준 E2E framework 는 Playwright**. 자동 감지·자동 video config·PR 자동 첨부의 보장 대상은 Playwright 단일.
+  - `playwright.config` 발견 시 기존 흐름 (AskUserQuestion → `video: 'on'` 자동 추가) 그대로.
+  - **`playwright.config` 가 없지만 다른 E2E 도구 흔적 (Cypress config, 또는 `package.json` 의 `cypress`/`puppeteer` 의존성) 발견 시**: **non-Playwright notice** 한 번 출력 (자동 변경/거부 없음). 안내문에 Playwright 마이그레이션 가이드 링크 (cypress / puppeteer 각각).
+
+### Added
+
+- **`template/.env.example.scv`**: `SCV_STATUS_CACHE_TTL=300` 주석 한 줄 추가 (`/scv:status` 의 stale 카운트 캐시 TTL, 초 단위).
+
+### Removed (v0.3.1 작업 중 도입했다가 stance 재고로 빠진 것들)
+
+- ~~Cypress 자동 감지 Step 5c~~ — Playwright 표준화 stance 와 일관 안 맞아 제외. 대신 Step 5b 의 non-Playwright notice 로 통합.
+- ~~`pr-helper.sh` 의 `cypress/videos/` 자동 스캔~~ — 동일 사유. Cypress 사용자는 `videosFolder` 로 redirect.
+
+### Tests
+
+- `tests/run-dry.sh` 신규 섹션 [11mm], [11nn], [11oo] — 357 → **377 PASS** (+20 assertion). 0 FAIL.
+- 검증 영역:
+  - **[11mm]** v0.3.0 layout 자동 migration (7 assertion) — root `manifest.json` + root `<slug>/legacy.webm` 시드 → upload 호출 → `scv/manifest.json` + `scv/<slug>/legacy.webm` 로 이동, root 의 옛 파일/폴더 부재, commit 메시지 정확, 두 번째 upload 시 idempotent (정확히 1 migration commit).
+  - **[11nn]** `attachments_status` 정확 카운트 + 캐시 (5 assertion) — fresh 계산 (`stale=1` at retention=3), cache 파일 생성, cache hit (mock gh swap 으로 검증), retention=7 별도 cache key 로 fresh compute (`stale=0`), SHA mismatch poisoned cache invalidation.
+  - **[11oo]** Step 5b 표준화 stance + non-Playwright 안내 (8 assertion) — "SCV 표준 E2E", `playwright.config.{ts,js,mjs,cjs}`, "non-Playwright notice", "Cypress → Playwright" / "Puppeteer → Playwright" 링크, Cypress 5c step 부재 (제거 일관성 검증).
+
+### 비채택 (v0.4+ 후보, v0.3.0 명단 그대로 유지)
+
+- **`s3` / `r2` 백엔드 본문**: v0.4 후보. v0.3.x 는 abstraction + stub 만.
+- **GitLab / Bitbucket / Gitea PR 자동 생성**: v0.5 후보. `lib/pr-platform.sh` 추상화 도입 예정.
+- **Cypress / Puppeteer → Playwright 자동 마이그레이션**: 의미 차이 큰 영역 (특히 Cypress) 의 자동 변환은 reliability 가 핵심이라 별도 minor 또는 별도 plugin 후보.
+
 ## [0.3.0] — 2026-04-29
 
 ### 핵심 — PR 비디오 자동 첨부 (Playwright 자동 + Orphan 브랜치)

@@ -1546,6 +1546,204 @@ assert_contains "$WORK_CMD" "git history 영향 0"
 assert_contains "$WORK_CMD" "inline 재생"
 
 echo
+echo "=== [11mm] lib/attachments.sh — v0.3.0 layout → v0.3.1 scv/ subdirectory 자동 migration ==="
+MIGRATE_OUT=$(bash <<'INNER_EOF'
+WORK=$(mktemp -d)
+ORIGIN="$WORK/origin.git"
+LOCAL="$WORK/repo"
+git init -q --bare "$ORIGIN"
+git init -q -b main "$LOCAL"
+cd "$LOCAL"
+git remote add origin "$ORIGIN"
+echo init > README.md
+git add README.md
+git -c user.email=t@t -c user.name=t commit -q -m init
+git push -q origin main
+
+# Seed a v0.3.0 layout orphan branch on origin:
+#   root/manifest.json + root/<slug>/<file> (NO scv/ subdir).
+git worktree add --detach "$WORK/wt0" >/dev/null 2>&1
+(
+  cd "$WORK/wt0"
+  git checkout --orphan scv-attachments >/dev/null 2>&1
+  git rm -rf . >/dev/null 2>&1 || true
+  echo "v0.3.0 init" > README.md
+  printf '{"version":1,"entries":{"old-slug":{"pr_number":7,"added_at":"2026-04-01T00:00:00Z"}}}\n' > manifest.json
+  mkdir -p old-slug
+  echo "fake old video" > old-slug/legacy.webm
+  git add README.md manifest.json old-slug
+  git -c user.email=t@t -c user.name=t commit -q -m "v0.3.0 init"
+  git push -q origin scv-attachments
+)
+git worktree remove --force "$WORK/wt0" >/dev/null 2>&1
+git branch -D scv-attachments >/dev/null 2>&1
+
+source /home/zpsuk/바탕화면/work/labs/scv-claude-code/scripts/lib/attachments.sh
+_get_github_owner_repo() { echo "x/y"; return 0; }
+
+# Trigger migration through a normal upload call (also adds new entry).
+echo "fake1" > /tmp/post-mig.webm
+SCV_ATTACHMENTS_BRANCH=scv-attachments \
+  attachments_upload migrated-pr 42 /tmp/post-mig.webm 2>&1
+
+# Idempotency: second upload must NOT create another migration commit.
+echo "fake2" > /tmp/post-mig2.webm
+SCV_ATTACHMENTS_BRANCH=scv-attachments \
+  attachments_upload migrated-pr-2 43 /tmp/post-mig2.webm >/dev/null 2>&1
+
+echo "---FILES---"
+git ls-tree -r origin/scv-attachments | awk '{print $4}'
+echo "---LOG---"
+git log --format='%s' origin/scv-attachments
+
+cd /; rm -rf "$WORK"
+INNER_EOF
+)
+
+printf '%s' "$MIGRATE_OUT" | grep -qF "Migrated v0.3.0 layout → scv/" \
+  && pass "attachments migrate: stderr notice emitted" \
+  || fail "attachments migrate: stderr notice missing"
+
+printf '%s' "$MIGRATE_OUT" | awk '/---FILES---/,/---LOG---/' | grep -qE '^scv/manifest\.json$' \
+  && pass "attachments migrate: scv/manifest.json present on origin" \
+  || fail "attachments migrate: scv/manifest.json absent"
+
+printf '%s' "$MIGRATE_OUT" | awk '/---FILES---/,/---LOG---/' | grep -qE '^manifest\.json$' \
+  && fail "attachments migrate: root manifest.json still in tree" \
+  || pass "attachments migrate: root manifest.json removed"
+
+printf '%s' "$MIGRATE_OUT" | awk '/---FILES---/,/---LOG---/' | grep -qE '^scv/old-slug/legacy\.webm$' \
+  && pass "attachments migrate: legacy slug folder moved to scv/" \
+  || fail "attachments migrate: legacy slug not under scv/"
+
+printf '%s' "$MIGRATE_OUT" | awk '/---FILES---/,/---LOG---/' | grep -qE '^old-slug/' \
+  && fail "attachments migrate: old root slug folder still in tree" \
+  || pass "attachments migrate: old root slug folder removed"
+
+printf '%s' "$MIGRATE_OUT" | grep -qF "Migrate v0.3.0 layout → scv/ subdirectory (v0.3.1)" \
+  && pass "attachments migrate: commit message correct" \
+  || fail "attachments migrate: commit message missing"
+
+migrate_count=$(printf '%s' "$MIGRATE_OUT" | awk '/---LOG---/{flag=1;next} flag' | grep -c "Migrate v0.3.0 layout")
+[[ "$migrate_count" == "1" ]] \
+  && pass "attachments migrate: idempotent (exactly 1 migration commit)" \
+  || fail "attachments migrate: expected 1 migration commit, got $migrate_count"
+
+echo
+echo "=== [11nn] lib/attachments.sh — attachments_status stale 정확 카운트 + 캐시 ==="
+STATUS_OUT=$(bash <<'INNER_EOF'
+WORK=$(mktemp -d)
+ORIGIN="$WORK/origin.git"
+LOCAL="$WORK/repo"
+git init -q --bare "$ORIGIN"
+git init -q -b main "$LOCAL"
+cd "$LOCAL"
+git remote add origin "$ORIGIN"
+echo init > README.md
+git add README.md
+git -c user.email=t@t -c user.name=t commit -q -m init
+git push -q origin main
+
+source /home/zpsuk/바탕화면/work/labs/scv-claude-code/scripts/lib/attachments.sh
+_get_github_owner_repo() { echo "x/y"; return 0; }
+
+echo "f1" > /tmp/s1.webm; echo "f2" > /tmp/s2.webm; echo "f3" > /tmp/s3.webm
+SCV_ATTACHMENTS_BRANCH=scv-attachments attachments_upload slug-merged-old 100 /tmp/s1.webm >/dev/null 2>&1
+SCV_ATTACHMENTS_BRANCH=scv-attachments attachments_upload slug-open 200 /tmp/s2.webm >/dev/null 2>&1
+SCV_ATTACHMENTS_BRANCH=scv-attachments attachments_upload slug-merged-recent 300 /tmp/s3.webm >/dev/null 2>&1
+
+MOCK=$(mktemp -d)
+make_real_mock() {
+cat > "$MOCK/gh" <<'GH'
+#!/usr/bin/env bash
+if [[ "$1 $2" == "pr view" ]]; then
+  case "$3" in
+    100) c=$(date -u -d '5 days ago' +%Y-%m-%dT%H:%M:%SZ); echo "{\"state\":\"MERGED\",\"closedAt\":\"$c\"}" ;;
+    200) echo '{"state":"OPEN","closedAt":null}' ;;
+    300) c=$(date -u -d '1 day ago' +%Y-%m-%dT%H:%M:%SZ); echo "{\"state\":\"MERGED\",\"closedAt\":\"$c\"}" ;;
+  esac
+fi
+GH
+chmod +x "$MOCK/gh"
+}
+make_real_mock
+
+rm -f /tmp/scv-attachments-status-x_y-3.json /tmp/scv-attachments-status-x_y-7.json
+
+# 1) Cache miss → compute fresh count
+echo "---FRESH-3---"
+PATH="$MOCK:$PATH" SCV_ATTACHMENTS_BRANCH=scv-attachments SCV_ATTACHMENTS_RETENTION_DAYS=3 \
+  _attachments_git_orphan_status
+
+echo "---CACHE-FILE-3---"
+[[ -f /tmp/scv-attachments-status-x_y-3.json ]] && echo "EXISTS" || echo "MISSING"
+
+# 2) Cache hit verification: swap mock to "all OPEN" — would compute stale=0
+# if recomputed. Cache hit must serve previous stale=1.
+cat > "$MOCK/gh" <<'GH'
+#!/usr/bin/env bash
+[[ "$1 $2" == "pr view" ]] && echo '{"state":"OPEN","closedAt":null}'
+GH
+chmod +x "$MOCK/gh"
+echo "---HIT-3---"
+PATH="$MOCK:$PATH" SCV_ATTACHMENTS_BRANCH=scv-attachments SCV_ATTACHMENTS_RETENTION_DAYS=3 \
+  _attachments_git_orphan_status
+
+make_real_mock
+
+# 3) retention=7 → separate cache key, fresh compute (PR 100 closed 5d < 7d → not stale)
+echo "---FRESH-7---"
+PATH="$MOCK:$PATH" SCV_ATTACHMENTS_BRANCH=scv-attachments SCV_ATTACHMENTS_RETENTION_DAYS=7 \
+  _attachments_git_orphan_status
+
+echo "---CACHE-FILE-7---"
+[[ -f /tmp/scv-attachments-status-x_y-7.json ]] && echo "EXISTS" || echo "MISSING"
+
+# 4) SHA mismatch → invalidate poisoned cache → recompute
+python3 -c "import json; json.dump({'head_sha':'badbeef','stale':99}, open('/tmp/scv-attachments-status-x_y-3.json','w'))"
+echo "---INVALIDATED-3---"
+PATH="$MOCK:$PATH" SCV_ATTACHMENTS_BRANCH=scv-attachments SCV_ATTACHMENTS_RETENTION_DAYS=3 \
+  _attachments_git_orphan_status
+
+cd /; rm -rf "$WORK" "$MOCK" /tmp/scv-attachments-status-x_y-3.json /tmp/scv-attachments-status-x_y-7.json
+INNER_EOF
+)
+
+printf '%s' "$STATUS_OUT" | awk '/---FRESH-3---/{f=1;next} /---CACHE-FILE-3---/{f=0} f' | grep -qE 'stale=1\b' \
+  && pass "attachments status: fresh count retention=3 → stale=1" \
+  || fail "attachments status: expected stale=1 at retention=3"
+
+printf '%s' "$STATUS_OUT" | awk '/---CACHE-FILE-3---/{f=1;next} /---HIT-3---/{f=0} f' | grep -qF "EXISTS" \
+  && pass "attachments status: cache file created" \
+  || fail "attachments status: cache file not created"
+
+printf '%s' "$STATUS_OUT" | awk '/---HIT-3---/{f=1;next} /---FRESH-7---/{f=0} f' | grep -qE 'stale=1\b' \
+  && pass "attachments status: cache hit serves cached value (gh ignored)" \
+  || fail "attachments status: cache miss (cache not used)"
+
+printf '%s' "$STATUS_OUT" | awk '/---FRESH-7---/{f=1;next} /---CACHE-FILE-7---/{f=0} f' | grep -qE 'stale=0\b' \
+  && pass "attachments status: retention=7 → stale=0 (separate cache key)" \
+  || fail "attachments status: retention=7 expected stale=0"
+
+printf '%s' "$STATUS_OUT" | awk '/---INVALIDATED-3---/{f=1;next} f' | grep -qE 'stale=1\b' \
+  && pass "attachments status: SHA mismatch invalidates cache (recomputes)" \
+  || fail "attachments status: stale SHA cache used (poisoning)"
+
+echo
+echo "=== [11oo] commands/work.md — Step 5b Playwright 표준화 + non-Playwright 안내 ==="
+assert_contains "$WORK_CMD" "SCV 표준 E2E"
+assert_contains "$WORK_CMD" "playwright.config.{ts,js,mjs,cjs}"
+assert_contains "$WORK_CMD" "non-Playwright notice"
+assert_contains "$WORK_CMD" "Cypress → Playwright"
+assert_contains "$WORK_CMD" "Puppeteer → Playwright"
+assert_contains "$WORK_CMD" "playwright.dev/docs/migrating-from-cypress"
+assert_contains "$WORK_CMD" "playwright.dev/docs/puppeteer"
+# Cypress 5c 가 v0.3.1 에서 제거됐는지 확인 (non-Playwright 는 안내만)
+grep -qF "Step 5c — Cypress 비디오 자동 설정" "$WORK_CMD" \
+  && fail "work.md: Cypress 5c 자동 감지 step 가 남아있음 (v0.3.1 stance: 안내만)" \
+  || pass "work.md: Cypress 5c step 제거됨 (안내만 stance 일관)"
+
+echo
 echo "=== [11dd] PROMOTE.md — fast-path section (v0.2.1) ==="
 PROMOTE_DOC="$STANDARD_ROOT/template/scv/PROMOTE.md"
 assert_contains "$PROMOTE_DOC" "Fast-path"
