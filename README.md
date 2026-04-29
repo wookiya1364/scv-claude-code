@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/scv.jpg" width="160" height="160" alt="SCV mascot" />
+<img src="assets/scv-circle.png" width="160" height="160" alt="SCV mascot" />
 
 <h1>SCV</h1>
 
