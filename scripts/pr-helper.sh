@@ -39,6 +39,7 @@ ARCHIVE_DIR="${ARCHIVE_DIR:-scv/archive}"
 ARTIFACTS_DIR="${ARTIFACTS_DIR:-.scv-pr-artifacts}"
 TEST_RESULTS_DIR="${TEST_RESULTS_DIR:-test-results}"
 VIDEO_PLACEHOLDER="<!-- SCV_VIDEO_PLACEHOLDER -->"
+ATTACHMENTS_BRANCH="${SCV_ATTACHMENTS_BRANCH:-scv-attachments}"
 
 usage() {
   cat <<'EOF'
@@ -146,6 +147,51 @@ if [[ -d "$TEST_RESULTS_DIR" ]]; then
   while IFS= read -r f; do
     [[ -f "$f" ]] && VIDEOS+=("$f")
   done < <(find "$TEST_RESULTS_DIR" -type f \( -iname '*.webm' -o -iname '*.mp4' \) 2>/dev/null | LC_ALL=C sort)
+fi
+
+# ---- generate GIFs from videos (if ffmpeg available) ----
+# GitHub renders ![](.gif) inline in PR body but does NOT render <video> or
+# bare .webm/.mp4 URLs as inline player (only drag-drop user-attachments do).
+# So we make a silent GIF preview alongside each video — body has both:
+#   - inline GIF (auto-render in PR body)
+#   - link to .webm (click → browser native player, with audio)
+GIFS=()
+GIF_BY_VIDEO=()  # parallel to VIDEOS — empty string if no GIF for that index
+GIF_WIDTH="${SCV_GIF_WIDTH:-480}"
+GIF_FPS="${SCV_GIF_FPS:-10}"
+GIF_MAX_SECONDS="${SCV_GIF_MAX_SECONDS:-60}"
+
+if [[ ${#VIDEOS[@]} -gt 0 ]] && command -v ffmpeg >/dev/null 2>&1; then
+  for v in "${VIDEOS[@]}"; do
+    gif_path="${v%.*}.gif"
+    # Cap duration: very long recordings make huge GIFs. Trim to first N seconds.
+    # Use 2-pass palette generation for reasonable quality:
+    #   pass 1: generate optimized 256-color palette
+    #   pass 2: encode using palette
+    palette_path="${v%.*}.palette.png"
+    if ffmpeg -nostdin -y -loglevel error \
+         -t "$GIF_MAX_SECONDS" -i "$v" \
+         -vf "fps=${GIF_FPS},scale=${GIF_WIDTH}:-1:flags=lanczos,palettegen=stats_mode=diff" \
+         "$palette_path" 2>/dev/null \
+       && ffmpeg -nostdin -y -loglevel error \
+         -t "$GIF_MAX_SECONDS" -i "$v" -i "$palette_path" \
+         -lavfi "fps=${GIF_FPS},scale=${GIF_WIDTH}:-1:flags=lanczos [x]; [x][1:v] paletteuse=dither=bayer:bayer_scale=5" \
+         -loop 0 "$gif_path" 2>/dev/null \
+       && [[ -f "$gif_path" ]]; then
+      GIFS+=("$gif_path")
+      GIF_BY_VIDEO+=("$gif_path")
+      rm -f "$palette_path"
+    else
+      GIF_BY_VIDEO+=("")
+      rm -f "$palette_path"
+    fi
+  done
+elif [[ ${#VIDEOS[@]} -gt 0 ]]; then
+  # ffmpeg missing — graceful degrade
+  echo "Note: ffmpeg not found — skipping GIF preview generation. Videos will be link-only." >&2
+  for v in "${VIDEOS[@]}"; do
+    GIF_BY_VIDEO+=("")
+  done
 fi
 
 # ---- helpers for body assembly ----
@@ -275,7 +321,15 @@ if [[ $DRY_RUN -eq 1 ]]; then
   echo ""
   echo "=== Videos to attach (via $ATTACHMENTS_BRANCH orphan branch) ==="
   if [[ ${#VIDEOS[@]} -gt 0 ]]; then
-    printf '  · %s\n' "${VIDEOS[@]}"
+    for i in "${!VIDEOS[@]}"; do
+      v="${VIDEOS[$i]}"
+      gif="${GIF_BY_VIDEO[$i]:-}"
+      if [[ -n "$gif" ]]; then
+        echo "  · $v + GIF preview ($gif)"
+      else
+        echo "  · $v (no GIF — ffmpeg unavailable or conversion failed)"
+      fi
+    done
     echo "  (each → https://github.com/<owner>/<repo>/raw/$ATTACHMENTS_BRANCH/$SLUG_NAME/<file>)"
   else
     echo "  (none in $TEST_RESULTS_DIR)"
@@ -396,17 +450,48 @@ if [[ $NO_CREATE -eq 0 ]]; then
     if [[ ! "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
       echo "WARN: could not parse PR number from URL '$PR_URL' — skipping video attach" >&2
     else
-      echo "Uploading ${#VIDEOS[@]} video(s) to $ATTACHMENTS_BRANCH orphan branch..."
-      VIDEO_URLS=$(attachments_upload "$SLUG_NAME" "$PR_NUMBER" "${VIDEOS[@]}" 2>&1)
+      gif_count=${#GIFS[@]}
+      total_files=$((${#VIDEOS[@]} + gif_count))
+      echo "Uploading $total_files file(s) to $ATTACHMENTS_BRANCH orphan branch (${#VIDEOS[@]} video + $gif_count GIF preview)..."
+      # Pass videos + gifs together — orphan upload returns URLs in input order
+      VIDEO_URLS=$(attachments_upload "$SLUG_NAME" "$PR_NUMBER" "${VIDEOS[@]}" "${GIFS[@]}" 2>&1)
       upload_rc=$?
       if [[ $upload_rc -eq 0 && -n "$VIDEO_URLS" ]]; then
-        # Build markdown video block from URLs
-        VIDEO_MD=""
-        while IFS= read -r url; do
-          [[ -z "$url" ]] && continue
-          base="${url##*/}"
-          VIDEO_MD+="![${base}](${url})"$'\n\n'
+        # Build markdown — pair each video with its GIF preview by basename.
+        # GitHub renders ![](.gif) inline as image (silent preview); .webm/.mp4
+        # gets a clickable link (browser native player on click, with audio).
+        declare -A url_by_filename=()
+        while IFS= read -r u; do
+          [[ -z "$u" ]] && continue
+          fname="${u##*/}"
+          url_by_filename["$fname"]="$u"
         done <<< "$VIDEO_URLS"
+
+        VIDEO_MD=""
+        for i in "${!VIDEOS[@]}"; do
+          v="${VIDEOS[$i]}"
+          v_base=$(basename "$v")
+          v_url="${url_by_filename[$v_base]:-}"
+          gif_path="${GIF_BY_VIDEO[$i]:-}"
+          gif_url=""
+          if [[ -n "$gif_path" ]]; then
+            gif_base=$(basename "$gif_path")
+            gif_url="${url_by_filename[$gif_base]:-}"
+          fi
+
+          # Inline GIF preview (auto-renders silently in PR body)
+          if [[ -n "$gif_url" ]]; then
+            VIDEO_MD+="![${v_base}](${gif_url})"$'\n\n'
+          fi
+          # Link to full video (audio + full quality)
+          if [[ -n "$v_url" ]]; then
+            if [[ -n "$gif_url" ]]; then
+              VIDEO_MD+="- [▶ ${v_base}](${v_url}) — full video with audio (click to play in browser)"$'\n'
+            else
+              VIDEO_MD+="- [▶ ${v_base}](${v_url}) — click to play in browser native player (install ffmpeg for inline GIF previews)"$'\n'
+            fi
+          fi
+        done
 
         # Replace placeholder in body file using Python (simpler escape handling)
         UPDATED_BODY=$(mktemp)
@@ -417,10 +502,17 @@ with open(src) as f: body = f.read()
 body = body.replace(placeholder, replacement.rstrip("\n"))
 with open(dst, "w") as f: f.write(body)
 PY
-        if gh pr edit "$PR_NUMBER" --body-file "$UPDATED_BODY" >/dev/null 2>&1; then
+        # Use `gh api PATCH` directly — `gh pr edit` returns exit 1 due to
+        # GraphQL Projects (classic) deprecation warning, even when body
+        # update succeeds.
+        OWNER_REPO=$(_get_github_owner_repo 2>/dev/null || echo "")
+        if [[ -n "$OWNER_REPO" ]] && \
+           gh api -X PATCH "repos/${OWNER_REPO}/pulls/${PR_NUMBER}" \
+             -F body=@"$UPDATED_BODY" --silent 2>/dev/null; then
           echo "PR body updated with ${#VIDEOS[@]} video link(s)"
         else
           echo "WARN: failed to update PR body with video links" >&2
+          echo "  Updated body kept at: $UPDATED_BODY (manually copy if needed)" >&2
         fi
         rm -f "$UPDATED_BODY"
       else

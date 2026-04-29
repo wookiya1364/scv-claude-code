@@ -33,9 +33,11 @@
 #
 # Dependencies: git, gh CLI (for cleanup), python3 (manifest JSON manipulation).
 
-# Defaults — loaded after .env so caller can override
-ATTACHMENTS_BRANCH="${SCV_ATTACHMENTS_BRANCH:-scv-attachments}"
-RETENTION_DAYS="${SCV_ATTACHMENTS_RETENTION_DAYS:-3}"
+# Defaults — note these are captured at SOURCE time. Functions below re-read
+# the SCV_ATTACHMENTS_* vars at CALL time so .env loaded after sourcing this
+# library still takes effect (e.g., pr-helper.sh sources lib then env_load).
+ATTACHMENTS_BRANCH_DEFAULT="scv-attachments"
+RETENTION_DAYS_DEFAULT="3"
 
 # ============================================================================
 # Public API — backend dispatch
@@ -61,8 +63,9 @@ attachments_upload() {
 }
 
 attachments_cleanup_stale() {
-  # 'never' retention → no cleanup
-  if [[ "${RETENTION_DAYS:-3}" == "never" ]]; then
+  # Re-read env at call time (caller may have loaded .env after sourcing lib)
+  local retention="${SCV_ATTACHMENTS_RETENTION_DAYS:-$RETENTION_DAYS_DEFAULT}"
+  if [[ "$retention" == "never" ]]; then
     return 0
   fi
   local backend="${SCV_ATTACHMENTS_BACKEND:-git-orphan}"
@@ -101,16 +104,48 @@ _get_github_owner_repo() {
 # Open a worktree at the orphan branch. Creates the branch if absent.
 # Echoes the worktree path. Caller MUST call _orphan_worktree_close when done.
 _orphan_worktree_open() {
+  local ATTACHMENTS_BRANCH="${SCV_ATTACHMENTS_BRANCH:-$ATTACHMENTS_BRANCH_DEFAULT}"
   local wt; wt=$(mktemp -d -t scv-attachments.XXXXXX)
+
+  # Defensive cleanup of any leftover local branch / worktree from prior runs.
+  # Without this, if origin has the branch deleted but local branch lingers
+  # (e.g., user previously deleted origin manually), `git checkout --orphan`
+  # silently fails and pushes the stale local branch back to origin — losing
+  # any new commits made on detached HEAD.
+  local existing_wt
+  existing_wt=$(git worktree list --porcelain 2>/dev/null \
+    | awk -v b="refs/heads/$ATTACHMENTS_BRANCH" '
+        /^worktree / {p=$2}
+        /^branch / && $2==b {print p}
+      ')
+  if [[ -n "$existing_wt" ]]; then
+    git worktree remove --force "$existing_wt" >/dev/null 2>&1 || true
+  fi
+
   if git ls-remote --exit-code --heads origin "$ATTACHMENTS_BRANCH" >/dev/null 2>&1; then
     git fetch origin "$ATTACHMENTS_BRANCH" >/dev/null 2>&1 || true
+    # Update local tracking ref to remote state (handles case where remote
+    # was deleted then recreated — local origin/<branch> may be stale).
+    git update-ref "refs/remotes/origin/$ATTACHMENTS_BRANCH" \
+      "$(git ls-remote origin "$ATTACHMENTS_BRANCH" | awk '{print $1}')" 2>/dev/null || true
+    # Reset local branch to match origin (or create new if absent).
+    git branch -D "$ATTACHMENTS_BRANCH" >/dev/null 2>&1 || true
     git worktree add "$wt" "origin/$ATTACHMENTS_BRANCH" >/dev/null 2>&1
-    (cd "$wt" && git checkout -B "$ATTACHMENTS_BRANCH" >/dev/null 2>&1)
+    (cd "$wt" && git checkout -B "$ATTACHMENTS_BRANCH" "origin/$ATTACHMENTS_BRANCH" >/dev/null 2>&1)
   else
+    # Origin doesn't have it — create fresh orphan. Delete any stale local
+    # branch first (it would block `git checkout --orphan`).
+    git branch -D "$ATTACHMENTS_BRANCH" >/dev/null 2>&1 || true
+    # Also clear stale remote-tracking ref if any.
+    git update-ref -d "refs/remotes/origin/$ATTACHMENTS_BRANCH" 2>/dev/null || true
+
     git worktree add --detach "$wt" >/dev/null 2>&1
     (
       cd "$wt"
-      git checkout --orphan "$ATTACHMENTS_BRANCH" >/dev/null 2>&1
+      git checkout --orphan "$ATTACHMENTS_BRANCH" >/dev/null 2>&1 || {
+        echo "ERROR: failed to create orphan branch in worktree" >&2
+        exit 1
+      }
       git rm -rf . >/dev/null 2>&1 || true
       cat > README.md <<'README_EOF'
 # SCV PR Attachments
@@ -131,7 +166,10 @@ README_EOF
 MANIFEST_EOF
       git add README.md manifest.json
       git commit -q -m "Initialize scv-attachments orphan branch"
-    )
+    ) || {
+      _orphan_worktree_close "$wt"
+      return 1
+    }
   fi
   echo "$wt"
 }
@@ -145,6 +183,7 @@ _orphan_worktree_close() {
 }
 
 _attachments_git_orphan_upload() {
+  local ATTACHMENTS_BRANCH="${SCV_ATTACHMENTS_BRANCH:-$ATTACHMENTS_BRANCH_DEFAULT}"
   local slug="$1" pr_number="$2"; shift 2
   local files=("$@")
   [[ ${#files[@]} -eq 0 ]] && return 0
@@ -181,6 +220,13 @@ _attachments_git_orphan_upload() {
     local base; base=$(basename "$f")
     cp "$f" "$dst/$base"
     copied_files+=("$f")
+    # Use /raw/ URL — redirects to raw.githubusercontent.com which serves the
+    # binary directly with correct MIME. Two reasons:
+    #  - For .gif: markdown ![](url) inline-renders image (blob URL would be
+    #    a HTML page, can't be rendered as image)
+    #  - For .webm/.mp4: clicking opens browser native HTML5 player in new tab
+    #    (blob URL only shows "View raw" link, GitHub doesn't render inline
+    #    video player for repo content — only user-attachments domain does)
     urls+=("https://github.com/${owner_repo}/raw/${ATTACHMENTS_BRANCH}/${slug}/${base}")
   done
 
@@ -243,6 +289,8 @@ PY
 }
 
 _attachments_git_orphan_cleanup_stale() {
+  local ATTACHMENTS_BRANCH="${SCV_ATTACHMENTS_BRANCH:-$ATTACHMENTS_BRANCH_DEFAULT}"
+  local RETENTION_DAYS="${SCV_ATTACHMENTS_RETENTION_DAYS:-$RETENTION_DAYS_DEFAULT}"
   command -v gh >/dev/null 2>&1 || return 0   # silently skip if gh missing
   command -v python3 >/dev/null 2>&1 || return 0
 
@@ -338,6 +386,7 @@ PY
 }
 
 _attachments_git_orphan_status() {
+  local ATTACHMENTS_BRANCH="${SCV_ATTACHMENTS_BRANCH:-$ATTACHMENTS_BRANCH_DEFAULT}"
   if ! git ls-remote --exit-code --heads origin "$ATTACHMENTS_BRANCH" >/dev/null 2>&1; then
     echo "active=0 stale=0 total_size_bytes=0"
     return 0
