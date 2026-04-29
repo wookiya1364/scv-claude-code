@@ -262,15 +262,20 @@ TMP_BODY=$(mktemp)
       echo "### Screenshots"
       echo
       # Screenshots stay in .scv-pr-artifacts/<slug>/ committed to PR branch
-      # (small files, OK to live in git history). Use absolute raw URL so
-      # GitLab MR rendering also resolves the image (GitHub auto-resolves
-      # relative paths in PR body but GitLab doesn't — v0.5+).
-      _ss_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+      # (small files, OK to live in git history). Use absolute raw URL with
+      # commit SHA so:
+      #   - GitLab MR rendering resolves the image (relative paths don't
+      #     work in GitLab MR descriptions, only in wikis)
+      #   - GitHub doesn't trip over branch names with slashes (e.g.,
+      #     'feat/foo/bar') that would produce ambiguous URL resolution
+      #   - the URL stays valid even after the branch is merged/deleted
+      # The actual HEAD SHA isn't known yet (the screenshot commit happens
+      # later in the flow); embed a placeholder and substitute post-push.
       for src in "${SCREENSHOTS[@]}"; do
         base=$(basename "$src")
         ss_url=""
-        if declare -F pr_raw_url >/dev/null 2>&1 && [[ -n "$_ss_branch" && "$_ss_branch" != "HEAD" ]]; then
-          ss_url=$(pr_raw_url "$_ss_branch" "$ARTIFACTS_DIR/$SLUG_NAME/$base" 2>/dev/null) || ss_url=""
+        if declare -F pr_raw_url >/dev/null 2>&1; then
+          ss_url=$(pr_raw_url "__SCV_HEAD_SHA__" "$ARTIFACTS_DIR/$SLUG_NAME/$base" 2>/dev/null) || ss_url=""
         fi
         [[ -z "$ss_url" ]] && ss_url="$ARTIFACTS_DIR/$SLUG_NAME/$base"
         echo "![${base}](${ss_url})"
@@ -428,6 +433,17 @@ if [[ $NO_PUSH -eq 0 ]]; then
     rm -f "$TMP_BODY"
     exit 1
   }
+fi
+
+# ---- substitute screenshot SHA placeholder ----
+# At body assembly the actual HEAD SHA wasn't known (screenshots committed
+# in this run). Now post-push, swap __SCV_HEAD_SHA__ for the real SHA so
+# the screenshot raw URLs resolve on both GitHub and GitLab.
+if [[ ${#SCREENSHOTS[@]} -gt 0 ]]; then
+  _ACTUAL_HEAD_SHA=$(git rev-parse HEAD 2>/dev/null || echo "")
+  if [[ -n "$_ACTUAL_HEAD_SHA" ]]; then
+    sed -i "s|__SCV_HEAD_SHA__|$_ACTUAL_HEAD_SHA|g" "$TMP_BODY"
+  fi
 fi
 
 # ---- create PR ----
