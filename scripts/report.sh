@@ -16,7 +16,7 @@ usage() {
 Usage: report.sh "<phase-name>" <status> [options]
 
 Arguments:
-  phase-name    Quoted if it contains spaces (e.g. "Phase 2 — 음성 코어")
+  phase-name    Quoted if it contains spaces (e.g. "Phase 2 — voice core")
   status        passed | failed | info
 
 Options:

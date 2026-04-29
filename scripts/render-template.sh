@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Render a provider-agnostic report (title + body markdown).
 # Inputs via env:
-#   PHASE          e.g. "Phase 2 — 음성 코어"
+#   PHASE          e.g. "Phase 2 — voice core"
 #   STATUS         passed | failed | info
 #   PROJECT        project name (derived from PROJECT_NAME env or $(basename $PWD))
 #   GIT_SHORT      short commit sha (or "n/a")
@@ -23,13 +23,13 @@ set -euo pipefail
 
 case "$STATUS" in
   passed)
-    emoji="✅"; label="완료"
+    emoji="✅"; label="Passed"
     ;;
   failed)
-    emoji="❌"; label="실패"
+    emoji="❌"; label="Failed"
     ;;
   info)
-    emoji="ℹ️"; label="진행 중"
+    emoji="ℹ️"; label="In progress"
     ;;
   *)
     emoji="•"; label="$STATUS"
@@ -38,15 +38,15 @@ esac
 
 title="${emoji} ${PHASE} — ${label}"
 
-meta="프로젝트: *${PROJECT}* | 커밋: \`${GIT_SHORT}\` | 시도: ${ATTEMPT}차 | 소요: ${DURATION}"
+meta="Project: *${PROJECT}* | Commit: \`${GIT_SHORT}\` | Attempt: ${ATTEMPT} | Duration: ${DURATION}"
 
 if [[ "$STATUS" == "failed" ]]; then
   body="${meta}
 
-*원인*
+*Cause*
 ${SUMMARY:-(no summary provided)}
 
-→ 재시도 진행 중"
+→ Retry in progress"
 elif [[ "$STATUS" == "passed" ]]; then
   body="${meta}
 
@@ -54,7 +54,7 @@ ${SUMMARY:-(no summary provided)}"
 else
   body="${meta}
 
-${SUMMARY:-(진행 보고)}"
+${SUMMARY:-(progress report)}"
 fi
 
 jq -n --arg t "$title" --arg b "$body" '{title:$t, body:$b}'

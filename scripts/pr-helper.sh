@@ -141,11 +141,11 @@ if [[ -d "$TEST_RESULTS_DIR" ]]; then
   done < <(find "$TEST_RESULTS_DIR" -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' \) 2>/dev/null | LC_ALL=C sort)
 fi
 
-# ---- collect videos from test-results/ (SCV 표준 비디오 폴더) ----
-# SCV 의 표준 E2E 도구는 Playwright (Step 5b). Playwright 의 default
-# 출력 폴더가 test-results/. 다른 도구 (Cypress 등) 도 video 만 여기에
-# 두면 자동 첨부됨 — Cypress 사용자는 cypress.config 에 videosFolder
-# 옵션으로 redirect 필요. 자세한 stance 는 work.md Step 5b 참조.
+# ---- collect videos from test-results/ (SCV's standard video folder) ----
+# SCV's standard E2E framework is Playwright (Step 5b). Playwright's default
+# output folder is test-results/. Other frameworks (Cypress, etc.) work too
+# as long as their videos land here — Cypress users redirect via the
+# `videosFolder` option in cypress.config. See work.md Step 5b for full stance.
 VIDEOS=()
 if [[ -d "$TEST_RESULTS_DIR" ]]; then
   while IFS= read -r f; do
@@ -234,13 +234,13 @@ TMP_BODY=$(mktemp)
   if [[ -f "$TESTS_FILE" ]]; then
     echo "## Tests"
     echo
-    echo "**실행 방법**:"
+    echo "**How to run**:"
     echo
-    extract_section "$TESTS_FILE" "^## 실행 방법" | trim_blank_lines
+    extract_section "$TESTS_FILE" "^## (How to run|실행 방법)" | trim_blank_lines
     echo
-    echo "**통과 판정**:"
+    echo "**Pass criteria**:"
     echo
-    extract_section "$TESTS_FILE" "^## 통과 판정" | trim_blank_lines
+    extract_section "$TESTS_FILE" "^## (Pass criteria|통과 판정)" | trim_blank_lines
     echo
   fi
 

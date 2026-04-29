@@ -130,9 +130,9 @@ cat <<EOF
 ✅ SCV template hydrated into: $TARGET
    SCV version: $VERSION (synced $TODAY, mode=$MODE_LABEL)
 
-▶ 다음 단계는 Claude Code 세션에서 아래 한 줄만 치면 됩니다:
+▶ Next: in your Claude Code session, run this one line:
 
     /scv:help
 
-/scv:help 가 현재 상태를 진단하고 단계별 추천 액션을 알려줍니다.
+/scv:help diagnoses the current state and recommends the next step.
 EOF

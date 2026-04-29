@@ -175,7 +175,7 @@ if [[ "$MODE" == "archive" ]]; then
 
   ARCHIVED_DATE=$(date +%Y-%m-%d)
   REASON_LINE="${REASON:-tests passed}"
-  BODY_REASON=$(printf '%s' "${REASON:-모든 TESTS 시나리오 통과}")
+  BODY_REASON=$(printf '%s' "${REASON:-All TESTS scenarios passed}")
 
   # Extract supersedes from the newly-archived PLAN.md (if any) so the
   # archive record preserves the audit trail of what this plan replaced.
@@ -202,11 +202,11 @@ archived_by: $AUTHOR
 reason: $REASON_LINE
 ${SUPERSEDES_BLOCK}---
 
-# Archive 기록
+# Archive record
 
-이 계획은 $ARCHIVED_DATE 에 archive 됐습니다.
+This plan was archived on $ARCHIVED_DATE.
 
-## 완료 사유
+## Reason
 
 - $BODY_REASON
 EOF

@@ -184,7 +184,7 @@ process_template_file() {
 }
 
 shopt -s nullglob
-# template/scv/ 하위의 .md (scv/CLAUDE.md 포함; merge-on-markers by basename rule)
+# .md files under template/scv/ (incl. scv/CLAUDE.md; merge-on-markers by basename rule)
 for tmpl in "$TEMPLATE_DIR/scv"/*.md; do
   process_template_file "$tmpl" "scv"
 done

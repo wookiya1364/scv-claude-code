@@ -134,14 +134,14 @@ SUGGEST_SPLIT="no"
 SPLIT_REASON=""
 if [[ $RAW_FILE_COUNT -gt 7 ]]; then
   SUGGEST_SPLIT="yes"
-  SPLIT_REASON="raw 파일 ${RAW_FILE_COUNT}개 (>7 임계치)"
+  SPLIT_REASON="${RAW_FILE_COUNT} raw files (>7 threshold)"
 fi
 if [[ $RAW_TOPDIR_COUNT -ge 3 ]]; then
   SUGGEST_SPLIT="yes"
   if [[ -n "$SPLIT_REASON" ]]; then
-    SPLIT_REASON="$SPLIT_REASON, 토픽 클러스터 ${RAW_TOPDIR_COUNT}개 (>=3)"
+    SPLIT_REASON="$SPLIT_REASON, ${RAW_TOPDIR_COUNT} topic clusters (>=3)"
   else
-    SPLIT_REASON="토픽 클러스터 ${RAW_TOPDIR_COUNT}개 (>=3)"
+    SPLIT_REASON="${RAW_TOPDIR_COUNT} topic clusters (>=3)"
   fi
 fi
 echo ""

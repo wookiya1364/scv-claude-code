@@ -197,15 +197,17 @@ detect_supersede_cycles() {
 
 # ---- TESTS.md parsing ----
 
-# Extract the commands from `## 실행 방법` section.
+# Extract the commands from `## How to run` (or legacy `## 실행 방법`) section.
 # Prefers the first fenced code block; falls back to raw section text.
+# Both heading variants are accepted for backwards compat with v0.3.x archived
+# TESTS.md (Korean) and v0.4+ template (English).
 read_test_command() {
   local tests="$1"
   [[ -f "$tests" ]] || return 1
   awk '
     BEGIN { in_section=0; in_fence=0; has_fence=0; buf=""; plain="" }
     /^## /{ if (in_section) { exit } }
-    /^## 실행 방법[[:space:]]*$/ { in_section=1; next }
+    /^## (How to run|실행 방법)[[:space:]]*$/ { in_section=1; next }
     in_section {
       if (!in_fence && /^[[:space:]]*```/) {
         in_fence=1; has_fence=1; next
@@ -352,7 +354,7 @@ main() {
     fi
     local cmd; cmd=$(read_test_command "$tests")
     if [[ -z "$cmd" ]]; then
-      echo "[$idx/$total_slugs] $slug — TESTS.md has empty '## 실행 방법' (skipping)"
+      echo "[$idx/$total_slugs] $slug — TESTS.md has empty '## How to run' / '## 실행 방법' (skipping)"
       slug_outcome["$slug"]="skipped"
       continue
     fi

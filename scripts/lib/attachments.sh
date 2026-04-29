@@ -311,7 +311,7 @@ PY
   # Output URLs (one per line, same order as inputs that were copied)
   printf '%s\n' "${urls[@]}"
 
-  # Local cleanup of source files (per spec: "PR 올린 후 삭제")
+  # Local cleanup of source files (per spec: "delete after PR upload")
   for f in "${copied_files[@]}"; do
     rm -f "$f"
   done
@@ -386,7 +386,7 @@ _attachments_git_orphan_cleanup_stale() {
     return 0
   fi
 
-  # Read manifest, compute stale slugs (state ≠ OPEN AND closedAt + N일 < now)
+  # Read manifest, compute stale slugs (state ≠ OPEN AND closedAt + N days < now)
   local stale_slugs
   stale_slugs=$(python3 - "$wt/scv/manifest.json" "$RETENTION_DAYS" <<'PY'
 import json, sys, subprocess, datetime as dt
