@@ -114,6 +114,11 @@ fi
 export PHASE STATUS ATTEMPT SUMMARY GIT_SHORT DURATION
 export PROJECT="$PROJECT_NAME"
 export DISCORD_STATUS_HINT="$STATUS"   # informs discord.sh color
+# v0.4+: pass user's preferred language to render-template.sh.
+# .env's SCV_LANG (loaded above) takes precedence; if unset we default to english.
+# (settings.json `language` is checked at the slash-command instruction layer
+#  before /scv:report runs — that path is not visible to this sh.)
+export SCV_LANG="${SCV_LANG:-english}"
 
 RENDERED=$(bash "$SCRIPT_DIR/render-template.sh")
 TITLE=$(echo "$RENDERED" | jq -r '.title')

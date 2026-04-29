@@ -1764,6 +1764,49 @@ assert_contains "$HELP_CMD" "Which language do you prefer for SCV output?"
 assert_contains "$STANDARD_ROOT/template/.env.example.scv" "SCV_LANG"
 
 echo
+echo "=== [11rr] render-template.sh — SCV_LANG dynamic branching (v0.4+) ==="
+RENDER_SH="$STANDARD_ROOT/scripts/render-template.sh"
+
+# 1. English (default — no SCV_LANG)
+OUT_EN=$(PHASE="Phase 1" STATUS=passed PROJECT=test GIT_SHORT=abc1234 bash "$RENDER_SH")
+printf '%s' "$OUT_EN" | grep -qF "Passed" \
+  && pass "render-template: english passed label" \
+  || fail "render-template: english passed label missing"
+printf '%s' "$OUT_EN" | grep -qF "Project:" \
+  && pass "render-template: english Project label" \
+  || fail "render-template: english Project label missing"
+
+# 2. Korean
+OUT_KO=$(PHASE="Phase 1" STATUS=passed PROJECT=test GIT_SHORT=abc1234 SCV_LANG=korean bash "$RENDER_SH")
+printf '%s' "$OUT_KO" | grep -qF "완료" \
+  && pass "render-template: korean passed label" \
+  || fail "render-template: korean passed label missing"
+printf '%s' "$OUT_KO" | grep -qF "프로젝트:" \
+  && pass "render-template: korean Project label" \
+  || fail "render-template: korean Project label missing"
+
+# 3. Japanese (failed status — covers cause / retry chrome too)
+OUT_JA=$(PHASE="Phase 1" STATUS=failed PROJECT=test GIT_SHORT=abc1234 SCV_LANG=japanese bash "$RENDER_SH")
+printf '%s' "$OUT_JA" | grep -qF "失敗" \
+  && pass "render-template: japanese failed label" \
+  || fail "render-template: japanese failed label missing"
+printf '%s' "$OUT_JA" | grep -qF "原因" \
+  && pass "render-template: japanese cause label" \
+  || fail "render-template: japanese cause label missing"
+
+# 4. Unknown language → English fallback
+OUT_FB=$(PHASE="Phase 1" STATUS=passed PROJECT=test GIT_SHORT=abc1234 SCV_LANG=esperanto bash "$RENDER_SH")
+printf '%s' "$OUT_FB" | grep -qF "Passed" \
+  && pass "render-template: unknown lang falls back to english" \
+  || fail "render-template: unknown lang fallback missing"
+
+# 5. Case-insensitive (KOREAN matches korean)
+OUT_KO_CAP=$(PHASE="Phase 1" STATUS=passed PROJECT=test GIT_SHORT=abc1234 SCV_LANG=KOREAN bash "$RENDER_SH")
+printf '%s' "$OUT_KO_CAP" | grep -qF "완료" \
+  && pass "render-template: SCV_LANG case-insensitive" \
+  || fail "render-template: SCV_LANG case-sensitive (should be insensitive)"
+
+echo
 echo "=== [11dd] PROMOTE.md — fast-path section (v0.2.1) ==="
 PROMOTE_DOC="$STANDARD_ROOT/template/scv/PROMOTE.md"
 assert_contains "$PROMOTE_DOC" "Fast-path"
