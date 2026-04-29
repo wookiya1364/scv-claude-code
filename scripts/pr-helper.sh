@@ -2,18 +2,22 @@
 # pr-helper.sh — Assemble a PR body for an archived plan and (optionally)
 # create the PR via `gh pr create`.
 #
-# v0.2.0 scope: screenshots only (PNG). Videos are deferred to v0.3.
+# v0.3.0 scope: screenshots (PNG/JPG, committed to PR branch in
+# .scv-pr-artifacts/) + videos (.webm/.mp4, pushed to scv-attachments orphan
+# branch via lib/attachments.sh, kept out of PR branch git history).
 #
 # Behavior:
 #   1. Resolve scv/archive/<slug>/ via work.sh-style fuzzy match
 #   2. Read PLAN.md / TESTS.md / ARCHIVED_AT.md → assemble markdown body
-#   3. Move test-results/ PNGs into .scv-pr-artifacts/<slug>/ (off the
-#      gitignore-typical test-results dir, into a committable location)
-#   4. Stage + commit screenshots if there are any
-#   5. Determine base branch — epic/<epic-slug> when PLAN has epic:, else main
-#   6. Push current branch, push epic base branch (creating it from main if
-#      missing), then call gh pr create
-#   7. Print PR URL on stdout
+#   3. Move test-results/ PNGs into .scv-pr-artifacts/<slug>/ (committed)
+#   4. Collect test-results/ videos (.webm/.mp4) — handled by attachments lib
+#   5. Stage + commit screenshots
+#   6. Push current branch, ensure epic base branch exists
+#   7. attachments_cleanup_stale (self-amortizing cleanup of merged old PRs)
+#   8. gh pr create with placeholder body
+#   9. attachments_upload <slug> <pr_number> <videos...>
+#  10. gh pr edit — replace placeholder with actual video URLs
+#  11. Print PR URL on stdout
 #
 # Internal API: this script is called by /scv:work Step 9d (commands/work.md).
 # Users do NOT invoke it directly.
@@ -23,10 +27,18 @@ set -uo pipefail
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # shellcheck source=lib/yaml.sh
 source "$SCRIPT_DIR/lib/yaml.sh"
+# shellcheck source=lib/env.sh
+source "$SCRIPT_DIR/lib/env.sh"
+# shellcheck source=lib/attachments.sh
+source "$SCRIPT_DIR/lib/attachments.sh"
+
+# Load project .env so SCV_ATTACHMENTS_* vars are visible
+env_load 2>/dev/null || true
 
 ARCHIVE_DIR="${ARCHIVE_DIR:-scv/archive}"
 ARTIFACTS_DIR="${ARTIFACTS_DIR:-.scv-pr-artifacts}"
 TEST_RESULTS_DIR="${TEST_RESULTS_DIR:-test-results}"
+VIDEO_PLACEHOLDER="<!-- SCV_VIDEO_PLACEHOLDER -->"
 
 usage() {
   cat <<'EOF'
@@ -128,6 +140,14 @@ if [[ -d "$TEST_RESULTS_DIR" ]]; then
   done < <(find "$TEST_RESULTS_DIR" -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' \) 2>/dev/null | LC_ALL=C sort)
 fi
 
+# ---- collect videos from test-results/ ----
+VIDEOS=()
+if [[ -d "$TEST_RESULTS_DIR" ]]; then
+  while IFS= read -r f; do
+    [[ -f "$f" ]] && VIDEOS+=("$f")
+  done < <(find "$TEST_RESULTS_DIR" -type f \( -iname '*.webm' -o -iname '*.mp4' \) 2>/dev/null | LC_ALL=C sort)
+fi
+
 # ---- helpers for body assembly ----
 
 extract_section() {
@@ -174,15 +194,29 @@ TMP_BODY=$(mktemp)
     echo
   fi
 
-  if [[ ${#SCREENSHOTS[@]} -gt 0 ]]; then
-    echo "## Screenshots"
+  if [[ ${#SCREENSHOTS[@]} -gt 0 || ${#VIDEOS[@]} -gt 0 ]]; then
+    echo "## Test evidence"
     echo
-    # We move PNGs into .scv-pr-artifacts/<slug>/ later. The body uses that path.
-    for src in "${SCREENSHOTS[@]}"; do
-      base=$(basename "$src")
-      echo "![${base}]($ARTIFACTS_DIR/$SLUG_NAME/$base)"
+    if [[ ${#VIDEOS[@]} -gt 0 ]]; then
+      echo "### Videos"
       echo
-    done
+      # Video URLs are filled in *after* PR creation (need PR number for manifest).
+      # During PR creation, this placeholder line is in the body. After
+      # attachments_upload returns URLs, we `gh pr edit` to replace it.
+      echo "$VIDEO_PLACEHOLDER"
+      echo
+    fi
+    if [[ ${#SCREENSHOTS[@]} -gt 0 ]]; then
+      echo "### Screenshots"
+      echo
+      # Screenshots stay in .scv-pr-artifacts/<slug>/ committed to PR branch
+      # (small files, OK to live in git history).
+      for src in "${SCREENSHOTS[@]}"; do
+        base=$(basename "$src")
+        echo "![${base}]($ARTIFACTS_DIR/$SLUG_NAME/$base)"
+        echo
+      done
+    fi
   fi
 
   # Refs (jira / linear / pr / etc.)
@@ -235,6 +269,14 @@ if [[ $DRY_RUN -eq 1 ]]; then
   echo "=== Screenshots to attach ==="
   if [[ ${#SCREENSHOTS[@]} -gt 0 ]]; then
     printf '  · %s\n' "${SCREENSHOTS[@]}"
+  else
+    echo "  (none in $TEST_RESULTS_DIR)"
+  fi
+  echo ""
+  echo "=== Videos to attach (via $ATTACHMENTS_BRANCH orphan branch) ==="
+  if [[ ${#VIDEOS[@]} -gt 0 ]]; then
+    printf '  · %s\n' "${VIDEOS[@]}"
+    echo "  (each → https://github.com/<owner>/<repo>/raw/$ATTACHMENTS_BRANCH/$SLUG_NAME/<file>)"
   else
     echo "  (none in $TEST_RESULTS_DIR)"
   fi
@@ -327,6 +369,13 @@ if [[ $NO_CREATE -eq 0 ]]; then
     echo "PR body saved at: $TMP_BODY"
     exit 1
   fi
+
+  # Self-amortizing cleanup of stale attachments before adding new ones
+  if [[ ${#VIDEOS[@]} -gt 0 ]]; then
+    echo "Cleaning up stale attachments (retention=${SCV_ATTACHMENTS_RETENTION_DAYS:-3} days)..."
+    attachments_cleanup_stale 2>&1 | sed 's/^/  /' || true
+  fi
+
   TITLE_PREFIX="feat"
   [[ "$KIND" == "refactor" ]] && TITLE_PREFIX="refactor"
   [[ "$KIND" == "retirement" ]] && TITLE_PREFIX="chore"
@@ -338,6 +387,48 @@ if [[ $NO_CREATE -eq 0 ]]; then
     echo "$PR_URL" >&2
     echo "PR body saved at: $TMP_BODY"
     exit 1
+  fi
+
+  # ---- Phase 2: upload videos + edit PR body to replace placeholder ----
+  if [[ ${#VIDEOS[@]} -gt 0 ]]; then
+    # Extract PR number from URL (last path segment)
+    PR_NUMBER="${PR_URL##*/}"
+    if [[ ! "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
+      echo "WARN: could not parse PR number from URL '$PR_URL' — skipping video attach" >&2
+    else
+      echo "Uploading ${#VIDEOS[@]} video(s) to $ATTACHMENTS_BRANCH orphan branch..."
+      VIDEO_URLS=$(attachments_upload "$SLUG_NAME" "$PR_NUMBER" "${VIDEOS[@]}" 2>&1)
+      upload_rc=$?
+      if [[ $upload_rc -eq 0 && -n "$VIDEO_URLS" ]]; then
+        # Build markdown video block from URLs
+        VIDEO_MD=""
+        while IFS= read -r url; do
+          [[ -z "$url" ]] && continue
+          base="${url##*/}"
+          VIDEO_MD+="![${base}](${url})"$'\n\n'
+        done <<< "$VIDEO_URLS"
+
+        # Replace placeholder in body file using Python (simpler escape handling)
+        UPDATED_BODY=$(mktemp)
+        python3 - "$TMP_BODY" "$UPDATED_BODY" "$VIDEO_PLACEHOLDER" "$VIDEO_MD" <<'PY'
+import sys
+src, dst, placeholder, replacement = sys.argv[1:]
+with open(src) as f: body = f.read()
+body = body.replace(placeholder, replacement.rstrip("\n"))
+with open(dst, "w") as f: f.write(body)
+PY
+        if gh pr edit "$PR_NUMBER" --body-file "$UPDATED_BODY" >/dev/null 2>&1; then
+          echo "PR body updated with ${#VIDEOS[@]} video link(s)"
+        else
+          echo "WARN: failed to update PR body with video links" >&2
+        fi
+        rm -f "$UPDATED_BODY"
+      else
+        echo "WARN: video upload failed:" >&2
+        echo "$VIDEO_URLS" | sed 's/^/  /' >&2
+        echo "PR body still has placeholder — remove manually if desired." >&2
+      fi
+    fi
   fi
 fi
 

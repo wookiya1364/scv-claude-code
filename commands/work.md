@@ -89,6 +89,43 @@ Look at the helper's `=== related documents (from PLAN.md) ===` list.
 
 If TESTS.md is missing or the 실행 방법 block is empty / ambiguous → **stop and ask**. Do not guess a test command.
 
+#### Step 5b — Playwright 비디오 자동 설정 (선택, v0.3+)
+
+After loading TESTS.md, check whether this is a Playwright project:
+
+1. Use `Glob` to look for `playwright.config.{ts,js,mjs,cjs}` at project root.
+2. If **none found**: skip this step (non-Playwright project — proceed to Step 6).
+3. If **found**: `Read` the file and check for `video:` configuration inside `use:` block.
+4. If `video:` is **missing** or set to `'off'`:
+
+   ```
+   AskUserQuestion (default Yes):
+     Question: "Playwright 비디오 녹화가 꺼져 있습니다. SCV 가 자동으로 켤까요?"
+     options:
+     [1] "Yes — video: 'on' 자동 추가 (권장)"
+         description:
+         "playwright.config 의 use: 블록에 video: 'on' 한 줄 추가합니다.
+          이후 모든 Playwright 테스트가 .webm 을 test-results/ 에 생성하고,
+          /scv:work Step 9d 의 PR 생성이 그 비디오를 자동으로 PR body 에
+          inline 임베드합니다 (scv-attachments orphan 브랜치 경유, 작업
+          브랜치 git history 영향 0).
+
+          PR 머지 후 사용자 지정 N 일 (default 3) 후 자동 삭제됩니다."
+
+     [2] "No — 비디오 없이 진행"
+         description:
+         "config 를 수정하지 않습니다. PR 에는 스크린샷만 첨부됩니다."
+   ```
+
+5. If user picks **[1] Yes**: use `Edit` to insert `video: 'on'` into the `use:` block.
+   - If `use:` block exists: insert `video: 'on'` line.
+   - If no `use:` block: add `use: { video: 'on' },` at top-level config object.
+   - Confirm the edit is consistent with file's TypeScript/JavaScript syntax.
+6. If user picks **[2] No**: continue without modifying config.
+7. If `video:` is already `'on'` / `'retain-on-failure'` / `'retry-with-video'`: skip silently (already configured).
+
+This step runs **once per project** in practice — after first Yes, video config is permanent.
+
 ### Step 6 — Implement
 
 Follow `PLAN.md` `Steps` in order. For each step:
@@ -228,9 +265,41 @@ Propagated obsolete marking:
   ? <D-slug>    (user chose Review — not marked)
 ```
 
-### Step 9d — PR 자동 생성 (선택, v0.2.0)
+### Step 9d — PR 자동 생성 (선택, v0.3+)
 
 조건: Step 9b 에서 archive 가 실제로 일어났음.
+
+#### Step 9d-prep — 비디오 보존 기간 (한 번만)
+
+`/scv:work` 가 처음 PR 을 만들 때 `.env` 에 `SCV_ATTACHMENTS_RETENTION_DAYS` 가 없으면 **한 번** 다음 AskUserQuestion 발동 (이후엔 안 뜸):
+
+```
+Question: "PR 머지 후 비디오 첨부를 며칠 보관할까요?
+           (scv-attachments orphan 브랜치에서 자동 삭제)"
+options:
+[1] "3 일 (기본 · 권장)"
+    description:
+    "머지 후 빠른 정리. 머지 직후 짧은 추가 검토 정도만 대비. 보통 충분.
+     storage 누적 부담 최소."
+[2] "7 일"
+    description:
+    "한 주. 머지 후 다음 sprint 동안 referencable. 약간 더 보수적."
+[3] "30 일"
+    description:
+    "한 달. 분기별 회고 시점까지 보존. 비디오 storage 가 더 누적되지만
+     장기 추적 가능."
+[4] "Never — 삭제 안 함"
+    description:
+    "영구 보존. orphan 브랜치 storage 가 계속 자람 — long-term archive
+     의도 시에만."
+```
+
+답변 후 Claude 가 `Edit` 으로 `.env` 끝에 한 줄 추가 (없으면 .env 새로 생성):
+```
+SCV_ATTACHMENTS_RETENTION_DAYS=<N>   # 또는 'never'
+```
+
+#### Step 9d-main — PR 생성 AskUserQuestion
 
 **AskUserQuestion** (default Yes):
 
@@ -241,20 +310,27 @@ options:
     description:
     "다음 단계가 자동으로 진행됩니다:
     - PLAN.md / TESTS.md / ARCHIVED_AT.md 의 핵심 섹션을 PR body 로 조립
-    - test-results/ 의 스크린샷 (PNG/JPG) 을 .scv-pr-artifacts/<slug>/ 로 이동
-      (test-results/ 폴더에서 빠짐 — 디스크 정리)
-    - PR body 에 markdown 이미지로 임베드 (GitHub blob URL)
+    - test-results/ 의 스크린샷 (PNG/JPG) 을 .scv-pr-artifacts/<slug>/ 로
+      이동 (test-results/ 폴더에서 빠짐 — 디스크 정리). PR 브랜치에 commit.
+    - test-results/ 의 비디오 (.webm/.mp4) 를 lib/attachments.sh 의
+      git-orphan 백엔드로 scv-attachments orphan 브랜치에 push (PR 브랜치
+      git history 영향 0). 로컬 비디오 파일은 push 후 즉시 삭제.
+    - PR body 에 GitHub raw URL 로 비디오 markdown 임베드 → PR 페이지에서
+      inline 재생. manifest 갱신.
+    - PR 머지 + 사용자 지정 N 일 후 자동 삭제 (self-amortizing — 다음
+      pr-helper 호출 시 진행).
     - epic 이 있으면 base 브랜치 = epic/<epic-slug> (없으면 main).
       epic 브랜치가 origin 에 없으면 origin/main 에서 자동 생성.
-    - 현재 feature 브랜치를 push + gh pr create 호출
+    - 현재 feature 브랜치를 push + gh pr create 후 attachments_upload +
+      gh pr edit 으로 placeholder 교체.
     - PR URL 출력
 
     전제:
     - 현재 git 브랜치가 main 이 아닌 feature 브랜치
     - gh CLI 인증됨 (gh auth status)
-    - test-results/ 의 스크린샷은 사용자가 미리 준비 (Playwright/CDP 등)
-
-    비디오 첨부는 v0.3 으로 미뤄졌습니다 — 지금은 스크린샷만."
+    - test-results/ 의 스크린샷·비디오는 사용자 테스트 도구가 준비
+      (Playwright video: 'on' 자동 설정 권장 — Step 5b)
+    - 비디오는 GitHub 만 지원 (GitLab 등은 v0.4)"
 
 [2] "Skip — PR 은 따로 만들겠다"
     description:

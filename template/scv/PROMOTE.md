@@ -324,6 +324,10 @@ npm run test:auth
 
 하나라도 모호하면 `/scv:work` 는 구현 시작 전에 사용자에게 질문합니다.
 
+### 비디오 증거 자동 첨부 (v0.3+)
+
+Playwright (`video: 'on'`) 또는 동등한 도구가 `test-results/` 에 .webm/.mp4 를 생성하면 `/scv:work` Step 9d 의 PR 생성이 **자동으로** PR body 에 inline 임베드합니다. 비디오는 별도 `scv-attachments` orphan 브랜치로 push 되어 작업 브랜치 git history 를 더럽히지 않으며, PR 머지 + N일 후 자동 삭제. 자세한 건 `TESTING.md §3.3`.
+
 ### 회귀 재실행을 염두에 둔 작성 가이드
 
 TESTS.md 는 `/scv:work` 최초 구현 검증 + **archive 이후 `/scv:regression` 이 누적 회귀로 계속 호출**합니다. 두 가지 작성 패턴:

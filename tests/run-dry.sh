@@ -24,6 +24,7 @@ REGRESSION_SH="$STANDARD_ROOT/scripts/regression.sh"
 REGRESSION_CMD="$STANDARD_ROOT/commands/regression.md"
 PR_HELPER="$STANDARD_ROOT/scripts/pr-helper.sh"
 STATUS_SH="$STANDARD_ROOT/scripts/status.sh"
+ATTACHMENTS_LIB="$STANDARD_ROOT/scripts/lib/attachments.sh"
 
 # Counter files (so subshell pass/fail calls still aggregate correctly).
 PASS_FILE=$(mktemp)
@@ -1340,6 +1341,209 @@ EOF
   [[ -f test-results/regression-summary.json ]] && pass "regression: CI=true → JSON summary auto-created" || fail "regression: JSON summary missing under CI=true"
 )
 rm -rf "$CI_APP"
+
+echo
+echo "=== [11ee] pr-helper.sh — 비디오 감지 (dry-run) ==="
+PR_APP=$(mktemp -d)
+mkdir -p "$PR_APP/scv/archive/20260429-test-feat" "$PR_APP/test-results"
+cat > "$PR_APP/scv/archive/20260429-test-feat/PLAN.md" <<'EOF'
+---
+title: Video pickup test
+slug: 20260429-test-feat
+status: done
+kind: feature
+---
+## Summary
+sample
+## Goals / Non-Goals
+- Goals: x
+## Steps
+1. y
+EOF
+cat > "$PR_APP/scv/archive/20260429-test-feat/TESTS.md" <<'EOF'
+## 실행 방법
+```bash
+exit 0
+```
+## 통과 판정
+- ok
+EOF
+echo "fakewebm" > "$PR_APP/test-results/recording.webm"
+echo "fakemp4" > "$PR_APP/test-results/demo.mp4"
+echo "fakepng" > "$PR_APP/test-results/screenshot.png"
+
+(
+  cd "$PR_APP"
+  git init -q -b main
+  git remote add origin https://github.com/test/test.git
+  OUT=$(bash "$PR_HELPER" 20260429-test-feat --dry-run 2>&1)
+  assert_out_contains "Videos to attach" "$OUT"            "pr-helper: Videos section in dry-run"
+  assert_out_contains "recording.webm" "$OUT"              "pr-helper: lists .webm"
+  assert_out_contains "demo.mp4" "$OUT"                    "pr-helper: lists .mp4"
+  assert_out_contains "scv-attachments" "$OUT"             "pr-helper: mentions orphan branch"
+  assert_out_contains "SCV_VIDEO_PLACEHOLDER" "$OUT"       "pr-helper: body has video placeholder"
+  assert_out_contains "screenshot.png" "$OUT"              "pr-helper: still lists screenshots"
+)
+rm -rf "$PR_APP"
+
+echo
+echo "=== [11ff] lib/attachments.sh — _get_github_owner_repo URL parsing ==="
+bash <<'INNER_EOF'
+source /home/zpsuk/바탕화면/work/labs/scv-claude-code/scripts/lib/attachments.sh
+TMP=$(mktemp -d); cd "$TMP"; git init -q -b main
+
+git remote add origin https://github.com/owner/repo.git
+out=$(_get_github_owner_repo)
+[[ "$out" == "owner/repo" ]] && echo PASS https-git || echo FAIL https-git "got=$out"
+
+git remote set-url origin git@github.com:owner/repo.git
+out=$(_get_github_owner_repo)
+[[ "$out" == "owner/repo" ]] && echo PASS ssh-git || echo FAIL ssh-git "got=$out"
+
+git remote set-url origin https://github.com/owner/repo
+out=$(_get_github_owner_repo)
+[[ "$out" == "owner/repo" ]] && echo PASS https-no-suffix || echo FAIL https-no-suffix "got=$out"
+
+git remote set-url origin https://gitlab.com/owner/repo.git
+_get_github_owner_repo >/dev/null && echo FAIL gitlab-rejected || echo PASS gitlab-rejected
+
+cd /; rm -rf "$TMP"
+INNER_EOF
+PARSE_OUT=$(bash <<'INNER_EOF'
+source /home/zpsuk/바탕화면/work/labs/scv-claude-code/scripts/lib/attachments.sh
+TMP=$(mktemp -d); cd "$TMP"; git init -q -b main
+for url in "https://github.com/owner/repo.git" "git@github.com:owner/repo.git" "https://github.com/owner/repo"; do
+  if [[ -d .git ]]; then git remote remove origin 2>/dev/null; fi
+  git remote add origin "$url"
+  out=$(_get_github_owner_repo); echo "$url -> $out"
+done
+git remote set-url origin https://gitlab.com/owner/repo.git
+if _get_github_owner_repo >/dev/null; then echo "gitlab-not-rejected"; else echo "gitlab-rejected"; fi
+cd /; rm -rf "$TMP"
+INNER_EOF
+)
+printf '%s' "$PARSE_OUT" | grep -qF "https://github.com/owner/repo.git -> owner/repo" && pass "attachments URL: https/.git → owner/repo" || fail "attachments URL: https/.git parse"
+printf '%s' "$PARSE_OUT" | grep -qF "git@github.com:owner/repo.git -> owner/repo" && pass "attachments URL: ssh/.git → owner/repo" || fail "attachments URL: ssh/.git parse"
+printf '%s' "$PARSE_OUT" | grep -qF "https://github.com/owner/repo -> owner/repo" && pass "attachments URL: https no-suffix → owner/repo" || fail "attachments URL: no-suffix parse"
+printf '%s' "$PARSE_OUT" | grep -qF "gitlab-rejected" && pass "attachments URL: gitlab rejected" || fail "attachments URL: gitlab not rejected"
+
+echo
+echo "=== [11gg] lib/attachments.sh — backend dispatch + stub ==="
+DISPATCH_OUT=$(bash <<'INNER_EOF'
+source /home/zpsuk/바탕화면/work/labs/scv-claude-code/scripts/lib/attachments.sh
+TMP=$(mktemp -d); cd "$TMP"; git init -q -b main
+git remote add origin https://gitlab.com/x/y.git    # non-github, will fail anyway
+SCV_ATTACHMENTS_BACKEND=invalid attachments_upload x 1 2>&1 | head -1
+echo "---"
+echo "fake" > /tmp/test.webm
+SCV_ATTACHMENTS_BACKEND=s3 attachments_upload x 1 /tmp/test.webm 2>&1 | head -2
+rm -f /tmp/test.webm
+cd /; rm -rf "$TMP"
+INNER_EOF
+)
+printf '%s' "$DISPATCH_OUT" | grep -qF "unknown SCV_ATTACHMENTS_BACKEND='invalid'" && pass "attachments dispatch: invalid backend rejected" || fail "attachments dispatch: invalid not rejected"
+printf '%s' "$DISPATCH_OUT" | grep -qF "s3 backend not yet implemented" && pass "attachments dispatch: s3 stub warning" || fail "attachments dispatch: s3 stub missing"
+
+echo
+echo "=== [11hh] lib/attachments.sh — size guards ==="
+SIZE_OUT=$(bash <<'INNER_EOF'
+source /home/zpsuk/바탕화면/work/labs/scv-claude-code/scripts/lib/attachments.sh
+TMP=$(mktemp -d); cd "$TMP"; git init -q -b main
+git remote add origin https://github.com/test/test.git
+
+# fake remote bare so push works
+BARE=$(mktemp -d -t bare.XXX)
+git init -q --bare "$BARE"
+git remote set-url origin "$BARE"
+echo init > README.md
+git add README.md
+git -c user.email=t@t -c user.name=t commit -q -m init
+git push -q origin main 2>&1
+
+# 51MB fake file
+dd if=/dev/zero of=/tmp/big.webm bs=1024 count=$((51*1024)) 2>/dev/null
+
+# patch URL parser to return owner/repo (real check would fail on bare path)
+_get_github_owner_repo() { echo "test/test"; return 0; }
+SCV_ATTACHMENTS_BRANCH=scv-attachments \
+  attachments_upload size-test 99 /tmp/big.webm 2>&1 | grep -E '50MB|>50MB' | head -1
+
+rm -f /tmp/big.webm
+cd /; rm -rf "$TMP" "$BARE"
+INNER_EOF
+)
+printf '%s' "$SIZE_OUT" | grep -qE 'WARN.*51MB|>50MB' && pass "attachments size: 50MB+ WARN" || fail "attachments size: 50MB+ WARN missing — got: $SIZE_OUT"
+
+echo
+echo "=== [11ii] lib/attachments.sh — manifest + cleanup with mock gh ==="
+CLEAN_OUT=$(bash <<'INNER_EOF'
+WORK=$(mktemp -d)
+ORIGIN="$WORK/origin.git"
+LOCAL="$WORK/repo"
+git init -q --bare "$ORIGIN"
+git init -q -b main "$LOCAL"
+cd "$LOCAL"
+git remote add origin "$ORIGIN"
+echo init > README.md
+git add README.md
+git -c user.email=t@t -c user.name=t commit -q -m init
+git push -q origin main
+
+source /home/zpsuk/바탕화면/work/labs/scv-claude-code/scripts/lib/attachments.sh
+_get_github_owner_repo() { echo "x/y"; return 0; }
+
+echo "fake1" > /tmp/v1.webm
+echo "fake2" > /tmp/v2.webm
+SCV_ATTACHMENTS_BRANCH=scv-attachments attachments_upload merged-old 100 /tmp/v1.webm >/dev/null 2>&1
+SCV_ATTACHMENTS_BRANCH=scv-attachments attachments_upload still-open 200 /tmp/v2.webm >/dev/null 2>&1
+
+# Mock gh CLI
+MOCK=$(mktemp -d)
+cat > "$MOCK/gh" <<'GH'
+#!/usr/bin/env bash
+if [[ "$1 $2" == "pr view" ]]; then
+  if [[ "$3" == "100" ]]; then
+    closed=$(date -u -d '5 days ago' +%Y-%m-%dT%H:%M:%SZ)
+    echo "{\"state\":\"MERGED\",\"closedAt\":\"$closed\"}"
+  elif [[ "$3" == "200" ]]; then
+    echo "{\"state\":\"OPEN\",\"closedAt\":null}"
+  fi
+fi
+GH
+chmod +x "$MOCK/gh"
+PATH="$MOCK:$PATH" SCV_ATTACHMENTS_BRANCH=scv-attachments RETENTION_DAYS=3 \
+  attachments_cleanup_stale 2>&1
+
+# Verify orphan state
+git fetch -q origin scv-attachments 2>/dev/null
+git ls-tree -r origin/scv-attachments | awk '{print $4}'
+
+cd /; rm -rf "$WORK" "$MOCK"
+INNER_EOF
+)
+printf '%s' "$CLEAN_OUT" | grep -qF "DELETED merged-old" && pass "attachments cleanup: stale slug deleted" || fail "attachments cleanup: DELETED line missing"
+printf '%s' "$CLEAN_OUT" | grep -qF "still-open/v2.webm" && pass "attachments cleanup: open PR preserved" || fail "attachments cleanup: open PR was deleted"
+printf '%s' "$CLEAN_OUT" | grep -qF "merged-old/v1.webm" && fail "attachments cleanup: merged file still in tree" || pass "attachments cleanup: merged file removed from tree"
+
+echo
+echo "=== [11jj] commands/work.md — Step 9d retention AskUserQuestion content ==="
+assert_contains "$WORK_CMD" "SCV_ATTACHMENTS_RETENTION_DAYS"
+assert_contains "$WORK_CMD" "3 일 (기본"
+assert_contains "$WORK_CMD" "7 일"
+assert_contains "$WORK_CMD" "30 일"
+assert_contains "$WORK_CMD" "Never"
+
+echo
+echo "=== [11kk] commands/work.md — Step 5b Playwright auto-detect content ==="
+assert_contains "$WORK_CMD" "Step 5b"
+assert_contains "$WORK_CMD" "playwright.config"
+assert_contains "$WORK_CMD" "video: 'on'"
+
+echo
+echo "=== [11ll] commands/work.md — Step 9d video flow content ==="
+assert_contains "$WORK_CMD" "scv-attachments orphan 브랜치"
+assert_contains "$WORK_CMD" "git history 영향 0"
+assert_contains "$WORK_CMD" "inline 재생"
 
 echo
 echo "=== [11dd] PROMOTE.md — fast-path section (v0.2.1) ==="

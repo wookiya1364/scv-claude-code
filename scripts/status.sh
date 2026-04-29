@@ -19,6 +19,11 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 READPATH="$SCRIPT_DIR/readpath.sh"
 # shellcheck source=lib/yaml.sh
 source "$SCRIPT_DIR/lib/yaml.sh"
+# shellcheck source=lib/env.sh
+source "$SCRIPT_DIR/lib/env.sh"
+# shellcheck source=lib/attachments.sh
+source "$SCRIPT_DIR/lib/attachments.sh"
+env_load 2>/dev/null || true
 
 ACK=0
 VERBOSE=0
@@ -289,6 +294,27 @@ else
     fi
     echo "  $icon epic $epic: $state"
   done
+fi
+
+echo ""
+
+# ---------- [6] PR attachments (orphan branch storage) ----------
+echo "[scv-attachments — PR media storage]"
+backend="${SCV_ATTACHMENTS_BACKEND:-git-orphan}"
+retention="${SCV_ATTACHMENTS_RETENTION_DAYS:-3}"
+echo "  backend: $backend · retention: ${retention} day(s)"
+if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  status_line=$(attachments_status 2>/dev/null || echo "active=? stale=? total_size_bytes=?")
+  active=$(printf '%s' "$status_line" | sed -n 's/.*active=\([^ ]*\).*/\1/p')
+  stale=$(printf '%s' "$status_line" | sed -n 's/.*stale=\([^ ]*\).*/\1/p')
+  total=$(printf '%s' "$status_line" | sed -n 's/.*total_size_bytes=\([0-9]*\).*/\1/p')
+  total_mb="?"
+  if [[ -n "$total" && "$total" =~ ^[0-9]+$ ]]; then
+    total_mb=$((total / 1024 / 1024))MB
+  fi
+  echo "  active: ${active:-?} entries · stale: ${stale:-?} · total: $total_mb"
+else
+  echo "  (not in a git repo — skipped)"
 fi
 
 echo ""

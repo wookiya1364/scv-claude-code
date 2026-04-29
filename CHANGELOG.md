@@ -2,6 +2,54 @@
 
 이 저장소의 변경사항을 기록합니다. [Semantic Versioning](https://semver.org/lang/ko/) 규칙을 따릅니다.
 
+## [0.3.0] — 2026-04-29
+
+### 핵심 — PR 비디오 자동 첨부 (Playwright 자동 + Orphan 브랜치)
+
+리뷰어가 코드를 안 보고도 "진짜 동작하는지" 확인할 수 있도록 **테스트 실행 비디오를 PR body 에 자동 임베드**. PR 브랜치 git history 를 더럽히지 않도록 별도 `scv-attachments` orphan 브랜치 경유 + 머지 후 N일 자동 삭제.
+
+### Added
+
+- **`scripts/lib/attachments.sh`** (신규, ~310 라인) — backend abstraction layer
+  - Public API: `attachments_upload`, `attachments_cleanup_stale`, `attachments_status`
+  - 백엔드 dispatch (`SCV_ATTACHMENTS_BACKEND` 환경변수): `git-orphan` (default, v0.3 구현) / `s3`, `r2` (v0.4 stub — 현재는 git-orphan fallback + warning)
+  - `git-orphan` 백엔드: orphan 브랜치 worktree 분리 체크아웃 → 비디오 commit + push → 로컬 파일 삭제 → GitHub raw URL 반환
+  - manifest.json 으로 slug ↔ PR 번호 매핑 추적
+  - `attachments_cleanup_stale`: `gh pr view` 로 mergedAt/closedAt 조회 → retention 일수 지난 entry 자동 삭제 (self-amortizing — 매 pr-helper 호출 시 함께 진행, cron 인프라 불요)
+  - 크기 가드: 50MB+ WARN, 100MB+ 거부 (git push 실패 방지)
+
+- **Playwright 자동 video 설정** — `commands/work.md` Step 5b 신설
+  - `playwright.config.{ts,js,mjs,cjs}` 자동 감지
+  - `video:` 미설정/`'off'` 시 AskUserQuestion (default Yes) → Yes 선택 시 Claude 가 `Edit` 으로 한 줄 추가
+  - 한 번 설정하면 영구 (이후 호출엔 안 뜸)
+
+- **PR 비디오 자동 첨부 흐름** — `commands/work.md` Step 9d 확장
+  - **Step 9d-prep** — `.env` 에 `SCV_ATTACHMENTS_RETENTION_DAYS` 가 없으면 한 번만 AskUserQuestion: 3일 (기본) / 7일 / 30일 / Never. 답변을 `.env` 에 저장.
+  - **Step 9d-main** — `gh pr create` 후 `attachments_upload` → `gh pr edit` 으로 placeholder 교체 패턴. PR body 에 GitHub raw URL markdown 임베드 → PR 페이지에서 inline 재생.
+
+- **`/scv:status` 에 `[scv-attachments]` 섹션** — backend, retention, active/stale/total size 표시
+
+### Changed
+
+- **`scripts/pr-helper.sh`** — `lib/attachments.sh` 호출 + 비디오 수집 (.webm/.mp4) + Test evidence 섹션 (Videos + Screenshots) + create-then-edit 흐름. dry-run 출력에도 비디오 경로 + 예상 raw URL 패턴 표시.
+- **`scripts/status.sh`** — `[scv-attachments]` 신규 섹션. `lib/attachments.sh::attachments_status` 호출.
+- **`template/scv/TESTING.md §3.3`** (신설) — PR 비디오 자동 첨부 안내 + .env 설정 예시.
+- **`template/scv/PROMOTE.md`** — TESTS.md 작성 가이드에 비디오 증거 자동 첨부 한 단락.
+- **`template/.env.example.scv`** — `SCV_ATTACHMENTS_BACKEND` · `SCV_ATTACHMENTS_RETENTION_DAYS` · `SCV_ATTACHMENTS_BRANCH` env vars 추가.
+
+### Tests
+
+- `tests/run-dry.sh` 새 섹션 [11ee–11ll] 8개. 330 → **357 PASS** (+27 assertion). 0 FAIL.
+- 검증 영역: pr-helper 비디오 감지 · URL 파싱 (3 형식 + non-GitHub 거부) · 백엔드 dispatch + s3/r2 stub · 크기 가드 · cleanup with mock gh CLI · Step 5b/9d-prep/9d-main content.
+
+### 비채택 (의도적, 후속 버전)
+
+- **CDP MCP 기반 화면 녹화**: MCP 도구 없음. Playwright 만 지원. v0.4 이상에서 검토.
+- **`s3` / `r2` 백엔드 실제 구현**: v0.3 은 abstraction + stub 만. v0.4 에서 `_attachments_s3_*` / `_attachments_r2_*` 본문.
+- **GitLab / Bitbucket / Gitea 지원**: v0.4. `lib/pr-platform.sh` 추상화 도입 예정.
+- **`attachments_status` 의 stale 정확 카운트**: v0.3 에선 `?` (gh API 호출 부담). v0.4 캐싱 후 정확 표시.
+- **자동 GIF 합성 (스크린샷 시퀀스 → GIF)**: v0.5+ 후보.
+
 ## [0.2.1] — 2026-04-28
 
 ### Added — Fast-path 가이드 (작은 변경 전용)

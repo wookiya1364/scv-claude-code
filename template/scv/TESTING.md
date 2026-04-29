@@ -146,7 +146,26 @@ PR 머지 게이트로 만들려면 위 workflow 의 `regression` job 을 GitHub
 
 **Tip — supersedes 의 효과**: 새 feature 가 옛 feature 를 의도적으로 바꾼 경우, 옛 feature 의 archived TESTS 가 자동으로 깨지는 게 정상입니다. PLAN.md 의 `supersedes: [<옛-slug>]` 한 줄로 회귀 runner 가 자동 skip — 이게 **시간 압박 머지** 를 막으면서도 **노후화** 는 명시적으로 처리하는 핵심.
 
-#### 3.3 테스트 노후화 처리 (회귀와의 구분)
+#### 3.3 PR 비디오 자동 첨부 (v0.3+)
+
+`/scv:work` Step 9d 가 PR 을 만들 때, **테스트 실행 비디오** 를 PR body 에 자동 임베드합니다 — 리뷰어가 코드 안 보고도 "진짜 동작하는지" 영상으로 확인 가능.
+
+**자동화되는 것**:
+- Playwright 프로젝트라면 SCV 가 `playwright.config.{ts,js,mjs,cjs}` 자동 감지 + `video: 'on'` 자동 추가 권장 (Step 5b 의 AskUserQuestion). 한 번 Yes 하면 영구 적용.
+- 테스트 시 .webm 이 `test-results/` 에 자동 생성됨 (Playwright 표준 동작).
+- Step 9d 에서 PR 생성 시 그 비디오들이 **`scv-attachments` orphan 브랜치** 로 push (작업 브랜치 git history 영향 0). PR body 에 GitHub raw URL 로 markdown 임베드 → PR 페이지에서 inline 재생.
+- 로컬 비디오 파일은 push 후 즉시 삭제 (디스크 정리).
+- PR 머지 + 사용자 지정 N 일 (default 3) 후 orphan 브랜치에서 자동 삭제 (manifest.json + `gh pr view` 기반 self-amortizing cleanup).
+
+**.env 설정** (선택, 기본값 그대로 두면 OK):
+```
+SCV_ATTACHMENTS_BACKEND=git-orphan         # 기본. v0.4 부터 s3 · r2 추가 예정
+SCV_ATTACHMENTS_RETENTION_DAYS=3           # 머지 후 보관 일수. 'never' 가능
+```
+
+비-Playwright 프로젝트 (Cypress / 백엔드 테스트만) 는 비디오 없이 진행 — PR 에 스크린샷만 첨부됨.
+
+#### 3.4 테스트 노후화 처리 (회귀와의 구분)
 
 새 기능이 **의도적으로** 기존 동작을 바꿀 때의 3 경로 (자세히는 `scv/PROMOTE.md §8b`):
 
