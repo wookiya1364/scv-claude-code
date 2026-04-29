@@ -21,29 +21,29 @@ cat <<'EOF'
 ║  SCV — Standard · Cowork · Verify                                     ║
 ╚══════════════════════════════════════════════════════════════════════╝
 
-핵심 아이디어 (S·C·V)
-  S  Standard — 사람이 설계 문서를 대화로 채운다 (scv/INTAKE.md)
-  C  Cowork   — scv/raw 자유 투입 → scv/promote/ 승격으로 팀 협업
-  V  Verify   — 구현 → E2E → Slack/Discord 보고로 매 Phase 검증
+Core idea (S·C·V)
+  S  Standard — humans fill design docs through dialogue (scv/INTAKE.md)
+  C  Cowork   — drop into scv/raw, promote to scv/promote/ for team handoff
+  V  Verify   — implement → E2E → Slack/Discord report each Phase
 
-워크플로 (기본 = adoption / --new = greenfield)
-  ① hydrate         → 빈 템플릿을 프로젝트에 복제
-  ② .env 설정       → NOTIFIER_PROVIDER=slack|discord, 토큰/채널
-  ③ scv/raw/        → 기존 자료(회의록·스케치·PDF) 자유 투입 (선택)
+Workflow (default = adoption / --new = greenfield)
+  ① hydrate         → copy the empty template into the project
+  ② .env setup      → NOTIFIER_PROVIDER=slack|discord, tokens/channels
+  ③ scv/raw/        → drop existing material (notes, sketches, PDFs) — optional
   ④ /scv:promote    → raw → scv/promote/<YYYYMMDD>-<author>-<slug>/ (PLAN + TESTS)
-  ⑤ /scv:work       → 구현 · 테스트 · 통과 시 archive 이동
-  (선택) INTAKE.md   → 신규 프로젝트(--new)일 때 표준 문서를 대화로 채움
-  (선택) /ralph-loop → 외부 템플릿 (ralph-template-scv.md 를 ~/.claude/ralph-template.md 로 복사 필요)
-  (선택) /scv:regression → 주기적 · 릴리즈 전 누적 회귀 (archive 전체). ⑤ 의 archive 직전에도 선택적 pre-flight 가능
+  ⑤ /scv:work       → implement · test · move to archive on pass
+  (opt) INTAKE.md   → for new projects (--new), fill standard docs via dialogue
+  (opt) /ralph-loop → external template (copy ralph-template-scv.md → ~/.claude/ralph-template.md)
+  (opt) /scv:regression → periodic / pre-release accumulated regression. Optional pre-flight before ⑤'s archive too.
 
-커맨드
-  /scv:help       이 화면 (현재 상태 + 다음 할 일)
-  /scv:status     scv/raw/ 변경 감지 + 활성 promote 계획 + 그래프 상태
-  /scv:promote    scv/raw/ → scv/promote/<YYYYMMDD>-<author>-<slug>/ 승격 + 그래프 갱신
-  /scv:work       promote 계획 구현 → 테스트 → 필요 시 archive 이동
-  /scv:regression archived 누적 회귀 실행 + supersedes/obsolete 자동 skip + 실패 triage
-  /scv:report     Slack/Discord로 Phase 보고 (아티팩트 포함)
-  /scv:sync       템플릿 버전 업 시 안전 병합
+Commands
+  /scv:help       This screen (current state + next step)
+  /scv:status     scv/raw/ change detection + active promote plans + graph status
+  /scv:promote    scv/raw/ → scv/promote/<YYYYMMDD>-<author>-<slug>/ + graph refresh
+  /scv:work       Implement promote plan → test → optionally archive
+  /scv:regression Run accumulated archived regression + auto-skip supersedes/obsolete + failure triage
+  /scv:report     Phase report to Slack/Discord (with artifacts)
+  /scv:sync       Safe merge on template version bump
 
 EOF
 
@@ -67,7 +67,7 @@ fi
 # --- Dynamic diagnosis of current project ------------------------------------
 PROJECT_PWD="$(pwd)"
 echo "──────────────────────────────────────────────────────────────────────"
-echo " 현재 프로젝트 진단 ($PROJECT_PWD)"
+echo " Current project diagnosis ($PROJECT_PWD)"
 echo "──────────────────────────────────────────────────────────────────────"
 
 HYDRATED=0
@@ -80,9 +80,9 @@ NA_DOCS=()
 # Hydration check (SCV owns scv/ only — root CLAUDE.md is user-owned)
 if [[ -f "scv/CLAUDE.md" && -f "scv/INTAKE.md" ]]; then
   HYDRATED=1
-  echo "  [✓] hydrate 완료 (scv/CLAUDE.md + scv/INTAKE.md 존재)"
+  echo "  [✓] hydrate complete (scv/CLAUDE.md + scv/INTAKE.md exist)"
 else
-  echo "  [✗] hydrate 안됨 (scv/CLAUDE.md / scv/INTAKE.md 누락)"
+  echo "  [✗] hydrate not done (scv/CLAUDE.md / scv/INTAKE.md missing)"
 fi
 
 # .env check
@@ -96,17 +96,17 @@ if [[ -f ".env" ]]; then
     esac
     if [[ $token_ok -eq 1 ]]; then
       ENV_SET=1
-      echo "  [✓] .env 설정 (NOTIFIER_PROVIDER=$prov, 토큰 있음)"
+      echo "  [✓] .env configured (NOTIFIER_PROVIDER=$prov, token present)"
     else
-      echo "  [△] .env 있지만 토큰 미설정 (NOTIFIER_PROVIDER=$prov)"
+      echo "  [△] .env present but token unset (NOTIFIER_PROVIDER=$prov)"
     fi
   else
-    echo "  [△] .env 있지만 NOTIFIER_PROVIDER 없음"
+    echo "  [△] .env present but NOTIFIER_PROVIDER missing"
   fi
 elif [[ -f ".env.example.scv" ]]; then
-  echo "  [✗] .env 없음 — 'cp .env.example.scv .env' (또는 기존 .env 에 cat >> 로 append) 후 값 채우기"
+  echo "  [✗] .env missing — run 'cp .env.example.scv .env' (or 'cat .env.example.scv >> .env' to append) and fill in values"
 else
-  echo "  [✗] .env.example.scv 도 없음 (hydrate 필요)"
+  echo "  [✗] .env.example.scv also missing (hydrate required)"
 fi
 
 # Document status
@@ -123,12 +123,12 @@ if [[ $HYDRATED -eq 1 ]]; then
     esac
   done
 
-  echo "  문서 상태:"
+  echo "  Document status:"
   if [[ ${#ACTIVE_DOCS[@]} -gt 0 ]]; then
     printf '    active  : %s\n' "${ACTIVE_DOCS[*]}"
   fi
   if [[ ${#DRAFT_DOCS[@]} -gt 0 ]]; then
-    printf '    draft   : %s  ← 채워야 함\n' "${DRAFT_DOCS[*]}"
+    printf '    draft   : %s  ← needs filling\n' "${DRAFT_DOCS[*]}"
   fi
   if [[ ${#NA_DOCS[@]} -gt 0 ]]; then
     printf '    N/A     : %s\n' "${NA_DOCS[*]}"
@@ -139,7 +139,7 @@ fi
 if [[ -d "scv/raw" ]]; then
   RAW_COUNT=$(find scv/raw -type f ! -name 'README.md' 2>/dev/null | wc -l | tr -d ' ')
   if [[ "$RAW_COUNT" -gt 0 ]]; then
-    echo "  [i] scv/raw 에 $RAW_COUNT 개 자료 있음 — /scv:promote 로 정제 검토 가능"
+    echo "  [i] scv/raw has $RAW_COUNT item(s) — consider /scv:promote to refine"
   fi
 fi
 
@@ -160,7 +160,7 @@ if [[ -d "scv/promote" ]]; then
   done
 fi
 if [[ ${#ACTIVE_PLANS[@]} -gt 0 ]]; then
-  echo "  [i] scv/promote 에 ${#ACTIVE_PLANS[@]} 개 활성 계획: ${ACTIVE_PLANS[0]}${ACTIVE_PLANS[1]+ …}"
+  echo "  [i] scv/promote has ${#ACTIVE_PLANS[@]} active plan(s): ${ACTIVE_PLANS[0]}${ACTIVE_PLANS[1]+ …}"
 fi
 
 # Archive count (info-only)
@@ -170,122 +170,122 @@ if [[ -d "scv/archive" ]]; then
     [[ -d "$d" ]] && ARCHIVED_COUNT=$((ARCHIVED_COUNT+1))
   done
   if [[ "$ARCHIVED_COUNT" -gt 0 ]]; then
-    echo "  [i] scv/archive 에 $ARCHIVED_COUNT 개 완료 계획 보관됨"
+    echo "  [i] scv/archive has $ARCHIVED_COUNT completed plan(s) stored"
   fi
 fi
 
 echo ""
 echo "──────────────────────────────────────────────────────────────────────"
-echo " 추천 다음 액션"
+echo " Recommended next action"
 echo "──────────────────────────────────────────────────────────────────────"
 
 # --- Recommend next step based on state --------------------------------------
 if [[ $HYDRATED -eq 0 ]]; then
   cat <<EOF
-  이 디렉토리는 아직 hydrate 되지 않았습니다. 두 가지 모드 중 선택하세요.
+  This directory is not hydrated yet. Pick one of two modes.
 
-  ── 기본 · adoption mode (권장) — 기존 프로젝트에 SCV 얹기 ──
-  표준 문서는 status: N/A 로 시드되고 /scv:promote, /scv:work 를
-  바로 쓸 수 있습니다. 필요한 범위만 scope 좁혀 문서화 가능.
+  ── default · adoption mode (recommended) — apply SCV to an existing project ──
+  Standard docs seed with status: N/A and /scv:promote, /scv:work are
+  usable right away. Document only the scope you need.
 
     bash "$PLUGIN_ROOT/scripts/hydrate.sh" init .
 
-  ── --new · greenfield mode — 신규 프로젝트에서 INTAKE 로 전체 표준 문서 채우기 ──
-  표준 문서가 status: draft 로 시드되고, /scv:help 가 INTAKE
-  프로토콜로 DOMAIN / ARCHITECTURE / ... 를 하나씩 채우도록
-  안내합니다. 이건 정말 "zero 부터 시작" 할 때만.
+  ── --new · greenfield mode — fill all standard docs via INTAKE for a new project ──
+  Standard docs seed with status: draft and /scv:help walks you through
+  the INTAKE protocol filling DOMAIN / ARCHITECTURE / ... one at a time.
+  Use this only when truly starting from zero.
 
     bash "$PLUGIN_ROOT/scripts/hydrate.sh" init . --new
 
-  완료 후 다시 /scv:help 를 호출하면 다음 단계를 알려드립니다.
+  Run /scv:help again afterwards to see the next step.
 EOF
 elif [[ $ENV_SET -eq 0 ]]; then
   cat <<'EOF'
-  .env 를 설정하세요. SCV Notifier 변수는 `.env.example.scv` 에 있습니다.
+  Configure .env. The SCV Notifier variables live in `.env.example.scv`.
 
-  1. 기존 .env 없으면:   cp .env.example.scv .env
-     기존 .env 있으면:   cat .env.example.scv >> .env   (SCV 변수만 append)
-  2. NOTIFIER_PROVIDER (slack 또는 discord) 결정
-  3. 해당 Bot 토큰과 SLACK_CHANNEL_ID_* (또는 DISCORD_*) 채우기
-  4. 다시 /scv:help
+  1. If no .env yet:    cp .env.example.scv .env
+     If .env exists:    cat .env.example.scv >> .env   (append SCV vars only)
+  2. Set NOTIFIER_PROVIDER (slack or discord)
+  3. Fill in the matching Bot token and SLACK_CHANNEL_ID_* (or DISCORD_*)
+  4. Run /scv:help again
 EOF
 elif [[ ${#DRAFT_DOCS[@]} -gt 0 ]]; then
-  active_list="${ACTIVE_DOCS[*]:-(없음)}"
+  active_list="${ACTIVE_DOCS[*]:-(none)}"
   cat <<EOF
-  표준 문서 상태:
+  Standard document status:
     active : $active_list
     draft  : ${DRAFT_DOCS[*]}
 
-  INTAKE 를 진행하세요. Claude 가 먼저 이어서/처음부터 선택을 물어봅니다.
+  Run INTAKE. Claude will first ask whether to resume or start over.
 
-  - Claude 에게 요청하는 문장 (복사용):
+  - Phrase to give Claude (copyable):
 
-    "scv/INTAKE.md 를 읽고, §1 의 'resume check' 절차에 따라
-     현재 status 를 먼저 확인한 뒤, [A] 이어서 / [B] 처음부터
-     어느 쪽으로 진행할지 먼저 물어봐줘. 바로 단계 0 부터 시작하지 말 것."
+    "Read scv/INTAKE.md and follow the §1 'resume check' procedure to
+     verify current status first, then ask whether to [A] resume or
+     [B] start over before doing anything. Don't jump straight to step 0."
 
-  - 기존 raw 자료가 있으면 scv/raw/ 에 넣어두면 Claude 가 참고합니다.
+  - Drop any existing raw material into scv/raw/ so Claude can reference it.
 EOF
 elif [[ "$RAW_CHANGES_TOTAL" -gt 0 ]]; then
   cat <<EOF
-  scv/raw/ 에 감지된 변경이 있습니다 (총 $RAW_CHANGES_TOTAL 건).
+  Detected changes in scv/raw/ ($RAW_CHANGES_TOTAL item(s) total).
 
-  다음 커맨드로 정제해서 promote 계획을 생성하세요:
+  Use this command to refine into a promote plan:
 
       /scv:promote
 
-  또는 먼저 상세 diff 를 보려면:
+  Or to inspect the diff first:
 
       /scv:status
 
-  (변경만 확인하고 계획은 나중에 만들 거면 /scv:status --ack 로 baseline 만 갱신)
+  (To only mark current state as baseline and defer planning: /scv:status --ack)
 EOF
 elif [[ ${#ACTIVE_PLANS[@]} -gt 0 ]]; then
   FIRST_SLUG="${ACTIVE_PLANS[0]}"
   if [[ ${#ACTIVE_PLANS[@]} -eq 1 ]]; then
-    PLAN_HINT="다음 커맨드로 구현·테스트를 시작하세요:
+    PLAN_HINT="Use this command to start implementation + tests:
 
       /scv:work $FIRST_SLUG"
   else
-    PLAN_HINT="다음 커맨드로 가장 오래된 계획부터 시작하거나, /scv:status 로 전체 목록 확인:
+    PLAN_HINT="Use this command to start with the oldest plan, or /scv:status for the full list:
 
-      /scv:work $FIRST_SLUG       # 가장 오래된 계획부터
-      /scv:status               # 전체 계획 + 그래프 상태"
+      /scv:work $FIRST_SLUG       # oldest plan first
+      /scv:status               # all plans + graph status"
   fi
   cat <<EOF
-  활성 promote 계획이 ${#ACTIVE_PLANS[@]} 개 있습니다.
+  ${#ACTIVE_PLANS[@]} active promote plan(s) found.
 
   $PLAN_HINT
 
-  구현·테스트 통과 후 /scv:work 가 archive 이동 여부를 대화로 확인합니다.
+  After tests pass, /scv:work asks whether to move to archive interactively.
 EOF
 else
   cat <<'EOF'
-  준비 완료 — 지금 당장 필요한 액션 없음.
+  Ready — no immediate action required.
 
-  다음 중 하나로 새 루프를 시작하세요:
+  Start a new loop with one of:
 
-  - 새 자료 던지기        : scv/raw/ 에 파일 투입 → 다시 /scv:help
-  - Ralph Loop 자동 반복  : /ralph-loop  (외부 커맨드 · ralph-template-scv.md 설정 필요)
-  - 수동 Phase 보고       : /scv:report "Phase 1 — ..." passed --summary "..."
+  - Drop new material        : add files to scv/raw/, then /scv:help
+  - Ralph Loop autoloop      : /ralph-loop  (external command — needs ralph-template-scv.md)
+  - Manual phase report      : /scv:report "Phase 1 — ..." passed --summary "..."
 EOF
 fi
 
 echo ""
 echo "──────────────────────────────────────────────────────────────────────"
-echo " 더 알고 싶다면"
+echo " Learn more"
 echo "──────────────────────────────────────────────────────────────────────"
 cat <<EOF
-  각 커맨드에 --help 또는 -h 지원:
+  Each command supports --help or -h:
     /scv:report -h
     /scv:promote --help
 
-  플러그인 루트:
+  Plugin root:
     $PLUGIN_ROOT
 
-  주요 문서 (hydrate 후 scv/ 하위에 생성됨 — 루트 CLAUDE.md 는 SCV 가 건드리지 않음):
-    scv/CLAUDE.md     — SCV 워크플로 인덱스 · 규칙
-    scv/INTAKE.md     — 대화 프로토콜 (프로젝트 시작 순서)
-    scv/PROMOTE.md    — raw → promote → archive 승격 규약
+  Key documents (created under scv/ after hydrate — root CLAUDE.md is untouched by SCV):
+    scv/CLAUDE.md     — SCV workflow index + rules
+    scv/INTAKE.md     — Dialogue protocol (project bootstrap order)
+    scv/PROMOTE.md    — raw → promote → archive promotion convention
 
 EOF

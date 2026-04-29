@@ -147,7 +147,7 @@ EMPTY_DIR2=$(mktemp -d)
 (
   cd "$EMPTY_DIR2"
   OUT=$(bash "$HELP_SH" 2>&1)
-  assert_out_contains "기본 · adoption" "$OUT" "help(un-hydrated): shows default/adoption option"
+  assert_out_contains "default · adoption" "$OUT" "help(un-hydrated): shows default/adoption option"
   assert_out_contains "--new"       "$OUT"  "help(un-hydrated): shows --new option"
   assert_out_contains "adoption mode" "$OUT" "help(un-hydrated): mentions adoption mode"
   assert_out_contains "INTAKE"      "$OUT"  "help(un-hydrated): mentions INTAKE for --new"
@@ -241,8 +241,8 @@ EMPTY_DIR=$(mktemp -d)
 (
   cd "$EMPTY_DIR"
   OUT=$(bash "$HELP_SH" 2>&1)
-  assert_out_contains "hydrate 안됨" "$OUT" "help: detects un-hydrated dir"
-  assert_out_contains "추천 다음 액션" "$OUT" "help: prints recommended next action"
+  assert_out_contains "hydrate not done" "$OUT" "help: detects un-hydrated dir"
+  assert_out_contains "Recommended next action" "$OUT" "help: prints recommended next action"
   assert_out_contains "hydrate.sh" "$OUT" "help: suggests hydrate.sh"
 )
 rm -rf "$EMPTY_DIR"
@@ -250,7 +250,7 @@ rm -rf "$EMPTY_DIR"
 (
   cd "$APP"
   OUT=$(bash "$HELP_SH" 2>&1)
-  assert_out_contains "hydrate 완료" "$OUT" "help: detects hydrated dir"
+  assert_out_contains "hydrate complete" "$OUT" "help: detects hydrated dir"
   assert_out_contains "N/A" "$OUT" "help: lists N/A documents (adoption default)"
   assert_out_contains "/scv:status" "$OUT" "help: includes status"
   assert_out_contains "/scv:promote" "$OUT" "help: includes promote"
@@ -621,12 +621,12 @@ done
 
   # [1] all clean → "준비 완료"
   OUT=$(bash "$HELP_SH" 2>&1)
-  assert_out_contains "준비 완료" "$OUT"                         "help/state-clean: 준비 완료 message"
+  assert_out_contains "Ready — no immediate action" "$OUT"      "help/state-clean: ready message"
 
   # [2] add raw file → recommends /scv:promote
   echo "note" > scv/raw/note.md
   OUT=$(bash "$HELP_SH" 2>&1)
-  assert_out_contains "scv/raw/ 에 감지된 변경" "$OUT"            "help/state-raw: detects raw changes"
+  assert_out_contains "Detected changes in scv/raw/" "$OUT"     "help/state-raw: detects raw changes"
   assert_out_contains "/scv:promote" "$OUT"                      "help/state-raw: suggests /scv:promote"
 
   # [3] ack baseline + add active plan → recommends /scv:work <slug>
@@ -635,21 +635,21 @@ done
   printf -- "---\ntitle: Feature X\nslug: 20260420-wookiya1364-feature-x\n---\n# X\n" \
     > scv/promote/20260420-wookiya1364-feature-x/PLAN.md
   OUT=$(bash "$HELP_SH" 2>&1)
-  assert_out_contains "활성 promote 계획" "$OUT"                  "help/state-plan: detects active plans"
+  assert_out_contains "active promote plan" "$OUT"               "help/state-plan: detects active plans"
   assert_out_contains "/scv:work 20260420-wookiya1364-feature-x" "$OUT" \
                                                                   "help/state-plan: suggests /scv:work <slug>"
-  assert_out_contains "scv/promote 에 1 개 활성 계획" "$OUT"       "help: diagnosis includes plan count"
+  assert_out_contains "scv/promote has 1 active plan" "$OUT"     "help: diagnosis includes plan count"
 
   # [4] archive entry shows in diagnosis
   mkdir -p scv/archive/20260418-wookiya1364-old-plan
   printf 'done' > scv/archive/20260418-wookiya1364-old-plan/ARCHIVED_AT.md
   OUT=$(bash "$HELP_SH" 2>&1)
-  assert_out_contains "scv/archive 에 1 개 완료 계획" "$OUT"       "help: diagnosis includes archive count"
+  assert_out_contains "scv/archive has 1 completed plan" "$OUT"  "help: diagnosis includes archive count"
 
   # [5] priority: draft docs override raw/plan detection
   sed -i '0,/^status:/{s#^status: .*#status: draft#}' scv/DOMAIN.md
   OUT=$(bash "$HELP_SH" 2>&1)
-  assert_out_contains "이어서/처음부터"   "$OUT"                    "help/state-priority: draft docs take precedence (A/B prompt)"
+  assert_out_contains "resume or"          "$OUT"                  "help/state-priority: draft docs take precedence (A/B prompt)"
   assert_out_contains "DOMAIN"             "$OUT"                   "help/state-priority: mentions specific draft doc"
   assert_out_contains "resume check"       "$OUT"                   "help/state-priority: references INTAKE resume procedure"
   printf '%s' "$OUT" | grep -qF "활성 promote 계획이" \
