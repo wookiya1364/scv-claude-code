@@ -7,6 +7,9 @@
 set -uo pipefail
 
 STANDARD_ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
+# Exported so heredoc-spawned subshells can locate sibling scripts/libs without
+# hardcoding an absolute path.
+export STANDARD_ROOT
 HYDRATE="$STANDARD_ROOT/scripts/hydrate.sh"
 SYNC="$STANDARD_ROOT/scripts/sync.sh"
 CHECK_FRONT="$STANDARD_ROOT/scripts/check-frontmatter.sh"
@@ -1389,7 +1392,7 @@ rm -rf "$PR_APP"
 echo
 echo "=== [11ff] lib/attachments.sh — _get_github_owner_repo URL parsing ==="
 bash <<'INNER_EOF'
-source /home/zpsuk/바탕화면/work/labs/scv-claude-code/scripts/lib/attachments.sh
+source $STANDARD_ROOT/scripts/lib/attachments.sh
 TMP=$(mktemp -d); cd "$TMP"; git init -q -b main
 
 git remote add origin https://github.com/owner/repo.git
@@ -1410,7 +1413,7 @@ _get_github_owner_repo >/dev/null && echo FAIL gitlab-rejected || echo PASS gitl
 cd /; rm -rf "$TMP"
 INNER_EOF
 PARSE_OUT=$(bash <<'INNER_EOF'
-source /home/zpsuk/바탕화면/work/labs/scv-claude-code/scripts/lib/attachments.sh
+source $STANDARD_ROOT/scripts/lib/attachments.sh
 TMP=$(mktemp -d); cd "$TMP"; git init -q -b main
 for url in "https://github.com/owner/repo.git" "git@github.com:owner/repo.git" "https://github.com/owner/repo"; do
   if [[ -d .git ]]; then git remote remove origin 2>/dev/null; fi
@@ -1430,7 +1433,7 @@ printf '%s' "$PARSE_OUT" | grep -qF "gitlab-rejected" && pass "attachments URL: 
 echo
 echo "=== [11gg] lib/attachments.sh — backend dispatch + stub ==="
 DISPATCH_OUT=$(bash <<'INNER_EOF'
-source /home/zpsuk/바탕화면/work/labs/scv-claude-code/scripts/lib/attachments.sh
+source $STANDARD_ROOT/scripts/lib/attachments.sh
 TMP=$(mktemp -d); cd "$TMP"; git init -q -b main
 git remote add origin https://gitlab.com/x/y.git    # non-github, will fail anyway
 SCV_ATTACHMENTS_BACKEND=invalid attachments_upload x 1 2>&1 | head -1
@@ -1447,7 +1450,7 @@ printf '%s' "$DISPATCH_OUT" | grep -qF "s3 backend not yet implemented" && pass 
 echo
 echo "=== [11hh] lib/attachments.sh — size guards ==="
 SIZE_OUT=$(bash <<'INNER_EOF'
-source /home/zpsuk/바탕화면/work/labs/scv-claude-code/scripts/lib/attachments.sh
+source $STANDARD_ROOT/scripts/lib/attachments.sh
 TMP=$(mktemp -d); cd "$TMP"; git init -q -b main
 git remote add origin https://github.com/test/test.git
 
@@ -1489,7 +1492,7 @@ git add README.md
 git -c user.email=t@t -c user.name=t commit -q -m init
 git push -q origin main
 
-source /home/zpsuk/바탕화면/work/labs/scv-claude-code/scripts/lib/attachments.sh
+source $STANDARD_ROOT/scripts/lib/attachments.sh
 _get_github_owner_repo() { echo "x/y"; return 0; }
 
 echo "fake1" > /tmp/v1.webm
@@ -1578,7 +1581,7 @@ git worktree add --detach "$WORK/wt0" >/dev/null 2>&1
 git worktree remove --force "$WORK/wt0" >/dev/null 2>&1
 git branch -D scv-attachments >/dev/null 2>&1
 
-source /home/zpsuk/바탕화면/work/labs/scv-claude-code/scripts/lib/attachments.sh
+source $STANDARD_ROOT/scripts/lib/attachments.sh
 _get_github_owner_repo() { echo "x/y"; return 0; }
 
 # Trigger migration through a normal upload call (also adds new entry).
@@ -1644,7 +1647,7 @@ git add README.md
 git -c user.email=t@t -c user.name=t commit -q -m init
 git push -q origin main
 
-source /home/zpsuk/바탕화면/work/labs/scv-claude-code/scripts/lib/attachments.sh
+source $STANDARD_ROOT/scripts/lib/attachments.sh
 _get_github_owner_repo() { echo "x/y"; return 0; }
 
 echo "f1" > /tmp/s1.webm; echo "f2" > /tmp/s2.webm; echo "f3" > /tmp/s3.webm
@@ -1813,7 +1816,7 @@ WORK=$(mktemp -d)
 cd "$WORK"
 git init -q .
 
-source /home/zpsuk/바탕화면/work/labs/scv-claude-code/scripts/lib/pr-platform.sh
+source $STANDARD_ROOT/scripts/lib/pr-platform.sh
 
 # 1. GitHub origin → auto-detect = github
 git remote add origin git@github.com:wookiya1364/foo.git
@@ -1936,7 +1939,7 @@ echo "=== [11tt] help.sh — Dependency check section (v0.5.1+) ==="
 HELP_DEP_OUT=$(bash <<'INNER_EOF'
 TMP=$(mktemp -d)
 cd "$TMP"
-bash /home/zpsuk/바탕화면/work/labs/scv-claude-code/scripts/help.sh 2>&1
+bash $STANDARD_ROOT/scripts/help.sh 2>&1
 cd /; rm -rf "$TMP"
 INNER_EOF
 )
@@ -1956,7 +1959,7 @@ assert_out_contains "attachments_status cache parsing" "$HELP_DEP_OUT" "help.sh:
 HELP_DEP_MISSING_OUT=$(bash <<INNER_EOF
 TMP=\$(mktemp -d)
 cd "\$TMP"
-env -i HOME="\$HOME" PATH=/nonexistent /bin/bash /home/zpsuk/바탕화면/work/labs/scv-claude-code/scripts/help.sh 2>&1
+env -i HOME="\$HOME" PATH=/nonexistent /bin/bash $STANDARD_ROOT/scripts/help.sh 2>&1
 cd /; rm -rf "\$TMP"
 INNER_EOF
 )
@@ -2004,7 +2007,7 @@ chmod +x "$BIN_FAIL/glab"
 # for grep/awk/etc, so we just add bin-ok / bin-fail to the front per scenario.
 RESTRICTED="/usr/bin:/bin"
 
-source /home/zpsuk/바탕화면/work/labs/scv-claude-code/scripts/lib/pr-platform.sh
+source $STANDARD_ROOT/scripts/lib/pr-platform.sh
 
 # Scenario 1: glab present + returns token → use it (env GITLAB_TOKEN should be ignored)
 echo "---S1---"
@@ -2072,7 +2075,7 @@ echo "no token"
 exit 0
 GLAB
 chmod +x "$WORK/bin/glab"
-source /home/zpsuk/바탕화면/work/labs/scv-claude-code/scripts/lib/pr-platform.sh
+source $STANDARD_ROOT/scripts/lib/pr-platform.sh
 PATH="$WORK/bin:/usr/bin:/bin" GITLAB_TOKEN=env-saved _pr_gitlab_token
 rm -rf "$WORK"
 INNER_EOF

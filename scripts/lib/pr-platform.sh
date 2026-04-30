@@ -181,7 +181,7 @@ _pr_gitlab_host() {
   echo "${GITLAB_HOST:-https://gitlab.com}"
 }
 
-# Returns URL-encoded "namespace/project" (e.g., "wookiya1364%2Fscv-test-pr-flow")
+# Returns URL-encoded "namespace/project" (e.g., "acme%2Fmyproject")
 # from the git remote origin URL. Strips .git suffix.
 _pr_gitlab_project_path() {
   local origin
@@ -191,7 +191,7 @@ _pr_gitlab_project_path() {
   local path
   case "$origin" in
     git@*:*)
-      # SSH: git@gitlab.com:wookiya1364/scv-test.git
+      # SSH: git@gitlab.com:acme/myproject.git
       path=${origin#*:}
       ;;
     https://*|http://*|ssh://*)
