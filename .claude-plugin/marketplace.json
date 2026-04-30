@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "scv",
-      "description": "Claude Code plugin for team workflows. Every change becomes a plan + tests before merging; archived tests accumulate into a self-running regression suite. Run /scv:help to start. 7 slash commands, no flags to memorize.",
+      "description": "Claude Code plugin for team workflows. Every change becomes a plan + tests before merging; archived tests accumulate into a self-running regression suite. Run /scv:help to start. 8 slash commands, no flags to memorize.",
       "source": "./",
       "category": "productivity",
       "tags": [

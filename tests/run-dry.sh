@@ -1963,9 +1963,10 @@ env -i HOME="\$HOME" PATH=/nonexistent /bin/bash $STANDARD_ROOT/scripts/help.sh 
 cd /; rm -rf "\$TMP"
 INNER_EOF
 )
-assert_out_contains "Install hint: macOS" "$HELP_DEP_MISSING_OUT"  "help.sh: install hint emitted when deps missing"
-assert_out_contains "brew install"         "$HELP_DEP_MISSING_OUT" "help.sh: install hint mentions brew"
-assert_out_contains "apt install"          "$HELP_DEP_MISSING_OUT" "help.sh: install hint mentions apt"
+assert_out_contains "Install hint" "$HELP_DEP_MISSING_OUT"        "help.sh: install hint emitted when deps missing"
+assert_out_contains "/scv:install-deps"  "$HELP_DEP_MISSING_OUT"  "help.sh: install hint references /scv:install-deps slash command"
+assert_out_contains "brew install"       "$HELP_DEP_MISSING_OUT"  "help.sh: install hint mentions brew"
+assert_out_contains "apt install"        "$HELP_DEP_MISSING_OUT"  "help.sh: install hint mentions apt"
 
 echo
 echo "=== [11uu] PROMOTE.md — fast-path threshold + .env override (v0.5.1+) ==="
@@ -2091,6 +2092,89 @@ assert_contains "$REGRESSION_CMD" "Archive scale guidance"
 assert_contains "$REGRESSION_CMD" "partition the suite with"
 assert_contains "$REGRESSION_CMD" "Recommended for large archives"
 assert_contains "$REGRESSION_CMD" "Do not auto-add tags"
+
+echo
+echo "=== [11xx] install-deps.sh + /scv:install-deps + graphify awareness (v0.6.0+) ==="
+
+INSTALL_DEPS_SH="$STANDARD_ROOT/scripts/install-deps.sh"
+INSTALL_DEPS_CMD="$STANDARD_ROOT/commands/install-deps.md"
+
+assert_file "$INSTALL_DEPS_SH"
+assert_file "$INSTALL_DEPS_CMD"
+
+# Script syntax sanity
+if bash -n "$INSTALL_DEPS_SH" 2>/dev/null; then
+  pass "install-deps.sh: bash syntax valid"
+else
+  fail "install-deps.sh: bash syntax invalid"
+fi
+
+# --check mode runs to completion
+CHECK_OUT=$(bash "$INSTALL_DEPS_SH" --check 2>&1)
+CHECK_EXIT=$?
+[[ $CHECK_EXIT -eq 0 || $CHECK_EXIT -eq 1 ]] \
+  && pass "install-deps.sh --check: exits 0 or 1 (deps state)" \
+  || fail "install-deps.sh --check: unexpected exit $CHECK_EXIT"
+
+assert_out_contains "OS detected:" "$CHECK_OUT"            "install-deps --check: OS detection line"
+assert_out_contains "Package manager:" "$CHECK_OUT"        "install-deps --check: PM detection line"
+assert_out_contains "Dependency check:" "$CHECK_OUT"       "install-deps --check: deps section"
+assert_out_contains "graphify (Claude Code skill" "$CHECK_OUT" "install-deps --check: graphify section header"
+# graphify install link only appears when graphify is missing — check via mock
+GRAPHIFY_MISSING_OUT=$(bash <<INNER_EOF
+HOME=/nonexistent-home-for-test bash $STANDARD_ROOT/scripts/install-deps.sh --check 2>&1
+INNER_EOF
+)
+assert_out_contains "github.com/safishamsi/graphify" "$GRAPHIFY_MISSING_OUT" "install-deps --check: graphify install link when missing"
+
+# --print mode covers all OSes
+PRINT_OUT=$(bash "$INSTALL_DEPS_SH" --print 2>&1)
+assert_out_contains "── macos (brew) ──" "$PRINT_OUT"           "install-deps --print: macOS section"
+assert_out_contains "── linux-debian (apt) ──" "$PRINT_OUT"     "install-deps --print: Debian section"
+assert_out_contains "── linux-fedora (dnf) ──" "$PRINT_OUT"     "install-deps --print: Fedora section"
+assert_out_contains "── linux-arch (pacman) ──" "$PRINT_OUT"    "install-deps --print: Arch section"
+assert_out_contains "── linux-suse (zypper) ──" "$PRINT_OUT"    "install-deps --print: openSUSE section"
+assert_out_contains "── linux-alpine (apk) ──" "$PRINT_OUT"     "install-deps --print: Alpine section"
+assert_out_contains "── windows (winget) ──" "$PRINT_OUT"       "install-deps --print: Windows section"
+assert_out_contains "brew install gh" "$PRINT_OUT"              "install-deps --print: macOS gh install command"
+assert_out_contains "GitHub.cli" "$PRINT_OUT"                   "install-deps --print: Windows winget gh package id"
+assert_out_contains "Gyan.FFmpeg" "$PRINT_OUT"                  "install-deps --print: Windows winget ffmpeg package id"
+assert_out_contains "github.com/safishamsi/graphify" "$PRINT_OUT" "install-deps --print: graphify GitHub link"
+
+# Unknown mode rejected with exit 2
+bash "$INSTALL_DEPS_SH" --bogus 2>/dev/null
+[[ $? -eq 2 ]] \
+  && pass "install-deps.sh: unknown mode rejected (exit 2)" \
+  || fail "install-deps.sh: unknown mode should exit 2"
+
+# Slash command frontmatter
+assert_contains "$INSTALL_DEPS_CMD" 'description: "Detect missing SCV system dependencies'
+assert_contains "$INSTALL_DEPS_CMD" "AskUserQuestion"
+assert_contains "$INSTALL_DEPS_CMD" "install-deps.sh"
+assert_contains "$INSTALL_DEPS_CMD" "Language preference"
+assert_contains "$INSTALL_DEPS_CMD" "github.com/safishamsi/graphify"
+assert_contains "$INSTALL_DEPS_CMD" "Install now"
+assert_contains "$INSTALL_DEPS_CMD" "Just print the install commands"
+assert_contains "$INSTALL_DEPS_CMD" "Cancel"
+
+# help.sh now mentions graphify in deps check
+HELP_GRAPHIFY_OUT=$(bash <<INNER_EOF
+TMP=\$(mktemp -d)
+cd "\$TMP"
+bash $STANDARD_ROOT/scripts/help.sh 2>&1
+cd /; rm -rf "\$TMP"
+INNER_EOF
+)
+assert_out_contains "graphify" "$HELP_GRAPHIFY_OUT" "help.sh: graphify row in deps check"
+assert_out_contains "Claude Code skill" "$HELP_GRAPHIFY_OUT" "help.sh: graphify is identified as a Claude Code skill"
+assert_out_contains "/scv:install-deps" "$HELP_GRAPHIFY_OUT" "help.sh: install hint references new slash command"
+
+# work.md mentions /scv:install-deps + graphify install link
+assert_contains "$WORK_CMD" "/scv:install-deps"
+assert_contains "$WORK_CMD" "github.com/safishamsi/graphify"
+
+# promote.md graphify warning has resolved install link
+assert_contains "$PROMOTE_CMD" "github.com/safishamsi/graphify"
 
 echo
 echo "=== [10] sync --dry-run (version detection) ==="

@@ -144,9 +144,25 @@ _scv_check_dep ffmpeg  optional    "PR video → GIF inline preview"
 _scv_check_dep python3 optional    "attachments_status cache parsing"
 unset -f _scv_check_dep
 
+# graphify (Claude Code skill — different distribution channel than system CLIs)
+GRAPHIFY_PRESENT=0
+if [[ -f "$HOME/.claude/skills/graphify/SKILL.md" ]]; then
+  GRAPHIFY_PRESENT=1
+elif compgen -G "$HOME/.claude/plugins/cache/*/skills/graphify/SKILL.md" >/dev/null 2>&1; then
+  GRAPHIFY_PRESENT=1
+fi
+if [[ $GRAPHIFY_PRESENT -eq 1 ]]; then
+  printf '    [✓] %-8s — %s\n' "graphify" "Claude Code skill — token-efficient graph queries (/scv:promote, /scv:work)"
+else
+  printf '    [△] %-8s — %s (optional, graceful degrade)\n' "graphify" "Claude Code skill — token-efficient graph queries"
+  echo "        Install: https://github.com/safishamsi/graphify"
+fi
+
 if [[ ${#DEP_MISSING_HARD[@]} -gt 0 || ${#DEP_MISSING_SOFT[@]} -gt 0 ]]; then
   ALL_MISSING=("${DEP_MISSING_HARD[@]}" "${DEP_MISSING_SOFT[@]}")
-  echo "    Install hint: macOS \`brew install ${ALL_MISSING[*]}\` · Debian/Ubuntu \`sudo apt install ${ALL_MISSING[*]}\`"
+  echo "    Install hint: run '/scv:install-deps' for OS-specific commands, or:"
+  echo "      macOS:          brew install ${ALL_MISSING[*]}"
+  echo "      Debian/Ubuntu:  sudo apt install ${ALL_MISSING[*]}"
   if printf '%s\n' "${ALL_MISSING[@]}" | grep -qx gh; then
     echo "    (gh on Debian/Ubuntu needs the GitHub apt repo — see https://github.com/cli/cli/blob/trunk/docs/install_linux.md)"
   fi

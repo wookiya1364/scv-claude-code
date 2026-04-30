@@ -2,6 +2,90 @@
 
 이 저장소의 변경사항을 기록합니다. [Semantic Versioning](https://semver.org/lang/ko/) 규칙을 따릅니다.
 
+## [0.6.0] — 2026-04-30
+
+### 핵심 — `/scv:install-deps` 신규 슬래시 명령어 + 전체 OS 자동 감지 + graphify 인지
+
+DISCUSS.md v0.5.2 토론의 §3.3 (외부 의존성 install friction) 마무리. 7 시스템 CLI (git/gh/glab/curl/jq/ffmpeg/python3) + 1 Claude Code skill (graphify) 의 부재 감지 + OS 별 정확한 install 명령어 자동 출력. 사용자가 본인 OS 확인하고 라인 찾는 마찰 제거.
+
+### Added
+
+- **`scripts/install-deps.sh`** (신규, ~330 줄) — OS / package manager 자동 감지 + 부재 deps install 명령어 출력 또는 실행. 3 모드:
+  - **`--check`** (default) — 부재 deps 별 OS 정확 명령어 출력 (실행 안 함). exit 0 (모두 설치됨 또는 optional 만 부재) / 1 (required 부재) / 2 (PM 자체 부재).
+  - **`--install`** — 실제 install 실행. sudo prompt 가능 (apt/dnf/pacman/zypper/apk). winget 은 자체 dialog.
+  - **`--print`** — 정보용 — 모든 OS 의 install 명령어 reference 출력.
+
+  OS / PM 지원 행렬:
+  - **macOS** → `brew install ...` (전체 deps 한 줄)
+  - **Linux Debian/Ubuntu** → `apt install ...` + **gh apt repo 자동 등록** (keyring + sources.list) + **glab .deb 직접 다운로드** (apt 에 없음)
+  - **Linux Fedora/RHEL** → `dnf install ...` + gh repo 자동 등록 + glab .rpm 직접
+  - **Linux Arch/Manjaro** → `pacman -S ...` (전체 한 줄, AUR 불요)
+  - **Linux openSUSE** → `zypper install ...` + glab .rpm 직접
+  - **Linux Alpine** → `apk add ...` + glab static binary 다운로드
+  - **Windows winget** (default) → `winget install ...` (`GitHub.cli` / `GitLab.GLab` / `Gyan.FFmpeg` / `jqlang.jq` 등 정확한 ID)
+  - **Windows scoop / choco** (alternative) → `scoop install ...` / `choco install ...`
+  - **Unknown OS / PM** → 명확한 안내 + 종료
+
+  graphify 처리: **시스템 CLI 가 아니라서 install-deps.sh scope 외**. 부재 시 `https://github.com/safishamsi/graphify` 안내만 (manual SKILL.md 배치 권장).
+
+- **`commands/install-deps.md`** (신규) — `/scv:install-deps` 슬래시 명령어. 8 번째 명령어:
+  - Step 0: `--check` 자동 실행
+  - Step 1: 부재 시 AskUserQuestion 으로 3 지선다 (Install now / Just print / Cancel)
+  - "Install now" 선택 시 `--install` 실행 + 결과 요약. graphify 자동 install 안 함 (다른 채널).
+  - Language preference 우선순위 instruction 포함.
+
+### Changed
+
+- **`scripts/help.sh`** — Dependency check 에 `graphify` row 추가:
+  - 가용 시 `[✓] graphify — Claude Code skill — token-efficient graph queries (/scv:promote, /scv:work)`
+  - 부재 시 `[△] graphify — Claude Code skill ... (optional, graceful degrade)` + `Install: https://github.com/safishamsi/graphify`
+  - 감지 경로: `~/.claude/skills/graphify/SKILL.md` 또는 `~/.claude/plugins/cache/*/skills/graphify/SKILL.md` (status.sh 와 동일 패턴).
+  - Install hint footer 갱신: `Install hint: run '/scv:install-deps' for OS-specific commands, or:` + macOS/Debian fallback 라인 보존.
+
+- **`commands/promote.md`** §Step 1 graphify-missing 안내에 install link 박음 — 기존의 `[link from user's environment]` placeholder → `https://github.com/safishamsi/graphify (place SKILL.md at ~/.claude/skills/graphify/)`.
+
+- **`commands/work.md`** §Protocol 머리에 Dependency note 단락 추가 — helper warning 시 `/scv:install-deps` 안내 권장. graphify install link 명시. **자동 호출 안 함** (decision: 사용자 manual run 권장 — friction 끼어드는 거 회피).
+
+  §Step 2 (Graph freshness check) 의 graphify missing 케이스를 silent 에서 → 한 줄 mention (한 번만, 반복 안 함) 으로 갱신.
+
+- **`.claude-plugin/plugin.json`** — version `0.5.2` → `0.6.0`.
+- **`.claude-plugin/marketplace.json`** — description "7 slash commands" → "8 slash commands".
+- **`README.md`** — 3 언어 섹션 (English / 한국어 / 日本語) 모두 슬래시 커맨드 표 갱신: "Seven Total" → "Eight Total" (한국어 7→8, 일본어 7→8) + `/scv:install-deps` row 추가. 배지 카운트 451 → 488.
+- **`DISCUSS.md`** §1 / §3.3 / §4.2 갱신 — 외부 의존성 표면을 "시스템 CLI 7 + Claude Code skill 1 (graphify)" 로 명시 + v0.6.0 의 install-deps.sh 마찰 완화 효과 반영.
+
+### Tests
+
+- 신규 섹션 **[11xx]** (~30 assertion):
+  - `install-deps.sh --check` exit 0/1, OS / PM detection 라인 출력, deps 섹션 + graphify 섹션 헤더 검증
+  - `--print` mode 의 7 OS 섹션 (macos/brew, linux-debian/apt, linux-fedora/dnf, linux-arch/pacman, linux-suse/zypper, linux-alpine/apk, windows/winget) 모두 포함
+  - Windows winget package ID 정확성 (`GitHub.cli`, `Gyan.FFmpeg`)
+  - graphify 부재 시뮬레이션 (`HOME=/nonexistent`) 후 install link 출력 검증
+  - 알 수 없는 mode (`--bogus`) 시 exit 2
+  - `commands/install-deps.md` frontmatter (`AskUserQuestion`, `install-deps.sh`) + body (`Install now` / `Just print` / `Cancel`)
+  - `help.sh` 의 graphify row + `/scv:install-deps` reference
+  - `commands/work.md` 의 `/scv:install-deps` 안내 + graphify install link
+  - `commands/promote.md` 의 graphify install link
+- **[11tt]** 의 install hint 문구 갱신 — "Install hint: macOS" → "Install hint" 더 일반적 매치, `/scv:install-deps` reference 검증 추가.
+- 회귀: 451 → **488 PASS** (+37 assertion) / 0 FAIL.
+
+### Backwards compat
+
+- 기존 7 슬래시 명령어 (help/status/promote/work/regression/report/sync) 동작 변화 0. 새 명령어 추가만.
+- `/scv:help` 의 dependency check 출력 형식 변경 — 기존 한 줄 install hint → 다중 줄 (run /scv:install-deps + macOS/Debian fallback). 회귀의 [11tt] 갱신 외 사용자 영향 없음.
+- archived TESTS.md / hydrated 문서 / orphan branch layout 모두 무영향.
+
+### 검증 한계 (정직한 안내)
+
+- 자동 install 흐름 (`--install` mode) 의 실 환경 검증은 **Linux/apt 만 end-to-end 수행**. macOS/brew, Windows/winget, 기타 Linux distros (Fedora/Arch/openSUSE/Alpine) 는 **best-effort** — 패키지 ID 와 명령어 syntax 는 upstream packaging guide 기반이지만 실 install 검증 미수행.
+- `--check` / `--print` mode 는 모든 OS 에서 verify 됨 (출력 검증).
+- Windows 의 PowerShell vs Git Bash 환경 차이는 미검증. WSL 은 Linux 분기 자동 적용으로 동작 예상.
+
+### 비채택 (DISCUSS §4.4 권장 중 v0.6.0 제외)
+
+- **#1 Slack/Discord 토큰 OS keyring 통합** — vendor CLI 부재 영역. 자체 keyring 추상화 layer 도입 vs `.env` 평문 유지 결정 필요. v0.6.x / v0.7 후보.
+- **#5 Telemetry opt-in** — privacy 검토 후 1.0 진입 결정 근거 수집. v0.7+ 또는 v1.0 진입 시.
+- **graphify 자동 install** — Claude Code skill 의 공식 배포 채널 미확정. 사용자 GitHub 링크 안내로 manual placement 권장.
+
 ## [0.5.2] — 2026-04-30
 
 ### 핵심 — GitLab 토큰을 OS keyring 으로 (`glab auth login` 우선) + `.env.example.scv` 영어화

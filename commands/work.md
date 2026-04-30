@@ -50,6 +50,11 @@ Parse the header (`MODE:`, `TARGET_SLUG:`, `PLAN_FILE:`, `TESTS_FILE:`, `GRAPHIF
 
 ## Protocol
 
+> **Dependency note** — If the helper emits warnings about missing external CLI
+> (`gh` / `glab` / `ffmpeg` / etc.) or missing `graphify` skill, suggest running
+> `/scv:install-deps` once to get OS-specific install commands. Don't auto-run
+> it. graphify install: https://github.com/safishamsi/graphify
+
 ### Step 0 — Archive short-circuit
 
 If `MODE: archive`: the helper already moved the folder and wrote `ARCHIVED_AT.md`. Just report the `ARCHIVED:` line and stop. Do not continue with Steps 1+.
@@ -67,7 +72,7 @@ Based on `GRAPHIFY_SKILL` + `GRAPH_STATUS`:
 |---|---|---|
 | `available` | `stale` | Ask user via `AskUserQuestion`: "docs graph is stale — refresh it first via `/scv:promote --graph-only`?" Default: **yes**. If yes, tell user the command (do NOT invoke `/scv:promote` yourself from here — they run it). If no, continue. |
 | `available` | `missing` or `built` | Continue. |
-| `missing` (skill) | any | Continue silently. |
+| `missing` (skill) | any | Continue. Mention once (one line): "graphify skill not installed — see https://github.com/safishamsi/graphify or run `/scv:install-deps` for the full deps list." Don't repeat on subsequent runs. |
 
 ### Step 3 — Load PLAN.md (required)
 
