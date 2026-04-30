@@ -127,10 +127,16 @@ Aggregate the triage log and emit a `=== triage log ===` block to the user:
 - Yes + everything resolved as obsolete/flaky → `--event regression-summary`
 - No → terminate.
 
+## Archive scale guidance
+
+When `scv/archive/` accumulates beyond a few dozen slugs, a no-arg `/scv:regression` run can take many minutes. Recommend the user partition the suite with `--tag` (e.g. `core`, `payment`, `auth`) on PLAN.md `tags:` and run `--tag core` for fast pre-merge feedback while saving the full suite for nightly / pre-release. If the user has never set tags, suggest once: "consider tagging recent PLANs with a small set of `tags:` (e.g. `core`, `experimental`) so future regressions can scope by tag."
+
+Do not auto-add tags to existing PLANs. The user owns the tag taxonomy.
+
 ## Flag semantics
 
 - `<slug-prefix>` — Substring narrowing across archive + promote. Omit to run all.
-- `--tag <x>` — Only slugs whose PLAN.md `tags:` array contains `<x>`.
+- `--tag <x>` — Only slugs whose PLAN.md `tags:` array contains `<x>`. **Recommended for large archives** — see Archive scale guidance above.
 - `--include-promote` — Default is archive-only. Adds `scv/promote/**/TESTS.md` to the run set (covers in-flight plans before they're archived).
 - `--include-obsolete` — Force-runs slugs with `status: obsolete` (auditing / re-validation).
 - `--only <slug>` / `--skip <slug>` — Repeatable. Exact match.

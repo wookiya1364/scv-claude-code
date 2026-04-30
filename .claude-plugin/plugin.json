@@ -1,6 +1,6 @@
 {
   "name": "scv",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "SCV (Standard · Cowork · Verify) — Claude Code plugin for team workflows. Every change becomes a plan + tests before merging, and those tests accumulate into a self-running regression suite. Built-in Slack/Discord reporting and supersedes-based test obsolescence. Run /scv:help to start.",
   "author": {
     "name": "wookiya1364",

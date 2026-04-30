@@ -2,6 +2,50 @@
 
 이 저장소의 변경사항을 기록합니다. [Semantic Versioning](https://semver.org/lang/ko/) 규칙을 따릅니다.
 
+## [0.5.1] — 2026-04-30
+
+### 핵심 — DISCUSS.md v0.5.0 회고에서 도출된 docs-only patch
+
+`DISCUSS.md` 의 v0.5.0 시점 6 페르소나 시뮬레이션 회고 (3 개월 사용 후) 에서 도출된 권장 7 개 중, **검증 부담이 작고 backwards compat 안 깨지는 docs-heavy 항목 3 개 + 부수 정리**. 사용자 가시 동작은 거의 같지만 첫 사용자 onboarding 마찰이 줄어듦.
+
+### Added
+
+- **`scripts/help.sh` — Dependency check section** (DISCUSS §4.4 #3): `/scv:help` 출력의 dynamic 진단에 SCV 가 사용하는 외부 CLI 6 개 (`git` / `gh` / `curl` / `jq` / `ffmpeg` / `python3`) 의 부재 여부 + tier (required / recommended / optional) 표시. 부재 시 macOS Homebrew + Debian/Ubuntu apt 설치 hint 한 줄 출력. `gh` 가 부재면 GitHub apt repo 안내 링크 추가. 첫 사용자가 `ffmpeg` 안 깔린 상태에서 PR 비디오 GIF 변환만 안 되는 비균일 표면을 사전 발견.
+
+- **`template/scv/PROMOTE.md` §1.6 — Fast-path threshold + team override** (DISCUSS §4.4 #2):
+  - 기본 임계점이 "1–2 line hotfix" → **"≤ 5 lines + 단일 함수/블록 안"** 으로 확장.
+  - 새 env `SCV_FAST_PATH_LINE_THRESHOLD` 로 팀별 lock 가능 (보수적: 3, 성숙 코드베이스: 10 등). `.env` 한 줄로 per-PR 협상 ("이 6 줄 변경은 fast-path OK?") 제거.
+  - **단일 함수/블록 룰은 override 불가** — 다중 함수 변경은 라인 수와 무관하게 formal promote loop. 안전 default 유지.
+  - examples 표의 "1–2 line null-guard hotfix" → "≤5 line null-guard / off-by-one hotfix in a single function" 으로 갱신.
+
+- **`commands/regression.md` — Archive scale guidance** (DISCUSS §4.4 #6): Step 3 와 Flag semantics 사이에 "Archive scale guidance" 단락 추가. archive 가 수십 개 누적 시 `--tag core` / `--tag payment` 등으로 partition 권장. tag taxonomy 는 사용자 자율, SCV 가 자동 추가하지 않음 (안전 default). `--tag <x>` flag 설명에도 "Recommended for large archives" 한 줄 보강.
+
+- **`template/.env.example.scv`** — `SCV_FAST_PATH_LINE_THRESHOLD` 주석 단락 추가.
+
+### Changed
+
+- **`README.md`** — Regression 배지 `412 PASS` → `442 PASS` (v0.5.0 = 421 → v0.5.1 = 442, 다음 21 assertion 추가).
+- **`.claude-plugin/plugin.json`** — version `0.5.0` → `0.5.1`.
+
+### Tests
+
+- 신규 섹션 **[11tt]** (10 assertion) — `help.sh` Dependency check 섹션 + 부재 시 Install hint 출력. 부재 시뮬레이션은 `env -i HOME=$HOME PATH=/nonexistent /bin/bash` 패턴으로 모든 `command -v` 가 fail 하는 환경 재현.
+- 신규 섹션 **[11uu]** (7 assertion) — PROMOTE.md 의 ≤5 line / 단일 함수 룰 / `SCV_FAST_PATH_LINE_THRESHOLD` / Team override / non-overridable 룰 / `.env.example.scv` 동기화.
+- 신규 섹션 **[11vv]** (4 assertion) — regression.md 의 Archive scale guidance / `--tag` 권장 / "Do not auto-add tags" stance.
+- 회귀: 421 → **442 PASS** (+21 assertion) / 0 FAIL.
+
+### Backwards compat
+
+- 동작 변화 0. 모든 추가는 docs / 출력 표면 / env 옵션. 기존 사용자가 `.env` 에 `SCV_FAST_PATH_LINE_THRESHOLD` 안 박아도 default 5 로 동작 (v0.2.1 fast-path 보다 약간 완화).
+- archived TESTS.md (v0.3.x) / hydrated 문서 / orphan branch layout 모두 무영향.
+
+### 비채택 (DISCUSS §4.4 권장 중 v0.5.1 제외, v0.6.0 후보)
+
+- **#1 secret backend 통합** (`GITLAB_TOKEN` Keychain / `gh auth` / `pass` 통합 + `hydrate.sh` `.gitignore` 강제) — 구조 변경 + cross-OS 분기 + 회귀 신규 섹션. patch 가 아닌 minor (v0.6.0).
+- **#4 `docs/ONBOARDING.md` 또는 README walkthrough** — 시나리오 작성 + 스크린샷. v0.5.x 후속 또는 v0.6.0.
+- **#5 orphan branch gc 정책** — 6 개월 데이터 후 결정.
+- **#7 telemetry opt-in** — privacy 검토 → v1.0 진입 결정 근거.
+
 ## [0.5.0] — 2026-04-29
 
 ### 핵심 — GitLab MR 자동 생성 + PR/MR backend 추상화

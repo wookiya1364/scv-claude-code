@@ -1932,6 +1932,58 @@ for f in "$STANDARD_ROOT/commands"/*.md; do
 done
 
 echo
+echo "=== [11tt] help.sh — Dependency check section (v0.5.1+) ==="
+HELP_DEP_OUT=$(bash <<'INNER_EOF'
+TMP=$(mktemp -d)
+cd "$TMP"
+bash /home/zpsuk/바탕화면/work/labs/scv-claude-code/scripts/help.sh 2>&1
+cd /; rm -rf "$TMP"
+INNER_EOF
+)
+assert_out_contains "Dependency check:" "$HELP_DEP_OUT"            "help.sh: 'Dependency check' section header present"
+assert_out_contains "git operations (core)"   "$HELP_DEP_OUT"      "help.sh: git deps row present"
+assert_out_contains "GitHub PR auto-create"   "$HELP_DEP_OUT"      "help.sh: gh deps row present"
+assert_out_contains "GitLab MR + Slack/Discord HTTP" "$HELP_DEP_OUT" "help.sh: curl deps row present"
+assert_out_contains "JSON parsing for GitLab MR" "$HELP_DEP_OUT"   "help.sh: jq deps row present"
+assert_out_contains "PR video → GIF inline preview" "$HELP_DEP_OUT" "help.sh: ffmpeg deps row present"
+assert_out_contains "attachments_status cache parsing" "$HELP_DEP_OUT" "help.sh: python3 deps row present"
+
+# Verify install-hint path triggers when dependencies are missing. `env -i`
+# clears the env and PATH=/nonexistent makes every `command -v` lookup fail
+# inside the help.sh subshell; only the bash binary itself is invoked by
+# absolute path so the script can still execute.
+HELP_DEP_MISSING_OUT=$(bash <<INNER_EOF
+TMP=\$(mktemp -d)
+cd "\$TMP"
+env -i HOME="\$HOME" PATH=/nonexistent /bin/bash /home/zpsuk/바탕화면/work/labs/scv-claude-code/scripts/help.sh 2>&1
+cd /; rm -rf "\$TMP"
+INNER_EOF
+)
+assert_out_contains "Install hint: macOS" "$HELP_DEP_MISSING_OUT"  "help.sh: install hint emitted when deps missing"
+assert_out_contains "brew install"         "$HELP_DEP_MISSING_OUT" "help.sh: install hint mentions brew"
+assert_out_contains "apt install"          "$HELP_DEP_MISSING_OUT" "help.sh: install hint mentions apt"
+
+echo
+echo "=== [11uu] PROMOTE.md — fast-path threshold + .env override (v0.5.1+) ==="
+PROMOTE_DOC="$STANDARD_ROOT/template/scv/PROMOTE.md"
+assert_contains "$PROMOTE_DOC" "Touches ≤ 5 lines"
+assert_contains "$PROMOTE_DOC" "single function or block"
+assert_contains "$PROMOTE_DOC" "SCV_FAST_PATH_LINE_THRESHOLD"
+assert_contains "$PROMOTE_DOC" "Team override"
+assert_contains "$PROMOTE_DOC" "single-function/block rule is **not** overridable"
+ENV_EXAMPLE="$STANDARD_ROOT/template/.env.example.scv"
+assert_contains "$ENV_EXAMPLE" "SCV_FAST_PATH_LINE_THRESHOLD"
+assert_contains "$ENV_EXAMPLE" "Fast-path 임계점"
+
+echo
+echo "=== [11vv] regression.md — Archive scale guidance + --tag recommendation (v0.5.1+) ==="
+REGRESSION_CMD="$STANDARD_ROOT/commands/regression.md"
+assert_contains "$REGRESSION_CMD" "Archive scale guidance"
+assert_contains "$REGRESSION_CMD" "partition the suite with"
+assert_contains "$REGRESSION_CMD" "Recommended for large archives"
+assert_contains "$REGRESSION_CMD" "Do not auto-add tags"
+
+echo
 echo "=== [10] sync --dry-run (version detection) ==="
 # Force a local divergence on a preserve-policy file so sync reports SKIP
 printf '\n<!-- local note: force divergence -->\n' >> "$APP/scv/AGENTS.md"

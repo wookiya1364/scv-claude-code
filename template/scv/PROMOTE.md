@@ -53,12 +53,26 @@ If you decide to formally document a specific subsystem, lift just that section 
 
 ### Fast-path criteria (all must be true)
 
-- [ ] Change has a single simple intent (typo fix / 1–2 line hotfix / patch-version dep bump / one-line doc tweak)
+- [ ] Change has a single simple intent (typo fix / null-guard hotfix / patch-version dep bump / one-paragraph doc tweak)
+- [ ] **Touches ≤ 5 lines and stays inside a single function or block** (default — see "Team override" below)
 - [ ] No new behavior, API, or feature — preservation of existing behavior is obvious
 - [ ] Within scope of existing regression TESTS (so archived TESTS won't break post-merge — reasonably expected)
 - [ ] PR description fits in one paragraph (PLAN.md's Goals / Non-Goals / Steps would compress to one line)
 
-If even one of the four is suspect, take the formal promote loop. **The default decision is "formal promote loop"** — fast-path is a deliberate exception for obvious cases.
+If even one of the five is suspect, take the formal promote loop. **The default decision is "formal promote loop"** — fast-path is a deliberate exception for obvious cases.
+
+### Team override — `SCV_FAST_PATH_LINE_THRESHOLD`
+
+The 5-line ceiling is a default, not dogma. Teams shipping mostly to mature codebases can raise it; teams in security-sensitive domains can lower it. Set in the project's `.env`:
+
+```bash
+# .env
+SCV_FAST_PATH_LINE_THRESHOLD=3   # stricter — only ≤3 lines qualify
+# or
+SCV_FAST_PATH_LINE_THRESHOLD=10  # looser — ≤10 lines OK if other 4 criteria still hold
+```
+
+Locking the threshold per team in `.env` removes the per-PR negotiation ("is this 6-line change really fast-path-able?"). When unset, default is 5. The single-function/block rule is **not** overridable — multi-function changes always take the formal loop regardless of line count.
 
 ### Fast-path examples
 
@@ -66,7 +80,7 @@ If even one of the four is suspect, take the formal promote loop. **The default 
 |---|---|
 | README / code comment typo fix | New feature (even if 1-hour) |
 | Patch-version dep bump (security advisory response) | Bug fix that needs spec change ("was this behavior intentional?" — anything needing review) |
-| 1–2 line null-guard hotfix found in production | Refactor (even single-file — rename, helper extraction, signature changes) |
+| ≤5 line null-guard / off-by-one hotfix in a single function | Refactor (even single-file — rename, helper extraction, signature changes) |
 | Linter / formatter auto-cleanup | DB schema change / API compat impact |
 | Comment / doc paragraph addition | "Looks small but I'm not sure" change — when in doubt, promote |
 
