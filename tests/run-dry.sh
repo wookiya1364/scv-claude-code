@@ -2265,6 +2265,48 @@ assert_contains "$README" "標準ドキュメントは任意です"
 assert_contains "$README" "外部 Refs (Jira / Linear / PR / ドキュメント) — 自動検出"
 
 echo
+echo "=== [11zz] README 재구조 — Why SCV? + 5분 walkthrough (v0.6.2+) ==="
+
+README="$STANDARD_ROOT/README.md"
+
+# 영어 — Why SCV? + 5-Minute Walkthrough
+assert_contains "$README" "## Why SCV?"
+assert_contains "$README" "## 5-Minute Walkthrough"
+assert_contains "$README" "Reviewing AI-generated code is painful"
+assert_contains "$README" "Information about a change lives in 3 places"
+assert_contains "$README" "Archived plans become dead weight"
+assert_contains "$README" "executable quality gate"
+assert_contains "$README" 'Scenario: "Add a refund button to the checkout page"'
+assert_contains "$README" "Min 1 — Drop materials into scv/raw/"
+assert_contains "$README" "Min 5 — Review → merge → archive"
+
+# 한국어 — 왜 SCV? + 5 분 워크스루
+assert_contains "$README" "## 왜 SCV?"
+assert_contains "$README" "## 5 분 워크스루"
+assert_contains "$README" "AI 가 짠 코드 리뷰가 괴롭다"
+assert_contains "$README" "변경에 대한 정보가 3 군데에 흩어져"
+assert_contains "$README" "archive 가 6 개월 뒤 죽은 무게"
+assert_contains "$README" "실행 가능한 quality gate"
+assert_contains "$README" '시나리오: "결제 페이지에 환불 버튼 추가"'
+assert_contains "$README" "1 분 — scv/raw/ 에 자료 떨어뜨림"
+assert_contains "$README" "5 분 — 리뷰 → 머지 → archive"
+
+# 일본어 — なぜ SCV? + 5 分ウォークスルー
+assert_contains "$README" "## なぜ SCV?"
+assert_contains "$README" "## 5 分ウォークスルー"
+assert_contains "$README" "AI が書いたコードのレビューがつらい"
+assert_contains "$README" "変更に関する情報が 3 か所に散らばり"
+assert_contains "$README" "archive が 6 か月後に死荷重になる"
+assert_contains "$README" "実行可能な quality gate"
+assert_contains "$README" 'シナリオ: "決済ページに払い戻しボタンを追加"'
+assert_contains "$README" "1 分 — scv/raw/ に資料を投入"
+assert_contains "$README" "5 分 — レビュー → マージ → archive"
+
+# Top nav anchors
+assert_contains "$README" "#why-scv"
+assert_contains "$README" "#5-minute-walkthrough"
+
+echo
 echo "=== [10] sync --dry-run (version detection) ==="
 # Force a local divergence on a preserve-policy file so sync reports SKIP
 printf '\n<!-- local note: force divergence -->\n' >> "$APP/scv/AGENTS.md"

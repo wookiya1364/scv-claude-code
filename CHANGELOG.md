@@ -2,6 +2,55 @@
 
 이 저장소의 변경사항을 기록합니다. [Semantic Versioning](https://semver.org/lang/ko/) 규칙을 따릅니다.
 
+## [0.6.2] — 2026-04-30
+
+### 핵심 — README 재구조 (Why SCV? + 5 분 walkthrough)
+
+DISCUSS.md 의 README 가 가치 못 드러내는 약점 마무리. 기능 표 중심 → 가치 + 시나리오 중심으로 hero 다음 두 신규 섹션 추가. 3 언어 모두.
+
+### Added
+
+- **`README.md` "Why SCV?" 섹션** (3 언어) — hero "What is SCV?" 다음, "Quick Start" 전. AI 코드 짜는 흐름에서 마주치는 3 문제 + SCV 답:
+  1. **AI 가 짠 코드 리뷰가 괴롭다** — Playwright 비디오 + ffmpeg GIF 자동 첨부로 5 초 안에 동작 확인. 리뷰어 인지 비용 비교 ASCII 표.
+  2. **변경 정보가 Linear / PR description / 코드 3 사본** — PLAN.md = *실행 가능한 quality gate*, refs: 가 외부 도구 *링크* (복제 아님). 자동 인식 (raw / args / dialog).
+  3. **archive 가 죽은 무게** — supersedes / obsolete 그래프로 자동 skip + 살아있는 자산 (grep 검색 가능).
+
+- **`README.md` "5-Minute Walkthrough" 섹션** (3 언어) — concrete scenario "Add a refund button to checkout":
+  - Min 1: raw 자료 떨어뜨림 (URL 포함)
+  - Min 2: `/scv:promote` (refs 자동 인식 + dialog)
+  - Min 3: `/scv:work` (구현 + Playwright e2e + .webm 캡처)
+  - Min 4: 자동 PR (ffmpeg .gif + orphan branch + GIF inline + .webm 링크 + refs)
+  - Min 5: 리뷰 → 머지 → archive → retention cleanup → 누적 회귀 진입
+
+- **상단 nav 앵커** — `#why-scv` / `#5-minute-walkthrough` 추가, `#end-to-end-flow` 제거 (스페이스 확보).
+
+### Changed
+
+- **`.claude-plugin/plugin.json`** — version `0.6.1` → `0.6.2`.
+- **`README.md`** 회귀 배지 528 PASS → 557 PASS.
+
+### Tests
+
+- 신규 섹션 **[11zz]** (~30 assertion):
+  - 3 언어 의 신규 섹션 헤더 (`## Why SCV?` / `## 왜 SCV?` / `## なぜ SCV?` / `## 5-Minute Walkthrough` / `## 5 분 워크스루` / `## 5 分ウォークスルー`)
+  - 핵심 가치 3 가지의 핵심 문구 (영어 / 한국어 / 일본어)
+  - "executable quality gate" / "실행 가능한 quality gate" / "実行可能な quality gate"
+  - Walkthrough 시나리오 ("Add a refund button to the checkout page" + 한국어 / 일본어 등가)
+  - Min 1 ~ Min 5 단계 헤더
+  - 상단 nav 앵커
+- 회귀: 528 → **557 PASS** (+29 assertion) / 0 FAIL.
+
+### Backwards compat
+
+- 동작 변화 0. 기존 사용자 무영향.
+- README 의 기존 섹션 (Quick Start / Slash Commands / End-to-End Flow / Project Layout / 기타) 모두 보존, 새 섹션은 hero 와 Quick Start 사이에 *추가* 만.
+- archived TESTS.md / hydrated 문서 / orphan branch layout 모두 무영향.
+
+### 비채택
+
+- README 의 기존 섹션 큰 재정렬 — Quick Start 의 정확성 / Slash Commands 표 의 reference 가치는 그대로 두는 게 안전. 새 섹션 추가만으로 가치 부각 충분.
+- 다른 언어 (Spanish / French / 등) 추가 — 4 지선다 의 "Other" 사용자 표면은 i18n 인프라 (Language preference 우선순위 + render-template.sh dynamic 분기) 만으로 처리. README 자체는 영어 / 한국어 / 일본어 3 언어 유지.
+
 ## [0.6.1] — 2026-04-30
 
 ### 핵심 — 표준 문서 부담 완화 + 외부 refs 자동 인식 (deliberate sources only, dialog-driven clarification 보존)
