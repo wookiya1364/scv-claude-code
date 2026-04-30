@@ -29,8 +29,10 @@
 #
 # Required env per backend:
 #   github: gh CLI authenticated (gh auth status)
-#   gitlab: GITLAB_TOKEN (Personal Access Token; scope: api + write_repository)
-#           GITLAB_HOST (optional; default https://gitlab.com)
+#   gitlab: glab CLI authenticated (preferred — `glab auth login`; token lives
+#           in OS-native keyring) OR GITLAB_TOKEN env (Personal Access Token;
+#           scope: api + write_repository) as fallback.
+#           GITLAB_HOST (optional; default https://gitlab.com).
 #
 # Dependencies: git; gh CLI (github backend); curl + jq (gitlab backend).
 
@@ -209,12 +211,38 @@ _pr_gitlab_project_path() {
 }
 
 _pr_gitlab_token() {
-  local t="${GITLAB_TOKEN:-}"
-  if [[ -z "$t" ]]; then
-    echo "ERROR: GITLAB_TOKEN env var not set (Personal Access Token; scope: api + write_repository)" >&2
-    return 1
+  # Tier 1 (preferred, v0.5.2+): glab CLI keyring. Token sits in OS-native
+  # secret store (macOS Keychain / libsecret / Windows Credential Manager —
+  # whichever glab decided to use). No plaintext in .env.
+  if command -v glab >/dev/null 2>&1; then
+    local glab_args=(auth token)
+    if [[ -n "${GITLAB_HOST:-}" ]]; then
+      local h="${GITLAB_HOST#http://}"; h="${h#https://}"; h="${h%/}"
+      [[ -n "$h" ]] && glab_args+=(--hostname "$h")
+    fi
+    local glab_token
+    glab_token=$(glab "${glab_args[@]}" 2>/dev/null) || glab_token=""
+    # glab can echo a non-token diagnostic on some versions; trim and validate
+    # it looks like a token (non-empty, no whitespace, > 8 chars).
+    glab_token="${glab_token//$'\n'/}"
+    if [[ -n "$glab_token" && "$glab_token" != *' '* && ${#glab_token} -ge 8 ]]; then
+      echo "$glab_token"
+      return 0
+    fi
   fi
-  echo "$t"
+
+  # Tier 2 (fallback): GITLAB_TOKEN env var (kept for backwards compat with
+  # v0.5.0/0.5.1 users who set the token in .env).
+  local t="${GITLAB_TOKEN:-}"
+  if [[ -n "$t" ]]; then
+    echo "$t"
+    return 0
+  fi
+
+  echo "ERROR: no GitLab token available. Either:" >&2
+  echo "  1. Run 'glab auth login' (recommended — token stored in OS keyring)" >&2
+  echo "  2. Or set GITLAB_TOKEN in .env (Personal Access Token; scope: api + write_repository)" >&2
+  return 1
 }
 
 _pr_gitlab_create() {

@@ -1943,6 +1943,7 @@ INNER_EOF
 assert_out_contains "Dependency check:" "$HELP_DEP_OUT"            "help.sh: 'Dependency check' section header present"
 assert_out_contains "git operations (core)"   "$HELP_DEP_OUT"      "help.sh: git deps row present"
 assert_out_contains "GitHub PR auto-create"   "$HELP_DEP_OUT"      "help.sh: gh deps row present"
+assert_out_contains "GitLab MR auth (preferred over GITLAB_TOKEN" "$HELP_DEP_OUT" "help.sh: glab deps row present (v0.5.2+)"
 assert_out_contains "GitLab MR + Slack/Discord HTTP" "$HELP_DEP_OUT" "help.sh: curl deps row present"
 assert_out_contains "JSON parsing for GitLab MR" "$HELP_DEP_OUT"   "help.sh: jq deps row present"
 assert_out_contains "PR video → GIF inline preview" "$HELP_DEP_OUT" "help.sh: ffmpeg deps row present"
@@ -1973,7 +1974,112 @@ assert_contains "$PROMOTE_DOC" "Team override"
 assert_contains "$PROMOTE_DOC" "single-function/block rule is **not** overridable"
 ENV_EXAMPLE="$STANDARD_ROOT/template/.env.example.scv"
 assert_contains "$ENV_EXAMPLE" "SCV_FAST_PATH_LINE_THRESHOLD"
-assert_contains "$ENV_EXAMPLE" "Fast-path 임계점"
+assert_contains "$ENV_EXAMPLE" "Fast-path threshold"
+
+echo
+echo "=== [11ww] lib/pr-platform.sh — _pr_gitlab_token glab→env fallback (v0.5.2+) ==="
+GITLAB_TOKEN_OUT=$(bash <<'INNER_EOF'
+set +e
+WORK=$(mktemp -d)
+BIN_OK="$WORK/bin-ok"
+BIN_FAIL="$WORK/bin-fail"
+mkdir -p "$BIN_OK" "$BIN_FAIL"
+
+# glab that returns a valid-looking token
+cat > "$BIN_OK/glab" <<'GLAB'
+#!/bin/sh
+[ "$1" = "auth" ] && [ "$2" = "token" ] && { echo "glpat-FROM-KEYRING-1234567890"; exit 0; }
+exit 1
+GLAB
+chmod +x "$BIN_OK/glab"
+
+# glab that exits 1 (not authenticated)
+cat > "$BIN_FAIL/glab" <<'GLAB'
+#!/bin/sh
+exit 1
+GLAB
+chmod +x "$BIN_FAIL/glab"
+
+# Restricted PATH base (no real glab around). /bin and /usr/bin still needed
+# for grep/awk/etc, so we just add bin-ok / bin-fail to the front per scenario.
+RESTRICTED="/usr/bin:/bin"
+
+source /home/zpsuk/바탕화면/work/labs/scv-claude-code/scripts/lib/pr-platform.sh
+
+# Scenario 1: glab present + returns token → use it (env GITLAB_TOKEN should be ignored)
+echo "---S1---"
+PATH="$BIN_OK:$RESTRICTED" GITLAB_TOKEN=env-should-not-win _pr_gitlab_token
+
+# Scenario 2: glab present + exits 1 → fall back to GITLAB_TOKEN env
+echo "---S2---"
+PATH="$BIN_FAIL:$RESTRICTED" GITLAB_TOKEN=env-tier2-fallback _pr_gitlab_token
+
+# Scenario 3: glab absent + GITLAB_TOKEN env set → use env
+echo "---S3---"
+PATH="$RESTRICTED" GITLAB_TOKEN=env-tier2-only _pr_gitlab_token
+
+# Scenario 4: glab absent + no env → error path
+echo "---S4---"
+PATH="$RESTRICTED" GITLAB_TOKEN="" _pr_gitlab_token 2>&1
+echo "S4-EXIT=$?"
+
+rm -rf "$WORK"
+INNER_EOF
+)
+
+# Scenario 1
+S1=$(printf '%s' "$GITLAB_TOKEN_OUT" | awk '/---S1---/{f=1;next} /---S2---/{f=0} f' | head -1)
+[[ "$S1" == "glpat-FROM-KEYRING-1234567890" ]] \
+  && pass "_pr_gitlab_token: glab keyring wins over GITLAB_TOKEN env" \
+  || fail "_pr_gitlab_token: glab tier-1 not used (got: $S1)"
+
+# Scenario 2
+S2=$(printf '%s' "$GITLAB_TOKEN_OUT" | awk '/---S2---/{f=1;next} /---S3---/{f=0} f' | head -1)
+[[ "$S2" == "env-tier2-fallback" ]] \
+  && pass "_pr_gitlab_token: glab fail falls back to GITLAB_TOKEN env" \
+  || fail "_pr_gitlab_token: env fallback when glab fails (got: $S2)"
+
+# Scenario 3
+S3=$(printf '%s' "$GITLAB_TOKEN_OUT" | awk '/---S3---/{f=1;next} /---S4---/{f=0} f' | head -1)
+[[ "$S3" == "env-tier2-only" ]] \
+  && pass "_pr_gitlab_token: glab absent uses GITLAB_TOKEN env" \
+  || fail "_pr_gitlab_token: env fallback when glab absent (got: $S3)"
+
+# Scenario 4: error message + non-zero
+S4_BLOCK=$(printf '%s' "$GITLAB_TOKEN_OUT" | awk '/---S4---/{f=1;next} f')
+printf '%s' "$S4_BLOCK" | grep -q "no GitLab token available" \
+  && pass "_pr_gitlab_token: error mentions 'no GitLab token available'" \
+  || fail "_pr_gitlab_token: error message wrong (got: $S4_BLOCK)"
+printf '%s' "$S4_BLOCK" | grep -q "glab auth login" \
+  && pass "_pr_gitlab_token: error suggests 'glab auth login'" \
+  || fail "_pr_gitlab_token: error doesn't mention glab auth login"
+printf '%s' "$S4_BLOCK" | grep -q "GITLAB_TOKEN in .env" \
+  && pass "_pr_gitlab_token: error suggests GITLAB_TOKEN in .env fallback" \
+  || fail "_pr_gitlab_token: error doesn't mention GITLAB_TOKEN .env"
+printf '%s' "$S4_BLOCK" | grep -q "S4-EXIT=1" \
+  && pass "_pr_gitlab_token: returns exit 1 when no source available" \
+  || fail "_pr_gitlab_token: should exit 1 (got: $S4_BLOCK)"
+
+# Whitespace / short-token sanity: glab returning '<not authenticated>' or
+# similar diagnostic must NOT be treated as a token.
+GITLAB_DIAG_OUT=$(bash <<'INNER_EOF'
+set +e
+WORK=$(mktemp -d)
+mkdir -p "$WORK/bin"
+cat > "$WORK/bin/glab" <<'GLAB'
+#!/bin/sh
+echo "no token"
+exit 0
+GLAB
+chmod +x "$WORK/bin/glab"
+source /home/zpsuk/바탕화면/work/labs/scv-claude-code/scripts/lib/pr-platform.sh
+PATH="$WORK/bin:/usr/bin:/bin" GITLAB_TOKEN=env-saved _pr_gitlab_token
+rm -rf "$WORK"
+INNER_EOF
+)
+[[ "$GITLAB_DIAG_OUT" == "env-saved" ]] \
+  && pass "_pr_gitlab_token: rejects whitespace-containing 'token' from glab" \
+  || fail "_pr_gitlab_token: whitespace token sanity broke (got: $GITLAB_DIAG_OUT)"
 
 echo
 echo "=== [11vv] regression.md — Archive scale guidance + --tag recommendation (v0.5.1+) ==="

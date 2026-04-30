@@ -2,6 +2,53 @@
 
 이 저장소의 변경사항을 기록합니다. [Semantic Versioning](https://semver.org/lang/ko/) 규칙을 따릅니다.
 
+## [0.5.2] — 2026-04-30
+
+### 핵심 — GitLab 토큰을 OS keyring 으로 (`glab auth login` 우선) + `.env.example.scv` 영어화
+
+DISCUSS.md v0.5.0 회고의 권장 #1 (secret backend 통합) 을 **최소 부담 경로** 로 해결. 별도 keyring 추상화 layer (`lib/secrets.sh`) 만들지 않고, 이미 SCV 의존인 vendor CLI (`gh` / `glab`) 가 OS native keyring 자동 처리하는 점을 활용. GitLab 사용자는 `glab auth login` 하면 토큰이 macOS Keychain / Linux libsecret / Windows Credential Manager 에 저장되고, SCV 가 자동으로 `glab auth token` 으로 읽어옴. 평문 `.env` 노출 제거.
+
+추가로 v0.4.x i18n 정리에서 누락됐던 `template/.env.example.scv` 한국어 주석을 영어로 통째 번역. 글로벌 사용자 일관성.
+
+### Changed
+
+- **`scripts/lib/pr-platform.sh`** — `_pr_gitlab_token` 을 2-tier 로:
+  - **Tier 1 (preferred, v0.5.2+)**: `glab` CLI 가 PATH 에 있으면 `glab auth token` 호출 (self-hosted 시 `--hostname` 자동 부여 — `GITLAB_HOST` env 에서 hostname 추출). 토큰 OS native keyring 에 자동 저장된 상태.
+  - **Tier 2 (fallback)**: `GITLAB_TOKEN` env. backwards compat 유지 — v0.5.0/0.5.1 에서 `.env` 평문 박은 사용자 무영향.
+  - **둘 다 없을 때**: 새 에러 메시지가 두 옵션 모두 안내 ("Run 'glab auth login'" + "Or set GITLAB_TOKEN in .env").
+  - Sanity check: `glab auth token` 이 빈 문자열·whitespace 포함·8 자 미만 반환하면 토큰 아닌 진단으로 간주하고 Tier 2 로 fall through.
+
+- **`scripts/help.sh`** — Dependency check 에 `glab` row 추가 (recommended tier, "GitLab MR auth (preferred over GITLAB_TOKEN .env)"). 부재 시 `gh` 와 함께 install hint 마지막 줄에 GitLab CLI 설치 + `glab auth login` 안내 링크.
+
+- **`template/.env.example.scv`** — 두 가지 변화:
+  - **`GITLAB_TOKEN` 주석 갱신** — `glab auth login` 권장이 default 가이드. Tier 2 fallback (deprecated 아님) 으로 명시.
+  - **전체 한국어 주석을 영어로 번역** — v0.4.x i18n 정리에서 누락된 부분. 117 줄 영어화. 동작 변화 0.
+
+### Tests
+
+- 신규 섹션 **[11ww]** (8 assertion) — `_pr_gitlab_token` 의 4 시나리오 + whitespace token sanity:
+  1. `glab` 있고 token 반환 → 그 토큰 사용 (`GITLAB_TOKEN` env 무시)
+  2. `glab` 있고 exit 1 → `GITLAB_TOKEN` env fallback
+  3. `glab` 부재 → `GITLAB_TOKEN` env fallback
+  4. 둘 다 없음 → exit 1 + 에러 메시지에 두 옵션 모두 명시
+  5. `glab` 가 `"no token"` 같은 진단 문자열 반환 → 토큰 아닌 것으로 간주, Tier 2 fall through
+- mock `glab` via `PATH` 의 임시 디렉토리. 실 `glab` CLI 의존 없음.
+- **[11tt]** 에 glab row 검증 한 줄 추가 (deps check 의 8 번째 row 정상 출력).
+- **[11uu]** 의 `.env.example.scv` 영어화 따라 한국어 매치 1 곳 영어로 갱신 ("Fast-path 임계점" → "Fast-path threshold").
+- 회귀: 442 → **451 PASS** (+9 assertion) / 0 FAIL.
+
+### Backwards compat
+
+- v0.5.0/0.5.1 사용자 무영향. `.env` 의 `GITLAB_TOKEN` 그대로 동작 (Tier 2). 새로 `glab auth login` 한 사용자만 keyring 경로로 자동 전환.
+- archived TESTS.md / hydrated 문서 / orphan branch layout 모두 무영향.
+- self-hosted GitLab: `GITLAB_HOST` 가 `glab` 의 `--hostname` 으로 자동 forwarding.
+
+### 비채택 (DISCUSS §4.4 권장 중 v0.5.2 제외)
+
+- **secrets.sh 추상화 + Slack/Discord keyring 적용** — Slack bot token / Discord bot token 은 vendor CLI 가 issue + keyring 저장하는 흐름 자체가 없음 (Slack 은 dashboard 에서 발급, 사용자 어딘가 paste 필요). v0.6+ 에 자체 keyring 추상화 도입 시 같이 검토.
+- **다국어 동적 template** — `.env.example.scv` 와 `template/scv/*.md` 의 사용자 선호 언어별 분기. hydrate 시점에 SCV_LANG 미확정 + 재-render trigger 설계 필요. v0.6 후보로 미룸.
+- **`pass` (GPG-based) 백엔드** — power-user 도구라 SCV 사용자 모집단에 비해 진입 장벽 큼. 기존 `gh` / `glab` keyring 으로 대부분 케이스 cover. 별도 추가 필요 없음.
+
 ## [0.5.1] — 2026-04-30
 
 ### 핵심 — DISCUSS.md v0.5.0 회고에서 도출된 docs-only patch

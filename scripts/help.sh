@@ -137,6 +137,7 @@ _scv_check_dep() {
 
 _scv_check_dep git     required    "git operations (core)"
 _scv_check_dep gh      recommended "GitHub PR auto-create (SCV_PR_PLATFORM=github)"
+_scv_check_dep glab    recommended "GitLab MR auth (preferred over GITLAB_TOKEN .env)"
 _scv_check_dep curl    recommended "GitLab MR + Slack/Discord HTTP"
 _scv_check_dep jq      recommended "JSON parsing for GitLab MR + Notifier"
 _scv_check_dep ffmpeg  optional    "PR video → GIF inline preview"
@@ -148,6 +149,9 @@ if [[ ${#DEP_MISSING_HARD[@]} -gt 0 || ${#DEP_MISSING_SOFT[@]} -gt 0 ]]; then
   echo "    Install hint: macOS \`brew install ${ALL_MISSING[*]}\` · Debian/Ubuntu \`sudo apt install ${ALL_MISSING[*]}\`"
   if printf '%s\n' "${ALL_MISSING[@]}" | grep -qx gh; then
     echo "    (gh on Debian/Ubuntu needs the GitHub apt repo — see https://github.com/cli/cli/blob/trunk/docs/install_linux.md)"
+  fi
+  if printf '%s\n' "${ALL_MISSING[@]}" | grep -qx glab; then
+    echo "    (glab — install via https://gitlab.com/gitlab-org/cli/-/blob/main/docs/installation.md, then run 'glab auth login')"
   fi
 fi
 
