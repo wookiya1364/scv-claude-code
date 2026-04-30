@@ -62,6 +62,37 @@ Summarize to the user:
 - Whether the graph was updated.
 - What existing promote folders / archive folders already exist.
 
+#### Step 2.1 — Reference scan (deliberate sources only)
+
+Scan the **two deliberate sources** for URLs to pre-populate `refs:` in the PLAN.md scaffold (Step 5). LLM applies the URL pattern table at §Step 3.1.5 to determine `type` and `id`/`url`.
+
+| Source | Scan? | Why |
+|---|---|---|
+| `scv/raw/` files (changed window per `readpath.json`) | ✅ | User deliberately dropped artifacts here |
+| The current `/scv:promote` invocation argument text | ✅ | User typed it explicitly for this promote |
+| Earlier user messages / prior `/scv:*` invocations in this conversation | ⚠️ See below |
+| Unrelated earlier conversation | ❌ | Out of scope — would violate SCV's "deliberate clarification" purpose |
+
+For **earlier conversation** (e.g., user did `/scv:help "...URL..."` before this `/scv:promote`):
+
+- Do **NOT auto-populate** `refs:` from these mentions — that would short-circuit the clarification dialog SCV is built around.
+- DO surface them as **suggestions** in the Plan summary so the user can deliberately re-mention them in dialog answers if they want them included. Use LLM judgment to filter only URLs whose topic matches the current promote.
+
+Display the scan result to the user with **source attribution**. Example output:
+
+```
+Plan summary:
+  - 3 raws changed (added=1, modified=2, removed=0)
+  - graph: built
+  - Detected refs (will auto-populate to PLAN.md):
+      [jira] PAY-1234        from scv/raw/meeting-notes.md
+      [confluence] design-v2 from /scv:promote argument
+  - 💡 Earlier you mentioned in /scv:help: linear ENG-567
+      (not auto-added — paste into your dialog answers if you want it in refs)
+```
+
+If no URLs found in either deliberate source, omit the "Detected refs" line entirely. If no earlier-conversation suggestion either, omit the 💡 line.
+
 ### Step 3 — Dialog (for each candidate promote folder)
 
 #### Step 3.0 — Split suggestion (epic grouping)
@@ -115,12 +146,44 @@ After user picks:
 
 #### Step 3.1 — Single-folder dialog (no split)
 
-Use `AskUserQuestion` to confirm with the user. Typical batch:
+**Preamble (conditional — emit ONCE before the question batch, not via `AskUserQuestion`).**
+
+Show this preamble (one short text line, in the user's preferred language) only when **both** of the following hold:
+
+- Step 2.1's "Detected refs" came up empty (no URLs in raw or `/scv:promote` argument).
+- The project's `.env` has at least one of `JIRA_BASE_URL` / `LINEAR_BASE_URL` / `CONFLUENCE_BASE_URL` / etc. set (signal: this team uses external trackers).
+
+Suggested wording (English):
+
+> 💡 Tip: I didn't find any related ticket / doc URLs in your raw materials or invocation. If this plan has any (Jira / Linear / Confluence / GitHub PR / Google Doc / Notion / etc.), include them in any of your answers below — I'll auto-detect and add them to `refs:`.
+
+If neither condition holds (URLs already extracted, or team doesn't use external trackers), skip the preamble entirely — keep the dialog clean.
+
+Then use `AskUserQuestion` for the batch (questions stay clean — do NOT mix the URL ask into the question text or option descriptions):
 
 1. **Scope**: "Do you want a single promote folder covering all N changed raws, or separate folders per topic?"
 2. **Slug(s)**: For each folder, ask: "Slug for this promote folder? (kebab-case, 3~5 words)". Combine with `TODAY` and `AUTHOR` from the helper to produce `<YYYYMMDD>-<AUTHOR>-<slug>/`.
 3. **Title**: "One-line title for `<folder>`?" (will go in PLAN.md frontmatter `title`).
 4. **Raw sources**: For each folder, confirm which raw file paths belong to it (default: all changed raws; user may split).
+
+#### Step 3.1.5 — Parse URLs from dialog answers (URL pattern → ref type)
+
+After collecting answers, scan **all** of the user's free-text responses for URLs. For each match, derive a `refs:` entry using this table. Strip the URL from the text field (e.g., title) so only the plain text remains.
+
+| URL pattern | `type` | `id` (when extractable) |
+|---|---|---|
+| `*.atlassian.net/browse/<KEY>-<N>` | `jira` | `<KEY>-<N>` |
+| `linear.app/<workspace>/issue/<ID>` | `linear` | `<ID>` |
+| `github.com/<org>/<repo>/pull/<N>` | `pr` | (use full URL) |
+| `gitlab.com/<group>/<project>/-/merge_requests/<N>` | `pr` | (use full URL) |
+| `*.atlassian.net/wiki/*` or `*confluence*` | `confluence` | (use full URL) |
+| `docs.google.com/document/d/<ID>` | `google-doc` | (use full URL) |
+| `*.notion.so/*` | `notion` | (use full URL) |
+| any other URL | `link` | (use full URL) |
+
+**`.env` BASE_URL inference**: if the project's `.env` defines `<TYPE>_BASE_URL` and the URL matches that base, prefer storing only `id:` (the URL is inferred at display time). Otherwise store `url:` directly. Both `id` and `url` together is also valid.
+
+Merge these dialog-extracted refs with Step 2.1's deliberate-source refs. Dedupe by URL/id.
 
 ### Step 4 — Collision check
 
@@ -230,6 +293,26 @@ refs: []
 - [`tests/e2e-scenarios.md`](./tests/e2e-scenarios.md)
 -->
 ```
+
+**Populating `refs:`**: replace the `refs: []` placeholder with the merged set from Step 2.1 (deliberate-source extraction) + Step 3.1.5 (dialog-answer extraction). Use the canonical YAML form:
+
+```yaml
+refs:
+  - type: jira
+    id: PAY-1234
+  - type: pr
+    url: https://github.com/org/repo/pull/567
+```
+
+**Source attribution after writing**: print a one-line summary so the user sees what landed in `refs:`. Example:
+
+```
+✓ Created scv/promote/<folder>/
+  refs: 3 auto-detected (2 from raw, 1 from dialog answer)
+  edit PLAN.md frontmatter to add more.
+```
+
+If `refs:` is empty, omit the count line; just confirm the folder was created.
 
 ### Step 6 — Update readpath baseline
 

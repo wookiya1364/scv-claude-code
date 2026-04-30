@@ -15,7 +15,7 @@ Every change becomes a plan + tests before merging, and those tests accumulate i
 <a href="https://github.com/wookiya1364/scv-claude-code/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/wookiya1364/scv-claude-code?label=release&color=blue" /></a>
 <img alt="License" src="https://img.shields.io/badge/license-MIT-green" />
 <img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude%20Code-plugin-D97757" />
-<img alt="Regression" src="https://img.shields.io/badge/tests-488_PASS-brightgreen" />
+<img alt="Regression" src="https://img.shields.io/badge/tests-528_PASS-brightgreen" />
 <img alt="i18n" src="https://img.shields.io/badge/i18n-EN_·_KO_·_JA-purple" />
 </p>
 
@@ -151,6 +151,20 @@ my-project/
 ```
 
 > **Non-destructive**: your existing root `CLAUDE.md` and `.env.example` stay intact. SCV creates `scv/` plus a separate `.env.example.scv` (notifier vars) at the root, and appends its ignore rules to an existing `.gitignore` (or creates one from its fragment). Want Claude to be SCV-aware in casual conversations? Add one line to your root `CLAUDE.md`: `> This project uses SCV — see scv/CLAUDE.md.`
+
+> **Standard docs are optional**. In adoption mode (the default), 7 of the 9 docs (`DOMAIN`, `ARCHITECTURE`, `DESIGN`, `AGENTS`, `TESTING`, `REPORTING`, `RALPH_PROMPT`) are seeded as `status: N/A` and **stay that way until you decide to document a specific subsystem**. SCV is fully usable without filling them — for existing projects, just do feature work and bug fixes through `/scv:promote` / `/scv:work` / `/scv:regression`. N/A is a steady state, not a backlog.
+
+## External Refs (Jira / Linear / PR / Docs) — Auto-Detection
+
+SCV's PLAN.md frontmatter has a vendor-agnostic `refs:` array (Jira / Linear / Confluence / GitHub PR / GitLab MR / Google Doc / Notion / etc.). `/scv:promote` auto-detects URLs from **deliberate sources** and pre-populates `refs:`:
+
+- URLs in `scv/raw/` files (drop a meeting note with the ticket URL inside).
+- URLs in your `/scv:promote "...URL..."` invocation argument.
+- URLs in your dialog answers (when `/scv:promote` asks for slug/title/etc., paste any URLs alongside — they're parsed automatically).
+
+**Setup (optional)**: in your `.env`, set `JIRA_BASE_URL` / `LINEAR_BASE_URL` / `CONFLUENCE_BASE_URL` so PLAN.md can store just `id: PAY-1234` and the URL is inferred at display time. Without these, full URLs are stored. See `template/.env.example.scv` for the commented placeholders.
+
+`/scv:work` then groups refs by type when reporting, and the auto-created PR/MR body includes them. `/scv:regression` and archive preserve them verbatim.
 
 ## Notifier Setup (.env) — Optional
 
@@ -309,6 +323,20 @@ my-project/
 
 > **Non-destructive**: 본인의 루트 `CLAUDE.md` 와 `.env.example` 은 그대로 보존됩니다. SCV 는 `scv/` 를 만들고, 루트에 별도 `.env.example.scv` (Notifier 변수) 를 추가하며, 기존 `.gitignore` 가 있으면 SCV 규칙만 뒤에 붙입니다 (없으면 fragment 에서 생성). 평소 대화에서 Claude 가 SCV 를 인지하길 원하면 본인의 루트 `CLAUDE.md` 에 한 줄: `> 이 프로젝트는 SCV 사용 — scv/CLAUDE.md 참조.`
 
+> **표준 문서는 옵션입니다**. adoption 모드 (default) 에선 9 문서 중 7 개 (`DOMAIN`, `ARCHITECTURE`, `DESIGN`, `AGENTS`, `TESTING`, `REPORTING`, `RALPH_PROMPT`) 가 `status: N/A` 로 시드되고, **본인이 특정 subsystem 을 문서화하기로 결정할 때까지 그대로 둡니다**. 채우지 않아도 SCV 는 정상 동작 — 기존 프로젝트는 `/scv:promote` / `/scv:work` / `/scv:regression` 으로 피쳐 + 버그 픽스만 하시면 됩니다. N/A 는 backlog 가 아니라 정상 상태입니다.
+
+## 외부 Refs (Jira / Linear / PR / 문서) — 자동 인식
+
+SCV 의 PLAN.md frontmatter 는 vendor-agnostic `refs:` 배열을 가집니다 (Jira / Linear / Confluence / GitHub PR / GitLab MR / Google Doc / Notion 등). `/scv:promote` 가 **deliberate source** 의 URL 을 자동 인식해서 `refs:` 에 미리 채웁니다:
+
+- `scv/raw/` 안 파일의 URL (회의록에 티켓 URL 같이 적어두면 됨).
+- `/scv:promote "...URL..."` 호출 인자 안의 URL.
+- dialog 답변 안의 URL (`/scv:promote` 가 slug / title 등을 물을 때 URL 같이 paste — 자동 파싱).
+
+**Setup (옵션)**: `.env` 에 `JIRA_BASE_URL` / `LINEAR_BASE_URL` / `CONFLUENCE_BASE_URL` 박으면 PLAN.md 가 `id: PAY-1234` 만 저장하고 URL 은 표시 시점에 추론됨. 안 박으면 full URL 그대로 저장. `template/.env.example.scv` 의 주석 placeholder 참조.
+
+`/scv:work` 가 type 별로 그룹핑해서 보고하고, 자동 생성 PR/MR body 에도 포함됩니다. `/scv:regression` 과 archive 가 그대로 보존.
+
 ## 협업툴 설정 (.env) — 선택 사항
 
 Phase 결과를 Slack 이나 Discord 에 자동으로 올리려면:
@@ -465,6 +493,20 @@ my-project/
 ```
 
 > **Non-destructive**: ご自身のルート `CLAUDE.md` と `.env.example` はそのまま保持されます。SCV は `scv/` を作成し、ルートに別途 `.env.example.scv` (Notifier 変数) を追加し、既存の `.gitignore` があれば SCV ルールのみ末尾に追加します (なければ fragment から生成)。通常の対話で Claude に SCV を認識させたい場合は、ご自身のルート `CLAUDE.md` に 1 行: `> このプロジェクトは SCV を使用 — scv/CLAUDE.md 参照。`
+
+> **標準ドキュメントは任意です**。adoption モード (default) では 9 ドキュメントのうち 7 つ (`DOMAIN`, `ARCHITECTURE`, `DESIGN`, `AGENTS`, `TESTING`, `REPORTING`, `RALPH_PROMPT`) が `status: N/A` で seed され、**特定の subsystem をドキュメント化すると決めるまでそのまま** です。埋めなくても SCV は正常動作 — 既存プロジェクトでは `/scv:promote` / `/scv:work` / `/scv:regression` でフィーチャー実装と バグ修正のみで OK。N/A は backlog ではなく定常状態です。
+
+## 外部 Refs (Jira / Linear / PR / ドキュメント) — 自動検出
+
+SCV の PLAN.md frontmatter は vendor-agnostic な `refs:` 配列を持ちます (Jira / Linear / Confluence / GitHub PR / GitLab MR / Google Doc / Notion 等)。`/scv:promote` が **deliberate source** の URL を自動検出し `refs:` に予め populate します:
+
+- `scv/raw/` 内ファイルの URL (議事録にチケット URL を含めれば OK)。
+- `/scv:promote "...URL..."` 呼び出し引数中の URL。
+- dialog 回答中の URL (`/scv:promote` が slug / title 等を尋ねる際 URL も貼り付け — 自動 parse)。
+
+**Setup (任意)**: `.env` に `JIRA_BASE_URL` / `LINEAR_BASE_URL` / `CONFLUENCE_BASE_URL` を設定すると PLAN.md は `id: PAY-1234` のみ保存し、URL は表示時に推論されます。未設定なら full URL を直接保存。`template/.env.example.scv` のコメント placeholder 参照。
+
+`/scv:work` が type 別にグループ化して報告し、自動生成される PR/MR body にも含まれます。`/scv:regression` と archive がそのまま保持。
 
 ## 通知ツール設定 (.env) — 任意
 

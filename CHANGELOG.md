@@ -2,6 +2,63 @@
 
 이 저장소의 변경사항을 기록합니다. [Semantic Versioning](https://semver.org/lang/ko/) 규칙을 따릅니다.
 
+## [0.6.1] — 2026-04-30
+
+### 핵심 — 표준 문서 부담 완화 + 외부 refs 자동 인식 (deliberate sources only, dialog-driven clarification 보존)
+
+DISCUSS.md 의 두 약점 ("9 표준 문서가 부담" + "DRY 잔재") 동시 마무리. 사용자 가시 표면 (출력 / docs / dialog) 만 변경 — 동작 표면 호환성 유지.
+
+### Changed
+
+- **`scripts/help.sh`** — Document status 출력 압축. `draft = 0` (정상 adoption mode 운영) 시 9 줄 → 1 줄: "Standard docs: 2 active, 7 N/A — adoption mode default. Lift any N/A doc to draft only when you decide to document that subsystem." `draft > 0` 시 기존 multi-line + "needs filling" 힌트 유지. 첫 사용자가 N/A 9 개를 "9 항목 ToDo" 로 오해하는 마찰 mitigation.
+
+- **`template/scv/CLAUDE.md`** — adoption mode 단락 강화. "N/A is a steady state, not a backlog. Existing large projects can run SCV indefinitely with all 7 docs at status: N/A — just do feature work and bug fixes through /scv:promote / /scv:work / /scv:regression." + "Lift one doc at a time when there's a real driver — never preemptively." 기존 프로젝트 사용자 안심.
+
+- **`commands/promote.md`** — Y5+ refs 자동 인식 흐름 4 단계 추가/갱신:
+  - **Step 2.1 (신규)** — Reference scan from deliberate sources only. (1) `scv/raw/` 안 URL (2) `/scv:promote` 호출 인자 안 URL 만 자동 populate. **이전 conversation (예: `/scv:help "...URL..."`) 은 자동 add 안 함** — 대신 LLM topic match 로 "💡 Earlier you mentioned: ... (paste into your dialog answers if you want it in refs)" suggestion 으로만 표시. SCV 의 "deliberate clarification" 철학 보존 — casual mention 으로 PLAN.md 더럽히지 않음.
+  - **Step 3.1 머리 (신규)** — Conditional preamble: Step 2.1 에서 URL 추출 0 + `.env` 에 `*_BASE_URL` 하나라도 set 시에만 한 줄 텍스트 hint ("if this plan has any URLs, include them in any of your answers"). **AskUserQuestion 새 단계 추가 안 함** — 기존 question batch (Scope / Slug / Title / Raw sources) 에 "URL 도 paste 해주세요" 섞으면 choice 혼란 발생하는 우려 회피.
+  - **Step 3.1.5 (신규)** — Dialog 답변 안 URL parsing. URL pattern → ref type table: jira (`*.atlassian.net/browse/<KEY>-<N>`) / linear (`linear.app/.../issue/<ID>`) / pr (GitHub + GitLab MR) / confluence / google-doc / notion / link. `.env` 의 `<TYPE>_BASE_URL` 일치 시 `id:` 만 저장, 외엔 `url:` 직접. Step 2.1 + Step 3.1.5 결과 dedupe.
+  - **Step 5 (갱신)** — Source attribution after writing. PLAN.md 작성 후 한 줄 출력: "refs: 3 auto-detected (2 from raw, 1 from dialog answer) · edit PLAN.md frontmatter to add more." 사용자가 어디서 detected 됐는지 가시화.
+
+- **`template/.env.example.scv`** — `JIRA_BASE_URL` / `LINEAR_BASE_URL` / `CONFLUENCE_BASE_URL` 주석 placeholder 단락 추가. 사용자가 setup 단계에서 refs 자동 인식 + Step 3.1 conditional preamble 의 BASE_URL 시그널 인지.
+
+- **`README.md`** (3 언어 — English / 한국어 / 日本語):
+  - "표준 문서는 옵션입니다 / N/A is a steady state, not a backlog" callout — adoption mode 기본 동작 안심.
+  - "External Refs (Jira / Linear / PR / Docs) — Auto-Detection" 신규 섹션 — 3 deliberate sources (raw / args / dialog answer) 명시 + `.env` BASE_URL setup 안내 + `/scv:work` / regression / archive 보존.
+  - 회귀 배지: 488 PASS → 528 PASS.
+
+- **`.claude-plugin/plugin.json`** — version `0.6.0` → `0.6.1`.
+
+### Tests
+
+- 신규 섹션 **[11yy]** (~40 assertion):
+  - `help.sh` 의 adoption mode 압축 출력 (한 줄, "adoption mode default", "Lift any N/A doc to draft" 문구) + draft 분기 (multi-line + "needs filling")
+  - `template/scv/CLAUDE.md` 의 "N/A is a steady state, not a backlog" + "Lift one doc at a time when there's a real driver" 문구
+  - `commands/promote.md` 의 Step 2.1 (deliberate sources only / 자동 populate 거부 / suggestion 표시) + Step 3.1 conditional preamble + Step 3.1.5 URL pattern table (jira / linear / pr GitLab + GitHub / google-doc / notion) + Step 5 source attribution
+  - `template/.env.example.scv` 의 3 BASE_URL placeholder
+  - `README.md` 3 언어 의 표준 문서 옵션 + 외부 Refs 단락 영어/한국어/일본어 매치
+- 회귀: 488 → **528 PASS** (+40 assertion) / 0 FAIL.
+
+### Backwards compat
+
+- 기존 PLAN.md frontmatter `refs:` 스키마 변경 0. 기존 archived 데이터 무영향.
+- `/scv:work` / `/scv:regression` / `/scv:status` / `/scv:report` / `/scv:sync` / `/scv:install-deps` 동작 변화 0.
+- `/scv:promote` 의 사용자 표면 변화: (1) Plan summary 에 "Detected refs" 라인 추가 (URL 발견 시) (2) Step 3.1 conditional preamble (조건 충족 시) (3) Step 5 의 source attribution 한 줄. 기존 dialog 4 questions 동일.
+- `/scv:help` 의 Document status 출력 형식 변경 — `draft = 0` 시 한 줄 (이전 multi-line) / `draft > 0` 시 기존 동일.
+- archived TESTS.md / hydrated 문서 / orphan branch layout 모두 무영향.
+
+### 검증 한계 (정직한 안내)
+
+- URL pattern matching 의 LLM judgment quality 는 회귀 mock 으로 직접 측정 못 함. instruction 존재 검증만.
+- "Earlier conversation suggestion" 의 topic match 정확도도 LLM 영역 — false positive 발생 시 사용자가 dialog 답변에서 "skip" 명시하거나 PLAN.md 직접 편집.
+- 모든 변경은 docs / instruction / 출력 표면 영역 — 실 코드 동작 변화 0 (help.sh 의 출력 분기만 코드 수정).
+
+### 비채택
+
+- **conversation 전체 무차별 scan (Y4-loose)** — false positive 큼 + SCV 의 "deliberate clarification" 가치와 모순.
+- **/scv:help 의 URL 자동 add (Y4-balanced)** — casual mention 을 PLAN.md 에 박는 건 명확화 단계 단축. Y5+ 의 suggestion-only 가 안전한 답.
+- **AskUserQuestion 새 step 추가** — choice question 과 URL 입력 혼란 우려. preamble + dialog parsing 로 충분.
+
 ## [0.6.0] — 2026-04-30
 
 ### 핵심 — `/scv:install-deps` 신규 슬래시 명령어 + 전체 OS 자동 감지 + graphify 인지

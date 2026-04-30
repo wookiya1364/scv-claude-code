@@ -2177,6 +2177,94 @@ assert_contains "$WORK_CMD" "github.com/safishamsi/graphify"
 assert_contains "$PROMOTE_CMD" "github.com/safishamsi/graphify"
 
 echo
+echo "=== [11yy] v0.6.1 — 표준 문서 부담 완화 + Y5+ refs 자동 인식 ==="
+
+# --- help.sh 의 Document status 압축 (draft = 0 시 한 줄) ---
+HELP_ADOPTION_OUT=$(bash <<INNER_EOF
+TMP=\$(mktemp -d)
+cd "\$TMP"
+bash $STANDARD_ROOT/scripts/hydrate.sh init . >/dev/null 2>&1
+bash $STANDARD_ROOT/scripts/help.sh 2>&1
+cd /; rm -rf "\$TMP"
+INNER_EOF
+)
+assert_out_contains "Standard docs:" "$HELP_ADOPTION_OUT"           "help.sh: adoption 모드 한 줄 출력"
+assert_out_contains "adoption mode default" "$HELP_ADOPTION_OUT"    "help.sh: adoption 모드 명시 문구"
+assert_out_contains "Lift any N/A doc to draft" "$HELP_ADOPTION_OUT" "help.sh: lift 안내"
+# Document status 가 multi-line block 으로 안 출력 됨 (draft=0 일 때)
+echo "$HELP_ADOPTION_OUT" | grep -q "^  Document status:" \
+  && fail "help.sh: 압축 안 됨 (draft=0 인데 multi-line)" \
+  || pass "help.sh: draft=0 이면 multi-line 안 출력 (압축 작동)"
+
+# --- help.sh 의 draft 분기 (적어도 1 개 draft 면 multi-line 유지) ---
+HELP_DRAFT_OUT=$(bash <<INNER_EOF
+TMP=\$(mktemp -d)
+cd "\$TMP"
+bash $STANDARD_ROOT/scripts/hydrate.sh init . >/dev/null 2>&1
+sed -i 's/^status: N\/A\$/status: draft/' scv/DOMAIN.md
+bash $STANDARD_ROOT/scripts/help.sh 2>&1
+cd /; rm -rf "\$TMP"
+INNER_EOF
+)
+assert_out_contains "Document status:" "$HELP_DRAFT_OUT"            "help.sh: draft 있을 때 multi-line"
+assert_out_contains "draft   : DOMAIN" "$HELP_DRAFT_OUT"            "help.sh: draft DOMAIN 표시"
+assert_out_contains "needs filling" "$HELP_DRAFT_OUT"               "help.sh: needs filling hint"
+
+# --- scv/CLAUDE.md 의 adoption 강화 단락 ---
+SCV_CLAUDE="$STANDARD_ROOT/template/scv/CLAUDE.md"
+assert_contains "$SCV_CLAUDE" "N/A is a steady state, not a backlog"
+assert_contains "$SCV_CLAUDE" "Lift one doc at a time when there's a real driver"
+
+# --- commands/promote.md Y5+ Step 2.1 / 3.1 / 3.1.5 / 5 instruction ---
+PROMOTE_CMD="$STANDARD_ROOT/commands/promote.md"
+assert_contains "$PROMOTE_CMD" "Step 2.1 — Reference scan"
+assert_contains "$PROMOTE_CMD" "deliberate sources only"
+assert_contains "$PROMOTE_CMD" "Earlier user messages / prior"
+assert_contains "$PROMOTE_CMD" "Do **NOT auto-populate**"
+assert_contains "$PROMOTE_CMD" "would short-circuit the clarification"
+assert_contains "$PROMOTE_CMD" "Detected refs (will auto-populate"
+assert_contains "$PROMOTE_CMD" "Earlier you mentioned in"
+
+# Step 3.1 conditional preamble
+assert_contains "$PROMOTE_CMD" "Preamble (conditional"
+assert_contains "$PROMOTE_CMD" "JIRA_BASE_URL"
+assert_contains "$PROMOTE_CMD" "do NOT mix the URL ask"
+
+# Step 3.1.5 URL pattern table
+assert_contains "$PROMOTE_CMD" "Step 3.1.5 — Parse URLs from dialog answers"
+assert_contains "$PROMOTE_CMD" "atlassian.net/browse"
+assert_contains "$PROMOTE_CMD" "linear.app"
+assert_contains "$PROMOTE_CMD" "github.com/<org>/<repo>/pull"
+assert_contains "$PROMOTE_CMD" "gitlab.com/<group>/<project>/-/merge_requests"
+assert_contains "$PROMOTE_CMD" "docs.google.com/document/d"
+assert_contains "$PROMOTE_CMD" "notion.so"
+
+# Step 5 source attribution after writing
+assert_contains "$PROMOTE_CMD" "Source attribution after writing"
+assert_contains "$PROMOTE_CMD" "auto-detected"
+
+# --- .env.example.scv BASE_URL placeholders ---
+ENV_EXAMPLE="$STANDARD_ROOT/template/.env.example.scv"
+assert_contains "$ENV_EXAMPLE" "JIRA_BASE_URL=https://company.atlassian.net"
+assert_contains "$ENV_EXAMPLE" "LINEAR_BASE_URL=https://linear.app/company"
+assert_contains "$ENV_EXAMPLE" "CONFLUENCE_BASE_URL=https://confluence.example.com"
+assert_contains "$ENV_EXAMPLE" "External refs base URLs"
+
+# --- README 의 표준 문서 옵션 + refs 단락 (3 lang) ---
+README="$STANDARD_ROOT/README.md"
+# 영어
+assert_contains "$README" "Standard docs are optional"
+assert_contains "$README" "N/A is a steady state, not a backlog"
+assert_contains "$README" "External Refs (Jira / Linear / PR / Docs)"
+assert_contains "$README" "auto-detects URLs from **deliberate sources**"
+# 한국어
+assert_contains "$README" "표준 문서는 옵션입니다"
+assert_contains "$README" "외부 Refs (Jira / Linear / PR / 문서) — 자동 인식"
+# 일본어
+assert_contains "$README" "標準ドキュメントは任意です"
+assert_contains "$README" "外部 Refs (Jira / Linear / PR / ドキュメント) — 自動検出"
+
+echo
 echo "=== [10] sync --dry-run (version detection) ==="
 # Force a local divergence on a preserve-policy file so sync reports SKIP
 printf '\n<!-- local note: force divergence -->\n' >> "$APP/scv/AGENTS.md"

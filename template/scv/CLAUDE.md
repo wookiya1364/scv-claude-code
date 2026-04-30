@@ -11,8 +11,9 @@ SCV supports two modes at hydrate time. **The default (adoption) mode is enough 
 - `bash hydrate.sh init .` (no flag)
 - Standard docs (`DOMAIN`, `ARCHITECTURE`, `DESIGN`, `AGENTS`, `TESTING`, `REPORTING`, `RALPH_PROMPT`) are all seeded with `status: N/A`.
 - **No INTAKE forced.** `/scv:promote` and `/scv:work` are usable immediately.
-- When needed, document only specific subsystems by walking them `draft → active`.
-- Hook to external docs (Confluence etc.) via `refs:`.
+- **N/A is a steady state, not a backlog.** Existing large projects can run SCV indefinitely with all 7 docs at `status: N/A` — just do feature work and bug fixes through `/scv:promote` / `/scv:work` / `/scv:regression`. Standard docs are an *opt-in tool* for when a specific subsystem genuinely needs documenting (e.g., new team members onboarding, post-incident learning, periodic audit).
+- When needed, document only specific subsystems by walking them `draft → active`. Lift one doc at a time when there's a real driver — never preemptively.
+- Hook to external docs (Confluence etc.) via `refs:` in PLAN.md frontmatter — no need to rewrite their content into SCV's standard docs.
 
 ### `--new` — greenfield (new project)
 

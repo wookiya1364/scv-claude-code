@@ -185,15 +185,23 @@ if [[ $HYDRATED -eq 1 ]]; then
     esac
   done
 
-  echo "  Document status:"
-  if [[ ${#ACTIVE_DOCS[@]} -gt 0 ]]; then
-    printf '    active  : %s\n' "${ACTIVE_DOCS[*]}"
-  fi
-  if [[ ${#DRAFT_DOCS[@]} -gt 0 ]]; then
+  if [[ ${#DRAFT_DOCS[@]} -eq 0 ]]; then
+    # No docs in draft state — adoption mode is operating normally. Compress
+    # to one line so first-time users don't read N/A as "9 things I owe".
+    # In adoption mode, N/A is the steady state.
+    printf '  Standard docs: %d active, %d N/A — adoption mode default. Lift any N/A doc to draft only when you decide to document that subsystem.\n' \
+      "${#ACTIVE_DOCS[@]}" "${#NA_DOCS[@]}"
+  else
+    # At least one doc is in draft state — the user is actively filling
+    # something, so show the breakdown so the "needs filling" hint surfaces.
+    echo "  Document status:"
+    if [[ ${#ACTIVE_DOCS[@]} -gt 0 ]]; then
+      printf '    active  : %s\n' "${ACTIVE_DOCS[*]}"
+    fi
     printf '    draft   : %s  ← needs filling\n' "${DRAFT_DOCS[*]}"
-  fi
-  if [[ ${#NA_DOCS[@]} -gt 0 ]]; then
-    printf '    N/A     : %s\n' "${NA_DOCS[*]}"
+    if [[ ${#NA_DOCS[@]} -gt 0 ]]; then
+      printf '    N/A     : %s\n' "${NA_DOCS[*]}"
+    fi
   fi
 fi
 
