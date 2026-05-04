@@ -351,6 +351,13 @@ options:
 [1] "Yes — auto-create PR (recommended)"
     description:
     "The following happens automatically:
+    - Read `lang:` from the archived PLAN.md frontmatter (set by /scv:promote
+      Step 0). All section headings, fixed phrases, and Claude-written narrative
+      in the PR body — including the commit message, PR title, and PR body
+      footer — are written in this language. pr-helper.sh's section labels
+      (## Summary / ## Tests / ## Architecture diagrams / 🗂 Archived ...)
+      branch on this lang field (en / ko / ja, with English fallback for
+      free-form / unset).
     - Assemble PR body from key sections of PLAN.md / TESTS.md / ARCHIVED_AT.md
     - If FEATURE_ARCHITECTURE.md exists, inline its two Mermaid blocks (Component
       data flow + Position in whole architecture) into the PR body — GitHub and

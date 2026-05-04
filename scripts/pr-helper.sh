@@ -136,6 +136,40 @@ EPIC=$(yaml_get "$PLAN_FILE" epic)
 KIND=$(yaml_get "$PLAN_FILE" kind)
 [[ -z "$KIND" ]] && KIND="feature"
 
+# v0.7.3+ — read PLAN.md frontmatter `lang:` for PR body localization.
+# Set by /scv:promote Step 0. Empty / unknown values fall back to English.
+LANG_PREF=$(yaml_get "$PLAN_FILE" lang)
+case "$LANG_PREF" in
+  korean|ko)
+    L_SUMMARY="요약"; L_GOALS="목표 / 비목표"; L_STEPS="단계"
+    L_TESTS="테스트"; L_HOW_TO_RUN="실행 방법"; L_PASS_CRITERIA="통과 기준"
+    L_ARCH_DIAGRAMS="아키텍처 도식"; L_TEST_EVIDENCE="테스트 증거"
+    L_VIDEOS="비디오"; L_SCREENSHOTS="스크린샷"; L_EXTERNAL_REFS="외부 참조"
+    L_ARCHIVED="보관됨"; L_BY="작성자"; L_PLAN="플랜"; L_EPIC="에픽"; L_KIND="종류"
+    HOW_TO_RUN_REGEX="^## (How to run|실행 방법)"
+    PASS_CRITERIA_REGEX="^## (Pass criteria|통과 기준|통과 판정)"
+    ;;
+  japanese|ja)
+    L_SUMMARY="概要"; L_GOALS="目標 / 非目標"; L_STEPS="ステップ"
+    L_TESTS="テスト"; L_HOW_TO_RUN="実行方法"; L_PASS_CRITERIA="合格基準"
+    L_ARCH_DIAGRAMS="アーキテクチャ図"; L_TEST_EVIDENCE="テスト証跡"
+    L_VIDEOS="ビデオ"; L_SCREENSHOTS="スクリーンショット"; L_EXTERNAL_REFS="外部参照"
+    L_ARCHIVED="アーカイブ済み"; L_BY="作成者"; L_PLAN="プラン"; L_EPIC="エピック"; L_KIND="種類"
+    HOW_TO_RUN_REGEX="^## (How to run|実行方法)"
+    PASS_CRITERIA_REGEX="^## (Pass criteria|合格基準)"
+    ;;
+  *)
+    # english | empty | other free-form → English fallback
+    L_SUMMARY="Summary"; L_GOALS="Goals / Non-Goals"; L_STEPS="Steps"
+    L_TESTS="Tests"; L_HOW_TO_RUN="How to run"; L_PASS_CRITERIA="Pass criteria"
+    L_ARCH_DIAGRAMS="Architecture diagrams"; L_TEST_EVIDENCE="Test evidence"
+    L_VIDEOS="Videos"; L_SCREENSHOTS="Screenshots"; L_EXTERNAL_REFS="External refs"
+    L_ARCHIVED="Archived"; L_BY="by"; L_PLAN="plan"; L_EPIC="Epic"; L_KIND="kind"
+    HOW_TO_RUN_REGEX="^## (How to run|실행 방법)"
+    PASS_CRITERIA_REGEX="^## (Pass criteria|통과 판정)"
+    ;;
+esac
+
 # ---- collect screenshots from test-results/ ----
 SCREENSHOTS=()
 if [[ -d "$TEST_RESULTS_DIR" ]]; then
@@ -221,17 +255,17 @@ trim_blank_lines() {
 TMP_BODY=$(mktemp)
 {
   # Title is part of `gh pr create --title`, not body
-  echo "## Summary"
+  echo "## $L_SUMMARY"
   echo
-  extract_section "$PLAN_FILE" "^## Summary" | trim_blank_lines
+  extract_section "$PLAN_FILE" "^## (Summary|요약|概要)" | trim_blank_lines
   echo
-  echo "## Goals / Non-Goals"
+  echo "## $L_GOALS"
   echo
-  extract_section "$PLAN_FILE" "^## Goals / Non-Goals" | trim_blank_lines
+  extract_section "$PLAN_FILE" "^## (Goals / Non-Goals|목표 / 비목표|目標 / 非目標)" | trim_blank_lines
   echo
-  echo "## Steps"
+  echo "## $L_STEPS"
   echo
-  extract_section "$PLAN_FILE" "^## Steps" | trim_blank_lines
+  extract_section "$PLAN_FILE" "^## (Steps|단계|ステップ)" | trim_blank_lines
   echo
 
   # FEATURE_ARCHITECTURE.md (v0.7.1+) — extract ```mermaid``` fenced blocks and
@@ -254,7 +288,7 @@ TMP_BODY=$(mktemp)
       END { if (in_mermaid) { print "```"; print "" } }
     ' "$FEATURE_ARCH_FILE")
     if [[ -n "$arch_blocks" ]]; then
-      echo "## Architecture diagrams"
+      echo "## $L_ARCH_DIAGRAMS"
       echo
       echo "$arch_blocks" | trim_blank_lines
       echo
@@ -262,23 +296,23 @@ TMP_BODY=$(mktemp)
   fi
 
   if [[ -f "$TESTS_FILE" ]]; then
-    echo "## Tests"
+    echo "## $L_TESTS"
     echo
-    echo "**How to run**:"
+    echo "**$L_HOW_TO_RUN**:"
     echo
-    extract_section "$TESTS_FILE" "^## (How to run|실행 방법)" | trim_blank_lines
+    extract_section "$TESTS_FILE" "$HOW_TO_RUN_REGEX" | trim_blank_lines
     echo
-    echo "**Pass criteria**:"
+    echo "**$L_PASS_CRITERIA**:"
     echo
-    extract_section "$TESTS_FILE" "^## (Pass criteria|통과 판정)" | trim_blank_lines
+    extract_section "$TESTS_FILE" "$PASS_CRITERIA_REGEX" | trim_blank_lines
     echo
   fi
 
   if [[ ${#SCREENSHOTS[@]} -gt 0 || ${#VIDEOS[@]} -gt 0 ]]; then
-    echo "## Test evidence"
+    echo "## $L_TEST_EVIDENCE"
     echo
     if [[ ${#VIDEOS[@]} -gt 0 ]]; then
-      echo "### Videos"
+      echo "### $L_VIDEOS"
       echo
       # Video URLs are filled in *after* PR creation (need PR number for manifest).
       # During PR creation, this placeholder line is in the body. After
@@ -287,7 +321,7 @@ TMP_BODY=$(mktemp)
       echo
     fi
     if [[ ${#SCREENSHOTS[@]} -gt 0 ]]; then
-      echo "### Screenshots"
+      echo "### $L_SCREENSHOTS"
       echo
       # Screenshots stay in .scv-pr-artifacts/<slug>/ committed to PR branch
       # (small files, OK to live in git history). Use absolute raw URL with
@@ -321,7 +355,7 @@ TMP_BODY=$(mktemp)
     fm==1 && in_block { print }
   ' "$PLAN_FILE")
   if [[ -n "$refs_block" ]]; then
-    echo "## External refs"
+    echo "## $L_EXTERNAL_REFS"
     echo
     echo '```yaml'
     echo "$refs_block" | trim_blank_lines
@@ -334,9 +368,9 @@ TMP_BODY=$(mktemp)
     archived_by=$(yaml_get "$ARCHIVED_AT_FILE" archived_by)
     echo "---"
     echo
-    echo "🗂  Archived ${archived_at:-?} by ${archived_by:-?} · plan: \`$TARGET_DIR/PLAN.md\`"
+    echo "🗂  $L_ARCHIVED ${archived_at:-?} $L_BY ${archived_by:-?} · $L_PLAN: \`$TARGET_DIR/PLAN.md\`"
     if [[ -n "$EPIC" ]]; then
-      echo "🎯  Epic: \`$EPIC\` · kind: \`$KIND\`"
+      echo "🎯  $L_EPIC: \`$EPIC\` · $L_KIND: \`$KIND\`"
     fi
   fi
 } > "$TMP_BODY"

@@ -238,6 +238,7 @@ supersedes_scenarios:
 | `supersedes_scenarios` | — | **Scenario-level** retirement. Array of `<slug>:T<n>` strings, e.g., `["20260115-sspark-auth-v1:T2"]` |
 | `epic` | — | When splitting a large user request into multiple features, group them under the same epic slug (count is content-driven — Claude proposes + user adjusts). `/scv:status` shows epic progress; `/scv:work`'s PR auto-creation uses the epic branch as base. See §8d |
 | `kind` | — | `feature` (default) / `refactor` (epic-closing integration cleanup) / `retirement` (pure removal — §8c). Used by Claude for epic flow / refactor guidance |
+| `lang` | — | (v0.7.3+) The resolved language for this promote's content + diagrams + commit/PR text. Set by `/scv:promote` Step 0 — auto-resolved from `settings.json language` and `.env SCV_LANG`, or via `AskUserQuestion` when those mismatch. Read by `/scv:work` Step 9d and `pr-helper.sh` for full localization (PR title, body labels like `## Summary` / `## 요약` / `## 概要`, footer `🗂 Archived` / `🗂 보관됨` / `🗂 アーカイブ済み`). Values: `english` / `korean` / `japanese` / free-form. Empty / unknown → English fallback. |
 
 ### `refs:` spec — vendor-neutral external references
 
@@ -408,6 +409,7 @@ title: <same as PLAN.md>
 slug: <same as folder>
 created_at: <ISO date>
 status: planned
+lang: <english | korean | japanese | other>   # (v0.7.3+) inherited from PLAN.md — Mermaid node/edge labels follow this language
 ---
 ```
 

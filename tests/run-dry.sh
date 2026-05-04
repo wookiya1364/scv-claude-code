@@ -2426,7 +2426,7 @@ assert_contains "$WORK_CMD" "reviewers see the design at a glance"
 # pr-helper.sh — FEATURE_ARCH_FILE 변수 + extract 로직
 assert_contains "$PR_HELPER" 'FEATURE_ARCH_FILE="$TARGET_DIR/FEATURE_ARCHITECTURE.md"'
 assert_contains "$PR_HELPER" "FEATURE_ARCHITECTURE.md (v0.7.1+)"
-assert_contains "$PR_HELPER" "## Architecture diagrams"
+assert_contains "$PR_HELPER" '## $L_ARCH_DIAGRAMS'
 assert_contains "$PR_HELPER" "in_mermaid=1"
 
 # pr-helper.sh — Mermaid 블록 추출 awk 로직 isolated 검증
@@ -2693,6 +2693,176 @@ if [[ "$fence_count_n" == "4" ]]; then
 else
   fail "[11ccc] Sanity: normal case fence count $fence_count_n != 4"
 fi
+
+echo
+echo "=== [11ddd] v0.7.3 — Language alignment + frontmatter lang + pr-helper i18n ==="
+
+PROMOTE_CMD="$STANDARD_ROOT/commands/promote.md"
+WORK_CMD="$STANDARD_ROOT/commands/work.md"
+PR_HELPER="$STANDARD_ROOT/scripts/pr-helper.sh"
+PROMOTE_DOC="$STANDARD_ROOT/template/scv/PROMOTE.md"
+ENV_EX="$STANDARD_ROOT/template/.env.example.scv"
+
+# promote.md Step 0 — Language alignment
+assert_contains "$PROMOTE_CMD" "Step 0 — Language alignment"
+assert_contains "$PROMOTE_CMD" "SCV_PROMOTE_LANG"
+assert_contains "$PROMOTE_CMD" "Settings.json"
+assert_contains "$PROMOTE_CMD" "Cached value matches one of the two"
+assert_contains "$PROMOTE_CMD" "cached: SCV_PROMOTE_LANG=korean"
+assert_contains "$PROMOTE_CMD" "sed -i 's/^SCV_PROMOTE_LANG=.*/SCV_PROMOTE_LANG=english/'"
+assert_contains "$PROMOTE_CMD" "sed -i '/^SCV_PROMOTE_LANG=/d' .env"
+assert_contains "$PROMOTE_CMD" "Saves SCV_PROMOTE_LANG=english to .env"
+assert_contains "$PROMOTE_CMD" "Free-form answers are NOT cached"
+assert_contains "$PROMOTE_CMD" "LANG_RESOLVED"
+
+# promote.md Step 5 — PLAN.md frontmatter lang
+assert_contains "$PROMOTE_CMD" "lang: <LANG_RESOLVED>"
+
+# promote.md Step 6.1 mapping rule #5 — Mermaid labels follow LANG_RESOLVED
+assert_contains "$PROMOTE_CMD" "Labels follow"
+assert_contains "$PROMOTE_CMD" "stay as code-style English to keep the Mermaid syntax stable"
+
+# work.md Step 9d — read lang from frontmatter
+assert_contains "$WORK_CMD" 'Read `lang:` from the archived PLAN.md frontmatter'
+assert_contains "$WORK_CMD" "section labels"
+assert_contains "$WORK_CMD" "branch on this lang field"
+
+# pr-helper.sh — language-resolution case statement
+assert_contains "$PR_HELPER" "v0.7.3+ — read PLAN.md frontmatter"
+assert_contains "$PR_HELPER" 'LANG_PREF=$(yaml_get "$PLAN_FILE" lang)'
+assert_contains "$PR_HELPER" 'L_SUMMARY="요약"'
+assert_contains "$PR_HELPER" 'L_SUMMARY="概要"'
+assert_contains "$PR_HELPER" 'L_SUMMARY="Summary"'
+assert_contains "$PR_HELPER" 'L_ARCHIVED="보관됨"'
+assert_contains "$PR_HELPER" 'L_ARCHIVED="アーカイブ済み"'
+assert_contains "$PR_HELPER" 'echo "## $L_SUMMARY"'
+assert_contains "$PR_HELPER" 'echo "## $L_TESTS"'
+assert_contains "$PR_HELPER" 'echo "## $L_ARCH_DIAGRAMS"'
+assert_contains "$PR_HELPER" 'echo "🗂  $L_ARCHIVED'
+
+# template/scv/PROMOTE.md — frontmatter table mentions lang
+assert_contains "$PROMOTE_DOC" '`lang` |'
+assert_contains "$PROMOTE_DOC" "(v0.7.3+) The resolved language"
+
+# template/.env.example.scv — SCV_PROMOTE_LANG section
+assert_contains "$ENV_EX" "Promote-time language cache (v0.7.3+)"
+assert_contains "$ENV_EX" "# SCV_PROMOTE_LANG=korean"
+
+# Isolated test — pr-helper.sh actually emits the right labels per lang
+TMP_PRH=$(mktemp -d)
+mkdir -p "$TMP_PRH/scv/archive/test-en" "$TMP_PRH/scv/archive/test-ko" "$TMP_PRH/scv/archive/test-ja"
+
+for LANG_VAL in english korean japanese; do
+  case "$LANG_VAL" in
+    english) DIR="test-en" ;;
+    korean) DIR="test-ko" ;;
+    japanese) DIR="test-ja" ;;
+  esac
+  cat > "$TMP_PRH/scv/archive/$DIR/PLAN.md" <<EOF_PLAN
+---
+title: i18n test
+slug: $DIR
+author: t
+created_at: 2026-05-04
+status: done
+lang: $LANG_VAL
+---
+
+## Summary
+Body.
+
+## Goals / Non-Goals
+- A
+
+## Steps
+1. A
+EOF_PLAN
+  cat > "$TMP_PRH/scv/archive/$DIR/TESTS.md" <<'EOF_TESTS'
+## How to run
+```bash
+echo
+```
+
+## Pass criteria
+- ok
+EOF_TESTS
+  cat > "$TMP_PRH/scv/archive/$DIR/ARCHIVED_AT.md" <<'EOF_ARCH'
+---
+archived_at: 2026-05-04
+archived_by: t
+---
+EOF_ARCH
+done
+
+# Run dry-run for each language and check the output for expected labels
+cd "$TMP_PRH"
+git init -q 2>/dev/null
+
+OUT_EN=$(bash "$PR_HELPER" test-en --dry-run 2>&1 || true)
+OUT_KO=$(bash "$PR_HELPER" test-ko --dry-run 2>&1 || true)
+OUT_JA=$(bash "$PR_HELPER" test-ja --dry-run 2>&1 || true)
+
+cd "$STANDARD_ROOT"
+
+if printf '%s' "$OUT_EN" | grep -qF "## Summary" && printf '%s' "$OUT_EN" | grep -qF "🗂  Archived"; then
+  pass "[11ddd] pr-helper dry-run: lang=english produces English labels"
+else
+  fail "[11ddd] pr-helper dry-run: English labels missing"
+fi
+if printf '%s' "$OUT_KO" | grep -qF "## 요약" && printf '%s' "$OUT_KO" | grep -qF "🗂  보관됨"; then
+  pass "[11ddd] pr-helper dry-run: lang=korean produces 한국어 labels (## 요약 / 🗂 보관됨)"
+else
+  fail "[11ddd] pr-helper dry-run: Korean labels missing"
+fi
+if printf '%s' "$OUT_JA" | grep -qF "## 概要" && printf '%s' "$OUT_JA" | grep -qF "🗂  アーカイブ済み"; then
+  pass "[11ddd] pr-helper dry-run: lang=japanese produces 日本語 labels (## 概要 / 🗂 アーカイブ済み)"
+else
+  fail "[11ddd] pr-helper dry-run: Japanese labels missing"
+fi
+
+# Unknown lang → fallback to English
+mkdir -p "$TMP_PRH/scv/archive/test-other"
+cat > "$TMP_PRH/scv/archive/test-other/PLAN.md" <<'EOF'
+---
+title: t
+slug: test-other
+author: t
+created_at: 2026-05-04
+status: done
+lang: spanish
+---
+
+## Summary
+Body.
+
+## Steps
+1. A
+EOF
+cat > "$TMP_PRH/scv/archive/test-other/TESTS.md" <<'EOF'
+## How to run
+```bash
+echo
+```
+
+## Pass criteria
+- ok
+EOF
+cat > "$TMP_PRH/scv/archive/test-other/ARCHIVED_AT.md" <<'EOF'
+---
+archived_at: 2026-05-04
+archived_by: t
+---
+EOF
+cd "$TMP_PRH"
+OUT_OTHER=$(bash "$PR_HELPER" test-other --dry-run 2>&1 || true)
+cd "$STANDARD_ROOT"
+if printf '%s' "$OUT_OTHER" | grep -qF "## Summary" && printf '%s' "$OUT_OTHER" | grep -qF "🗂  Archived"; then
+  pass "[11ddd] pr-helper dry-run: lang=spanish (unknown) falls back to English labels"
+else
+  fail "[11ddd] pr-helper dry-run: unknown lang fallback broken"
+fi
+
+rm -rf "$TMP_PRH"
 
 echo
 echo "=== [10] sync --dry-run (version detection) ==="

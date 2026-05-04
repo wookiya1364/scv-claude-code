@@ -2,6 +2,79 @@
 
 이 저장소의 변경사항을 기록합니다. [Semantic Versioning](https://semver.org/lang/ko/) 규칙을 따릅니다.
 
+## [0.7.3] — 2026-05-04
+
+### 핵심 — 사용자 언어 미스매치 자동 감지 + dialog 한 번 + cache + PR/도식 풀 다국어화
+
+`/scv:promote` 호출 시 사용자의 글로벌 언어 설정 (`settings.json language`) 과 프로젝트 언어 설정 (`.env SCV_LANG`) 이 *둘 다 명시적으로 설정되어 있고 다른 경우*, 어느 언어로 산출물 (PLAN.md / TESTS.md / FEATURE_ARCHITECTURE.md / 도식 / commit / PR title / PR body) 을 작성할지 한 번 묻고 그 결정을 `.env SCV_PROMOTE_LANG` 에 캐시. 다음 promote 부터는 캐시된 결정을 inline 한 줄 안내 (sed 명령 포함) 와 함께 사용 — dialog 안 발화.
+
+배경: 사용자 명시 요청 — "PR, 아키텍처가 영어로 되어있어서 불편하네... 만약 유저언어가 한국어이고, 프로젝트 env설정에서 유저언어랑 다를 경우, PR을 한국어, 영어, 일본어 등등 어떤 것으로 올릴지 물어봐줘". 매번 묻는 건 귀찮으니 cache + inline 안내로 마찰 ↓.
+
+**i18n 정책 변경 (정직 명시):** v0.4.0 부터 박혀있던 정책 ("영어 단일 source of truth + Claude 응답 다국어 = 합리적 균형") 의 *template* 영역이 일부 변경됨. `scripts/pr-helper.sh` 의 fixed 라벨 (`## Summary` / `🗂 Archived` 등) 이 PLAN.md frontmatter `lang:` 따라 한국어 / 일본어 / 영어 분기. 메모리 reference / project 갱신 (사용자 명시 결정 = "B 옵션 — Full localization").
+
+### Added
+
+- **`commands/promote.md` Step 0 — Language alignment (신규)** — Step 1 직전. 5 분기 (둘 다 미설정 / 한쪽만 / 같음 / 다름+캐시 / 다름+캐시없음). 다름+캐시없음 시 `AskUserQuestion` 4-way ([1] English / [2] 한국어 / [3] 日本語 / [4] free-form). 결과를 `.env SCV_PROMOTE_LANG=<value>` 에 자동 저장 (free-form 제외).
+- **inline 안내 (다름+캐시 발견 시)** — dialog 안 발화. 한 줄로 "Promote language: 한국어 (cached: SCV_PROMOTE_LANG=korean in .env). Settings mismatch: settings.json=korean, .env SCV_LANG=english. To change: sed -i ... To clear cache: sed -i ...". 복붙 가능한 정확한 sed 명령.
+- **PLAN.md frontmatter `lang:` field** — Step 0 의 `LANG_RESOLVED` 가 박힘. `/scv:work` Step 9d 와 `pr-helper.sh` 가 후속 단계에서 읽어서 일관 적용.
+- **Step 6.1 mapping rule #5 신규** — Mermaid node labels / edge labels / subgraph names 가 `LANG_RESOLVED` 따라감. 단 component identifiers (`OrderService` 같은 Mermaid node ID) 는 영어 유지 (Mermaid syntax 안정성), function names / SQL / HTTP verbs 는 verbatim (다국어 무관).
+- **`scripts/pr-helper.sh` 라벨 다국어 분기 (en / ko / ja, fallback en)** — PR body 의 fixed 라벨 모두 PLAN.md `lang:` 따라 분기:
+  - 한국어: `## 요약` / `## 목표 / 비목표` / `## 단계` / `## 테스트` / `## 아키텍처 도식` / `## 테스트 증거` / `### 비디오` / `### 스크린샷` / `## 외부 참조` / `🗂 보관됨 ... 작성자 ...`
+  - 일본어: `## 概要` / `## 目標 / 非目標` / `## ステップ` / `## テスト` / `## アーキテクチャ図` / `## テスト証跡` / `### ビデオ` / `### スクリーンショット` / `## 外部参照` / `🗂 アーカイブ済み ... 作成者 ...`
+  - 영어 (fallback): 기존 그대로
+  - `extract_section` 의 PLAN/TESTS heading 매칭 regex 도 다국어 alternation 추가 (`Summary|요약|概要` 등) — 사용자가 PLAN 의 헤딩을 그 언어로 작성해도 추출됨.
+- **`commands/work.md` Step 9d-main `[1] Yes` description 갱신** — frontmatter `lang:` 읽고 PR body labels 가 그 언어로 분기됨을 명시.
+- **`template/scv/PROMOTE.md`** — §4 frontmatter 표에 `lang` 행 추가 + §5b (FEATURE_ARCHITECTURE.md spec) frontmatter 에 `lang:` 한 줄 명시.
+- **`template/.env.example.scv`** — `SCV_PROMOTE_LANG` 섹션 신규 + 변경 / 클리어 sed 명령 안내.
+
+### Tests
+
+- 신규 섹션 **[11ddd]** (~35 assertion):
+  - Step 0 Language alignment 의 5 분기 표 / cache 안내 sed 명령 / AskUserQuestion 4 옵션 / `LANG_RESOLVED` 명시
+  - PLAN.md frontmatter `lang: <LANG_RESOLVED>` 명시
+  - Step 6.1 mapping rule #5 (Mermaid 라벨 다국어, identifier 영어 유지)
+  - work.md Step 9d 의 `Read \`lang:\` from the archived PLAN.md frontmatter` 안내
+  - pr-helper.sh 의 case statement 3 분기 (en/ko/ja) + 핵심 라벨 변수 설정
+  - PROMOTE.md / .env.example.scv 의 lang 설명
+  - **Isolated pr-helper dry-run** — dummy archives (test-en / test-ko / test-ja / test-other) 만들어 lang frontmatter 별 PR body 출력 검증:
+    - lang=english → `## Summary` + `🗂 Archived`
+    - lang=korean → `## 요약` + `🗂 보관됨`
+    - lang=japanese → `## 概要` + `🗂 アーカイブ済み`
+    - lang=spanish (unknown) → English fallback
+- 회귀: 654 → **689 PASS** (+35 assertion) / 0 FAIL.
+
+### Changed
+
+- **`.claude-plugin/plugin.json`** — version `0.7.2` → `0.7.3`.
+- **`README.md`** — 회귀 배지 654 PASS → 689 PASS.
+- **i18n 정책 (메모리 갱신)** — v0.4.0 부터의 "template 영어 단일 source" 정책이 *부분 변경*. `scripts/pr-helper.sh` 의 PR body 라벨이 `lang:` 따라 분기 (template 의 일부 부위가 다국어). 메모리의 `project_scv_current_state.md` + `reference_scv_resume_guide.md` 에 정책 변경 명시.
+
+### Backwards compat
+
+- 기존 사용자에게 동작 변화 1 가지 — `/scv:promote` 호출 시 settings.json language ≠ .env SCV_LANG 인 경우 한 번 dialog. 양쪽 같거나 한쪽만 설정 → 기존과 동일 (dialog 없음).
+- v0.7.2 이전 archived PLAN.md 에 `lang:` 없음 → pr-helper.sh 의 case statement default (English) → 기존 동작과 100% 동일. 자동 backfill 안 함 (역사적 사실 보존).
+- `extract_section` regex 가 multi-lang alternation 으로 확장 → 영어 헤딩 (`## Summary`) 만 있는 기존 PLAN.md 도 정상 동작.
+
+### 비채택
+
+- **dialog 결과를 `.env SCV_LANG` 자체에 갱신** (mismatch 자체 해소) — 사용자가 글로벌 settings.json 과 프로젝트 .env 를 *다르게 설정한 의도* 가 있을 수 있음. SCV 가 갱신하면 그 의도 침범. 별도 cache 키 (`SCV_PROMOTE_LANG`) 로 mismatch 상태 유지하면서 promote-time 결정만 캐시.
+- **글로벌 cache (홈 디렉토리)** — 프로젝트별로 다른 결정 가능 (회사 A 영어 / 회사 B 한국어). 프로젝트 `.env` 가 적절.
+- **AskUserQuestion 에 "이번만 / 캐시" 분리 옵션** — 옵션 너무 많음. [1]/[2]/[3] 은 자동 캐시, [4] free-form 만 캐시 안 함 — 단순 패턴.
+- **mmdc / mermaid lint** — v0.7.1 비채택 그대로 유지.
+
+### 검증 한계
+
+- *실제 mismatch 상황* 의 dialog → 캐시 → inline 안내 흐름을 별도 Claude 세션에서 풀 검증 안 함. promote.md 의 prompt + pr-helper.sh 의 case statement 는 isolated 어설션 + dry-run 으로 검증, dialog UX 는 사용자가 다음 SCV 사용 시 자연스럽게 검증.
+- 일본어 / 한국어 라벨의 자연스러움 (`## 요약` / `## 概要` 등 의 적절성) 은 LLM 판단 — 네이티브 사용자가 부자연스럽다 보면 v0.7.x patch 후보.
+- pr-helper.sh 의 다국어 라벨이 free-form lang (`spanish` / `french` 등) 에 대해선 영어 fallback. 진짜 다국어 지원은 en/ko/ja 만. 다른 언어 사용자는 free-form [4] 로 가도 PR body 라벨은 영어가 됨.
+
+### 메모
+
+- 이 변경은 사용자 명시 요청 — "PR 올리는 것도 사용자 언어 설정에 맞게... 매번 다시 물으면 좀 귀찮을거같네... 정한 값을 유지... 이전에 결정한 언어로 작성을 한다... 복사붙여넣기 해서 언어 바꿀 수 있도록 쉽게 안내".
+- v0.7.2 resume guide → v0.7.3 resume guide 로 대체.
+
+---
+
 ## [0.7.2] — 2026-05-04
 
 ### 핵심 — pr-helper.sh awk 의 closing-fence guard + GitHub mermaid 렌더 실증 검증

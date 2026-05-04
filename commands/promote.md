@@ -43,6 +43,79 @@ Parse the helper output — the lines `MODE:`, `TODAY:`, `AUTHOR:`, `STANDARD_VE
 
 ## Protocol
 
+### Step 0 — Language alignment (v0.7.3+, run before dialog)
+
+This promote's PLAN.md / TESTS.md / FEATURE_ARCHITECTURE.md content + Mermaid labels + commit message + PR title/body are **all written in one resolved language**. The resolver has 5 cases:
+
+| Settings.json `language` | `.env SCV_LANG` | `.env SCV_PROMOTE_LANG` (cache) | Action |
+|---|---|---|---|
+| Unset | Unset | (any) | Auto-detect from user's last message; fall back to English. **No dialog.** |
+| Set OR Set (only one) | (only one set) | (any) | Use the set value. **No dialog.** |
+| Set, same value | Set, same value | (any) | Use that value. **No dialog.** |
+| Set, **different** value | Set, **different** value | Cached value matches one of the two | Use cached. **No dialog.** Print one-line inline notice (below). |
+| Set, **different** value | Set, **different** value | Unset OR cached value matches neither | **Fire `AskUserQuestion`** (below). Save user's choice to `.env SCV_PROMOTE_LANG`. |
+
+**Inline notice (mismatch + cached choice found):**
+
+```
+🌐 Promote language: 한국어 (cached: SCV_PROMOTE_LANG=korean in .env).
+   Settings mismatch: settings.json language=korean, .env SCV_LANG=english.
+   To change: edit .env or run:
+     sed -i 's/^SCV_PROMOTE_LANG=.*/SCV_PROMOTE_LANG=english/' .env
+   To clear cache and be asked again:
+     sed -i '/^SCV_PROMOTE_LANG=/d' .env
+```
+
+(Localize the prose in the user's preferred language; keep the `sed` commands verbatim — they are copy-paste safe.)
+
+**`AskUserQuestion` (mismatch, no cache or stale cache):**
+
+```
+Question: "Settings mismatch — settings.json language=<value> and .env SCV_LANG=<value>
+differ. Which language should I use for this promote's PLAN.md / TESTS.md /
+FEATURE_ARCHITECTURE.md content + Mermaid labels + commit + PR text? Your choice
+will be saved to .env SCV_PROMOTE_LANG so I don't ask again."
+
+[1] English (`.env` value)
+    description: "Saves SCV_PROMOTE_LANG=english to .env. Pick when your team's
+    PRs are mainly English-readable. Sticks for all future promotes; clear with
+    sed -i '/^SCV_PROMOTE_LANG=/d' .env to be asked again."
+
+[2] 한국어 (settings.json value)
+    description: "Saves SCV_PROMOTE_LANG=korean. Pick when your team's PRs are
+    mainly Korean-readable."
+
+[3] 日本語
+    description: "Saves SCV_PROMOTE_LANG=japanese. Pick when your team's PRs are
+    mainly Japanese-readable."
+
+[4] (free-form) "Other — type your direction"
+    description: "Examples: 'Spanish for this one only, no cache' / 'Mixed: code in
+    English, narrative in Korean'. Free-form answers are NOT cached — you'll be
+    asked again next promote."
+```
+
+After choice [1]/[2]/[3], write the value to `.env`:
+
+```bash
+# If .env doesn't exist, create it. If SCV_PROMOTE_LANG line exists, update; else append.
+if grep -q '^SCV_PROMOTE_LANG=' .env 2>/dev/null; then
+  sed -i 's/^SCV_PROMOTE_LANG=.*/SCV_PROMOTE_LANG=<chosen>/' .env
+else
+  echo 'SCV_PROMOTE_LANG=<chosen>' >> .env
+fi
+```
+
+Replace `<chosen>` with `english` / `korean` / `japanese`. For [4] free-form, do NOT write to `.env` — use the value for this promote only.
+
+**Resolved value** = `LANG_RESOLVED`. Use it for **all** of:
+- PLAN.md `lang:` frontmatter (Step 5)
+- TESTS.md content (narrative paragraphs, not template labels which stay English in TESTS.md template)
+- FEATURE_ARCHITECTURE.md Mermaid node labels / edge labels / subgraph names (Step 6)
+- Commit message + PR title + PR body narrative (handled by `/scv:work` Step 9d, which reads `lang:` from the archived PLAN.md frontmatter)
+
+**Technical identifiers stay as-is in every language**: file paths, slash command names, frontmatter keys (`status`, `kind`, `epic`, `supersedes`, `lang`), env var names (`SCV_LANG`, `SCV_PROMOTE_LANG`), SCV terms (`promote`, `archive`, `orphan branch`, `epic`).
+
 ### Step 1 — Graph freshness (run before dialog)
 
 Based on the helper header:
@@ -206,6 +279,7 @@ author: <AUTHOR>
 created_at: <TODAY>
 status: planned
 kind: feature                          # feature | refactor | retirement (default feature; specify when splitting)
+lang: <LANG_RESOLVED>                  # english | korean | japanese | <other>. Source: Step 0. Read by /scv:work Step 9d for commit/PR language.
 # epic: <EPIC_SLUG>                    # Same value across all folders of a split. Omit for single-folder.
 tags: []
 raw_sources:
@@ -358,6 +432,7 @@ Build a `flowchart LR` (or `TB` if vertical layout fits better) showing the comp
 2. **Every external system named in PLAN.md** (DB / cache / queue / 3rd-party API / blob store / email / SMS / push) → cylinder node `[(Name)]`. Internal services use square node `[Name]`.
 3. **Every edge needs a label** — the function call / event name / SQL / HTTP verb that flows between the two nodes. No bare arrows. If you cannot label the edge concretely, the edge is suspicious — re-read PLAN.md before drawing it.
 4. **No invented components** — if a node is not in PLAN.md, do not draw it. Better an incomplete diagram (which the user can extend) than a hallucinated one (which misleads).
+5. **Labels follow `LANG_RESOLVED` (Step 0)** — Mermaid node labels (the bracketed text inside `[Name]` / `[(Name)]`), edge labels (text between `|"..."|`), and subgraph names use the resolved language. Component identifiers (the Mermaid node IDs before the bracket, e.g., `OrderService` in `OrderService[주문 서비스]`) stay as code-style English to keep the Mermaid syntax stable. Function names / SQL / HTTP verbs in edge labels stay verbatim (`getOrder(orderId)` is identical in any language); only narrative descriptions translate.
 
 **Anti-patterns to avoid:**
 
