@@ -239,12 +239,19 @@ TMP_BODY=$(mktemp)
   # The frontmatter, headings, and "Source:" line of FEATURE_ARCHITECTURE.md are
   # not included — only the Mermaid blocks themselves, prefixed with the section
   # heading they appeared under (## 1. ... / ## 2. ...).
+  #
+  # v0.7.2: END block guards against missing closing fence in the input —
+  # if the LLM-generated FEATURE_ARCHITECTURE.md leaves a mermaid block open,
+  # auto-close it so the rest of the PR body isn't swallowed into the block.
+  # The mermaid renderer will mark the block as syntax-error rather than
+  # corrupting the entire PR body.
   if [[ -f "$FEATURE_ARCH_FILE" ]]; then
     arch_blocks=$(awk '
       /^## [0-9]+\./ { current_heading=$0; next }
       /^```mermaid[[:space:]]*$/ { in_mermaid=1; if (current_heading) print "### " substr(current_heading, 4); print; next }
       in_mermaid && /^```[[:space:]]*$/ { print; print ""; in_mermaid=0; current_heading=""; next }
       in_mermaid { print }
+      END { if (in_mermaid) { print "```"; print "" } }
     ' "$FEATURE_ARCH_FILE")
     if [[ -n "$arch_blocks" ]]; then
       echo "## Architecture diagrams"

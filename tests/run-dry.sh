@@ -2484,6 +2484,217 @@ else
 fi
 
 echo
+echo "=== [11ccc] v0.7.2 — pr-helper awk 5 복잡 케이스 ==="
+
+# Helper: run the v0.7.2 awk against a temp file and capture output
+awk_extract() {
+  awk '
+    /^## [0-9]+\./ { current_heading=$0; next }
+    /^```mermaid[[:space:]]*$/ { in_mermaid=1; if (current_heading) print "### " substr(current_heading, 4); print; next }
+    in_mermaid && /^```[[:space:]]*$/ { print; print ""; in_mermaid=0; current_heading=""; next }
+    in_mermaid { print }
+    END { if (in_mermaid) { print "```"; print "" } }
+  ' "$1"
+}
+
+# pr-helper.sh — END block guard 명시
+PR_HELPER="$STANDARD_ROOT/scripts/pr-helper.sh"
+assert_contains "$PR_HELPER" 'END { if (in_mermaid) { print'
+assert_contains "$PR_HELPER" "v0.7.2: END block guards against missing closing fence"
+
+# Scenario A: heading 3 개
+TF_A=$(mktemp)
+cat > "$TF_A" <<'EOF_SA'
+## 1. Component data flow
+```mermaid
+flowchart LR
+  A --> B
+```
+
+## 2. Position in whole architecture
+```mermaid
+flowchart TB
+  X --> Y
+```
+
+## 3. Sequence
+```mermaid
+sequenceDiagram
+  Alice->>Bob: Hello
+```
+EOF_SA
+RESULT_A=$(awk_extract "$TF_A")
+rm -f "$TF_A"
+if printf '%s\n' "$RESULT_A" | grep -qF "### 1. Component data flow" && \
+   printf '%s\n' "$RESULT_A" | grep -qF "### 2. Position in whole architecture" && \
+   printf '%s\n' "$RESULT_A" | grep -qF "### 3. Sequence"; then
+  pass "[11ccc] Scenario A: 3 headings extracted as ### subsections"
+else
+  fail "[11ccc] Scenario A: missing one of 3 headings"
+fi
+fence_count_a=$(printf '%s\n' "$RESULT_A" | grep -c '^```')
+if [[ "$fence_count_a" == "6" ]]; then
+  pass "[11ccc] Scenario A: 6 fences (3 mermaid open + 3 close)"
+else
+  fail "[11ccc] Scenario A: expected 6 fences, got $fence_count_a"
+fi
+
+# Scenario B: 닫는 fence 빠짐 — END block 가 자동 보강
+TF_B=$(mktemp)
+cat > "$TF_B" <<'EOF_SB'
+## 1. Component data flow
+```mermaid
+flowchart LR
+  A --> B
+(no closing fence)
+EOF_SB
+RESULT_B=$(awk_extract "$TF_B")
+rm -f "$TF_B"
+fence_count_b=$(printf '%s\n' "$RESULT_B" | grep -c '^```')
+if [[ "$fence_count_b" == "2" ]]; then
+  pass "[11ccc] Scenario B: END block auto-closed missing fence (2 fences)"
+else
+  fail "[11ccc] Scenario B: expected 2 fences (mermaid + auto-closed), got $fence_count_b"
+fi
+# Last line should be a closing fence (auto-added)
+last_fence_line=$(printf '%s\n' "$RESULT_B" | grep -n '^```' | tail -1 | cut -d: -f1)
+total_lines=$(printf '%s\n' "$RESULT_B" | wc -l | tr -d ' ')
+if [[ -n "$last_fence_line" && "$last_fence_line" -ge 1 ]]; then
+  pass "[11ccc] Scenario B: closing fence present at line $last_fence_line (of $total_lines)"
+else
+  fail "[11ccc] Scenario B: no closing fence in output (corruption risk)"
+fi
+
+# Scenario C: 빈 mermaid 블록
+TF_C=$(mktemp)
+cat > "$TF_C" <<'EOF_SC'
+## 1. Empty diagram
+```mermaid
+```
+
+## 2. Real diagram
+```mermaid
+flowchart LR
+  A --> B
+```
+EOF_SC
+RESULT_C=$(awk_extract "$TF_C")
+rm -f "$TF_C"
+# Should still extract both headings + both fences (empty + real)
+if printf '%s\n' "$RESULT_C" | grep -qF "### 1. Empty diagram" && \
+   printf '%s\n' "$RESULT_C" | grep -qF "### 2. Real diagram"; then
+  pass "[11ccc] Scenario C: empty block does not break extraction"
+else
+  fail "[11ccc] Scenario C: empty block disrupts heading extraction"
+fi
+
+# Scenario D: 다른 fence 섞임 (bash, yaml) — mermaid 만 추출
+TF_D=$(mktemp)
+cat > "$TF_D" <<'EOF_SD'
+## 1. Component data flow
+
+Some bash before:
+```bash
+echo "hello"
+```
+
+```mermaid
+flowchart LR
+  A --> B
+```
+
+After-block yaml:
+```yaml
+key: value
+```
+
+## 2. Whole architecture
+```mermaid
+flowchart TB
+  X --> Y
+```
+EOF_SD
+RESULT_D=$(awk_extract "$TF_D")
+rm -f "$TF_D"
+if printf '%s\n' "$RESULT_D" | grep -qF 'echo "hello"'; then
+  fail "[11ccc] Scenario D: bash content leaked into output"
+else
+  pass "[11ccc] Scenario D: non-mermaid fences excluded (bash/yaml not in output)"
+fi
+if printf '%s\n' "$RESULT_D" | grep -qF "key: value"; then
+  fail "[11ccc] Scenario D: yaml content leaked into output"
+else
+  pass "[11ccc] Scenario D: yaml content correctly excluded"
+fi
+
+# Scenario E: 블록 사이 markdown 콘텐츠 — Source 줄 / description 제외
+TF_E=$(mktemp)
+cat > "$TF_E" <<'EOF_SE'
+## 1. Component data flow
+
+Description paragraph that should NOT leak.
+
+```mermaid
+flowchart LR
+  A --> B
+```
+
+> Source: scv/ARCHITECTURE.md
+
+## 2. Position in whole
+
+> Source: graphify (built 2026-05-04)
+
+Some intro text.
+
+```mermaid
+flowchart TB
+  X --> Y
+```
+EOF_SE
+RESULT_E=$(awk_extract "$TF_E")
+rm -f "$TF_E"
+if printf '%s\n' "$RESULT_E" | grep -qF "Description paragraph"; then
+  fail "[11ccc] Scenario E: description paragraph leaked"
+else
+  pass "[11ccc] Scenario E: description paragraph excluded"
+fi
+if printf '%s\n' "$RESULT_E" | grep -qF "Source: scv/ARCHITECTURE.md"; then
+  fail "[11ccc] Scenario E: Source line leaked"
+else
+  pass "[11ccc] Scenario E: Source line excluded"
+fi
+if printf '%s\n' "$RESULT_E" | grep -qF "Some intro text"; then
+  fail "[11ccc] Scenario E: intro text leaked"
+else
+  pass "[11ccc] Scenario E: intro text excluded"
+fi
+
+# Sanity — normal case still has correct fence count (no double-close from END)
+TF_N=$(mktemp)
+cat > "$TF_N" <<'EOF_SN'
+## 1. Diagram 1
+```mermaid
+flowchart LR
+  A --> B
+```
+
+## 2. Diagram 2
+```mermaid
+flowchart TB
+  X --> Y
+```
+EOF_SN
+RESULT_N=$(awk_extract "$TF_N")
+rm -f "$TF_N"
+fence_count_n=$(printf '%s\n' "$RESULT_N" | grep -c '^```')
+if [[ "$fence_count_n" == "4" ]]; then
+  pass "[11ccc] Sanity: normal case has 4 fences (no double-close from END)"
+else
+  fail "[11ccc] Sanity: normal case fence count $fence_count_n != 4"
+fi
+
+echo
 echo "=== [10] sync --dry-run (version detection) ==="
 # Force a local divergence on a preserve-policy file so sync reports SKIP
 printf '\n<!-- local note: force divergence -->\n' >> "$APP/scv/AGENTS.md"

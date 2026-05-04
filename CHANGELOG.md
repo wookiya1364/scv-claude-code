@@ -2,6 +2,69 @@
 
 이 저장소의 변경사항을 기록합니다. [Semantic Versioning](https://semver.org/lang/ko/) 규칙을 따릅니다.
 
+## [0.7.2] — 2026-05-04
+
+### 핵심 — pr-helper.sh awk 의 closing-fence guard + GitHub mermaid 렌더 실증 검증
+
+v0.7.1 출시 직후 사용자가 "검증 안 한 것 검증해봐" 지적 → 실제 검증 결과 awk 의 닫는-fence 누락 케이스 (시나리오 B) 에서 PR body corruption 위험 발견. fix + dummy PR 만들어 GitHub 가 mermaid 실제 렌더하는지 실증 확인.
+
+배경:
+- v0.7.1 awk 가 simple case (heading 2 + mermaid 2) 만 isolated 검증 → 5 복잡 시나리오 검증 시 시나리오 B (LLM 이 닫는 ` ``` ` fence 빠뜨린 손상 입력) 에서 awk 가 파일 끝까지 mermaid block 으로 처리 → PR body 의 모든 후속 콘텐츠 (Tests / Refs / Archived 정보 등) 가 깨진 mermaid block 안에 가둬짐.
+- GitHub vs GitLab mermaid 렌더는 *알려진 사실* 이라 표현했으나 실제 검증 안 함 → dummy PR 만들어서 GitHub 의 server-side rendering 에서 `highlight-source-mermaid` class 가 적용되는지 확인.
+
+### Added
+
+- **`scripts/pr-helper.sh` awk 에 `END` block guard** — closing fence 누락 시 자동 보강:
+  ```awk
+  END { if (in_mermaid) { print "```"; print "" } }
+  ```
+  손상 입력에서 mermaid block 이 파일 끝까지 잡아먹는 사고 방지. mermaid renderer 는 깨진 콘텐츠를 syntax error 로 표시하지만 PR body 의 *다른 섹션* (Tests / Refs / Archived) 은 정상 보존.
+
+### Tests
+
+- 신규 섹션 **[11ccc]** (~13 assertion) — pr-helper awk 의 5 복잡 시나리오 isolated 검증:
+  - **Scenario A** (heading 3 개) — 셋 다 정확 추출, 6 fences (3 mermaid 시작 + 3 close).
+  - **Scenario B** (closing fence 누락) — END block 자동 보강 동작 확인 (2 fences = mermaid 시작 + auto-close), 마지막 줄 closing fence 위치 검증.
+  - **Scenario C** (빈 mermaid 블록) — heading 추출 정상.
+  - **Scenario D** (다른 fence 섞임 — bash, yaml) — mermaid 만 추출, bash/yaml content 누설 안 함.
+  - **Scenario E** (블록 사이 markdown content) — description / Source 줄 / intro text 모두 누설 안 함.
+  - **Sanity** — 정상 케이스에서 END block 이 중복 fence 추가 안 함 (4 fences).
+- 회귀: 641 → **654 PASS** (+13 assertion) / 0 FAIL.
+
+### 검증 — GitHub mermaid 렌더 실증
+
+dummy PR (#8) 만들어 GitHub 의 server-rendered HTML 확인 → **`<div class="highlight highlight-source-mermaid">` 로 두 mermaid block 모두 처리됨**. `highlight-source-mermaid` 는 GitHub 의 mermaid 인식 marker (client-side mermaid.js 가 SVG 변환). PR 페이지에서 시각 확인 후 close + branch 삭제 (https://github.com/wookiya1364/scv-claude-code/pull/8 closed).
+
+GitLab 은 본 repo mirror 가 없어 직접 검증 안 함 — GitLab docs 의 mermaid 지원 명시는 *알려진 사실* 로 남김 (사용자가 GitLab 환경에서 직접 검증 가능).
+
+### Changed
+
+- **`.claude-plugin/plugin.json`** — version `0.7.1` → `0.7.2`.
+- **`README.md`** — 회귀 배지 641 PASS → 654 PASS.
+
+### Backwards compat
+
+- v0.7.1 정상 케이스와 동작 100% 동일 (sanity check 로 입증). END block 은 *손상 입력에만* 발화.
+- archived 폴더의 FEATURE_ARCHITECTURE.md 가 정상 (양 fence 모두 있음) 이면 PR body 변화 0.
+
+### 비채택
+
+- **시나리오 C (빈 mermaid 블록) 의 noise 제거** — mermaid 안 fenced block 이 빈 채로 PR body 에 들어가도 GitHub 는 빈 영역만 표시 (에러 아님). 작은 noise 라 영구 수용. 처리하려면 `END` block 외에도 빈 블록 detection 필요 → 복잡도 증가 비용 > 효과.
+- **GitLab 검증을 위한 dummy GitLab repo 생성** — 본 repo 와 떨어진 인프라 (별도 GitLab account / repo / glab CLI 인증). 비용 높음. GitLab docs 의 mermaid 지원 명시로 충분.
+
+### 검증 한계
+
+- LLM 행동 정확도 *실제 향상* — v0.7.1 의 prompt 보강이 진짜 효과 있는지는 사용자가 비교 사용해야 데이터 들어옴. 본 patch 는 awk 안전성만 강화.
+- awk 의 7+ 시나리오 (e.g., heading 5 개 / mermaid block 안에 ` ``` ` 가 escape 되어 있는 케이스) 는 unit test 안 함 — 발견 시 v0.7.x patch 후보.
+- GitHub 의 mermaid 렌더는 server-side `highlight-source-mermaid` class 까지 확인. 실제 SVG 변환은 client-side JS 로 사용자가 PR 페이지에서 직접 본 것이 검증.
+
+### 메모
+
+- 이 patch 는 v0.7.1 출시 후 사용자 즉각 ("확인을 제대로 해주라") 요청 → 5 복잡 시나리오 검증 + 시나리오 B fix + dummy PR 실증 + close. 실제 위험 발견 + 해소.
+- v0.7.1 resume guide → v0.7.2 resume guide 로 갱신.
+
+---
+
 ## [0.7.1] — 2026-05-04
 
 ### 핵심 — v0.7.0 의 도식 정확도 + 리뷰 사이클 강화 (3 영역 동시)
