@@ -2307,6 +2307,74 @@ assert_contains "$README" "#why-scv"
 assert_contains "$README" "#5-minute-walkthrough"
 
 echo
+echo "=== [11aaa] FEATURE_ARCHITECTURE.md auto-generation (v0.7.0+) ==="
+
+PROMOTE_CMD="$STANDARD_ROOT/commands/promote.md"
+PROMOTE_DOC="$STANDARD_ROOT/template/scv/PROMOTE.md"
+
+# commands/promote.md — Step 6 새 도식 단계 + AskUserQuestion (3-way)
+assert_contains "$PROMOTE_CMD" "Step 6 — Architecture diagrams"
+assert_contains "$PROMOTE_CMD" "FEATURE_ARCHITECTURE.md"
+assert_contains "$PROMOTE_CMD" "Yes — generate two Mermaid diagrams"
+assert_contains "$PROMOTE_CMD" "No — skip diagrams for this folder"
+assert_contains "$PROMOTE_CMD" 'Other — type your direction'
+
+# commands/promote.md — Step 6.1 component data flow
+assert_contains "$PROMOTE_CMD" "Step 6.1 — First diagram (Component data flow)"
+assert_contains "$PROMOTE_CMD" "flowchart LR"
+assert_contains "$PROMOTE_CMD" 'functionName(arg1, arg2)'
+
+# commands/promote.md — Step 6.2 second diagram + branching table
+assert_contains "$PROMOTE_CMD" "Step 6.2 — Second diagram (Position in whole"
+assert_contains "$PROMOTE_CMD" 'scv/ARCHITECTURE.md`'
+assert_contains "$PROMOTE_CMD" "GRAPHIFY_SKILL"
+assert_contains "$PROMOTE_CMD" "GRAPH_STATUS"
+assert_contains "$PROMOTE_CMD" "Use \`scv/ARCHITECTURE.md\` content"
+assert_contains "$PROMOTE_CMD" ".graphify/docs/graphify-out/graph.json"
+assert_contains "$PROMOTE_CMD" "Fire 3-way \`AskUserQuestion\`"
+assert_contains "$PROMOTE_CMD" "Fire 2-way \`AskUserQuestion\`"
+
+# commands/promote.md — graphify run-or-skip question
+assert_contains "$PROMOTE_CMD" "Run graphify update (or full build) now"
+assert_contains "$PROMOTE_CMD" "code-only changes use 0 LLM tokens"
+assert_contains "$PROMOTE_CMD" "Skip diagram 2"
+
+# commands/promote.md — Mermaid TB + classDef new highlight
+assert_contains "$PROMOTE_CMD" "flowchart TB"
+assert_contains "$PROMOTE_CMD" "classDef new fill:#FFE082"
+assert_contains "$PROMOTE_CMD" ":::new"
+
+# commands/promote.md — Step 6.3 file template
+assert_contains "$PROMOTE_CMD" "Step 6.3 — Write FEATURE_ARCHITECTURE.md"
+assert_contains "$PROMOTE_CMD" "## 1. Component data flow"
+assert_contains "$PROMOTE_CMD" "## 2. Position in whole architecture"
+assert_contains "$PROMOTE_CMD" "Source:"
+assert_contains "$PROMOTE_CMD" "Review Mermaid syntax"
+
+# commands/promote.md — Step 6 의 skip 분기 → Step 7 로 진행
+assert_contains "$PROMOTE_CMD" "skip the rest of Step 6 for this folder"
+
+# commands/promote.md — Step 7 (readpath baseline) + Step 8 (Report) 으로 번호 밀림
+assert_contains "$PROMOTE_CMD" "Step 7 — Update readpath baseline"
+assert_contains "$PROMOTE_CMD" "Step 8 — Report to user"
+assert_contains "$PROMOTE_CMD" "FEATURE_ARCHITECTURE.md if generated"
+
+# template/scv/PROMOTE.md — §5b spec 추가
+assert_contains "$PROMOTE_DOC" "## 5b. FEATURE_ARCHITECTURE.md"
+assert_contains "$PROMOTE_DOC" "Component data flow"
+assert_contains "$PROMOTE_DOC" "Position in whole architecture"
+assert_contains "$PROMOTE_DOC" "Two is the floor, not the ceiling"
+assert_contains "$PROMOTE_DOC" "scv/ARCHITECTURE.md status?"
+assert_contains "$PROMOTE_DOC" "skill installed + graph fresh"
+assert_contains "$PROMOTE_DOC" "skill installed + graph stale/missing"
+assert_contains "$PROMOTE_DOC" "skill missing"
+assert_contains "$PROMOTE_DOC" 'classDef new fill:#FFE082'
+assert_contains "$PROMOTE_DOC" "is **not enforced** by"
+
+# template/scv/PROMOTE.md — §3 free-extension 에 FEATURE_ARCHITECTURE.md 줄 추가
+assert_contains "$PROMOTE_DOC" "FEATURE_ARCHITECTURE.md   # optional — two Mermaid diagrams"
+
+echo
 echo "=== [10] sync --dry-run (version detection) ==="
 # Force a local divergence on a preserve-policy file so sync reports SKIP
 printf '\n<!-- local note: force divergence -->\n' >> "$APP/scv/AGENTS.md"

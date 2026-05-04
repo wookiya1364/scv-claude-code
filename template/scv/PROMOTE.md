@@ -126,14 +126,15 @@ Every promotion folder must contain **PLAN.md and TESTS.md**. Add any others as 
 
 ```
 20260420-sspark-user-auth/
-├── PLAN.md          # required — plan body + frontmatter
-├── TESTS.md         # required — test scenarios + pass criteria
-├── REQUIREMENTS.md  # optional — detailed requirements (split if large)
-├── ARCH.md          # optional — architecture design
-├── MIGRATION.md     # optional — migration strategy
-├── notes.md         # optional — work notes / decision records
-├── diagrams/        # optional — diagrams / screenshots
-└── attachments/     # optional — external PDFs, references
+├── PLAN.md                   # required — plan body + frontmatter
+├── TESTS.md                  # required — test scenarios + pass criteria
+├── FEATURE_ARCHITECTURE.md   # optional — two Mermaid diagrams (see §5b)
+├── REQUIREMENTS.md           # optional — detailed requirements (split if large)
+├── ARCH.md                   # optional — architecture design (deeper than the two diagrams)
+├── MIGRATION.md              # optional — migration strategy
+├── notes.md                  # optional — work notes / decision records
+├── diagrams/                 # optional — extra diagrams / screenshots
+└── attachments/              # optional — external PDFs, references
 ```
 
 ### Recommended structure by size
@@ -359,6 +360,89 @@ TESTS.md is used both for `/scv:work` initial verification AND, **after archive,
    fi
    ```
    With this pattern, a follow-up plan can `supersedes_scenarios: ["<slug>:T2"]` to skip just T2 while keeping the rest in regression. Without dispatch, `/scv:regression` can't support scenario-level skip and falls back (with a warning) to skipping the whole slug.
+
+---
+
+## 5b. FEATURE_ARCHITECTURE.md (optional, prompted on every promote)
+
+After PLAN.md / TESTS.md, `/scv:promote` asks **per folder** whether to also write `FEATURE_ARCHITECTURE.md` — two Mermaid diagrams that describe the feature's design before implementation.
+
+**Why two diagrams (minimum):**
+
+| Diagram | Purpose |
+|---|---|
+| 1. Component data flow | How this feature's components combine, what data / parameters flow between them. Helps the implementer (you or a teammate or `/scv:work`) understand the design before touching code. |
+| 2. Position in whole architecture | Where this feature sits in the system at a coarse grain. Helps stakeholders see the change scope at a glance and reduces "what is this connected to?" review questions. |
+
+The document may include more diagrams (sequence, state, deployment) when the feature genuinely needs them. Two is the floor, not the ceiling.
+
+**Why this is optional:**
+
+Trivial changes (typo fix, single-line null guard, patch dep bump) get no value from a diagram. The default `/scv:promote` flow asks every time so the user picks per folder. Pick "skip" once for trivial work, "yes" once for non-trivial work — there is no flag to remember.
+
+**Diagram 2's data source:**
+
+```
+scv/ARCHITECTURE.md status?
+  ├─ active or draft → use it as the layout reference
+  └─ N/A → check graphify
+      ├─ skill installed + graph fresh → use .graphify/docs/graphify-out/
+      ├─ skill installed + graph stale/missing → ask user (run graphify? skip? other?)
+      └─ skill missing → ask user (skip? other?)
+```
+
+`/scv:promote` decides this branching automatically. The user only sees the resulting `AskUserQuestion` when there is a real decision to make (graphify run-or-skip when ARCHITECTURE.md is `N/A`).
+
+**File location and frontmatter:**
+
+```
+scv/promote/<YYYYMMDD>-<author>-<slug>/
+├── PLAN.md                       # required
+├── TESTS.md                      # required
+└── FEATURE_ARCHITECTURE.md       # optional — generated when user opts in
+```
+
+```yaml
+---
+title: <same as PLAN.md>
+slug: <same as folder>
+created_at: <ISO date>
+status: planned
+---
+```
+
+**Body skeleton:**
+
+```markdown
+# Architecture — <title>
+
+> Two-diagram view of this feature. Review and edit before `/scv:work`.
+
+## 1. Component data flow
+
+```mermaid
+flowchart LR
+  ...
+```
+
+## 2. Position in whole architecture
+
+> Source: <ARCHITECTURE.md | graphify graph (built YYYY-MM-DD) | skipped>
+
+```mermaid
+flowchart TB
+  ...
+  classDef new fill:#FFE082,stroke:#F57C00,stroke-width:2px
+```
+```
+
+**Convention:**
+
+- New components introduced by this feature are highlighted with the `new` class (yellow fill, orange stroke).
+- The "Source:" line in section 2 is mandatory when section 2 is present — it makes the diagram's accuracy basis auditable.
+- If diagram 2 is skipped (graphify missing AND ARCHITECTURE.md `N/A`), section 2 is replaced by a one-line note pointing at how to enable it (lift ARCHITECTURE.md or run `/graphify`).
+- LLM-generated Mermaid may have syntax errors or wrong labels. Treat the file like PLAN.md / TESTS.md — review and edit before `/scv:work`.
+- The file is **not enforced** by `/scv:work` or `/scv:regression`. Its value is human comprehension, not gating.
 
 ---
 

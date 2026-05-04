@@ -2,6 +2,72 @@
 
 이 저장소의 변경사항을 기록합니다. [Semantic Versioning](https://semver.org/lang/ko/) 규칙을 따릅니다.
 
+## [0.7.0] — 2026-05-04
+
+### 핵심 — `/scv:promote` 가 PLAN.md / TESTS.md 옆에 `FEATURE_ARCHITECTURE.md` 도 자동 생성 (옵트인)
+
+`/scv:work` 로 구현 들어가기 전에 *기능 단위 아키텍처 도식* 두 개를 PLAN 옆에 미리 그려서, 구현자 / 리뷰어 / 이해관계자가 같은 그림으로 출발하도록 함. fast-path 같은 trivial 변경엔 dialog 의 [2] "skip" 한 번이면 끝 — 별도 플래그 없음.
+
+배경: 사용자가 backlog 에서 새로 결정한 항목 ("기능 한 개 = 두 그림 최소: 1) 컴포넌트 데이터 흐름 2) 전체 아키텍처에서 차지하는 위치"). DISCUSS treadmill 회피 정책 (v0.6.2) 유지하면서 사용자 명시 요청만 진행.
+
+### Added
+
+- **`commands/promote.md` Step 6 — Architecture diagrams** — Step 5 (PLAN/TESTS 작성) 다음에 폴더당 한 번 `AskUserQuestion` (3-way: yes / no / 주관식). [1] 선택 시 Step 6.1 ~ 6.3 으로 `FEATURE_ARCHITECTURE.md` 작성. 기존 Step 6 (readpath) → Step 7, Step 7 (Report) → Step 8 로 번호 밀림.
+- **Step 6.1 첫 번째 그림 — Component data flow** — `flowchart LR` (또는 TB) 로 PLAN.md 의 Approach Overview / Steps 에서 식별한 컴포넌트들이 어떤 함수 호출 / 이벤트 / 페이로드 로 데이터를 주고받는지. 외부 시스템은 `[(...)]` cylinder 노드.
+- **Step 6.2 두 번째 그림 — Position in whole architecture** — 데이터 소스 분기:
+  - `scv/ARCHITECTURE.md` `status: active|draft` → 그 내용을 layout reference 로 사용
+  - `status: N/A` + graphify graph 가 fresh → `.graphify/docs/graphify-out/graph.json` 사용
+  - `status: N/A` + graphify available + graph stale/missing → 3-way `AskUserQuestion` (run graphify update / skip / 주관식)
+  - `status: N/A` + graphify missing → 2-way `AskUserQuestion` (skip / 주관식)
+  - `flowchart TB` + subgraph (layer/domain) + `classDef new fill:#FFE082,stroke:#F57C00` 로 신규 컴포넌트 강조 (`:::new`).
+- **Step 6.3 — `FEATURE_ARCHITECTURE.md` 파일 템플릿** — frontmatter (title/slug/created_at/status) + `## 1. Component data flow` + `## 2. Position in whole architecture` (Source 줄 mandatory). Diagram 2 가 skip 되면 §2 가 "lift ARCHITECTURE.md or run /graphify" 한 줄 안내로 대체.
+- **`template/scv/PROMOTE.md` §5b** — 표준 문서에 `FEATURE_ARCHITECTURE.md` spec (왜 두 그림 / 왜 옵트인 / 데이터 소스 결정 트리 / 파일 위치 / frontmatter / 본문 skeleton / convention).
+- **`template/scv/PROMOTE.md` §3** — free-extension 디렉토리 예시에 `FEATURE_ARCHITECTURE.md` 한 줄 추가 (다른 free files 와 동일 레벨).
+
+### Changed
+
+- **`.claude-plugin/plugin.json`** — version `0.6.2` → `0.7.0`.
+- **`README.md`** — 회귀 배지 557 PASS → 599 PASS, 5-Minute Walkthrough 의 Min 2 (`/scv:promote`) 에 도식 단계 한 줄 추가 (3 언어).
+
+### Tests
+
+- 신규 섹션 **[11aaa]** (~42 assertion):
+  - `commands/promote.md` Step 6 의 AskUserQuestion 옵션 텍스트 (3-way) + Step 6.1 ~ 6.3 의 핵심 키워드
+  - graphify 분기 표 (active/draft/N/A × built/stale/missing/skill missing)
+  - 3-way / 2-way `AskUserQuestion` 텍스트 (run graphify / skip diagram 2 / 주관식)
+  - Mermaid `flowchart LR` / `flowchart TB` / `classDef new fill:#FFE082` / `:::new`
+  - Step 6 의 [2] "No" 분기 (skip the rest of Step 6)
+  - 기존 Step 6, 7 → Step 7, 8 로 번호 밀린 것
+  - `template/scv/PROMOTE.md` §5b spec + §3 디렉토리 예시
+- 회귀: 557 → **599 PASS** (+42 assertion) / 0 FAIL.
+
+### Backwards compat
+
+- **기존 사용자에게 동작 변화 1 가지** — `/scv:promote` 호출 시 **폴더당 한 번 더 질문 (도식 그릴까?)**. 사용자가 [2] "No" 한 번이면 v0.6.2 와 동일 흐름 (PLAN.md + TESTS.md 만). [1] 선택 시 `FEATURE_ARCHITECTURE.md` 도 추가로 생성.
+- `FEATURE_ARCHITECTURE.md` 는 **`/scv:work` / `/scv:regression` 에서 enforce 안 함** — 인간 이해 도구일 뿐, 게이트 아님. v0.6.2 기존 archived 폴더 무영향.
+- v0.6.2 이전 archived 폴더는 `FEATURE_ARCHITECTURE.md` 없이 보존됨 (역사적 사실, 자동 backfill 안 함).
+- `scv/ARCHITECTURE.md` `status: N/A` 가 적용된 adoption-mode 사용자: graphify 도 미설치라면 [11aaa] 의 2-way 분기에서 [1] "Skip diagram 2" 한 번이면 첫 번째 그림만 받음 — 추가 의존성 없음.
+
+### 비채택
+
+- **fast-path 면제 자동 트리거** — 검토 옵션 A (promote 호출 자체가 안 됨, 자연스러운 면제) / B (LLM 이 PLAN size 보고 판단) / C (매번 사용자 묻기) 중 사용자 결정 = **C**. A 는 사용자가 promote 호출 후에도 trivial 변경이라고 판단할 수 있어 한계, B 는 LLM 판단 신뢰도 낮음. C 는 매번 묻는 마찰이 있지만 사용자가 옵션·플래그 추가를 원치 않은 정책과 일관되며, 사용자 결정권 보존.
+- **자동 graphify --update 호출** — 사용자 모르는 토큰 사용 발생 (`graphify-out/cost.json` 에 기록되긴 하지만 사용자가 매번 확인 안 함) + graphify 미설치 환경 에러. 대신 stale/missing 감지 시 `AskUserQuestion` 으로 사용자 결정.
+- **`--architecture` / `--no-architecture` CLI 플래그** — 사용자 명시 거부 ("슬래시 명령어나 옵션이 더 추가되는 것을 원치 않음"). 매번 dialog 가 일관 패턴.
+- **Mermaid 자동 syntax 검증** — LLM 결과의 Mermaid 문법 에러 가능성에 대해 자동 lint 도입 검토 → 채택 안 함. 출력에 "Review Mermaid syntax — LLM-generated" 한 줄 안내 + 사용자 검토 흐름이 PLAN/TESTS 와 동일 패턴.
+
+### 검증 한계
+
+- 별도 Claude 세션에서 `/scv:promote` 의 새 Step 6 풀 흐름은 미검증 (사용자 본인이 다음 SCV 사용 시 자연스럽게 검증). regression 은 텍스트 어설션 레벨.
+- LLM 이 만드는 Mermaid 의 *실제 정확도* 는 시뮬레이션 안 함 — 사용자 검토 흐름에 의존.
+- graphify graph.json 으로 두 번째 그림 만드는 *구체 매핑 로직* 은 promote.md 의 텍스트 가이드 레벨 (graph.json → flowchart 자동 변환 코드 미작성). LLM 이 graph.json 의 community / god nodes 를 보고 자유롭게 layout 작성. 정확도는 corpus 와 graph 품질에 따라 변동.
+
+### 메모
+
+- 이 변경은 **사용자 backlog 결정 (b) — DISCUSS §7 의 14 항목 외 신규 결정** 으로 진행. 메모리 `project_scv_current_state.md` 는 v0.6.2 → v0.7.0 으로 갱신, "real user feedback 단계" 명제는 유지 (이번도 사용자 명시 요청).
+- 이전 v0.6.2 resume guide (`~/.claude/plans/scv-resume-after-v0.6.2.md`) 는 v0.7.0 resume 로 대체 (혼란 회피, v0.6.2 → v0.5.0 와 동일 정리 패턴).
+
+---
+
 ## [0.6.2] — 2026-04-30
 
 ### 핵심 — README 재구조 (Why SCV? + 5 분 walkthrough)

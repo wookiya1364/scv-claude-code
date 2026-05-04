@@ -314,9 +314,190 @@ refs:
 
 If `refs:` is empty, omit the count line; just confirm the folder was created.
 
-### Step 6 — Update readpath baseline
+### Step 6 — Architecture diagrams (per approved folder, optional)
 
-After all approved folders are created, run:
+For each folder created in Step 5, fire `AskUserQuestion` to decide whether to also generate `FEATURE_ARCHITECTURE.md` (two Mermaid diagrams) alongside `PLAN.md` / `TESTS.md`. The default flow asks every time — there is no `--skip-architecture` flag. When the change is trivial enough that diagrams add no value, the user picks [2] "skip" once.
+
+```
+Question: "Add architecture diagrams to <folder> (FEATURE_ARCHITECTURE.md)?"
+
+[1] "Yes — generate two Mermaid diagrams"
+    description:
+    "Creates scv/promote/<folder>/FEATURE_ARCHITECTURE.md with:
+     (1) Component data flow — how this feature's components interact,
+         with function names / parameters / data on edges. Helps the
+         implementer understand the design before running /scv:work.
+     (2) Position in whole architecture — which subsystem this feature
+         touches. Helps stakeholders see the change scope at a glance.
+     Mermaid renders inline on GitHub / GitLab / Bitbucket. Recommended
+     for non-trivial changes (anything beyond a typo / null-guard / dep bump)."
+
+[2] "No — skip diagrams for this folder"
+    description:
+    "For trivial changes (single-line guard, typo fix, patch-version dep
+     bump) PLAN.md alone is enough. You can write FEATURE_ARCHITECTURE.md
+     by hand later if needed — the file is conventional, not enforced."
+
+[3] (free-form) "Other — type your direction"
+    description:
+    "Examples: 'only the first diagram, second has no value here' /
+     'data flow perspective only' / 'wait, I'll write by hand'."
+```
+
+If [2]: skip the rest of Step 6 for this folder, continue with Step 7.
+
+If [1] or [3]: generate the file via Step 6.1 + Step 6.2 + Step 6.3 below.
+
+#### Step 6.1 — First diagram (Component data flow)
+
+Build a `flowchart LR` (or `TB` if vertical layout fits better) showing the components identified in PLAN.md's `Approach Overview` / `Steps`:
+
+- Each internal component → a node
+- External systems (DB, queue, third-party API) → `[(name)]` cylinder nodes
+- Edges labeled with the function call / event / payload that flows between them
+
+Skeleton (adjust to the actual feature):
+
+````markdown
+```mermaid
+flowchart LR
+  Caller[Caller] -->|"functionName(arg1, arg2)"| ServiceA
+  ServiceA -->|"validate(payload)"| ServiceB
+  ServiceB -->|"SELECT ... WHERE ..."| DB[(Database)]
+  ServiceA -->|"emit('event.name', data)"| EventBus
+```
+````
+
+#### Step 6.2 — Second diagram (Position in whole — data source branching)
+
+Determine the source for the system-level layout:
+
+| `scv/ARCHITECTURE.md` `status` | `GRAPHIFY_SKILL` | `GRAPH_STATUS` | Action |
+|---|---|---|---|
+| `active` or `draft` | (any) | (any) | Use `scv/ARCHITECTURE.md` content as the layout reference |
+| `N/A` (or file missing) | `available` | `built` | Use `.graphify/docs/graphify-out/graph.json` |
+| `N/A` | `available` | `stale` or `missing` | Fire 3-way `AskUserQuestion` (below) |
+| `N/A` | `missing` | (any) | Fire 2-way `AskUserQuestion` (below) |
+
+**3-way question** (graphify available + stale/missing graph):
+
+```
+Question: "scv/ARCHITECTURE.md is N/A and the graphify graph is <stale|missing>. How should I source diagram 2?"
+
+[1] "Run graphify update (or full build) now"
+    description:
+    "Builds / refreshes the knowledge graph from the codebase.
+     Token cost: code-only changes use 0 LLM tokens (AST is deterministic).
+     Doc / image changes use chunked extraction. No changes since last run
+     means 0 tokens. Then I build diagram 2 from the graph."
+
+[2] "Skip diagram 2"
+    description:
+    "FEATURE_ARCHITECTURE.md will contain only diagram 1 (component data
+     flow). Diagram 2 needs a system-level reference that does not exist
+     right now. Pick this when you do not want to spend time on graph build
+     or this promote is exploratory."
+
+[3] (free-form) "Other — type your direction"
+    description:
+    "Examples: 'use stale graph as-is, note the date' / 'I will lift
+     ARCHITECTURE.md manually first' / 'guess from code structure'."
+```
+
+**2-way question** (graphify not installed):
+
+```
+Question: "scv/ARCHITECTURE.md is N/A and graphify is not installed. How should I source diagram 2?"
+
+[1] "Skip diagram 2"
+    description:
+    "Only diagram 1 (component data flow) will be generated. The system-
+     level layout needs a reference (ARCHITECTURE.md or graphify) that
+     is not available."
+
+[2] (free-form) "Other — type your direction"
+    description:
+    "Examples: 'guess from code top-level directory layout' / 'I will install
+     graphify first (see /scv:install-deps)' / 'lift ARCHITECTURE.md to
+     draft and try again'."
+```
+
+After the source decision, build a `flowchart TB` with subgraphs for each layer / domain. Highlight the new components with the `new` class:
+
+````markdown
+```mermaid
+flowchart TB
+  subgraph "Layer / Domain A"
+    A1[Existing Service 1]
+    A2[Existing Service 2]
+  end
+  subgraph "Layer / Domain B"
+    B1[Existing Service 3]
+    B2[New Component]:::new
+  end
+  A1 --> B1
+  A2 --> B2
+  classDef new fill:#FFE082,stroke:#F57C00,stroke-width:2px
+```
+````
+
+If the user chose to skip diagram 2, omit this section entirely (Step 6.3 file template handles the omission).
+
+#### Step 6.3 — Write FEATURE_ARCHITECTURE.md
+
+````markdown
+---
+title: <TITLE>
+slug: <FOLDER_NAME>
+created_at: <TODAY>
+status: planned
+---
+
+# Architecture — <TITLE>
+
+> Two-diagram view of this feature. **Review and edit before `/scv:work`** —
+> diagrams are LLM-generated and may have inaccuracies.
+
+## 1. Component data flow
+
+How this feature's components interact.
+
+```mermaid
+<Step 6.1 output>
+```
+
+## 2. Position in whole architecture
+
+Where this feature sits in the system. New components highlighted in yellow.
+
+> Source: <one of: `scv/ARCHITECTURE.md` | graphify graph (built <YYYY-MM-DD>) | omitted — first diagram only>
+
+```mermaid
+<Step 6.2 output>
+```
+````
+
+If diagram 2 was skipped, replace the entire `## 2.` section with:
+
+```markdown
+## 2. Position in whole architecture
+
+> Skipped — `scv/ARCHITECTURE.md` is `N/A` and no graphify graph available.
+> Lift ARCHITECTURE.md to `draft` (or run `/graphify`) and re-run `/scv:promote`
+> on this folder to generate diagram 2.
+```
+
+Print one-line confirmation:
+
+```
+✓ Created scv/promote/<folder>/FEATURE_ARCHITECTURE.md
+  Diagram 2 source: <ARCHITECTURE.md | graphify | skipped>
+  ⚠ Review Mermaid syntax + node labels — LLM-generated.
+```
+
+### Step 7 — Update readpath baseline
+
+After all approved folders are created (and any FEATURE_ARCHITECTURE.md is written), run:
 
 ```
 !${CLAUDE_PLUGIN_ROOT}/scripts/readpath.sh update
@@ -324,14 +505,14 @@ After all approved folders are created, run:
 
 This marks the current raw state as the new baseline so future `/scv:help` / `/scv:status` won't keep flagging the consumed files.
 
-### Step 7 — Report to user
+### Step 8 — Report to user
 
 Summarize:
-- Created folders (list paths to PLAN.md + TESTS.md)
+- Created folders (list paths to PLAN.md + TESTS.md, and FEATURE_ARCHITECTURE.md if generated)
 - Graph update status
 - Baseline updated? (yes)
 - Next suggested command: `/scv:work <slug>` for the first new plan.
-- Reminder: PLAN.md and TESTS.md are **starting skeletons** — fill in the `<TODO>` spots. Run `/scv:status` any time to see pending changes.
+- Reminder: PLAN.md, TESTS.md, and FEATURE_ARCHITECTURE.md (when present) are **starting skeletons** — fill in the `<TODO>` spots and review the diagrams. Run `/scv:status` any time to see pending changes.
 
 ## Flag semantics
 

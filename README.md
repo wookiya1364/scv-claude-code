@@ -15,7 +15,7 @@ Every change becomes a plan + tests before merging, and those tests accumulate i
 <a href="https://github.com/wookiya1364/scv-claude-code/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/wookiya1364/scv-claude-code?label=release&color=blue" /></a>
 <img alt="License" src="https://img.shields.io/badge/license-MIT-green" />
 <img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude%20Code-plugin-D97757" />
-<img alt="Regression" src="https://img.shields.io/badge/tests-557_PASS-brightgreen" />
+<img alt="Regression" src="https://img.shields.io/badge/tests-599_PASS-brightgreen" />
 <img alt="i18n" src="https://img.shields.io/badge/i18n-EN_·_KO_·_JA-purple" />
 </p>
 
@@ -110,7 +110,9 @@ Min 2 — /scv:promote
        [jira] PAY-1234     from scv/raw/meeting-notes.md
      Single folder for this? [Yes]
      Title? → "Add refund button to checkout"
+     Add architecture diagrams (FEATURE_ARCHITECTURE.md)? [Yes]
      ✓ Created scv/promote/20260430-you-checkout-refund/
+       PLAN.md + TESTS.md + FEATURE_ARCHITECTURE.md (2 Mermaid diagrams)
        refs: 1 auto-detected (from raw)
 
 ──────────────────────────────────────────────────────────────────
@@ -377,7 +379,9 @@ dialog 에 답한 내용이 그대로 PLAN.md 로 들어감. 도구 간 복붙 0
        [jira] PAY-1234     from scv/raw/meeting-notes.md
      Single folder for this? [Yes]
      Title? → "Add refund button to checkout"
+     도식 추가할까 (FEATURE_ARCHITECTURE.md)? [Yes]
      ✓ Created scv/promote/20260430-you-checkout-refund/
+       PLAN.md + TESTS.md + FEATURE_ARCHITECTURE.md (Mermaid 도식 2 개)
        refs: 1 auto-detected (from raw)
 
 ──────────────────────────────────────────────────────────────────
@@ -644,7 +648,9 @@ dialog で答えた内容がそのまま PLAN.md に入る。ツール間のコ�
        [jira] PAY-1234     from scv/raw/meeting-notes.md
      Single folder for this? [Yes]
      Title? → "Add refund button to checkout"
+     アーキテクチャ図を追加 (FEATURE_ARCHITECTURE.md)? [Yes]
      ✓ Created scv/promote/20260430-you-checkout-refund/
+       PLAN.md + TESTS.md + FEATURE_ARCHITECTURE.md (Mermaid 図 2 つ)
        refs: 1 auto-detected (from raw)
 
 ──────────────────────────────────────────────────────────────────
