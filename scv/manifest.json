@@ -1,17 +1,4 @@
 {
   "version": 1,
-  "entries": {
-    "20260504-test-en": {
-      "pr_number": 10,
-      "created_at": "2026-05-04T02:20:15Z"
-    },
-    "20260504-test-ko": {
-      "pr_number": 11,
-      "created_at": "2026-05-04T02:21:10Z"
-    },
-    "20260504-test-ja": {
-      "pr_number": 12,
-      "created_at": "2026-05-04T02:22:04Z"
-    }
-  }
+  "entries": {}
 }
