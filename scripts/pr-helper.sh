@@ -122,6 +122,7 @@ SLUG_NAME=$(basename "$TARGET_DIR")
 PLAN_FILE="$TARGET_DIR/PLAN.md"
 TESTS_FILE="$TARGET_DIR/TESTS.md"
 ARCHIVED_AT_FILE="$TARGET_DIR/ARCHIVED_AT.md"
+FEATURE_ARCH_FILE="$TARGET_DIR/FEATURE_ARCHITECTURE.md"
 
 if [[ ! -f "$PLAN_FILE" ]]; then
   echo "ERROR: $PLAN_FILE not found" >&2
@@ -232,6 +233,26 @@ TMP_BODY=$(mktemp)
   echo
   extract_section "$PLAN_FILE" "^## Steps" | trim_blank_lines
   echo
+
+  # FEATURE_ARCHITECTURE.md (v0.7.1+) — extract ```mermaid``` fenced blocks and
+  # inline them so GitHub / GitLab auto-render the diagrams in the PR / MR body.
+  # The frontmatter, headings, and "Source:" line of FEATURE_ARCHITECTURE.md are
+  # not included — only the Mermaid blocks themselves, prefixed with the section
+  # heading they appeared under (## 1. ... / ## 2. ...).
+  if [[ -f "$FEATURE_ARCH_FILE" ]]; then
+    arch_blocks=$(awk '
+      /^## [0-9]+\./ { current_heading=$0; next }
+      /^```mermaid[[:space:]]*$/ { in_mermaid=1; if (current_heading) print "### " substr(current_heading, 4); print; next }
+      in_mermaid && /^```[[:space:]]*$/ { print; print ""; in_mermaid=0; current_heading=""; next }
+      in_mermaid { print }
+    ' "$FEATURE_ARCH_FILE")
+    if [[ -n "$arch_blocks" ]]; then
+      echo "## Architecture diagrams"
+      echo
+      echo "$arch_blocks" | trim_blank_lines
+      echo
+    fi
+  fi
 
   if [[ -f "$TESTS_FILE" ]]; then
     echo "## Tests"

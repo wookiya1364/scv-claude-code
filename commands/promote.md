@@ -350,13 +350,24 @@ If [1] or [3]: generate the file via Step 6.1 + Step 6.2 + Step 6.3 below.
 
 #### Step 6.1 — First diagram (Component data flow)
 
-Build a `flowchart LR` (or `TB` if vertical layout fits better) showing the components identified in PLAN.md's `Approach Overview` / `Steps`:
+Build a `flowchart LR` (or `TB` if vertical layout fits better) showing the components identified in PLAN.md's `Approach Overview` / `Steps`.
 
-- Each internal component → a node
-- External systems (DB, queue, third-party API) → `[(name)]` cylinder nodes
-- Edges labeled with the function call / event / payload that flows between them
+**Mapping rules (must follow):**
 
-Skeleton (adjust to the actual feature):
+1. **Every component named in `Approach Overview` or `Steps` must appear as a node** — do not omit. If a step says "OrderService validates the cart", `OrderService` is a node.
+2. **Every external system named in PLAN.md** (DB / cache / queue / 3rd-party API / blob store / email / SMS / push) → cylinder node `[(Name)]`. Internal services use square node `[Name]`.
+3. **Every edge needs a label** — the function call / event name / SQL / HTTP verb that flows between the two nodes. No bare arrows. If you cannot label the edge concretely, the edge is suspicious — re-read PLAN.md before drawing it.
+4. **No invented components** — if a node is not in PLAN.md, do not draw it. Better an incomplete diagram (which the user can extend) than a hallucinated one (which misleads).
+
+**Anti-patterns to avoid:**
+
+- ❌ Copying the skeleton verbatim (`Caller`, `ServiceA`, `ServiceB`) — those names exist only in this prompt as syntax illustration. Use the actual component names from PLAN.md.
+- ❌ Bare `A --> B` edges with no label.
+- ❌ Wrapping every node in `[(...)]` cylinder notation — use cylinder ONLY for external systems (DB, queue, 3rd-party). Internal services use plain `[Name]`.
+- ❌ Arbitrary "Data" / "Request" generic node names — use the actual data type / endpoint / event name.
+- ❌ More than ~12 nodes in one diagram — if the feature has more, group related ones into subgraphs or split into multiple diagrams.
+
+**Skeleton (illustrative only — replace ALL names with PLAN.md content):**
 
 ````markdown
 ```mermaid
@@ -422,7 +433,36 @@ Question: "scv/ARCHITECTURE.md is N/A and graphify is not installed. How should 
      draft and try again'."
 ```
 
-After the source decision, build a `flowchart TB` with subgraphs for each layer / domain. Highlight the new components with the `new` class:
+After the source decision, build a `flowchart TB` with subgraphs for each layer / domain.
+
+**Mapping rules by data source:**
+
+**Source = `scv/ARCHITECTURE.md`** (`active` or `draft`):
+
+1. Read the doc's `## Logical view` (or equivalent service-boundaries section).
+2. Each named service / domain there → a `subgraph` (use the exact name).
+3. Each component listed under that service → a node inside the subgraph.
+4. Map this feature's new components (from PLAN.md) into the most relevant subgraph.
+
+**Source = graphify `graph.json`** (`.graphify/docs/graphify-out/graph.json` exists):
+
+```bash
+# Read graph.json + GRAPH_REPORT.md (graphify outputs)
+# graph.json structure: { nodes: [{id, label, community, ...}], links: [{source, target, ...}] }
+# GRAPH_REPORT.md sections: "Community labels", "God nodes", "Surprising connections"
+```
+
+Mapping algorithm:
+
+1. **Subgraphs from communities.** Each community in `graph.json` (with the label graphify generated, e.g., "Auth Module" / "Payment Gateway") → one `subgraph "<community-label>"`. Do **not** invent your own community names — graphify already labeled them in plain language. Use those verbatim.
+2. **Nodes from god_nodes only.** A typical graph has hundreds of nodes; do not draw all of them. Use only the `god_nodes` list (high-degree central nodes graphify identified). Each god node → a node inside its community's subgraph.
+3. **Edges from top-weight links.** Among `graph.json` `links`, take only edges where both endpoints are god nodes. Drop the rest. If still too many, take top 8-12 by `weight`.
+4. **New components from PLAN.md.** This feature's new components (the ones in diagram 1 that don't exist as god nodes) → add as `:::new`-classed nodes in the most relevant community subgraph.
+5. **Edges from new components to existing.** For each new component, draw an edge to each existing god node it interacts with (per PLAN.md `Approach Overview`). Use a dashed edge `-.->` to distinguish "new connection" from "existing structure".
+
+**Source = none (skipped)**: this section is omitted entirely (Step 6.3 file template handles the omission).
+
+**Highlight new components with the `new` class** in all sources:
 
 ````markdown
 ```mermaid
@@ -436,12 +476,18 @@ flowchart TB
     B2[New Component]:::new
   end
   A1 --> B1
-  A2 --> B2
+  A2 -.-> B2
   classDef new fill:#FFE082,stroke:#F57C00,stroke-width:2px
 ```
 ````
 
-If the user chose to skip diagram 2, omit this section entirely (Step 6.3 file template handles the omission).
+**Anti-patterns to avoid (diagram 2):**
+
+- ❌ Drawing every node from `graph.json` — use god_nodes only.
+- ❌ Inventing community names instead of using graphify's labels.
+- ❌ Putting the new feature in a brand-new subgraph far from the rest — place it inside an existing community based on PLAN.md's interaction with that community.
+- ❌ Skipping the `Source:` line in §2 of FEATURE_ARCHITECTURE.md (Step 6.3) — every diagram 2 must declare its basis.
+- ❌ Using solid `-->` for new-component edges — use dashed `-.->` to make new connections visually distinct.
 
 #### Step 6.3 — Write FEATURE_ARCHITECTURE.md
 
@@ -494,6 +540,32 @@ Print one-line confirmation:
   Diagram 2 source: <ARCHITECTURE.md | graphify | skipped>
   ⚠ Review Mermaid syntax + node labels — LLM-generated.
 ```
+
+#### Step 6.4 — Self-review (before moving on)
+
+Before continuing to Step 7, silently re-read the FEATURE_ARCHITECTURE.md you just wrote and verify it against PLAN.md. Do **not** print this checklist to the user — fix problems silently and only mention if a fix changed something material.
+
+Checklist (apply once per generated file):
+
+1. **Coverage**: every component named in PLAN.md's `Approach Overview` / `Steps` appears as a node in diagram 1. If any is missing, add it.
+2. **No inventions**: every node in diagram 1 traces back to PLAN.md. If any node has no PLAN.md basis, remove it.
+3. **Edge labels**: every edge in diagram 1 has a non-empty label (function call / event / SQL / HTTP verb). Bare `-->` arrows get a label or get removed.
+4. **External-vs-internal notation**: cylinder `[(...)]` only for external systems (DB / queue / 3rd-party API), plain `[...]` for internal services. Fix any miscategorized nodes.
+5. **Diagram 2 Source line** (when present): the `> Source:` line in §2 names exactly one of `scv/ARCHITECTURE.md` / `graphify graph (built YYYY-MM-DD)` / `skipped`. If it says "ARCHITECTURE.md or graphify" / vague text, pick the actual source.
+6. **`:::new` class** (diagram 2): every node introduced by this feature has `:::new`. Existing nodes do not.
+7. **Dashed edges** (diagram 2 with graphify source): edges from new components use `-.->` (dashed). Existing-to-existing edges use `-->`.
+8. **Mermaid fence**: the diagram is inside a ` ```mermaid ` ... ` ``` ` fence (not ` ```markdown ` or unfenced).
+
+If a fix changed something user-visible (added a missing component / removed an invented one), mention it in the confirmation:
+
+```
+✓ Created scv/promote/<folder>/FEATURE_ARCHITECTURE.md
+  Diagram 2 source: <ARCHITECTURE.md | graphify | skipped>
+  Self-review: added 1 missing component (RefundEventHandler from Steps).
+  ⚠ Review Mermaid syntax + node labels — LLM-generated.
+```
+
+If self-review fixed nothing material, omit the "Self-review:" line.
 
 ### Step 7 — Update readpath baseline
 

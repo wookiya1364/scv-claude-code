@@ -2375,6 +2375,115 @@ assert_contains "$PROMOTE_DOC" "is **not enforced** by"
 assert_contains "$PROMOTE_DOC" "FEATURE_ARCHITECTURE.md   # optional — two Mermaid diagrams"
 
 echo
+echo "=== [11bbb] v0.7.1 — Mermaid + graphify mapping 정확도 보강 ==="
+
+PROMOTE_CMD="$STANDARD_ROOT/commands/promote.md"
+WORK_CMD="$STANDARD_ROOT/commands/work.md"
+PR_HELPER="$STANDARD_ROOT/scripts/pr-helper.sh"
+
+# Step 6.1 — Mermaid 정확도 prompt 보강
+assert_contains "$PROMOTE_CMD" "Mapping rules (must follow)"
+assert_contains "$PROMOTE_CMD" "Every component named in \`Approach Overview\`"
+assert_contains "$PROMOTE_CMD" "Every external system named in PLAN.md"
+assert_contains "$PROMOTE_CMD" "Every edge needs a label"
+assert_contains "$PROMOTE_CMD" "No invented components"
+assert_contains "$PROMOTE_CMD" "Anti-patterns to avoid"
+assert_contains "$PROMOTE_CMD" "Copying the skeleton verbatim"
+assert_contains "$PROMOTE_CMD" "Bare \`A --> B\` edges"
+assert_contains "$PROMOTE_CMD" "More than ~12 nodes"
+
+# Step 6.2 — graphify mapping algorithm
+assert_contains "$PROMOTE_CMD" "Mapping rules by data source"
+assert_contains "$PROMOTE_CMD" "Subgraphs from communities"
+assert_contains "$PROMOTE_CMD" "graphify already labeled them in plain language"
+assert_contains "$PROMOTE_CMD" "Nodes from god_nodes only"
+assert_contains "$PROMOTE_CMD" "Edges from top-weight links"
+assert_contains "$PROMOTE_CMD" "New components from PLAN.md"
+assert_contains "$PROMOTE_CMD" 'dashed edge `-.->'
+assert_contains "$PROMOTE_CMD" "Anti-patterns to avoid (diagram 2)"
+assert_contains "$PROMOTE_CMD" "Drawing every node from"
+assert_contains "$PROMOTE_CMD" "Inventing community names"
+
+# Step 6.4 — self-review 신규 단계
+assert_contains "$PROMOTE_CMD" "Step 6.4 — Self-review"
+assert_contains "$PROMOTE_CMD" "silently re-read the FEATURE_ARCHITECTURE.md"
+assert_contains "$PROMOTE_CMD" "Coverage**: every component named in PLAN.md"
+assert_contains "$PROMOTE_CMD" "No inventions**: every node in diagram 1 traces back to PLAN.md"
+assert_contains "$PROMOTE_CMD" "Edge labels**: every edge in diagram 1 has a non-empty label"
+assert_contains "$PROMOTE_CMD" "External-vs-internal notation"
+assert_contains "$PROMOTE_CMD" "Diagram 2 Source line"
+assert_contains "$PROMOTE_CMD" "\`:::new\` class"
+assert_contains "$PROMOTE_CMD" "Dashed edges"
+assert_contains "$PROMOTE_CMD" "Mermaid fence"
+assert_contains "$PROMOTE_CMD" "Self-review: added 1 missing component"
+
+# work.md Step 9d-main — FEATURE_ARCHITECTURE.md inline 도식 안내
+assert_contains "$WORK_CMD" "FEATURE_ARCHITECTURE.md exists, inline its two Mermaid blocks"
+assert_contains "$WORK_CMD" "GitHub and"
+assert_contains "$WORK_CMD" "GitLab auto-render"
+assert_contains "$WORK_CMD" "reviewers see the design at a glance"
+
+# pr-helper.sh — FEATURE_ARCH_FILE 변수 + extract 로직
+assert_contains "$PR_HELPER" 'FEATURE_ARCH_FILE="$TARGET_DIR/FEATURE_ARCHITECTURE.md"'
+assert_contains "$PR_HELPER" "FEATURE_ARCHITECTURE.md (v0.7.1+)"
+assert_contains "$PR_HELPER" "## Architecture diagrams"
+assert_contains "$PR_HELPER" "in_mermaid=1"
+
+# pr-helper.sh — Mermaid 블록 추출 awk 로직 isolated 검증
+TMP_FA=$(mktemp)
+cat > "$TMP_FA" <<'EOF'
+---
+title: Test feature
+---
+
+# Architecture — Test
+
+## 1. Component data flow
+
+```mermaid
+flowchart LR
+  A --> B
+```
+
+## 2. Position in whole architecture
+
+> Source: scv/ARCHITECTURE.md
+
+```mermaid
+flowchart TB
+  X --> Y
+```
+EOF
+EXTRACTED=$(awk '
+  /^## [0-9]+\./ { current_heading=$0; next }
+  /^```mermaid[[:space:]]*$/ { in_mermaid=1; if (current_heading) print "### " substr(current_heading, 4); print; next }
+  in_mermaid && /^```[[:space:]]*$/ { print; print ""; in_mermaid=0; current_heading=""; next }
+  in_mermaid { print }
+' "$TMP_FA")
+rm -f "$TMP_FA"
+
+if printf '%s' "$EXTRACTED" | grep -qF "### 1. Component data flow"; then
+  pass "pr-helper awk: heading 1 extracted as ### subsection"
+else
+  fail "pr-helper awk: heading 1 not found"
+fi
+if printf '%s' "$EXTRACTED" | grep -qF "### 2. Position in whole architecture"; then
+  pass "pr-helper awk: heading 2 extracted"
+else
+  fail "pr-helper awk: heading 2 not found"
+fi
+if printf '%s' "$EXTRACTED" | grep -c '```mermaid' | grep -q '^2$'; then
+  pass "pr-helper awk: exactly 2 mermaid fences (both blocks)"
+else
+  fail "pr-helper awk: mermaid fence count != 2"
+fi
+if printf '%s' "$EXTRACTED" | grep -qF "Source: scv/ARCHITECTURE.md"; then
+  fail "pr-helper awk: Source line leaked into output (should be excluded)"
+else
+  pass "pr-helper awk: Source line excluded (only mermaid blocks inline)"
+fi
+
+echo
 echo "=== [10] sync --dry-run (version detection) ==="
 # Force a local divergence on a preserve-policy file so sync reports SKIP
 printf '\n<!-- local note: force divergence -->\n' >> "$APP/scv/AGENTS.md"

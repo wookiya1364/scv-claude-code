@@ -352,6 +352,10 @@ options:
     description:
     "The following happens automatically:
     - Assemble PR body from key sections of PLAN.md / TESTS.md / ARCHIVED_AT.md
+    - If FEATURE_ARCHITECTURE.md exists, inline its two Mermaid blocks (Component
+      data flow + Position in whole architecture) into the PR body — GitHub and
+      GitLab auto-render them, so reviewers see the design at a glance and can
+      flag inaccuracies in the comment thread.
     - Move test-results/ screenshots (PNG/JPG) into .scv-pr-artifacts/<slug>/
       (cleared from test-results/ to keep disk clean). Commit them on the PR branch.
     - Push test-results/ videos (.webm/.mp4) via lib/attachments.sh's git-orphan

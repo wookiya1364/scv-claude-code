@@ -2,6 +2,66 @@
 
 이 저장소의 변경사항을 기록합니다. [Semantic Versioning](https://semver.org/lang/ko/) 규칙을 따릅니다.
 
+## [0.7.1] — 2026-05-04
+
+### 핵심 — v0.7.0 의 도식 정확도 + 리뷰 사이클 강화 (3 영역 동시)
+
+v0.7.0 출시 후 사용자가 검증 한계 (LLM Mermaid 정확도 미시뮬레이션 + graphify graph.json → flowchart 매핑 logic 명세 부족) 를 지적 → 즉시 patch. 사용자 명시 결정 = "(가) 묶음 patch".
+
+배경: v0.7.0 의 두 도식 자동 생성은 *하부 인프라 (promote-helper, ARCHITECTURE.md status 추출, graph mtime 비교)* 가 4 시나리오 모두 검증됐지만, *LLM 행동 정확도 (도식 노드 / 매핑 / Source 줄)* 는 prompt 보강과 사용자 검토 사이클로만 향상 가능. 이번 patch 가 그 부분을 메움.
+
+### Added
+
+- **`commands/promote.md` Step 6.1 — Mermaid prompt 보강** — "Mapping rules (must follow)" 4 항목 (모든 컴포넌트 노드화 / 외부 시스템은 cylinder / 모든 edge 에 라벨 / 발명 금지) + "Anti-patterns to avoid" 5 항목 (skeleton 베끼기 / 라벨 없는 화살표 / 모든 노드 cylinder / 일반 데이터 명 / 12 노드 초과). 사용자가 검증한 시뮬레이션 사례 외 진짜 LLM 출력에서 자주 보이는 실수를 명시 차단.
+- **`commands/promote.md` Step 6.2 — graphify mapping algorithm 명시** — 두 번째 그림의 데이터 소스별 매핑 절차:
+  - Source = `scv/ARCHITECTURE.md`: Logical view 의 service 명칭을 subgraph 로 그대로 사용.
+  - Source = graphify `graph.json`: (1) communities → subgraph (graphify 가 만든 plain-language label *그대로* 사용, LLM 재해석 금지) (2) god_nodes 만 노드화 (수백 노드 그리지 말 것) (3) top-weight links 만 edge (god 노드 양 끝 + weight 상위 8-12) (4) 새 컴포넌트는 PLAN.md 에서 추출 + `:::new` (5) 새-기존 edge 는 dashed `-.->`.
+- **`commands/promote.md` Step 6.4 — Self-review (신규 단계)** — 도식 작성 후 LLM 자가 점검 8 항목 (Coverage / No inventions / Edge labels / 외부-내부 노테이션 / Source 줄 / `:::new` 클래스 / Dashed edges / Mermaid fence). 결과는 사용자에게 *내부적으로* 처리 — material fix 가 발생한 경우만 "Self-review: added 1 missing component (...)" 형태로 confirmation 라인에 추가.
+- **`scripts/pr-helper.sh` — FEATURE_ARCHITECTURE.md inline 자동 첨부** — `FEATURE_ARCH_FILE` 변수 추가, `## Steps` 다음에 PR body 조립 단계에서 awk 로 ` ```mermaid ` 블록 두 개 추출 + `## Architecture diagrams` 섹션으로 inline. frontmatter / Source 줄 / heading 본문은 제외, mermaid 블록만. GitHub / GitLab 모두 PR / MR description 의 mermaid fenced block 자동 렌더 → 리뷰어가 PR 페이지에서 도식 즉시 확인 → 부정확한 부분 코멘트로 피드백.
+- **`commands/work.md` Step 9d-main — PR 생성 안내 갱신** — `[1] Yes` 의 description 에 "FEATURE_ARCHITECTURE.md 가 있으면 두 Mermaid 블록 inline 포함, GitHub / GitLab 자동 렌더, 리뷰어 design-at-a-glance" 한 줄 추가.
+
+### Changed
+
+- **`.claude-plugin/plugin.json`** — version `0.7.0` → `0.7.1`.
+- **`README.md`** — 회귀 배지 599 PASS → 641 PASS.
+
+### Tests
+
+- 신규 섹션 **[11bbb]** (~42 assertion):
+  - Step 6.1 의 Mapping rules + Anti-patterns 핵심 문구
+  - Step 6.2 의 mapping algorithm (communities / god_nodes / top-weight / 새 컴포넌트 / dashed edges) + Anti-patterns
+  - Step 6.4 self-review 8 체크리스트 + 사용자 보고 문구
+  - work.md Step 9d-main 의 inline 도식 안내
+  - pr-helper.sh 의 FEATURE_ARCH_FILE 변수 + Mermaid 블록 추출 awk 로직
+  - **awk 로직 isolated 검증** — 임시 FEATURE_ARCHITECTURE.md 만들어서 추출 결과 검증 (`### 1.` / `### 2.` 헤딩 변환 / mermaid fence 정확히 2 개 / Source 줄 제외).
+- 회귀: 599 → **641 PASS** (+42 assertion) / 0 FAIL.
+
+### Backwards compat
+
+- v0.7.0 와 동작 호환성 100% — 새 어떤 분기 / dialog 도 추가 없음. promote.md 의 prompt 만 보강, work.md / pr-helper.sh 의 PR body 조립만 보강.
+- v0.7.0 archived 폴더의 FEATURE_ARCHITECTURE.md 가 있으면 다음 PR 생성 시 자동으로 inline 포함됨 (역방향 적용 OK).
+- FEATURE_ARCHITECTURE.md 없는 archived 폴더는 PR body 변화 0 (조건부 분기).
+- v0.6.2 이전 archived 폴더 (FEATURE_ARCHITECTURE.md 미존재) 는 PR body 변화 0.
+
+### 비채택
+
+- **Mermaid CLI (mmdc) 자동 lint** — 검토했으나 미채택. 진짜 문제는 syntax 가 아니라 *내용 정확도* (PLAN 의 컴포넌트가 빠지거나 발명됨); Mermaid syntax 자체는 LLM 이 거의 항상 맞음. mmdc 도입은 npm/Node 의존성 추가 + install-deps.sh 갱신 필요 → 비용 대비 효과 낮음.
+- **Concrete examples 다수 추가** — 검토했으나 미채택. "예시 베끼기" 행동 유발 위험. 현재 skeleton 1 개 + Anti-patterns 명시가 균형.
+- **graphify query 호출 (도식용)** — `/graphify query "..."` BFS subgraph 반환은 도식 1 개당 추가 호출 + 토큰 사용 → 무거움. 대신 graph.json 의 community + god_nodes 직접 활용 (mapping algorithm) 으로 0 추가 호출.
+
+### 검증 한계
+
+- LLM 행동 정확도의 *실제 향상* 은 시뮬레이션 안 함. promote.md prompt 보강의 효과는 사용자가 v0.7.0 + v0.7.1 흐름을 비교 사용했을 때만 확인 가능.
+- Mermaid block 추출 awk 로직은 **간단한 케이스** (heading 2 개 + mermaid 블록 2 개) 로만 검증. 복잡 케이스 (heading 3 개 / mermaid 블록 부분 손상 / 빈 블록) 는 unit 테스트 안 함.
+- PR body 의 GitHub vs GitLab 자동 렌더 동작 *실제 검증 안 함* — 두 플랫폼 모두 mermaid fenced block 지원한다고 알려졌지만, 실제 PR/MR 만들어 확인 안 함. Bitbucket 은 미지원 (description 에서) — 이번 patch 영향 범위 밖.
+
+### 메모
+
+- 이 변경은 **v0.7.0 출시 직후 사용자 즉각 피드백 → 묶음 patch (가)** 로 진행. v0.6.2 의 "real user feedback 단계, treadmill 회피" 정책 일관 — 이번도 사용자 명시 요청.
+- v0.7.0 resume guide 는 v0.7.1 resume 로 대체 (혼란 회피).
+
+---
+
 ## [0.7.0] — 2026-05-04
 
 ### 핵심 — `/scv:promote` 가 PLAN.md / TESTS.md 옆에 `FEATURE_ARCHITECTURE.md` 도 자동 생성 (옵트인)
