@@ -83,6 +83,10 @@ When AI starts writing your team's code, three painful things happen. Here's wha
 
 Drop material → refine into a plan + tests → implement → archive. Every archived plan's tests join the **accumulating regression suite** that runs against every future change.
 
+<p align="center">
+  <img src="assets/the-loop.gif" width="720" alt="The Loop — Raw → Promote → Work → Archive → Regression, with regression as the safety net for the next change" />
+</p>
+
 ```mermaid
 %%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#1e1e1e','primaryTextColor':'#fff','primaryBorderColor':'#888','lineColor':'#fff','secondaryColor':'#2d2d2d','tertiaryColor':'#1e1e1e','background':'#0d1117','edgeLabelBackground':'#1e1e1e'}}}%%
 flowchart LR
@@ -140,6 +144,10 @@ No flags to memorize. Claude asks for inputs when needed.
 ## Architecture & Integrations
 
 PLAN.md is the single source of truth. External tools (Jira / Linear / Confluence / Google Doc) are linked via `refs:` — never copied. Outputs (PR / MR / Slack / Discord) are auto-generated from the same source.
+
+<p align="center">
+  <img src="assets/architecture.gif" width="720" alt="Architecture — SCV (PLAN/TESTS/FA/Archive) refs External (Jira/Linear/Confluence/Doc) and emits Output (PR/MR/Slack/Discord)" />
+</p>
 
 ```mermaid
 %%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#1e1e1e','primaryTextColor':'#fff','primaryBorderColor':'#888','lineColor':'#fff','secondaryColor':'#2d2d2d','tertiaryColor':'#1e1e1e','background':'#0d1117','edgeLabelBackground':'#1e1e1e'}}}%%

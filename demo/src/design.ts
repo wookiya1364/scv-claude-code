@@ -11,6 +11,10 @@ export const COLORS = {
   green: "#4ec9b0",
   blue: "#569cd6",
   orange: "#F57C00",
+  // Subgraph fills (Architecture diagram)
+  scvFill: "#1a2332",
+  externalFill: "#1a2a1a",
+  outputFill: "#2a1a2a",
 };
 
 export const FONTS = {
