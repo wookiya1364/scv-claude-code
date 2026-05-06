@@ -65,6 +65,8 @@ bash $CLAUDE_PLUGIN_ROOT/scripts/hydrate.sh init .
 
 That's it. From now on, **any time you're stuck or unsure, run `/scv:help`** — it'll detect your project's current state (raw materials waiting? active plan? tests failing? PR-ready?) and recommend the next action. **You don't need to read the rest of this README to use SCV.**
 
+> **Have an idea but no materials yet?** (v0.9.0+) Just run `/scv:help "I want to add a refund button"` — Claude will refine the idea with you turn by turn, save every step locally, and offer to draft `PLAN.md + TESTS.md` when ready.
+
 ## Why SCV?
 
 When AI starts writing your team's code, three painful things happen. Here's what SCV does about each:
@@ -290,6 +292,8 @@ bash $CLAUDE_PLUGIN_ROOT/scripts/hydrate.sh init .
 ```
 
 이게 다입니다. 이후 **막히거나 뭐 해야 할지 모르겠을 땐 `/scv:help`** — 현재 상태 (raw 자료가 쌓였나? 진행 중인 plan 이 있나? 테스트가 깨졌나? PR 보낼 차례인가?) 를 자동으로 파악하고 다음 행동을 안내합니다. **이 README 의 나머지를 안 읽어도 SCV 를 사용할 수 있습니다.**
+
+> **아이디어는 있는데 자료가 없다면?** (v0.9.0+) 그냥 `/scv:help "환불 버튼 추가하고 싶어"` — Claude 가 한 turn 씩 같이 정제하고, 매 단계를 로컬에 저장하고, 충분해지면 `PLAN.md + TESTS.md` 작성을 제안합니다.
 
 ## 왜 SCV?
 
@@ -517,6 +521,8 @@ bash $CLAUDE_PLUGIN_ROOT/scripts/hydrate.sh init .
 ```
 
 これだけです。以後 **詰まったり迷ったときは `/scv:help`** — 現在の状態 (raw 資料が溜まっているか? 進行中のプランがあるか? テストが落ちているか? PR を出す段階か?) を自動で把握し、次のアクションを推奨します。**この README の残りを読まなくても SCV は使えます。**
+
+> **アイデアはあるが資料はまだない?** (v0.9.0+) `/scv:help "払い戻しボタンを追加したい"` と入力するだけ — Claude が一つずつ精製しながら各ステップをローカルに保存し、十分になったら `PLAN.md + TESTS.md` の作成を提案します。
 
 ## なぜ SCV?
 

@@ -2986,6 +2986,57 @@ assert_contains "$STANDARD_ROOT/commands/promote.md" "**white edge arrows**"
 assert_contains "$STANDARD_ROOT/commands/promote.md" "큰 배경은 검은색, 화살표는 흰색"
 
 echo
+echo "=== [11iii] v0.9.0 — /scv:help conversation mode ==="
+
+HELP_CMD="$STANDARD_ROOT/commands/help.md"
+HELP_SCRIPT="$STANDARD_ROOT/scripts/help.sh"
+PROMOTE_CMD_v9="$STANDARD_ROOT/commands/promote.md"
+WORK_CMD_v9="$STANDARD_ROOT/commands/work.md"
+PROMOTE_DOC_v9="$STANDARD_ROOT/template/scv/PROMOTE.md"
+
+# help.sh — argument parsing + .conversations dir + UNFINISHED emit
+assert_contains "$HELP_SCRIPT" 'CONV_ARG=""'
+assert_contains "$HELP_SCRIPT" 'echo "ARG_CONVERSATION:'
+assert_contains "$HELP_SCRIPT" 'CONV_DIR="scv/.conversations"'
+assert_contains "$HELP_SCRIPT" 'UNFINISHED_CONVERSATIONS:'
+
+# help.md — Mode A / Mode B branch + Step B0~B6
+assert_contains "$HELP_CMD" "Mode A — Diagnosis (no argument)"
+assert_contains "$HELP_CMD" "Mode B — Conversation (with argument, v0.9.0+)"
+assert_contains "$HELP_CMD" "Step B0 — Resume vs new"
+assert_contains "$HELP_CMD" "Step B1 — Create / open the conversation file"
+assert_contains "$HELP_CMD" "Step B2 — Conversation loop"
+assert_contains "$HELP_CMD" "Step B3"
+assert_contains "$HELP_CMD" 'scv/.conversations/<YYYYMMDD-HHMMSS>-<slug>.md'
+assert_contains "$HELP_CMD" "draft PLAN.md + TESTS.md now"
+assert_contains "$HELP_CMD" "copy this conversation into scv/raw/"
+assert_contains "$HELP_CMD" "keep talking"
+
+# .gitignore — /scv/.conversations/
+assert_contains "$STANDARD_ROOT/.gitignore" "/scv/.conversations/"
+assert_contains "$STANDARD_ROOT/template/.gitignore.fragment" "/scv/.conversations/"
+
+# promote.md — source material branching (raw / .conversations / both)
+assert_contains "$PROMOTE_CMD_v9" "Source material — raw / .conversations / both"
+assert_contains "$PROMOTE_CMD_v9" 'scv/.conversations/<file>'
+assert_contains "$PROMOTE_CMD_v9" "is the source"
+
+# work.md Step 9b.1 — conversation archive option
+assert_contains "$WORK_CMD_v9" "Step 9b.1 — Conversation archive"
+assert_contains "$WORK_CMD_v9" "scv/.conversations/archive/"
+assert_contains "$WORK_CMD_v9" "scv/.conversations/ for now"
+
+# template/scv/PROMOTE.md §1.4 — idea-first entry
+assert_contains "$PROMOTE_DOC_v9" "1.4. Idea-first entry"
+assert_contains "$PROMOTE_DOC_v9" 'no concrete materials yet'
+
+# README — 3-language one-liner
+README="$STANDARD_ROOT/README.md"
+assert_contains "$README" "Have an idea but no materials yet"
+assert_contains "$README" "아이디어는 있는데 자료가 없다면"
+assert_contains "$README" "アイデアはあるが資料はまだない"
+
+echo
 echo "=== [10] sync --dry-run (version detection) ==="
 # Force a local divergence on a preserve-policy file so sync reports SKIP
 printf '\n<!-- local note: force divergence -->\n' >> "$APP/scv/AGENTS.md"

@@ -31,6 +31,24 @@ Drop into scv/raw/ → /scv:promote (Claude refines via dialogue)
 
 ---
 
+## 1.4. Idea-first entry — `/scv:help "..."` (v0.9.0+, no raw needed)
+
+**You don't need files in `scv/raw/` to start.** If you have an idea but no concrete materials yet:
+
+```
+/scv:help "I want to add a refund button to checkout"
+```
+
+This enters **conversation mode** — Claude refines your idea with you (asking goal / scope / acceptance questions), persists every turn to `scv/.conversations/<timestamp>-<slug>.md` (gitignored, local), and offers to draft `PLAN.md + TESTS.md` when there's enough information. You can:
+
+- **Quit anytime** — the conversation file is saved turn-by-turn. Run `/scv:help "<continue idea>"` later to resume.
+- **Promote without `scv/raw/`** — choice [1] in the conversation's "ready?" prompt creates the plan directly. Conversation stays in `.conversations/` (gitignored).
+- **Promote with team traceability** — choice [2] also copies the conversation to `scv/raw/<YYYYMMDD>-<author>-<slug>.md` (committable). Pick this when teammates value the raw-thinking history.
+
+If you already have files in `scv/raw/`, the classic flow (§1.5 below) still works — `/scv:help "..."` is the *additional* entry, not a replacement.
+
+---
+
 ## 1.5. Adoption mode usage (default mode)
 
 If hydrated with `hydrate.sh init .` (default), you're in this mode. Standard docs (DOMAIN, ARCHITECTURE, etc.) seed at `status: N/A` and **INTAKE is not forced**. The promote loop still works:

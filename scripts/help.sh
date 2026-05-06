@@ -4,9 +4,14 @@
 set -uo pipefail
 
 VERBOSE=0
+# v0.9.0+: collect non-flag args as the "conversation argument" (free-form text
+# the user typed after /scv:help). If empty, /scv:help runs in diagnosis mode.
+# If non-empty, /scv:help enters conversation mode (commands/help.md handles).
+CONV_ARG=""
 for a in "$@"; do
   case "$a" in
     --verbose|-v) VERBOSE=1 ;;
+    *) CONV_ARG="${CONV_ARG:+$CONV_ARG }$a" ;;
   esac
 done
 
@@ -14,6 +19,27 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # Plugin root (contains scripts/, template/, commands/, ...). When run as a
 # slash command, $CLAUDE_PLUGIN_ROOT is set; fall back to ../ of SCRIPT_DIR.
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+
+# Emit conversation arg + unfinished list to the LLM (commands/help.md reads).
+# Both lines are always emitted so the prompt can branch deterministically.
+echo "ARG_CONVERSATION: ${CONV_ARG}"
+
+# Unfinished conversations = active files in scv/.conversations/ (NOT under archive/).
+# v0.9.0+: persisted by /scv:help conversation mode, gitignored.
+CONV_DIR="scv/.conversations"
+if [[ -d "$CONV_DIR" ]]; then
+  # List files at the top level only (exclude archive/ and any other subdirs).
+  UNFINISHED=$(find "$CONV_DIR" -maxdepth 1 -type f -name '*.md' 2>/dev/null | sort)
+else
+  UNFINISHED=""
+fi
+if [[ -n "$UNFINISHED" ]]; then
+  echo "UNFINISHED_CONVERSATIONS:"
+  printf '  %s\n' $UNFINISHED
+else
+  echo "UNFINISHED_CONVERSATIONS: (none)"
+fi
+echo ""
 
 # --- Fixed overview (always shown) -------------------------------------------
 cat <<'EOF'

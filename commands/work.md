@@ -231,6 +231,26 @@ After a successful archive, remind the user:
 - `scv/archive/<slug>/ARCHIVED_AT.md` has the archive record.
 - Future `/scv:status` will no longer flag this plan.
 
+#### Step 9b.1 — Conversation archive (v0.9.0+, optional)
+
+If the just-archived plan's `raw_sources` includes a path under `scv/.conversations/`, the original conversation file is still in `scv/.conversations/` (active). Offer to archive it too:
+
+```
+AskUserQuestion: "This plan was started from a /scv:help conversation (`<filename>`). Archive that conversation too?"
+
+[1] "Yes — move to scv/.conversations/archive/"
+    description: "The conversation file is moved to scv/.conversations/archive/<filename>. /scv:help's 'unfinished' list won't show it anymore. Both directories are gitignored — the move only affects your local view."
+
+[2] "No — keep it in scv/.conversations/ for now"
+    description: "The conversation stays in the active list. You can still reference it, or archive it manually later. Pick this if you might come back to refine the original idea."
+```
+
+**On [1]**: `mkdir -p scv/.conversations/archive && mv scv/.conversations/<file> scv/.conversations/archive/`. Update the moved file's frontmatter: `status: archived`, `archived_at: <ISO>`. Print one-line confirmation.
+
+**On [2]**: do nothing. Conversation stays active.
+
+If `raw_sources` has no `.conversations/` path (the plan came from `scv/raw/` directly, not a `/scv:help` conversation), skip Step 9b.1 entirely.
+
 ### Step 9c — supersede propagation (new · adopts A's `supersedes` declaration)
 
 Condition: archive **actually happened** in Step 9b, and the just-archived PLAN.md's `supersedes:` array is non-empty.

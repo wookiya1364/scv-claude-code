@@ -36,3 +36,6 @@ DISCUSS.md
 # Remotion demo (Phase 1+) — node_modules ignored
 /demo/node_modules
 /demo/out
+
+# v0.9.0+ — /scv:help conversation mode (local sketch files, gitignored)
+/scv/.conversations/

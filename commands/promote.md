@@ -41,6 +41,18 @@ First, gather context:
 
 Parse the helper output — the lines `MODE:`, `TODAY:`, `AUTHOR:`, `STANDARD_VERSION:`, `GRAPHIFY_SKILL:`, `GRAPH_STATUS:`, `RAW_FILE_COUNT:`, `RAW_TOPIC_CLUSTERS:`, `SUGGEST_SPLIT:`, `SPLIT_REASON:` are the primary signals; section blocks (`=== scv/raw inventory ===` etc.) give you the content to work with.
 
+### Source material — raw / .conversations / both (v0.9.0+)
+
+Before dialog, decide what counts as **source material** for this promote:
+
+| Situation | Source |
+|---|---|
+| `scv/raw/` non-empty AND `/scv:promote` invocation has no conversation file path | `scv/raw/` files (tracked by `readpath.json`) — the classic flow |
+| `/scv:help` triggered this promote (Mode B Step B4) and passed a conversation file path | The conversation file at `scv/.conversations/<file>` is the source. Read its turns as the user's intent. `scv/raw/` may also have files — merge both as sources if so. |
+| `scv/raw/` empty AND no conversation triggered | Nothing to promote — print "Nothing to refine. Drop materials into `scv/raw/` or run `/scv:help \"<idea>\"` to start a conversation." Stop. |
+
+When the source includes a conversation file, also include the conversation's `slug` in the `raw_sources` array of the new PLAN.md frontmatter so traceability is preserved (e.g., `raw_sources: [scv/.conversations/20260506-103000-refund-button.md]`). The conversation file itself is *not* committed (gitignored), but the path serves as a local audit trail.
+
 ## Protocol
 
 ### Step 0 — Language alignment (v0.7.3+, run before dialog)
