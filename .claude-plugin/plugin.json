@@ -1,0 +1,23 @@
+{
+  "name": "scv",
+  "version": "0.8.0",
+  "description": "SCV (Standard · Cowork · Verify) — Claude Code plugin for team workflows. Every change becomes a plan + tests before merging, and those tests accumulate into a self-running regression suite. Built-in Slack/Discord reporting and supersedes-based test obsolescence. Run /scv:help to start.",
+  "author": {
+    "name": "wookiya1364",
+    "email": "wookiya1364@gmail.com"
+  },
+  "homepage": "https://github.com/wookiya1364/scv-claude-code",
+  "license": "MIT",
+  "keywords": [
+    "scv",
+    "team-standard",
+    "cowork",
+    "verify",
+    "workflow",
+    "slack",
+    "discord",
+    "ralph-loop",
+    "reporting",
+    "hydrate"
+  ]
+}

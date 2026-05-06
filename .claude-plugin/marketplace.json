@@ -1,0 +1,30 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "scv-claude-code",
+  "owner": {
+    "name": "wookiya1364",
+    "email": "wookiya1364@gmail.com"
+  },
+  "description": "SCV (Standard · Cowork · Verify) — Claude Code plugin for team workflows. A plan + tests gate on every change, accumulated regression suite from archived tests, supersedes-based test obsolescence, and Slack/Discord reporting — all in one plugin.",
+  "plugins": [
+    {
+      "name": "scv",
+      "description": "Claude Code plugin for team workflows. Every change becomes a plan + tests before merging; archived tests accumulate into a self-running regression suite. Run /scv:help to start. 8 slash commands, no flags to memorize.",
+      "source": "./",
+      "category": "productivity",
+      "tags": [
+        "scv",
+        "team-standard",
+        "cowork",
+        "verify",
+        "workflow",
+        "reporting",
+        "slack",
+        "discord",
+        "template",
+        "ralph-loop"
+      ],
+      "homepage": "https://github.com/wookiya1364/scv-claude-code"
+    }
+  ]
+}

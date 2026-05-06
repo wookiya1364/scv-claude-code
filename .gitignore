@@ -1,0 +1,38 @@
+# OS / editor
+.DS_Store
+*.swp
+*.swo
+Thumbs.db
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Node
+node_modules/
+
+# graphify local caches (output itself is committed; these are runtime helpers)
+.graphify_python
+.graphify_version
+
+# environment files — safety net (this repo is the template, not a hydrated project)
+.env
+.env.local
+
+# SCV sync backups (created by /scv:sync in hydrated projects)
+.scv-backup/
+
+# Scratch
+.scratch/
+tmp/
+
+# Private user notes — DISCUSS.md is the user's local discussion log
+DISCUSS.md
+
+# CHANGELOG.md — local-only (user keeps history privately)
+/CHANGELOG.md
+
+# Remotion demo (Phase 1+) — node_modules ignored
+/demo/node_modules
+/demo/out

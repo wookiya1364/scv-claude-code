@@ -1,0 +1,20 @@
+# === SCV 템플릿이 추가하는 ignore 규칙 ===
+# 이 내용은 scripts/hydrate.sh가 프로젝트 .gitignore 끝에 추가합니다.
+
+# 환경 변수
+.env
+.env.local
+
+# SCV sync 백업
+.scv-backup/
+
+# 테스트 아티팩트
+test-results/
+playwright-report/
+
+# Notifier 큐잉 (전송 실패 시 재시도 대상)
+test-results/report-queue/
+
+# graphify 스킬 로컬 캐시 (글로벌 /graphify 스킬이 생성)
+.graphify_python
+.graphify_version
