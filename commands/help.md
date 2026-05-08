@@ -65,8 +65,16 @@ From this point on, use the chosen language for all user-facing output in this a
 
 ## Run the help script
 
+`$ARGUMENTS` is wrapped in a single-quoted heredoc so the user's raw input
+(including `"`, `(`, `$`, `!`, `*`, `?`, etc.) is passed verbatim — no shell
+word-splitting or expansion. Users do **not** have to wrap their question in
+quotes.
+
 ```!
-"${CLAUDE_PLUGIN_ROOT}/scripts/help.sh" $ARGUMENTS
+"${CLAUDE_PLUGIN_ROOT}/scripts/help.sh" "$(cat <<'__SCV_HELP_ARG_EOF__'
+$ARGUMENTS
+__SCV_HELP_ARG_EOF__
+)"
 ```
 
 Parse the helper output:
