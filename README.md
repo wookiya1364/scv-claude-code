@@ -61,10 +61,8 @@ Click a language below to expand. **English** is open by default.
 /plugin marketplace add https://github.com/wookiya1364/scv-claude-code
 /plugin install scv@scv-claude-code
 
-# 2. Hydrate this project (one-time, per directory)
-bash $CLAUDE_PLUGIN_ROOT/scripts/hydrate.sh init .
-
-# 3. /scv:help takes over from here.
+# 2. /scv:help takes over from here.
+#    On first run it offers to hydrate this project (one click).
 /scv:help
 ```
 
@@ -309,10 +307,8 @@ The `demo/` directory holds Remotion compositions that produce the README's GIFs
 /plugin marketplace add https://github.com/wookiya1364/scv-claude-code
 /plugin install scv@scv-claude-code
 
-# 2. 이 프로젝트에 hydrate (디렉토리당 한 번)
-bash $CLAUDE_PLUGIN_ROOT/scripts/hydrate.sh init .
-
-# 3. /scv:help 가 여기서부터 안내합니다.
+# 2. /scv:help 가 여기서부터 안내합니다.
+#    첫 실행 시 hydrate 도 한 번 묻고 자동 진행합니다.
 /scv:help
 ```
 
@@ -550,10 +546,8 @@ Discord: `NOTIFIER_PROVIDER=discord` + `DISCORD_BOT_TOKEN` + `DISCORD_CHANNEL_ID
 /plugin marketplace add https://github.com/wookiya1364/scv-claude-code
 /plugin install scv@scv-claude-code
 
-# 2. このプロジェクトに hydrate (ディレクトリごとに 1 回)
-bash $CLAUDE_PLUGIN_ROOT/scripts/hydrate.sh init .
-
-# 3. ここから先は /scv:help が引き継ぎます。
+# 2. ここから先は /scv:help が引き継ぎます。
+#    初回実行時に hydrate も一度確認して自動で進めます。
 /scv:help
 ```
 

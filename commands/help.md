@@ -1,7 +1,7 @@
 ---
 description: "Show SCV workflow + diagnose project + recommend next step. With an argument, talk through an idea OR search the archive for past work — SCV picks the right mode from your wording."
 argument-hint: "[\"natural-language idea OR retrospective question (optional)\"]"
-allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/help.sh:*)", "Bash(mkdir:*)", "Bash(cat:*)", "Bash(grep:*)", "Bash(echo:*)", "Bash(test:*)", "Bash(date:*)", "AskUserQuestion", "Read", "Write", "Edit"]
+allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/help.sh:*)", "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/hydrate.sh:*)", "Bash(mkdir:*)", "Bash(cat:*)", "Bash(grep:*)", "Bash(echo:*)", "Bash(test:*)", "Bash(date:*)", "AskUserQuestion", "Read", "Write", "Edit"]
 ---
 
 # /scv:help
@@ -78,7 +78,28 @@ Then branch:
 
 ### If `ARG_CONVERSATION:` is empty → Mode A (diagnosis)
 
-Re-present the rest of the script's output in the resolved language: translate descriptions, recommended next-step explanations, and section headers. Keep slash command names (`/scv:help`, `/scv:promote`, …), file paths, and SCV technical terms (`promote`, `archive`, `orphan branch`, `epic`, `supersedes`) as-is. **If `UNFINISHED_CONVERSATIONS:` is non-empty**, also list them in your output: "You have N unfinished conversation(s). Run `/scv:help` with an idea (e.g., `/scv:help \"continue the refund button\"`) to resume — or start a new one."
+#### Step A0 — Auto-hydrate on first run (v0.10.0+)
+
+If the helper output contains the line `This directory is not hydrated yet.`, the project hasn't been initialized. Don't just relay the script's instructions — offer to hydrate now.
+
+Fire `AskUserQuestion`:
+
+```
+Question: "This project isn't hydrated yet. Set it up now?"
+options:
+[1] "Yes — adoption mode (recommended)"
+    description: "Seeds 9 standard docs at status: N/A. /scv:promote and /scv:work are usable immediately. Document only the scope you need, lift one doc to draft when you decide to. This is the right pick for an existing project."
+[2] "Yes — greenfield mode (--new)"
+    description: "Seeds standard docs at status: draft and walks you through the INTAKE protocol filling DOMAIN / ARCHITECTURE / DESIGN / TESTING one at a time. Pick this only when you are truly starting a new project from zero."
+[3] "Not now — show me the manual command"
+    description: "Skip automatic setup. I'll print the bash command and you can run it yourself when ready."
+```
+
+On choice [1]: run `bash "$CLAUDE_PLUGIN_ROOT/scripts/hydrate.sh" init .`. On [2]: append `--new`. After hydrate completes, re-run `"$CLAUDE_PLUGIN_ROOT/scripts/help.sh"` and present the new diagnosis. On [3]: re-present the manual command from the helper output and stop.
+
+#### Step A1 — Re-present diagnosis
+
+If hydrate is already complete (or just completed in Step A0), re-present the rest of the script's output in the resolved language: translate descriptions, recommended next-step explanations, and section headers. Keep slash command names (`/scv:help`, `/scv:promote`, …), file paths, and SCV technical terms (`promote`, `archive`, `orphan branch`, `epic`, `supersedes`) as-is. **If `UNFINISHED_CONVERSATIONS:` is non-empty**, also list them in your output: "You have N unfinished conversation(s). Run `/scv:help` with an idea (e.g., `/scv:help \"continue the refund button\"`) to resume — or start a new one."
 
 ### If `ARG_CONVERSATION:` is non-empty → classify intent first
 

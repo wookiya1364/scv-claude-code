@@ -3058,8 +3058,17 @@ assert_contains "$README" 'how did we handle refunds last quarter?"` (v0.10.0+)'
 assert_contains "$README" '지난 분기 결제 archive 보여줘"` (v0.10.0+)'
 assert_contains "$README" '先四半期の決済関連 archive を見せて"` (v0.10.0+)'
 
-# plugin.json — version 0.10.0
-assert_contains "$STANDARD_ROOT/.claude-plugin/plugin.json" '"version": "0.10.0"'
+# plugin.json — version 0.10.1
+assert_contains "$STANDARD_ROOT/.claude-plugin/plugin.json" '"version": "0.10.1"'
+
+# v0.10.1 — auto-hydrate on first run (Step A0 in commands/help.md)
+assert_contains "$HELP_CMD" "Step A0 — Auto-hydrate on first run"
+assert_contains "$HELP_CMD" "This project isn't hydrated yet"
+assert_contains "$HELP_CMD" 'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/hydrate.sh'
+# README — Quick Start no longer asks the user to run hydrate manually
+assert_contains "$README" "first run it offers to hydrate"
+assert_contains "$README" "첫 실행 시 hydrate"
+assert_contains "$README" "初回実行時に hydrate"
 
 echo
 echo "=== [10] sync --dry-run (version detection) ==="
