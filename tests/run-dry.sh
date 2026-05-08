@@ -2256,7 +2256,7 @@ README="$STANDARD_ROOT/README.md"
 assert_contains "$README" "Standard docs are optional"
 assert_contains "$README" "N/A is a steady state, not a backlog"
 assert_contains "$README" "External Refs (Jira / Linear / PR / Docs)"
-assert_contains "$README" "links to your ticket via `refs:`"
+assert_contains "$README" "Tickets via \`refs:\` (link only)"
 # 한국어
 assert_contains "$README" "표준 문서는 옵션"
 assert_contains "$README" "### 외부 Refs (Jira / Linear / PR / 문서)"
@@ -2269,34 +2269,34 @@ echo "=== [11zz] README 재구조 — Why SCV? + 5분 walkthrough (v0.6.2+, v0.7
 
 README="$STANDARD_ROOT/README.md"
 
-# 영어 — Why SCV? + 5-Minute Walkthrough (v0.7.5 압축 후 표 형식)
+# 영어 — Why SCV? + 5-Minute Walkthrough (v0.10.0 표 셀 1 문장 압축)
 assert_contains "$README" "## Why SCV?"
 assert_contains "$README" "## 5-Minute Walkthrough"
-assert_contains "$README" "Did the AI actually make this work"
-assert_contains "$README" "The same change is described in 3 places"
-assert_contains "$README" "Old PRs pile up, and no one knows which still matter"
-assert_contains "$README" "*one* source of truth"
+assert_contains "$README" "AI diffs — you end up running them yourself"
+assert_contains "$README" "drifts across ticket"
+assert_contains "$README" "graveyard no one searches"
+assert_contains "$README" "PLAN.md is the single source"
 assert_contains "$README" '"Add a refund button to the checkout page"'
 assert_contains "$README" "Drop materials into"
 assert_contains "$README" "Review → merge → archive"
 
-# 한국어 — 왜 SCV? + 5 분 워크스루 (v0.7.5 압축 후)
+# 한국어 — 왜 SCV? + 5 분 워크스루 (v0.10.0 표 셀 1 문장 압축)
 assert_contains "$README" "## 왜 SCV?"
 assert_contains "$README" "## 5 분 워크스루"
-assert_contains "$README" "AI 가 진짜 동작하게 만든 건지"
-assert_contains "$README" "같은 변경을 3 군데에 따로 적게 됩니다"
-assert_contains "$README" "옛 PR 이 쌓이는데 어느 게 아직 유효한지"
-assert_contains "$README" "*유일한* source of truth"
+assert_contains "$README" "AI diff, 결국 직접 돌려보게"
+assert_contains "$README" "티켓 · PR · 주석 3 군데에서 어긋"
+assert_contains "$README" "검색 안 되는 묘지"
+assert_contains "$README" "PLAN.md 가 단일 source"
 assert_contains "$README" '"결제 페이지에 환불 버튼 추가"'
 assert_contains "$README" "리뷰 → 머지 → archive"
 
-# 일본어 — なぜ SCV? + 5 分ウォークスルー (v0.7.5 압축 후)
+# 일본어 — なぜ SCV? + 5 分ウォークスルー (v0.10.0 표 셀 1 문장 압축)
 assert_contains "$README" "## なぜ SCV?"
 assert_contains "$README" "## 5 分ウォークスルー"
-assert_contains "$README" "AI が本当に動くものを作ったのか"
-assert_contains "$README" "同じ変更を 3 か所に書くことになります"
-assert_contains "$README" "古い PR が積み上がるが、どれがまだ有効か"
-assert_contains "$README" "*唯一の* source of truth"
+assert_contains "$README" "AI の diff、結局自分で動かして"
+assert_contains "$README" "3 か所でずれる"
+assert_contains "$README" "誰も検索しない墓場"
+assert_contains "$README" "PLAN.md が単一 source"
 assert_contains "$README" '"決済ページに払い戻しボタンを追加"'
 assert_contains "$README" "レビュー → マージ → archive"
 
@@ -2897,7 +2897,7 @@ assert_contains "$README" "Multi-language by default"
 
 # 영어 — Philosophy
 assert_contains "$README" "## Philosophy: Standard · Cowork · Verify"
-assert_contains "$README" "three failure modes of AI-assisted team development"
+assert_contains "$README" "Three failure modes of AI-assisted team development"
 assert_contains "$README" "**S — Standard.**"
 assert_contains "$README" "**C — Cowork.**"
 assert_contains "$README" "**V — Verify.**"
@@ -2908,9 +2908,9 @@ assert_contains "$README" "## 흐름 한눈에"
 assert_contains "$README" "왜 이 흐름이 중요한가"
 assert_contains "$README" "## 아키텍처 & 외부 통합"
 assert_contains "$README" "## 철학: Standard · Cowork · Verify"
-assert_contains "$README" "**S — Standard (표준)**"
-assert_contains "$README" "**C — Cowork (협업)**"
-assert_contains "$README" "**V — Verify (검증)**"
+assert_contains "$README" "**S — Standard (표준).**"
+assert_contains "$README" "**C — Cowork (협업).**"
+assert_contains "$README" "**V — Verify (검증).**"
 assert_contains "$README" "플러그인 이름은 플러그인의 계약"
 
 # 일본어 — ループ / アーキテクチャ / 哲学
@@ -2918,9 +2918,9 @@ assert_contains "$README" "## ループ"
 assert_contains "$README" "なぜこのループが重要か"
 assert_contains "$README" "## アーキテクチャと外部統合"
 assert_contains "$README" "## 哲学: Standard · Cowork · Verify"
-assert_contains "$README" "**S — Standard (標準)**"
-assert_contains "$README" "**C — Cowork (協業)**"
-assert_contains "$README" "**V — Verify (検証)**"
+assert_contains "$README" "**S — Standard (標準).**"
+assert_contains "$README" "**C — Cowork (協業).**"
+assert_contains "$README" "**V — Verify (検証).**"
 assert_contains "$README" "プラグインの名前はプラグインの契約"
 
 # Mermaid blocks — 6 새 다이어그램 (3 언어 × 2 섹션) — 정확히 6 추가
@@ -3001,8 +3001,9 @@ assert_contains "$HELP_SCRIPT" 'CONV_DIR="scv/.conversations"'
 assert_contains "$HELP_SCRIPT" 'UNFINISHED_CONVERSATIONS:'
 
 # help.md — Mode A / Mode B branch + Step B0~B6
+# (v0.10.0 reworded "with argument" → "future-leaning argument" — see [11iv].)
 assert_contains "$HELP_CMD" "Mode A — Diagnosis (no argument)"
-assert_contains "$HELP_CMD" "Mode B — Conversation (with argument, v0.9.0+)"
+assert_contains "$HELP_CMD" "Mode B — Conversation (future-leaning argument, v0.9.0+)"
 assert_contains "$HELP_CMD" "Step B0 — Resume vs new"
 assert_contains "$HELP_CMD" "Step B1 — Create / open the conversation file"
 assert_contains "$HELP_CMD" "Step B2 — Conversation loop"
@@ -3033,8 +3034,32 @@ assert_contains "$PROMOTE_DOC_v9" 'no concrete materials yet'
 # README — 3-language one-liner
 README="$STANDARD_ROOT/README.md"
 assert_contains "$README" "Have an idea but no materials yet"
-assert_contains "$README" "아이디어는 있는데 자료가 없다면"
-assert_contains "$README" "アイデアはあるが資料はまだない"
+assert_contains "$README" "아이디어만 있고 자료는 아직 없다"
+assert_contains "$README" "アイデアだけあって資料はまだない"
+
+echo
+echo "=== [11iv] v0.10.0 — /scv:help archive search (Mode B') ==="
+
+# help.sh — emit ARCHIVE_INDEX only when CONV_ARG is non-empty
+assert_contains "$HELP_SCRIPT" 'ARCHIVE_DIR="scv/archive"'
+assert_contains "$HELP_SCRIPT" 'echo "ARCHIVE_INDEX:"'
+assert_contains "$HELP_SCRIPT" "(no archive yet)"
+# README.md inside scv/.conversations/ should not be listed as unfinished
+assert_contains "$HELP_SCRIPT" "! -name 'README.md'"
+
+# help.md — Mode B' branch + classification step
+assert_contains "$HELP_CMD" "Mode B' — Archive Search (retrospective argument, v0.10.0+)"
+assert_contains "$HELP_CMD" "Step B-classify"
+assert_contains "$HELP_CMD" "Future-leaning vs Retrospective vs Ambiguous"
+assert_contains "$HELP_CMD" "ARCHIVE_INDEX:"
+
+# README — Slash Commands row mentions both modes (3 languages)
+assert_contains "$README" 'how did we handle refunds last quarter?"` (v0.10.0+)'
+assert_contains "$README" '지난 분기 결제 archive 보여줘"` (v0.10.0+)'
+assert_contains "$README" '先四半期の決済関連 archive を見せて"` (v0.10.0+)'
+
+# plugin.json — version 0.10.0
+assert_contains "$STANDARD_ROOT/.claude-plugin/plugin.json" '"version": "0.10.0"'
 
 echo
 echo "=== [10] sync --dry-run (version detection) ==="

@@ -1,22 +1,28 @@
 ---
-description: "Show SCV workflow + diagnose project + recommend next step. With an argument, enter conversation mode — talk through your idea naturally and SCV will offer to promote when ready."
-argument-hint: "[\"natural-language idea (optional)\"]"
+description: "Show SCV workflow + diagnose project + recommend next step. With an argument, talk through an idea OR search the archive for past work — SCV picks the right mode from your wording."
+argument-hint: "[\"natural-language idea OR retrospective question (optional)\"]"
 allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/help.sh:*)", "Bash(mkdir:*)", "Bash(cat:*)", "Bash(grep:*)", "Bash(echo:*)", "Bash(test:*)", "Bash(date:*)", "AskUserQuestion", "Read", "Write", "Edit"]
 ---
 
 # /scv:help
 
-Two modes — picked automatically by whether you passed a free-form argument.
+Three modes — picked automatically by whether you passed an argument and (if so) what kind.
 
 ## Mode A — Diagnosis (no argument)
 
 `/scv:help` with no argument: print SCV overview + diagnose current project + recommend next step. Used when you don't know what to do or want a status check.
 
-## Mode B — Conversation (with argument, v0.9.0+)
+## Mode B — Conversation (future-leaning argument, v0.9.0+)
 
-`/scv:help "I want to add a refund button"` (or any free-form idea): enter **conversation mode**. Claude talks with you to refine your raw idea into a concrete plan, persists the conversation to disk so you can pick it up later, and offers to promote when there's enough information for `PLAN.md + TESTS.md`.
+`/scv:help "I want to add a refund button"` (or any *forward-looking* idea): enter **conversation mode**. Claude talks with you to refine the idea into a concrete plan, persists the conversation to disk so you can pick it up later, and offers to promote when there's enough information for `PLAN.md + TESTS.md`.
 
-This mode is the entry point for **adoption mode without raw materials** — you have an idea but nothing in `scv/raw/` yet.
+This is the entry point for **adoption mode without raw materials** — you have an idea but nothing in `scv/raw/` yet.
+
+## Mode B' — Archive Search (retrospective argument, v0.10.0+)
+
+`/scv:help "지난 분기 결제 관련 archive 보여줘"` / `"how did we handle refunds last quarter?"` / `"find PRs related to checkout"` — enter **archive search mode**. Claude reads `ARCHIVE_INDEX` from the helper script, picks the most relevant 1–5 archives, and summarizes them in one paragraph each (slug · title · date · what it did · which `refs:` it linked to).
+
+No new slash command — same `/scv:help` entry, classified by your wording.
 
 ## Language preference — resolve FIRST, before any user-facing output
 
@@ -64,8 +70,9 @@ From this point on, use the chosen language for all user-facing output in this a
 ```
 
 Parse the helper output:
-- `ARG_CONVERSATION:` line — the free-form argument (empty = Mode A diagnosis, non-empty = Mode B conversation)
+- `ARG_CONVERSATION:` line — the free-form argument (empty = Mode A diagnosis, non-empty = Mode B or B')
 - `UNFINISHED_CONVERSATIONS:` line — files at top level of `scv/.conversations/` (active = NOT yet archived). Empty list shown as `(none)`.
+- `ARCHIVE_INDEX:` line + indented entries (only emitted when `ARG_CONVERSATION` is non-empty). Each entry: `<folder> | <title> | <created_at>`. Used by Mode B'.
 
 Then branch:
 
@@ -73,7 +80,53 @@ Then branch:
 
 Re-present the rest of the script's output in the resolved language: translate descriptions, recommended next-step explanations, and section headers. Keep slash command names (`/scv:help`, `/scv:promote`, …), file paths, and SCV technical terms (`promote`, `archive`, `orphan branch`, `epic`, `supersedes`) as-is. **If `UNFINISHED_CONVERSATIONS:` is non-empty**, also list them in your output: "You have N unfinished conversation(s). Run `/scv:help` with an idea (e.g., `/scv:help \"continue the refund button\"`) to resume — or start a new one."
 
-### If `ARG_CONVERSATION:` is non-empty → Mode B (conversation)
+### If `ARG_CONVERSATION:` is non-empty → classify intent first
+
+#### Step B-classify — Future-leaning vs Retrospective vs Ambiguous
+
+Read `ARG_CONVERSATION` and decide which mode applies. Use the wording — not keyword matching alone — to judge.
+
+| Signal | Goes to |
+|---|---|
+| Verbs of *building* / *wanting* / *adding* / *fixing* (e.g., "add", "build", "want", "let's create", "만들고 싶어", "추가하자", "追加したい") | **Mode B (conversation)** |
+| Verbs of *recall* / *finding* / *showing past* (e.g., "find", "search", "show me", "how did we", "last quarter", "related to", "찾아줘", "보여줘", "지난", "어떻게 했었지", "関連の", "過去") | **Mode B' (archive search)** |
+| Mixed / unclear (e.g., "결제 관련" with no other signal) | Ask once, then proceed |
+
+If unsure, fire a single `AskUserQuestion`:
+
+```
+Question: "Which fits your intent?"
+options:
+[1] "Build / change something new"
+    description: "I help you think it through and draft PLAN.md + TESTS.md."
+[2] "Find what we already did"
+    description: "I scan scv/archive/ and summarize the most relevant past work."
+```
+
+Default to [1] if the user does not answer in a reasonable time.
+
+#### → Mode B' (archive search)
+
+Skip Steps B0–B6 entirely. Instead:
+
+1. Read the `ARCHIVE_INDEX:` block from helper output. If it shows `(empty)` or `(no archive yet)`, tell the user honestly and suggest `/scv:promote` to create the first plan. Stop.
+2. Pick the 1–5 archives whose `<title>` / `<folder>` / `<created_at>` best match the user's question. Be conservative — fewer hits beat speculative ones.
+3. For each picked archive, read `scv/archive/<folder>/PLAN.md` (only the picked ones — don't read all). Extract: one-sentence purpose · `refs:` links · `supersedes:` if present · final outcome (look at the `Approach Overview` / `Result` sections).
+4. Print a compact summary in the resolved language. Format suggestion (one block per archive):
+
+   ```
+   • <folder>  ·  <created_at>
+     <title>
+     <one-sentence purpose>
+     refs: <jira/linear/... if any>
+     supersedes: <slug if any>
+   ```
+
+5. End with a single follow-up offer: `"Want to start a new plan based on one of these? Tell me which folder and I'll open it as a conversation seed."` If the user picks one, copy the relevant excerpts into a new `scv/.conversations/<timestamp>-<slug>.md` and proceed as Mode B from Step B1.
+
+Do not enter the long Mode B conversation loop here — Mode B' answers the question and stops.
+
+#### → Mode B (conversation, original flow)
 
 #### Step B0 — Resume vs new
 

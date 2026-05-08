@@ -27,9 +27,35 @@ echo "ARG_CONVERSATION: ${CONV_ARG}"
 # Unfinished conversations = active files in scv/.conversations/ (NOT under archive/).
 # v0.9.0+: persisted by /scv:help conversation mode, gitignored.
 CONV_DIR="scv/.conversations"
+
+# v0.9.2+: when the user enters conversation mode for the first time, create
+# the directory and a one-page safety README (gitignored notice + sensitive-data
+# warning). Only fires when CONV_ARG is non-empty so we don't pollute projects
+# that never use conversation mode.
+if [[ -n "$CONV_ARG" && ! -d "$CONV_DIR" ]]; then
+  mkdir -p "$CONV_DIR"
+fi
+if [[ -d "$CONV_DIR" && ! -f "$CONV_DIR/README.md" ]]; then
+  cat > "$CONV_DIR/README.md" <<'CONV_README_EOF'
+# scv/.conversations/ — local-only working folder
+
+This folder is created by `/scv:help "..."` conversation mode (v0.9.0+).
+It holds your in-progress idea sketches before they become a `scv/promote/` plan.
+
+- **gitignored** — files here are not committed (`.gitignore` rule: `/scv/.conversations/`).
+- **may contain sensitive material** — anything you typed in the conversation
+  (API keys, internal URLs, customer details, screenshots' filenames, etc.) is
+  written here verbatim. Review before sharing this folder by hand.
+- **lifecycle** — `/scv:promote` asks whether to move the conversation file to
+  `archive/` after a plan is created. Decline to keep iterating; accept to
+  retire it once the work is captured in PLAN.md.
+CONV_README_EOF
+fi
+
 if [[ -d "$CONV_DIR" ]]; then
-  # List files at the top level only (exclude archive/ and any other subdirs).
-  UNFINISHED=$(find "$CONV_DIR" -maxdepth 1 -type f -name '*.md' 2>/dev/null | sort)
+  # Top-level *.md only, excluding the safety README that v0.9.2+ auto-creates.
+  UNFINISHED=$(find "$CONV_DIR" -maxdepth 1 -type f -name '*.md' \
+                 ! -name 'README.md' 2>/dev/null | sort)
 else
   UNFINISHED=""
 fi
@@ -40,6 +66,43 @@ else
   echo "UNFINISHED_CONVERSATIONS: (none)"
 fi
 echo ""
+
+# v0.10.0+: archive index for retrospective queries.
+# Emitted only when conversation mode is active (CONV_ARG non-empty). The LLM
+# (commands/help.md) classifies the user argument as "future-leaning" (build
+# something new — Mode B) vs "retrospective" (find / show past work — Mode B').
+# For retrospective intent it uses this index + targeted grep on PLAN.md to
+# answer; future-leaning ignores the index entirely.
+ARCHIVE_DIR="scv/archive"
+if [[ -n "$CONV_ARG" ]]; then
+  if [[ -d "$ARCHIVE_DIR" ]]; then
+    # Newest archives first, capped at 30 entries to keep prompt size bounded.
+    echo "ARCHIVE_INDEX:"
+    found_any=0
+    while IFS= read -r dir; do
+      [[ -z "$dir" ]] && continue
+      folder=$(basename "$dir")
+      plan="$dir/PLAN.md"
+      if [[ -f "$plan" ]]; then
+        title=$(grep -m1 '^title:' "$plan" 2>/dev/null \
+          | sed 's/^title:[[:space:]]*//; s/^["'"'"']//; s/["'"'"']$//')
+        created=$(grep -m1 '^created_at:' "$plan" 2>/dev/null \
+          | sed 's/^created_at:[[:space:]]*//')
+        printf '  %s | %s | %s\n' "$folder" "${title:-<no title>}" "${created:-<no date>}"
+      else
+        printf '  %s | <no PLAN.md>\n' "$folder"
+      fi
+      found_any=1
+    done < <(find "$ARCHIVE_DIR" -mindepth 1 -maxdepth 1 -type d 2>/dev/null \
+              | sort -r | head -30)
+    if [[ "$found_any" -eq 0 ]]; then
+      echo "  (empty)"
+    fi
+  else
+    echo "ARCHIVE_INDEX: (no archive yet)"
+  fi
+  echo ""
+fi
 
 # --- Fixed overview (always shown) -------------------------------------------
 cat <<'EOF'

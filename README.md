@@ -13,6 +13,10 @@ Every change ships with a plan and tests. The tests run forever — even after y
 Drop materials → Claude refines them with you → implementation runs the tests → tests stay in your regression suite. Your next change is automatically checked against everything you've ever shipped.
 </p>
 
+<p>
+<b>SCV is a <i>process</i> plugin — not a code-generation accelerator.</b> It makes the team work from the same plan and the same tests. Speed comes as a side effect.
+</p>
+
 <img src="assets/scv-demo.gif" width="720" alt="SCV 30-second walkthrough — /scv:help → /scv:promote → /scv:work → auto PR" />
 
 <p>
@@ -24,13 +28,14 @@ Drop materials → Claude refines them with you → implementation runs the test
 </p>
 
 <p>
-<a href="#why-scv">Why SCV?</a> ·
-<a href="#the-loop">The Loop</a> ·
-<a href="#5-minute-walkthrough">5-min walkthrough</a> ·
 <a href="#quick-start--four-steps">Quick Start</a> ·
+<a href="#5-minute-walkthrough">5-min walkthrough</a> ·
+<a href="#the-loop">The Loop</a> ·
+<a href="#slash-commands">Commands</a> ·
+<a href="#why-scv">Why SCV?</a> ·
 <a href="#architecture--integrations">Architecture</a> ·
 <a href="#philosophy-standard--cowork--verify">Philosophy</a> ·
-<a href="CHANGELOG.md">Changelog</a>
+<a href="https://github.com/wookiya1364/scv-claude-code/releases">Releases</a>
 </p>
 
 </div>
@@ -63,19 +68,29 @@ bash $CLAUDE_PLUGIN_ROOT/scripts/hydrate.sh init .
 /scv:help
 ```
 
-That's it. From now on, **any time you're stuck or unsure, run `/scv:help`** — it'll detect your project's current state (raw materials waiting? active plan? tests failing? PR-ready?) and recommend the next action. **You don't need to read the rest of this README to use SCV.**
+That's it. **You only need to remember `/scv:help`** — it diagnoses your project and routes to the right command. Pick a starting line:
 
-> **Have an idea but no materials yet?** (v0.9.0+) Just run `/scv:help "I want to add a refund button"` — Claude will refine the idea with you turn by turn, save every step locally, and offer to draft `PLAN.md + TESTS.md` when ready.
-
-## Why SCV?
-
-When AI starts writing your team's code, three painful things happen. Here's what SCV does about each:
-
-| The painful thing | What SCV does |
+| Situation | Command |
 |---|---|
-| **"Did the AI actually make this work, or just make it *look* right?"** Reviewing an AI-generated 100-line diff, you end up running tests yourself before you can even start reading the logic. | `/scv:work` runs your Playwright e2e tests and attaches a 5-second GIF preview to the PR. Reviewers see the feature actually working, then read the diff with focus on logic — not "does it run". |
-| **The same change is described in 3 places** — Linear/Jira ticket, PR description, code comment — and they all drift. Six months later, no one knows which version is the truth. | PLAN.md is the *one* source of truth. It links to your ticket via `refs:` (no copy-paste), and its TESTS run on every future change. There's nothing to keep in sync. |
-| **Old PRs pile up, and no one knows which still matter.** Q1 archived 50 plans. Are they still relevant? Did any get replaced by a refactor? Without a graph, the archive becomes a graveyard you can't search. | Each plan can declare `supersedes: [old-slug]`. `/scv:regression` automatically skips replaced plans. The archive becomes a *living* record — new team members `grep` it to learn how the codebase got built. |
+| Don't know what to do next | `/scv:help` |
+| Have an idea but no materials yet | `/scv:help "I want to add a refund button"` (v0.9.0+) |
+| Want to find past work in the archive | `/scv:help "how did we handle refunds last quarter?"` (v0.10.0+) |
+
+---
+
+## 5-Minute Walkthrough
+
+**Scenario**: "Add a refund button to the checkout page"
+
+| Min | Step | What happens |
+|---|---|---|
+| 1 | Drop materials into `scv/raw/` | meeting notes + spec PDF (Jira URL inside) |
+| 2 | `/scv:promote` | URL detected · slug + title asked · `PLAN.md + TESTS.md + FEATURE_ARCHITECTURE.md` written |
+| 3 | `/scv:work <slug>` | Implements · runs Playwright e2e · captures `.webm` |
+| 4 | Auto PR | PR opens with GIF preview · Mermaid diagrams · Jira link — all attached |
+| 5 | Review → merge → archive | Reviewer confirms via GIF in 5 sec · merge moves plan to archive · joins `/scv:regression` |
+
+**Stuck at any step?** Run `/scv:help` — it picks up your project's current state and tells you what's next.
 
 ---
 
@@ -110,36 +125,32 @@ flowchart LR
 
 ---
 
-## 5-Minute Walkthrough
-
-**Scenario**: "Add a refund button to the checkout page"
-
-| Min | Step | What happens |
-|---|---|---|
-| 1 | Drop materials into `scv/raw/` | meeting notes + spec PDF (Jira URL inside) |
-| 2 | `/scv:promote` | Claude detects the URL, asks for slug + title → creates `PLAN.md + TESTS.md + FEATURE_ARCHITECTURE.md` (Mermaid diagrams) |
-| 3 | `/scv:work <slug>` | Implements + Playwright e2e + `.webm` capture |
-| 4 | Auto PR | PR opens with a GIF preview, the Mermaid diagrams, and a Jira link — all attached automatically |
-| 5 | Review → merge → archive | Reviewer confirms via GIF in 5 sec; on merge plan archives, joins `/scv:regression` suite |
-
-Every change becomes a plan + tests, accumulates into a self-running regression suite, and stays linked to your existing tools (Linear / Jira / Confluence) without duplication.
-
 ## Slash Commands
 
-> **You'll discover these through `/scv:help`'s recommendations as you go — you don't have to memorize them.** This table is for reference.
+**You don't have to memorize this** — `/scv:help` picks the right command for you at each step. Reference table below:
 
 | Command | What it does |
 |---|---|
-| **`/scv:help`** | **Tells you what to do next.** Diagnoses your project's state and recommends the next action. **Run this whenever you're unsure.** |
-| `/scv:status` | Inspect raw materials, active promotes, epic progress |
-| `/scv:promote` | Refine `scv/raw/` materials into a plan folder (`scv/promote/<slug>/`) — interactive, creates PLAN + TESTS + Mermaid architecture diagrams |
-| `/scv:work <slug>` | Implement the plan, run tests, archive when passing, open a PR with the e2e video auto-attached |
-| `/scv:regression` | Run all accumulated archived TESTS as a regression suite |
+| **`/scv:help`** | Tells you what to do next. With an argument: conversation (idea) or archive search (retrospective query) — see Quick Start. |
+| `/scv:status` | Inspect raw materials · active promotes · epic progress |
+| `/scv:promote` | `scv/raw/` → plan folder (`scv/promote/<slug>/`) with PLAN + TESTS + Mermaid diagrams |
+| `/scv:work <slug>` | Implement · run tests · archive on pass · open PR with e2e video |
+| `/scv:regression` | Run every archived TESTS as a regression suite |
 | `/scv:report` | Post a phase result to Slack or Discord |
 | `/scv:sync` | Apply plugin updates to standard docs |
-| `/scv:install-deps` | Detect & install missing CLIs (`gh` / `glab` / `jq` / `ffmpeg`) — OS-aware |
+| `/scv:install-deps` | Detect & install missing CLIs (`gh` / `glab` / `jq` / `ffmpeg`) |
 
-No flags to memorize. Claude asks for inputs when needed.
+---
+
+## Why SCV?
+
+When AI starts writing your team's code, three things break down.
+
+| Problem | SCV's answer |
+|---|---|
+| AI diffs — you end up running them yourself before reviewing logic. | `/scv:work` attaches an e2e GIF preview to the PR. |
+| The same change drifts across ticket · PR · comment. | PLAN.md is the single source. Tickets via `refs:` (link only). |
+| Old archives become a graveyard no one searches. | `supersedes:` + `/scv:regression` keep the archive *alive*. |
 
 ## Architecture & Integrations
 
@@ -188,22 +199,22 @@ flowchart TB
   class PLAN,Archive key
 ```
 
-**Key properties.**
+**Key properties**
 
-- **Single source of truth.** PLAN.md is written once. PR description, regression filter, Slack report — all read from it.
-- **External tools stay external.** `refs: [{type: jira, id: PAY-1234}]` links don't copy ticket bodies. When the ticket changes, the link still resolves.
-- **Vendor-agnostic backends.** PR/MR creation goes through `lib/pr-platform.sh`; GitHub (`gh`) and GitLab (`glab`) are first-class. Adding Bitbucket / Gitea is a new adapter, not a rewrite.
-- **Multi-language by default.** PR title, body labels (`## Summary` / `## 요약` / `## 概要`), Mermaid node labels, commit messages — all follow the resolved language (English / 한국어 / 日本語) from your settings. (default).
+- Single source of truth — PLAN.md written once · PR / regression / Slack all read from it.
+- External tools stay external — `refs:` link to tickets · no body copy · link resolves when ticket changes.
+- Vendor-agnostic backends — `gh` / `glab` first-class via `lib/pr-platform.sh` · adding Bitbucket / Gitea = a new adapter.
+- Multi-language by default — PR / Mermaid / commits follow your `SCV_LANG` (English · 한국어 · 日本語).
 
 ## Philosophy: Standard · Cowork · Verify
 
-The three letters are not features — they are **the three failure modes of AI-assisted team development that SCV refuses**.
+Three failure modes of AI-assisted team development — and what SCV refuses to do about each.
 
-**S — Standard.** *"Documentation is something the team should already have, not a chore SCV imposes."* So standard docs (DOMAIN, ARCHITECTURE, DESIGN, TESTING, …) seed at `status: N/A` and stay that way until you decide to lift one. Adoption is zero-friction. **N/A is a steady state, not a backlog.**
+**S — Standard.** Standard docs (DOMAIN, ARCHITECTURE, DESIGN, TESTING, …) seed at `status: N/A` and stay that way until you lift one. N/A is a steady state, not a backlog.
 
-**C — Cowork.** *"AI should refine your raw thinking with you, not replace it."* So `/scv:promote` is a **dialog**, not a generation. Claude reads `scv/raw/` (any format — notes, PDFs, screenshots, recordings), proposes a structure, and the user approves per-candidate. What lands in PLAN.md is what the user said, not what the LLM guessed.
+**C — Cowork.** `/scv:promote` is a dialog, not a generation. Claude reads `scv/raw/` and proposes a structure; you approve per-candidate. PLAN.md ends up with what you said, not what the LLM guessed.
 
-**V — Verify.** *"Tests don't just gate the current change — they protect every future change."* So TESTS.md is **executable**, not aspirational. Every archived plan's tests run as regression on the next change. Failures triage into regression / obsolete / flaky — never silently skipped.
+**V — Verify.** TESTS.md is executable, not aspirational. Every archived plan's tests run as regression on the next change. Failures triage into regression / obsolete / flaky — never silently skipped.
 
 > The plugin's name is the plugin's contract.
 
@@ -261,6 +272,10 @@ Discord: `NOTIFIER_PROVIDER=discord` + `DISCORD_BOT_TOKEN` + `DISCORD_CHANNEL_ID
 
 If you already have `.env`: `cat .env.example.scv >> .env`. Never commit `.env`.
 
+### `demo/` (Repo-only — not part of the plugin)
+
+The `demo/` directory holds Remotion compositions that produce the README's GIFs (`scv-demo.gif`, `the-loop.gif`, `architecture.gif`). It carries its own `pnpm` workspace and is unrelated to plugin behavior — plugin users do not need it.
+
 </details>
 
 ## Learn More
@@ -279,6 +294,8 @@ If you already have `.env`: `cat .env.example.scv >> .env`. Never commit `.env`.
 
 <details>
 <summary><b>한국어</b></summary>
+
+> **SCV 는 *프로세스* 플러그인입니다 — 코드 자동 생성기가 아닙니다.** 팀이 같은 plan 과 같은 테스트로 일하게 만드는 도구입니다. 속도는 부수 효과로 따라옵니다.
 
 ## 빠른 시작
 
@@ -299,19 +316,29 @@ bash $CLAUDE_PLUGIN_ROOT/scripts/hydrate.sh init .
 /scv:help
 ```
 
-이게 다입니다. 이후 **막히거나 뭐 해야 할지 모르겠을 땐 `/scv:help`** — 현재 상태 (raw 자료가 쌓였나? 진행 중인 plan 이 있나? 테스트가 깨졌나? PR 보낼 차례인가?) 를 자동으로 파악하고 다음 행동을 안내합니다. **이 README 의 나머지를 안 읽어도 SCV 를 사용할 수 있습니다.**
+이게 다입니다. **외울 명령은 `/scv:help` 하나** — 프로젝트를 진단하고 다음에 쓸 명령으로 안내합니다. 시작 줄을 고르세요:
 
-> **아이디어는 있는데 자료가 없다면?** (v0.9.0+) 그냥 `/scv:help "환불 버튼 추가하고 싶어"` — Claude 가 한 turn 씩 같이 정제하고, 매 단계를 로컬에 저장하고, 충분해지면 `PLAN.md + TESTS.md` 작성을 제안합니다.
-
-## 왜 SCV?
-
-AI 가 팀 코드를 짜기 시작하면, 세 가지 골치 아픈 일이 생깁니다. SCV 가 그걸 어떻게 풀어주는가:
-
-| 골치 아픈 일 | SCV 의 처리 |
+| 상황 | 명령 |
 |---|---|
-| **"AI 가 진짜 동작하게 만든 건지, 아니면 그럴듯해 *보이게만* 만든 건지?"** AI 가 짠 100 줄 diff 를 리뷰하려면 결국 본인이 직접 테스트 돌려본 다음에야 로직을 보게 됩니다. | `/scv:work` 가 Playwright e2e 를 돌리고 5 초짜리 GIF 미리보기를 PR 에 자동 첨부. 리뷰어가 *기능이 실제로 동작하는 모습* 을 먼저 보고, 그 다음에 diff 를 — "동작은 하는가?" 가 아니라 *로직* 에 집중해서 — 읽습니다. |
-| **같은 변경을 3 군데에 따로 적게 됩니다** — Linear/Jira 티켓, PR description, 코드 주석 — 그리고 셋 다 시간 지나면 어긋납니다. 6 개월 뒤엔 어느 게 진짜인지 아무도 모릅니다. | PLAN.md 가 *유일한* source of truth. 티켓은 `refs:` 로 *링크* (복붙 안 함), TESTS 는 미래 변경마다 자동 실행. 동기화할 게 없습니다. |
-| **옛 PR 이 쌓이는데 어느 게 아직 유효한지 아무도 모릅니다.** Q1 에 50 개 plan 이 archive 됐는데, 아직 유효한가? 어느 게 리팩터링으로 대체됐나? 의존 그래프가 없으면 archive 는 검색도 안 되는 묘지가 됩니다. | 각 plan 이 `supersedes: [옛-slug]` 를 선언할 수 있어요. `/scv:regression` 이 대체된 plan 은 자동 skip. archive 는 *살아있는* 기록 — 새 팀원이 `grep` 으로 "이 코드가 어떻게 만들어졌나" 를 추적합니다. |
+| 다음에 뭐 해야 할지 모르겠다 | `/scv:help` |
+| 아이디어만 있고 자료는 아직 없다 | `/scv:help "환불 버튼 추가하고 싶어"` (v0.9.0+) |
+| 과거 archive 를 찾고 싶다 | `/scv:help "지난 분기 결제 archive 보여줘"` (v0.10.0+) |
+
+---
+
+## 5 분 워크스루
+
+**시나리오**: "결제 페이지에 환불 버튼 추가"
+
+| 분 | 단계 | 결과 |
+|---|---|---|
+| 1 | `scv/raw/` 에 자료 투입 | 회의록 + 스펙 PDF (Jira URL 포함) |
+| 2 | `/scv:promote` | URL 인식 · slug + title 질문 · `PLAN.md + TESTS.md + FEATURE_ARCHITECTURE.md` 생성 |
+| 3 | `/scv:work <slug>` | 구현 · Playwright e2e · `.webm` 캡처 |
+| 4 | 자동 PR | PR 열림 · GIF 미리보기 · Mermaid 도식 · Jira 링크 모두 자동 첨부 |
+| 5 | 리뷰 → 머지 → archive | 리뷰어가 GIF 로 5 초 확인 · 머지 시 archive · `/scv:regression` suite 합류 |
+
+**어느 단계든 막히면** `/scv:help` — 프로젝트의 현재 상태를 보고 다음에 뭐 할지 알려줍니다.
 
 ---
 
@@ -342,36 +369,32 @@ flowchart LR
 
 ---
 
-## 5 분 워크스루
-
-**시나리오**: "결제 페이지에 환불 버튼 추가"
-
-| 분 | 단계 | 결과 |
-|---|---|---|
-| 1 | `scv/raw/` 에 자료 투입 | 회의록 + 스펙 PDF (Jira URL 포함) |
-| 2 | `/scv:promote` | Claude 가 URL 인식, slug + title 묻고 → `PLAN.md + TESTS.md + FEATURE_ARCHITECTURE.md` (Mermaid 도식) 생성 |
-| 3 | `/scv:work <slug>` | 구현 + Playwright e2e + `.webm` 캡처 |
-| 4 | 자동 PR | PR 열림 — GIF 미리보기, Mermaid 도식, Jira 링크 모두 자동 첨부 |
-| 5 | 리뷰 → 머지 → archive | 리뷰어가 GIF 로 5 초 안에 확인; 머지 시 archive, `/scv:regression` suite 에 합류 |
-
-모든 변경이 plan + tests 가 되어 자동 회귀 suite 으로 누적되고, 기존 도구 (Linear / Jira / Confluence) 와는 중복 없이 링크됩니다.
-
 ## 슬래시 커맨드
 
-> **외울 필요 없습니다 — `/scv:help` 의 안내를 따라가면서 자연스럽게 알게 됩니다.** 이 표는 참고용입니다.
+**외울 필요 없습니다** — `/scv:help` 가 매 단계마다 알맞은 명령을 안내합니다. 아래는 참고용 표:
 
 | 커맨드 | 하는 일 |
 |---|---|
-| **`/scv:help`** | **다음에 뭘 해야 할지 알려줍니다.** 프로젝트 상태를 진단하고 추천 행동을 안내. **모르겠을 땐 항상 이걸 먼저.** |
-| `/scv:status` | raw 자료 · 진행 중인 promote · epic 진척도 자세히 |
-| `/scv:promote` | `scv/raw/` 자료를 plan 폴더 (`scv/promote/<slug>/`) 로 정제 — 대화 형식, PLAN + TESTS + Mermaid 아키텍처 도식 생성 |
-| `/scv:work <slug>` | plan 구현 + 테스트 실행 + 통과 시 archive + PR 자동 생성 (e2e 비디오 자동 첨부) |
-| `/scv:regression` | archive 된 모든 TESTS 를 누적 회귀로 실행 |
+| **`/scv:help`** | 다음에 뭘 해야 할지 안내. 인자 있으면 분기 — 아이디어는 대화 모드, 회고 질문은 archive 검색. 예시는 빠른 시작 표. |
+| `/scv:status` | raw 자료 · 진행 중인 promote · epic 진척도 |
+| `/scv:promote` | `scv/raw/` → plan 폴더 (`scv/promote/<slug>/`) — PLAN + TESTS + Mermaid 도식 |
+| `/scv:work <slug>` | 구현 · 테스트 실행 · 통과 시 archive · e2e 비디오 첨부한 PR 생성 |
+| `/scv:regression` | archive 된 모든 TESTS 를 회귀로 실행 |
 | `/scv:report` | 단계 결과를 Slack / Discord 에 보고 |
 | `/scv:sync` | 플러그인 업데이트를 표준 문서에 반영 |
-| `/scv:install-deps` | 누락 CLI 자동 감지 + 설치 안내 (`gh` / `glab` / `jq` / `ffmpeg`) — OS 자동 인지 |
+| `/scv:install-deps` | 누락 CLI 자동 감지 + 설치 안내 (`gh` / `glab` / `jq` / `ffmpeg`) |
 
-외울 플래그 없습니다. Claude 가 필요할 때마다 입력을 묻고 진행합니다.
+---
+
+## 왜 SCV?
+
+AI 가 팀 코드를 짜기 시작하면 세 가지가 어긋납니다.
+
+| 문제 | SCV 의 답 |
+|---|---|
+| AI diff, 결국 직접 돌려보게 됩니다. | `/scv:work` 가 e2e + GIF 미리보기를 PR 에 자동 첨부. |
+| 같은 변경이 티켓 · PR · 주석 3 군데에서 어긋납니다. | PLAN.md 가 단일 source. 티켓은 `refs:` 링크. |
+| 옛 archive 가 검색 안 되는 묘지가 됩니다. | `supersedes:` 와 `/scv:regression` 으로 *살아있는* 기록. |
 
 
 ## 아키텍처 & 외부 통합
@@ -417,22 +440,22 @@ flowchart TB
   class PLAN,Archive key
 ```
 
-**핵심 속성**.
+**핵심 속성**
 
-- **단일 source of truth**. PLAN.md 는 한 번만 작성. PR description / regression filter / Slack 보고 — 모두 여기서 읽음.
-- **외부 도구는 외부에 둠**. `refs: [{type: jira, id: PAY-1234}]` 링크는 티켓 본문 복사 안 함. 티켓이 갱신돼도 링크는 여전히 유효.
-- **vendor-agnostic 백엔드**. PR/MR 생성은 `lib/pr-platform.sh` 거침. GitHub (`gh`) + GitLab (`glab`) first-class. Bitbucket / Gitea 추가는 새 어댑터, rewrite 아님.
-- **다국어 default**. PR 제목, body 라벨 (`## Summary` / `## 요약` / `## 概要`), Mermaid 노드 라벨, commit 메시지 — 모두 settings 에서 결정된 언어 (English / 한국어 / 日本語) 따라감. (default).
+- 단일 source of truth — PLAN.md 한 번만 작성 · PR / regression / Slack 모두 여기서 읽음.
+- 외부 도구는 외부에 둠 — `refs:` 로 티켓 링크 · 본문 복사 안 함 · 티켓 갱신돼도 링크는 유효.
+- vendor-agnostic 백엔드 — `lib/pr-platform.sh` 통해 `gh` / `glab` first-class · Bitbucket / Gitea 추가 = 새 어댑터.
+- 다국어 default — PR / Mermaid / commit 모두 `SCV_LANG` 따라감 (English · 한국어 · 日本語).
 
 ## 철학: Standard · Cowork · Verify
 
-세 글자는 *기능* 이 아니라 — **AI 협업 팀 개발의 세 가지 실패 모드**, SCV 가 거부하는 그것.
+AI 협업 팀 개발의 세 가지 실패 모드 — SCV 가 거부하는 것.
 
-**S — Standard (표준)**. *"문서는 팀이 이미 가지고 있어야 할 것이지, SCV 가 강요하는 잡일이 아니다."* 그래서 표준 문서 (DOMAIN, ARCHITECTURE, DESIGN, TESTING, …) 는 `status: N/A` 로 시드되고 사용자가 lift 결정할 때까지 그대로. 채택 마찰 0. **N/A 는 backlog 가 아니라 정상 상태.**
+**S — Standard (표준).** 표준 문서 (DOMAIN, ARCHITECTURE, DESIGN, TESTING, …) 는 `status: N/A` 로 시드되고 사용자가 lift 할 때까지 그대로. N/A 는 backlog 가 아니라 정상 상태.
 
-**C — Cowork (협업)**. *"AI 는 사용자 raw 사고를 함께 정제해야지, 대체하는 게 아니다."* 그래서 `/scv:promote` 는 **대화** — 생성이 아님. Claude 가 `scv/raw/` 를 읽고 (형식 무관 — 메모, PDF, 스크린샷, 녹화), 구조를 제안, 사용자가 건건이 승인. PLAN.md 에 들어가는 건 *사용자가 말한 것*, *LLM 이 추측한 것* 이 아님.
+**C — Cowork (협업).** `/scv:promote` 는 대화이지 생성이 아닙니다. Claude 가 `scv/raw/` 를 읽고 구조를 제안, 사용자가 건건이 승인. PLAN.md 에 들어가는 건 사용자가 말한 것 — LLM 이 추측한 게 아닙니다.
 
-**V — Verify (검증)**. *"테스트는 현재 변경의 게이트만이 아니다 — 모든 미래 변경을 보호한다."* 그래서 TESTS.md 는 **실행 가능한 것** — 희망 사항이 아님. 모든 archived plan 의 테스트는 다음 변경의 회귀로 돔. 실패는 regression / obsolete / flaky 로 triage — 조용히 skip 안 됨.
+**V — Verify (검증).** TESTS.md 는 실행 가능한 것이지 희망 사항이 아닙니다. 모든 archived plan 의 테스트가 다음 변경의 회귀로 돕니다. 실패는 regression / obsolete / flaky 로 triage — 조용히 skip 안 됨.
 
 > 플러그인 이름은 플러그인의 계약.
 
@@ -490,6 +513,10 @@ Discord: `NOTIFIER_PROVIDER=discord` + `DISCORD_BOT_TOKEN` + `DISCORD_CHANNEL_ID
 
 기존 `.env` 있다면: `cat .env.example.scv >> .env`. `.env` 는 절대 git commit 금지.
 
+### `demo/` (저장소 전용 — 플러그인 본체와 별개)
+
+`demo/` 디렉토리는 README 의 GIF (`scv-demo.gif`, `the-loop.gif`, `architecture.gif`) 를 만드는 Remotion 컴포지션을 담고 있습니다. 자체 `pnpm` workspace 로 동작하며 플러그인 동작과 무관합니다 — 사용자는 신경 쓸 필요 없습니다.
+
 </details>
 
 ## 더 알아보기
@@ -508,6 +535,8 @@ Discord: `NOTIFIER_PROVIDER=discord` + `DISCORD_BOT_TOKEN` + `DISCORD_CHANNEL_ID
 
 <details>
 <summary><b>日本語</b></summary>
+
+> **SCV は *プロセス* プラグインです — コード自動生成器ではありません。** チームが同じ plan と同じテストで仕事をするための道具です。スピードは副次効果として付いてきます。
 
 ## クイックスタート
 
@@ -528,19 +557,29 @@ bash $CLAUDE_PLUGIN_ROOT/scripts/hydrate.sh init .
 /scv:help
 ```
 
-これだけです。以後 **詰まったり迷ったときは `/scv:help`** — 現在の状態 (raw 資料が溜まっているか? 進行中のプランがあるか? テストが落ちているか? PR を出す段階か?) を自動で把握し、次のアクションを推奨します。**この README の残りを読まなくても SCV は使えます。**
+これだけです。**覚えるコマンドは `/scv:help` 一つ** — プロジェクトを診断し、次に使うコマンドへ案内します。開始行を選んでください:
 
-> **アイデアはあるが資料はまだない?** (v0.9.0+) `/scv:help "払い戻しボタンを追加したい"` と入力するだけ — Claude が一つずつ精製しながら各ステップをローカルに保存し、十分になったら `PLAN.md + TESTS.md` の作成を提案します。
-
-## なぜ SCV?
-
-AI がチームのコードを書き始めると、3 つの厄介なことが起こります。SCV はそれぞれにこう対処します:
-
-| 厄介なこと | SCV の対処 |
+| 状況 | コマンド |
 |---|---|
-| **「AI が本当に動くものを作ったのか、それとも*それっぽく見える*ものを作っただけか?」** AI が書いた 100 行の diff をレビューしようとすると、結局自分でテストを回してから論理を読み始めることになります。 | `/scv:work` が Playwright e2e を実行し 5 秒の GIF プレビューを PR に自動添付。レビュアーは*機能が実際に動く様子*を先に見て、その後 diff を — 「動くのか?」ではなく*ロジック*に集中して — 読みます。 |
-| **同じ変更を 3 か所に書くことになります** — Linear/Jira チケット、PR description、コードコメント — そして全部時間とともにずれます。半年後には誰もどれが真実か分かりません。 | PLAN.md が*唯一の* source of truth。チケットは `refs:` で*リンク* (コピペなし)、TESTS は未来の変更ごとに自動実行。同期するものがありません。 |
-| **古い PR が積み上がるが、どれがまだ有効か誰も知りません。** Q1 で 50 個の plan が archive されました。まだ有効? どれかリファクタで置き換わった? 依存グラフがなければ archive は検索もできない墓場になります。 | 各 plan が `supersedes: [古い-slug]` を宣言できます。`/scv:regression` が置き換えられた plan を自動 skip。archive は*生きた*記録 — 新メンバーが `grep` でコードベースの歴史を追跡できます。 |
+| 次に何をすべきか分からない | `/scv:help` |
+| アイデアだけあって資料はまだない | `/scv:help "払い戻しボタンを追加したい"` (v0.9.0+) |
+| 過去の archive を探したい | `/scv:help "先四半期の決済関連 archive を見せて"` (v0.10.0+) |
+
+---
+
+## 5 分ウォークスルー
+
+**シナリオ**: "決済ページに払い戻しボタンを追加"
+
+| 分 | ステップ | 結果 |
+|---|---|---|
+| 1 | `scv/raw/` に資料投入 | 議事録 + 仕様書 PDF (Jira URL 含む) |
+| 2 | `/scv:promote` | URL 検出 · slug + title 質問 · `PLAN.md + TESTS.md + FEATURE_ARCHITECTURE.md` を生成 |
+| 3 | `/scv:work <slug>` | 実装 · Playwright e2e · `.webm` キャプチャ |
+| 4 | 自動 PR | PR が開く · GIF プレビュー · Mermaid 図 · Jira リンクがすべて自動添付 |
+| 5 | レビュー → マージ → archive | レビュアーが GIF で 5 秒確認 · マージで archive · `/scv:regression` スイートに合流 |
+
+**どのステップで詰まっても** `/scv:help` — プロジェクトの現在の状態を見て、次に何をすべきか教えてくれます。
 
 ---
 
@@ -571,36 +610,32 @@ flowchart LR
 
 ---
 
-## 5 分ウォークスルー
-
-**シナリオ**: "決済ページに払い戻しボタンを追加"
-
-| 分 | ステップ | 結果 |
-|---|---|---|
-| 1 | `scv/raw/` に資料投入 | 議事録 + 仕様書 PDF (Jira URL 含む) |
-| 2 | `/scv:promote` | Claude が URL 検出、slug + title を尋ねて → `PLAN.md + TESTS.md + FEATURE_ARCHITECTURE.md` (Mermaid 図) を生成 |
-| 3 | `/scv:work <slug>` | 実装 + Playwright e2e + `.webm` キャプチャ |
-| 4 | 自動 PR | PR が開く — GIF プレビュー、Mermaid 図、Jira リンクがすべて自動添付 |
-| 5 | レビュー → マージ → archive | レビュアーが GIF で 5 秒で確認、マージ時 archive、`/scv:regression` スイートに合流 |
-
-すべての変更が plan + tests になり自動回帰スイートに累積、既存ツール (Linear / Jira / Confluence) とは複製なしでリンク。
-
 ## スラッシュコマンド
 
-> **覚える必要はありません — `/scv:help` の案内に従っていけば自然に身につきます。** この表は参考用です。
+**覚える必要はありません** — `/scv:help` が各ステップで適切なコマンドを案内します。参考用の表:
 
 | コマンド | やること |
 |---|---|
-| **`/scv:help`** | **次に何をすべきか教えてくれます。** プロジェクト状態を診断し推奨アクションを提示。**迷ったらいつでもこれを最初に。** |
-| `/scv:status` | raw 資料 · アクティブな promote · epic 進捗を詳しく |
-| `/scv:promote` | `scv/raw/` 資料を plan フォルダ (`scv/promote/<slug>/`) へ精製 — 対話形式、PLAN + TESTS + Mermaid アーキテクチャ図を生成 |
-| `/scv:work <slug>` | plan を実装 + テスト実行 + 通過時に archive + PR 自動作成 (e2e 動画自動添付) |
-| `/scv:regression` | archive されたすべての TESTS を累積回帰として実行 |
+| **`/scv:help`** | 次に何をすべきか教えてくれます。引数あり時は分岐 — アイデアは対話モード、回顧的な質問は archive 検索。例はクイックスタートの表参照。 |
+| `/scv:status` | raw 資料 · アクティブな promote · epic 進捗 |
+| `/scv:promote` | `scv/raw/` → plan フォルダ (`scv/promote/<slug>/`) — PLAN + TESTS + Mermaid 図 |
+| `/scv:work <slug>` | 実装 · テスト実行 · 通過時に archive · e2e 動画添付の PR を自動作成 |
+| `/scv:regression` | archive された全 TESTS を回帰として実行 |
 | `/scv:report` | フェーズ結果を Slack / Discord に通知 |
 | `/scv:sync` | プラグイン更新を標準ドキュメントに反映 |
-| `/scv:install-deps` | 不足 CLI 自動検出 + インストール案内 (`gh` / `glab` / `jq` / `ffmpeg`) — OS 自動判定 |
+| `/scv:install-deps` | 不足 CLI 自動検出 + インストール案内 (`gh` / `glab` / `jq` / `ffmpeg`) |
 
-覚えるフラグはありません。Claude が必要なときに入力を尋ねます。
+---
+
+## なぜ SCV?
+
+AI がチームのコードを書き始めると、3 つのことが噛み合わなくなります。
+
+| 問題 | SCV の答え |
+|---|---|
+| AI の diff、結局自分で動かして確かめる羽目に。 | `/scv:work` が e2e + GIF プレビューを PR に自動添付。 |
+| 同じ変更が チケット · PR · コメント の 3 か所でずれる。 | PLAN.md が単一 source。チケットは `refs:` でリンクのみ。 |
+| 古い archive が誰も検索しない墓場になる。 | `supersedes:` と `/scv:regression` で archive を*生かす*。 |
 
 
 ## アーキテクチャと外部統合
@@ -646,22 +681,22 @@ flowchart TB
   class PLAN,Archive key
 ```
 
-**重要な性質**.
+**重要な性質**
 
-- **単一の source of truth**. PLAN.md は一度だけ書く。PR description / regression filter / Slack 報告 — すべてここから読む。
-- **外部ツールは外部に**. `refs: [{type: jira, id: PAY-1234}]` リンクはチケット本文を複製しない。チケットが更新されてもリンクは有効。
-- **vendor-agnostic バックエンド**. PR/MR 作成は `lib/pr-platform.sh` 経由。GitHub (`gh`) + GitLab (`glab`) first-class。Bitbucket / Gitea 追加は新アダプター、書き直しではない。
-- **多言語デフォルト**. PR タイトル、body ラベル (`## Summary` / `## 요약` / `## 概要`)、Mermaid ノードラベル、commit メッセージ — すべて settings から決定された言語 (English / 한국어 / 日本語) に従う。
+- 単一の source of truth — PLAN.md は一度だけ書く · PR / regression / Slack すべてここから読む。
+- 外部ツールは外部に — `refs:` でチケットへリンク · 本文の複製なし · チケット更新時もリンクは有効。
+- vendor-agnostic バックエンド — `lib/pr-platform.sh` 経由で `gh` / `glab` first-class · Bitbucket / Gitea 追加 = 新アダプター。
+- 多言語デフォルト — PR / Mermaid / commit すべて `SCV_LANG` に従う (English · 한국어 · 日本語)。
 
 ## 哲学: Standard · Cowork · Verify
 
-3 文字は*機能*ではなく — **AI 協業チーム開発の 3 つの失敗モード**、SCV が拒否するもの。
+AI 協業チーム開発の 3 つの失敗モード — SCV が拒否するもの。
 
-**S — Standard (標準)**. *"ドキュメントはチームが既に持っているべきもの、SCV が押し付ける雑用ではない。"* だから標準ドキュメント (DOMAIN, ARCHITECTURE, DESIGN, TESTING, …) は `status: N/A` でシード、ユーザーが lift を決めるまでそのまま。導入摩擦ゼロ。**N/A は backlog ではなく定常状態。**
+**S — Standard (標準).** 標準ドキュメント (DOMAIN, ARCHITECTURE, DESIGN, TESTING, …) は `status: N/A` でシードされ、ユーザーが lift するまでそのまま。N/A は backlog ではなく定常状態。
 
-**C — Cowork (協業)**. *"AI はユーザーの raw 思考を共に精製すべきで、置き換えるべきではない。"* だから `/scv:promote` は**対話** — 生成ではない。Claude が `scv/raw/` を読み (形式自由 — メモ、PDF、スクリーンショット、録画)、構造を提案、ユーザーが個別に承認。PLAN.md に入るのは*ユーザーが言ったこと*、*LLM が推測したこと* ではない。
+**C — Cowork (協業).** `/scv:promote` は対話であって生成ではありません。Claude が `scv/raw/` を読み構造を提案、ユーザーが個別に承認。PLAN.md に入るのはユーザーが言ったこと — LLM が推測したものではありません。
 
-**V — Verify (検証)**. *"テストは現在の変更のゲートだけではない — すべての未来の変更を保護する。"* だから TESTS.md は**実行可能** — 願望ではない。すべての archived plan のテストは次の変更の回帰として回る。失敗は regression / obsolete / flaky にトリアージ — 黙ってスキップされない。
+**V — Verify (検証).** TESTS.md は実行可能なものであって願望ではありません。archived plan のテストは次の変更の回帰として回ります。失敗は regression / obsolete / flaky にトリアージ — 黙ってスキップされません。
 
 > プラグインの名前はプラグインの契約。
 
@@ -718,6 +753,10 @@ SLACK_CHANNEL_ID_E2E_FAILURE=C0XXXXX2
 Discord: `NOTIFIER_PROVIDER=discord` + `DISCORD_BOT_TOKEN` + `DISCORD_CHANNEL_ID_*`。
 
 既存 `.env` がある場合: `cat .env.example.scv >> .env`。`.env` は絶対に git にコミット禁止。
+
+### `demo/` (リポジトリ専用 — プラグイン本体とは別)
+
+`demo/` ディレクトリは README の GIF (`scv-demo.gif`、`the-loop.gif`、`architecture.gif`) を生成する Remotion コンポジションを含みます。独自の `pnpm` workspace として動き、プラグインの動作とは無関係です — 利用者が触る必要はありません。
 
 </details>
 
