@@ -163,6 +163,7 @@ Commands
   /scv:regression Run accumulated archived regression + auto-skip supersedes/obsolete + failure triage
   /scv:report     Phase report to Slack/Discord (with artifacts)
   /scv:sync       Safe merge on template version bump
+  /scv:update     Plugin self-update guide (/plugin marketplace update + /reload-plugins) [v0.11.2+]
 
 EOF
 

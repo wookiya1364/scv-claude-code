@@ -441,6 +441,29 @@ assert_contains "$PROMOTE_CMD" "v0.11.1+"
 assert_contains "$PROMOTE_CMD" "shallow-base + opt-in-depth"
 
 echo
+echo "=== [11g'''] /scv:update — plugin update guide (v0.11.2+) ==="
+UPDATE_SH="$STANDARD_ROOT/scripts/update.sh"
+UPDATE_CMD="$STANDARD_ROOT/commands/update.md"
+assert_file "$UPDATE_SH"
+assert_file "$UPDATE_CMD"
+[[ -x "$UPDATE_SH" ]] && pass "update.sh executable" || fail "update.sh not executable"
+
+# Helper output contract
+OUT=$(bash "$UPDATE_SH" 2>&1)
+assert_out_contains "INSTALLED_VERSION:"  "$OUT" "update.sh: emits INSTALLED_VERSION"
+assert_out_contains "MARKETPLACE_NAME:"   "$OUT" "update.sh: emits MARKETPLACE_NAME"
+assert_out_contains "PLUGIN_NAME:"        "$OUT" "update.sh: emits PLUGIN_NAME"
+assert_out_contains "LATEST_VERSION:"     "$OUT" "update.sh: emits LATEST_VERSION (value or unavailable reason)"
+assert_out_contains "UP_TO_DATE:"         "$OUT" "update.sh: emits UP_TO_DATE verdict"
+assert_out_contains "scv-claude-code"     "$OUT" "update.sh: extracts marketplace name 'scv-claude-code'"
+
+# command protocol content
+assert_contains "$UPDATE_CMD" "plugin marketplace update"
+assert_contains "$UPDATE_CMD" "reload-plugins"
+assert_contains "$UPDATE_CMD" "UP_TO_DATE"
+assert_contains "$UPDATE_CMD" "Read-only"
+
+echo
 echo "=== [11g''] /scv:codegen tests-smell.sh helper (P6 MVP static lint) ==="
 TESTS_SMELL_SH="$STANDARD_ROOT/scripts/tests-smell.sh"
 assert_file "$TESTS_SMELL_SH"
@@ -3172,8 +3195,8 @@ assert_contains "$README" 'how did we handle refunds last quarter?"` (v0.10.0+)'
 assert_contains "$README" '지난 분기 결제 archive 보여줘"` (v0.10.0+)'
 assert_contains "$README" '先四半期の決済関連 archive を見せて"` (v0.10.0+)'
 
-# plugin.json — version 0.11.1
-assert_contains "$STANDARD_ROOT/.claude-plugin/plugin.json" '"version": "0.11.1"'
+# plugin.json — version 0.11.2
+assert_contains "$STANDARD_ROOT/.claude-plugin/plugin.json" '"version": "0.11.2"'
 
 # v0.10.2 — heredoc-quoted $ARGUMENTS so raw user input survives shell evaluation
 assert_contains "$HELP_CMD" "__SCV_HELP_ARG_EOF__"
