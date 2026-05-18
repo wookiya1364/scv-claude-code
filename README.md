@@ -14,7 +14,7 @@ Drop materials → Claude refines them with you → implementation runs the test
 </p>
 
 <p>
-<b>SCV is a <i>process</i> plugin — not a code-generation accelerator.</b> It makes the team work from the same plan and the same tests. Speed comes as a side effect.
+<b>SCV is a <i>process-first</i> plugin with an optional codegen variant (<code>/scv:codegen</code>, v0.11.0+).</b> It makes the team work from the same plan and the same tests. Speed comes as a side effect.
 </p>
 
 <img src="assets/scv-demo.gif" width="720" alt="SCV 30-second walkthrough — /scv:help → /scv:promote → /scv:work → auto PR" />
@@ -133,7 +133,7 @@ flowchart LR
 | `/scv:status` | Inspect raw materials · active promotes · epic progress |
 | `/scv:promote` | `scv/raw/` → plan folder (`scv/promote/<slug>/`) with PLAN + TESTS + Mermaid diagrams |
 | `/scv:work <slug>` | Implement · run tests · archive on pass · open PR with e2e video |
-| `/scv:codegen <slug>` | **TDD-first variant** of `/scv:work` — TESTS drives code (Red→Green per case, budget 3). Uses optional PLAN.md `scope:` / `invariants:` as guards. Hands archive/PR off to `/scv:work`. (v0.11.0+) |
+| `/scv:codegen <slug>` | **TDD-first variant** of `/scv:work` — TESTS drives code (Red→Green per case, budget 3). Uses optional PLAN.md `scope:` / `invariants:` as guards. Hands archive/PR off to `/scv:work`. (v0.11.0+, *experimental*) |
 | `/scv:regression` | Run every archived TESTS as a regression suite |
 | `/scv:report` | Post a phase result to Slack or Discord |
 | `/scv:sync` | Apply plugin updates to standard docs |
@@ -150,6 +150,18 @@ When AI starts writing your team's code, three things break down.
 | AI diffs — you end up running them yourself before reviewing logic. | `/scv:work` attaches an e2e GIF preview to the PR. |
 | The same change drifts across ticket · PR · comment. | PLAN.md is the single source. Tickets via `refs:` (link only). |
 | Old archives become a graveyard no one searches. | `supersedes:` + `/scv:regression` keep the archive *alive*. |
+| 1-maintainer / future-proof concern. | bash + markdown core only — no NPM, no MCP server, no service. Forking is cheap; LLM/IDE evolution has minimal blast radius on the core. |
+
+## When SCV fits
+
+- Claude Code is your team's primary IDE.
+- Changes are typically small (single feature / refactor / fix) — not multi-month, deep-spec-driven mega-initiatives.
+- You value an accumulating regression net more than deep up-front spec dialog.
+- A 1-person operator can run SCV's bash + markdown core (no NPM, no MCP server, no service).
+
+**Composition is allowed**: `PLAN.md` / `TESTS.md` / `archive/` are plain markdown — committable text. You can use BMAD/GSD for the spec → code phase, and let SCV's archive accumulate the regression net underneath.
+
+**For larger changes**: split a multi-feature change into multiple slugs grouped under one `epic:` (PLAN.md frontmatter). See `scv/PROMOTE.md` §8d for the epic + multi-slug pattern.
 
 ## Architecture & Integrations
 
@@ -281,12 +293,10 @@ The `demo/` directory holds Remotion compositions that produce the README's GIFs
 
 - Each command's detail: `/scv:<command> --help`
 - Project-specific guide: `/scv:help`
-- Changelog: [CHANGELOG.md](./CHANGELOG.md)
 
 ## Contributing
 
 - Run `tests/run-dry.sh` before PRs
-- Log user-facing changes in `CHANGELOG.md`
 - Follow SemVer for `VERSION` bumps
 
 </details>
@@ -294,7 +304,7 @@ The `demo/` directory holds Remotion compositions that produce the README's GIFs
 <details>
 <summary><b>한국어</b></summary>
 
-> **SCV 는 *프로세스* 플러그인입니다 — 코드 자동 생성기가 아닙니다.** 팀이 같은 plan 과 같은 테스트로 일하게 만드는 도구입니다. 속도는 부수 효과로 따라옵니다.
+> **SCV 는 *프로세스 중심* 플러그인입니다 — 옵션 codegen 변형 (`/scv:codegen`, v0.11.0+) 포함.** 팀이 같은 plan 과 같은 테스트로 일하게 만드는 도구입니다. 속도는 부수 효과로 따라옵니다.
 
 ## 빠른 시작
 
@@ -376,7 +386,7 @@ flowchart LR
 | `/scv:status` | raw 자료 · 진행 중인 promote · epic 진척도 |
 | `/scv:promote` | `scv/raw/` → plan 폴더 (`scv/promote/<slug>/`) — PLAN + TESTS + Mermaid 도식 |
 | `/scv:work <slug>` | 구현 · 테스트 실행 · 통과 시 archive · e2e 비디오 첨부한 PR 생성 |
-| `/scv:codegen <slug>` | **TDD-first 변형** — TESTS 가 코드를 driver. case 단위 Red→Green (budget 3). PLAN.md `scope:` / `invariants:` 를 가드로 사용. archive/PR 은 `/scv:work` 에 위임. (v0.11.0+) |
+| `/scv:codegen <slug>` | **TDD-first 변형** — TESTS 가 코드를 driver. case 단위 Red→Green (budget 3). PLAN.md `scope:` / `invariants:` 를 가드로 사용. archive/PR 은 `/scv:work` 에 위임. (v0.11.0+, *experimental*) |
 | `/scv:regression` | archive 된 모든 TESTS 를 회귀로 실행 |
 | `/scv:report` | 단계 결과를 Slack / Discord 에 보고 |
 | `/scv:sync` | 플러그인 업데이트를 표준 문서에 반영 |
@@ -393,6 +403,18 @@ AI 가 팀 코드를 짜기 시작하면 세 가지가 어긋납니다.
 | AI diff, 결국 직접 돌려보게 됩니다. | `/scv:work` 가 e2e + GIF 미리보기를 PR 에 자동 첨부. |
 | 같은 변경이 티켓 · PR · 주석 3 군데에서 어긋납니다. | PLAN.md 가 단일 source. 티켓은 `refs:` 링크. |
 | 옛 archive 가 검색 안 되는 묘지가 됩니다. | `supersedes:` 와 `/scv:regression` 으로 *살아있는* 기록. |
+| 1 인 메인테이너 / 미래 위험. | bash + markdown 만 — NPM / MCP server / 외부 서비스 없음. fork 비용 낮음, LLM/IDE 변화에 core 영향 최소. |
+
+## SCV 가 맞을 때
+
+- Claude Code 가 팀의 main IDE.
+- 변경 단위가 보통 작음 (single feature / refactor / fix) — 다개월 깊은-spec-driven mega-initiative 가 아님.
+- 누적되는 회귀 안전망의 가치를 *깊은 사전 spec dialog* 보다 높게 봄.
+- 1 인 운영자가 SCV 의 bash + markdown core 를 돌릴 수 있음 (NPM / MCP server / 외부 service 없음).
+
+**조합 가능**: `PLAN.md` / `TESTS.md` / `archive/` 는 plain markdown — commit 가능한 텍스트. BMAD/GSD 로 spec → code 단계 진행하고, SCV 의 archive 가 그 밑에서 회귀 안전망 누적.
+
+**더 큰 변경의 경우**: multi-feature 변경을 *여러 slug* 으로 분할하고 동일한 `epic:` (PLAN.md frontmatter) 아래 묶음. `scv/PROMOTE.md` §8d 의 epic + multi-slug 패턴 참조.
 
 
 ## 아키텍처 & 외부 통합
@@ -521,12 +543,10 @@ Discord: `NOTIFIER_PROVIDER=discord` + `DISCORD_BOT_TOKEN` + `DISCORD_CHANNEL_ID
 
 - 각 커맨드 상세: `/scv:<command> --help`
 - 현재 프로젝트 맞춤 안내: `/scv:help`
-- 변경 이력: [CHANGELOG.md](./CHANGELOG.md)
 
 ## 기여
 
 - PR 전에 `tests/run-dry.sh` 통과 확인
-- 사용자 영향 변경은 `CHANGELOG.md` 에 기록
 - `VERSION` bump 은 SemVer 따름
 
 </details>
@@ -534,7 +554,7 @@ Discord: `NOTIFIER_PROVIDER=discord` + `DISCORD_BOT_TOKEN` + `DISCORD_CHANNEL_ID
 <details>
 <summary><b>日本語</b></summary>
 
-> **SCV は *プロセス* プラグインです — コード自動生成器ではありません。** チームが同じ plan と同じテストで仕事をするための道具です。スピードは副次効果として付いてきます。
+> **SCV は *プロセス中心* プラグインです — オプションの codegen 変形 (`/scv:codegen`, v0.11.0+) を含みます。** チームが同じ plan と同じテストで仕事をするための道具です。スピードは副次効果として付いてきます。
 
 ## クイックスタート
 
@@ -616,7 +636,7 @@ flowchart LR
 | `/scv:status` | raw 資料 · アクティブな promote · epic 進捗 |
 | `/scv:promote` | `scv/raw/` → plan フォルダ (`scv/promote/<slug>/`) — PLAN + TESTS + Mermaid 図 |
 | `/scv:work <slug>` | 実装 · テスト実行 · 通過時に archive · e2e 動画添付の PR を自動作成 |
-| `/scv:codegen <slug>` | **TDD-first 変形** — TESTS がコードのドライバ。case 単位の Red→Green (budget 3)。PLAN.md `scope:` / `invariants:` をガードとして使用。archive/PR は `/scv:work` に委譲。(v0.11.0+) |
+| `/scv:codegen <slug>` | **TDD-first 変形** — TESTS がコードのドライバ。case 単位の Red→Green (budget 3)。PLAN.md `scope:` / `invariants:` をガードとして使用。archive/PR は `/scv:work` に委譲。(v0.11.0+, *experimental*) |
 | `/scv:regression` | archive された全 TESTS を回帰として実行 |
 | `/scv:report` | フェーズ結果を Slack / Discord に通知 |
 | `/scv:sync` | プラグイン更新を標準ドキュメントに反映 |
@@ -633,6 +653,18 @@ AI がチームのコードを書き始めると、3 つのことが噛み合わ
 | AI の diff、結局自分で動かして確かめる羽目に。 | `/scv:work` が e2e + GIF プレビューを PR に自動添付。 |
 | 同じ変更が チケット · PR · コメント の 3 か所でずれる。 | PLAN.md が単一 source。チケットは `refs:` でリンクのみ。 |
 | 古い archive が誰も検索しない墓場になる。 | `supersedes:` と `/scv:regression` で archive を*生かす*。 |
+| 1 名メンテナ / 将来リスク。 | bash + markdown のみ — NPM / MCP サーバー / 外部サービスなし。fork コスト低い、LLM/IDE 変化が core に与える影響最小。 |
+
+## SCV が合うとき
+
+- Claude Code がチームの main IDE。
+- 変更単位が通常小さい (single feature / refactor / fix) — 多月にわたる深い-spec-driven メガ-initiative ではない。
+- 累積する回帰セーフティネットの価値を*深い事前 spec dialog* より高く評価。
+- 1 名運用者が SCV の bash + markdown core を回せる (NPM / MCP サーバー / 外部サービスなし)。
+
+**組み合わせ可能**: `PLAN.md` / `TESTS.md` / `archive/` は plain markdown — commit 可能なテキスト。BMAD/GSD で spec → code フェーズを進めて、SCV の archive がその下で回帰セーフティネットを累積。
+
+**より大きな変更の場合**: multi-feature 変更を *複数 slug* に分割し、同じ `epic:` (PLAN.md frontmatter) 下にグループ化。`scv/PROMOTE.md` §8d の epic + multi-slug パターン参照。
 
 
 ## アーキテクチャと外部統合
@@ -761,12 +793,10 @@ Discord: `NOTIFIER_PROVIDER=discord` + `DISCORD_BOT_TOKEN` + `DISCORD_CHANNEL_ID
 
 - 各コマンドの詳細: `/scv:<command> --help`
 - プロジェクト固有の案内: `/scv:help`
-- 変更履歴: [CHANGELOG.md](./CHANGELOG.md)
 
 ## コントリビューション
 
 - PR の前に `tests/run-dry.sh` を通す
-- ユーザー影響のある変更は `CHANGELOG.md` に記録
 - `VERSION` は SemVer に従う
 
 </details>

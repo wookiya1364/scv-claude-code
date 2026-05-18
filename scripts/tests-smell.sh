@@ -28,9 +28,10 @@ if [[ -z "$TESTS_FILE" || ! -f "$TESTS_FILE" ]]; then
   exit 1
 fi
 
-# Scenario headings — match common patterns:
-#   ## T1. ..., ## E2E-001 ..., ## U-1 ..., ## UT-1 ..., ## Scenario 1
-scenarios=$(grep -cE '^##[[:space:]]+(T[0-9]+|E2E-[0-9]+|U-[0-9]+|UT-[0-9]+|Scenario[[:space:]]+[0-9]+)' "$TESTS_FILE" 2>/dev/null || true)
+# Scenario headings — match common patterns at H2 (##) or H3 (###):
+#   ## T1. ..., ### T1. ..., ## E2E-001 ..., ## U-1 ..., ## UT-1 ..., ## Scenario 1
+# v0.11.1: H3 (###) added — PROMOTE.md TESTS.md template uses ### per scenario.
+scenarios=$(grep -cE '^#{2,3}[[:space:]]+(T[0-9]+|E2E-[0-9]+|U-[0-9]+|UT-[0-9]+|Scenario[[:space:]]+[0-9]+)' "$TESTS_FILE" 2>/dev/null || true)
 
 # Assertion-style keywords (JS/TS, Python, Go, Java/JUnit, RSpec)
 assertions=$(grep -cE 'expect\(|assert[A-Z]|\.toBe\(|\.toEqual\(|\.toMatch\(|should[A-Z]|assertEquals|assertTrue|assertFalse|assertThat' "$TESTS_FILE" 2>/dev/null || true)

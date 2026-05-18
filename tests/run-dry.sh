@@ -435,6 +435,10 @@ assert_contains "$PROMOTE_TPL" "invariants:"
 assert_contains "$PROMOTE_TPL" "T5 logic-skip"
 assert_contains "$PROMOTE_CMD" "Invariants"
 assert_contains "$PROMOTE_CMD" "invariants:"
+# v0.11.1+ — Socratic deepening opt-in (Step 3.1 question 6)
+assert_contains "$PROMOTE_CMD" "Socratic deepening"
+assert_contains "$PROMOTE_CMD" "v0.11.1+"
+assert_contains "$PROMOTE_CMD" "shallow-base + opt-in-depth"
 
 echo
 echo "=== [11g''] /scv:codegen tests-smell.sh helper (P6 MVP static lint) ==="
@@ -474,6 +478,31 @@ OK
 OUT=$(bash "$TESTS_SMELL_SH" "$SAMPLE_OK" 2>&1)
 assert_out_contains "TESTS_SMELL: clean" "$OUT" "tests-smell: reasonable TESTS → clean"
 assert_out_contains "scenarios: 3"       "$OUT" "tests-smell: detects 3 scenarios"
+
+# v0.11.1 regression: H3 (###) scenario headings — PROMOTE.md template uses ### per scenario.
+# v0.11.0 bug: regex was ^##[[:space:]]+ which missed ### headings (counted 0).
+SAMPLE_H3="$TMP/sample-tests-h3.md"
+cat > "$SAMPLE_H3" <<'H3'
+# H3 Headings Tests
+## Overview
+spec body
+## Test scenarios
+### T1. Basic case
+- expect(fn(1)).toBe(1)
+- expect(fn(2)).toBe(2)
+### T2. Edge case
+- expect(fn(0)).toBe(0)
+- expect(fn(-1)).toBe(-1)
+### T3. Boundary
+- expect(fn(99)).toBe(99)
+- expect(fn(100)).toBe(100)
+H3
+OUT=$(bash "$TESTS_SMELL_SH" "$SAMPLE_H3" 2>&1)
+assert_out_contains "TESTS_SMELL: clean" "$OUT" "tests-smell (v0.11.1): H3 (###) headings → clean"
+assert_out_contains "scenarios: 3"       "$OUT" "tests-smell (v0.11.1): counts H3 (###) scenarios (regression for v0.11.0 bug)"
+
+# Verify the regex change is in place
+assert_contains "$TESTS_SMELL_SH" "#{2,3}"
 
 # codegen.md references the helper
 assert_contains "$CODEGEN_CMD" "tests-smell.sh"
@@ -3143,8 +3172,8 @@ assert_contains "$README" 'how did we handle refunds last quarter?"` (v0.10.0+)'
 assert_contains "$README" '지난 분기 결제 archive 보여줘"` (v0.10.0+)'
 assert_contains "$README" '先四半期の決済関連 archive を見せて"` (v0.10.0+)'
 
-# plugin.json — version 0.11.0
-assert_contains "$STANDARD_ROOT/.claude-plugin/plugin.json" '"version": "0.11.0"'
+# plugin.json — version 0.11.1
+assert_contains "$STANDARD_ROOT/.claude-plugin/plugin.json" '"version": "0.11.1"'
 
 # v0.10.2 — heredoc-quoted $ARGUMENTS so raw user input survives shell evaluation
 assert_contains "$HELP_CMD" "__SCV_HELP_ARG_EOF__"

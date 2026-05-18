@@ -252,6 +252,33 @@ Then use `AskUserQuestion` for the batch (questions stay clean — do NOT mix th
 4. **Raw sources**: For each folder, confirm which raw file paths belong to it (default: all changed raws; user may split).
 5. **Invariants** (optional, v0.11.0+): "Any existing behavior this plan must NOT break? (e.g., '기존 결제 한도 체크 유지', '음수 환불 금지'. Skip if nothing comes to mind — this is a focused list, not a general regression list.)" The answer becomes PLAN.md frontmatter `invariants:` (string array). `/scv:codegen` uses it as a per-iteration self-check (T5 logic-skip guard). Empty answer is fine — most plans don't need it.
 
+6. **Socratic deepening — opt-in** (v0.11.1+): After collecting answers 1-5, fire **one** `AskUserQuestion` offering optional clarification. **Default behavior unchanged** — if user picks No, proceed directly to Step 3.1.5 as before.
+
+```
+Question: "Want me to apply Socratic clarification on your 5 answers? I'll re-read them, find the most ambiguous spots, and ask up to 50 short follow-ups to make the plan more concrete. Skip if you're confident your answers are already clear, or stop me anytime by answering 'that's enough'."
+
+[1] "Yes — clarify (recommended for non-trivial plans)"
+    description:
+    "I'll re-read your answers (scope / slug / title / raw sources / invariants), identify the most ambiguous aspects (vague goals, unstated boundaries, missing risk scenarios, undefined success criteria, etc.), then fire up to 50 sequential follow-up AskUserQuestion calls — one per ambiguity, in priority order. Your base 5 answers are preserved as-is; clarifications are added on top into PLAN.md's Approach Overview / Risks sections. Stop anytime by answering 'that's enough' / 'skip the rest' to a follow-up — early termination is encouraged."
+
+[2] "No — proceed with answers as-is (default)"
+    description:
+    "Use the 5 answers as written. Fast path, good for small or familiar plans. You can always re-promote later via a fresh /scv:promote on the same raw materials if more clarity surfaces."
+```
+
+**If [1] Yes — Socratic loop**:
+
+- Re-read the 5 user answers as a whole. Identify ambiguities *in priority order* by signal strength: vague scope edge ("payment-related" without listing modules), unstated dependency ("uses the auth service" without specifying which one), missing failure mode ("happy path described, no error case"), undefined success criterion ("works correctly" without metric), out-of-scope assumption ("kind: feature" but content reads like a refactor), etc. Hard cap = **50 ambiguities** — exhaust them by priority, but stop the loop early on any user signal.
+- For each (max 50, sequentially — but expect most users to stop earlier):
+  - Fire `AskUserQuestion` with the ambiguity framed as a *concrete* short question + 2-3 options if the resolution is multiple-choice, otherwise a free-text question note ("Other" handles this).
+  - Append the answer into PLAN.md's `Approach Overview` (concrete clarifications) or `Risks / Open Questions` (uncertainties acknowledged) — *not* into the base 5 frontmatter fields (those stay as user wrote them).
+  - If user's answer is "that's enough" / "skip the rest" / equivalent, exit the loop immediately.
+- After the loop, proceed to Step 3.1.5.
+
+**If [2] No**: proceed directly to Step 3.1.5.
+
+**Constraint**: Base 5 answers (Step 3.1 questions 1-5) are **always preserved unchanged** regardless of Y/N choice. Socratic adds *on top* of the base; never modifies it. This preserves SCV's shallow-base + opt-in-depth invariant.
+
 #### Step 3.1.5 — Parse URLs from dialog answers (URL pattern → ref type)
 
 After collecting answers, scan **all** of the user's free-text responses for URLs. For each match, derive a `refs:` entry using this table. Strip the URL from the text field (e.g., title) so only the plain text remains.
