@@ -71,6 +71,12 @@ Drop materials → Claude refines them with you → implementation runs the test
 | 아이디어만 있고 자료는 아직 없다 | `/scv:help "환불 버튼 추가하고 싶어"` (v0.9.0+) |
 | 과거 archive 를 찾고 싶다 | `/scv:help "지난 분기 결제 archive 보여줘"` (v0.10.0+) |
 
+> **플랫폼 사전 준비 (1회)**:
+> - **macOS**: `brew install bash` 1회 실행 — SCV 스크립트는 bash 4+ 기능 (`declare -A`) 사용. 설치 후 스크립트가 자동으로 `/opt/homebrew/bin/bash` 로 escalate, 시스템 bash 3.2 는 건드리지 않음.
+> - **Linux / WSL**: bash 4+ 가 기본 — 할 일 없음.
+> - **Windows native (PowerShell/cmd)**: 미지원. WSL 또는 Git Bash 사용.
+> - **모든 플랫폼 공통**: `curl`, `git`, `jq`, `gh` (또는 `glab`) 권장. `/scv:help` 가 첫 줄에서 누락된 의존성을 알려줍니다.
+
 ---
 
 ## 5 분 워크스루 <a id="5-minute-walkthrough"></a>
@@ -165,6 +171,18 @@ BMAD/GSD 로 spec → code 단계 진행하고, SCV 의 archive 가 그 밑에�
 **더 큰 변경의 경우**: multi-feature 변경을 *여러 slug* 으로 분할하고 동일한 `epic:` (PLAN.md frontmatter) 아래 묶음.
 
 `scv/PROMOTE.md` §8d 의 epic + multi-slug 패턴 참조.
+
+### `/scv:codegen` 이 맞을 때 (TDD-first 변형, v0.11.0+ · *experimental*)
+
+`/scv:work` 는 PLAN 으로 코드를 씁니다. `/scv:codegen` 은 반대 — **TESTS 가 코드를 driver**, case 단위 Red→Green (case 당 budget 3). 다음에 맞습니다:
+
+- TESTS 가 행동을 *정밀하게* 정의 — placeholder 가 아니라 구체적 acceptance criteria.
+- 변경이 **backend / API / data** 영역 (UI heavy 변경은 TDD 로 잡기 어색).
+- 각 커밋이 *계획된 step* 이 아니라 *TESTS case* 와 1:1 로 매핑되길 원함.
+
+archive/PR 은 `/scv:work` 에 위임하므로 archive 구조는 동일. TESTS 가 모호하면 `/scv:work` 유지 — codegen 은 그 경우 LLM 이 의도를 *추측해* 채움 (cowork 위반).
+
+`/scv:help` 는 slug 의 `TESTS.md` 에 구체적 acceptance 가 있을 때만 `/scv:codegen` 을 제안 — 기본 흐름엔 영향 없음.
 
 
 ## 아키텍처 & 외부 통합 <a id="architecture--integrations"></a>

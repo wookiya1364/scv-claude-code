@@ -190,6 +190,22 @@ echo "────────────────────────�
 echo " Current project diagnosis ($PROJECT_PWD)"
 echo "──────────────────────────────────────────────────────────────────────"
 
+# --- Pre-flight banner: surface missing core deps immediately (v0.11.5+) -----
+# Without this, dependency issues only showed up below the hydration/.env block,
+# so first-time users on Ubuntu/Alpine without curl/jq could miss them.
+_scv_pre_probe_missing=()
+for _cmd in git gh curl jq; do
+  command -v "$_cmd" >/dev/null 2>&1 || _scv_pre_probe_missing+=("$_cmd")
+done
+if [[ ${#_scv_pre_probe_missing[@]} -gt 0 ]]; then
+  echo
+  echo "  ⚠  Missing dependencies: ${_scv_pre_probe_missing[*]}"
+  echo "     Run '/scv:install-deps' for OS-specific install commands."
+  echo "     (Detailed check appears below.)"
+  echo
+fi
+unset _scv_pre_probe_missing _cmd
+
 HYDRATED=0
 ENV_SET=0
 RAW_COUNT=0

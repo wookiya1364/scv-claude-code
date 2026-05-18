@@ -71,6 +71,12 @@ Drop materials → Claude refines them with you → implementation runs the test
 | アイデアだけあって資料はまだない | `/scv:help "払い戻しボタンを追加したい"` (v0.9.0+) |
 | 過去の archive を探したい | `/scv:help "先四半期の決済関連 archive を見せて"` (v0.10.0+) |
 
+> **プラットフォーム事前準備 (1 回)**:
+> - **macOS**: `brew install bash` を 1 回実行 — SCV スクリプトは bash 4+ 機能 (`declare -A`) を使用。インストール後、スクリプトは自動的に `/opt/homebrew/bin/bash` に escalate し、システムの bash 3.2 はそのまま。
+> - **Linux / WSL**: bash 4+ がデフォルト — 何もする必要なし。
+> - **Windows native (PowerShell/cmd)**: 未対応。WSL または Git Bash を使用。
+> - **全プラットフォーム共通**: `curl`, `git`, `jq`, `gh` (または `glab`) 推奨。`/scv:help` が最初の行で不足している依存関係を知らせます。
+
 ---
 
 ## 5 分ウォークスルー <a id="5-minute-walkthrough"></a>
@@ -163,6 +169,18 @@ AI がチームのコードを書き始めると、3 つのことが噛み合わ
 BMAD/GSD で spec → code フェーズを進めて、SCV の archive がその下で回帰セーフティネットを累積。
 
 **より大きな変更の場合**: multi-feature 変更を *複数 slug* に分割し、同じ `epic:` (PLAN.md frontmatter) 下にグループ化。`scv/PROMOTE.md` §8d の epic + multi-slug パターン参照。
+
+### `/scv:codegen` が合うとき (TDD-first 変形、v0.11.0+ · *experimental*)
+
+`/scv:work` は PLAN からコードを書きます。`/scv:codegen` は逆 — **TESTS がコードを driver**、case 単位の Red→Green (case ごとに budget 3)。次に合います:
+
+- TESTS が行動を *精密に* 定義 — placeholder ではなく具体的な acceptance criteria。
+- 変更が **backend / API / data** 領域 (UI heavy な変更は TDD では掴みづらい)。
+- 各コミットが *計画された step* ではなく *TESTS case* と 1:1 でマップされるのを望む。
+
+archive/PR は `/scv:work` に委譲するので archive 構造は同一。TESTS が曖昧なら `/scv:work` のまま — codegen はその場合 LLM が意図を *推測して* 埋める (cowork 違反)。
+
+`/scv:help` は slug の `TESTS.md` に具体的な acceptance がある時にのみ `/scv:codegen` を提案 — デフォルトのフローには影響なし。
 
 
 ## アーキテクチャと外部統合 <a id="architecture--integrations"></a>

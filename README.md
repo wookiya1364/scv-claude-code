@@ -71,6 +71,12 @@ That's it. **You only need to remember `/scv:help`** — it diagnoses your proje
 | Have an idea but no materials yet | `/scv:help "I want to add a refund button"` (v0.9.0+) |
 | Want to find past work in the archive | `/scv:help "how did we handle refunds last quarter?"` (v0.10.0+) |
 
+> **Platform prerequisites (1-time)**:
+> - **macOS**: `brew install bash` once — SCV scripts use bash 4+ features (`declare -A`). Scripts auto-escalate to `/opt/homebrew/bin/bash` after install, so the system bash 3.2 stays untouched.
+> - **Linux / WSL**: bash 4+ is the default — nothing to do.
+> - **Windows native (PowerShell/cmd)**: unsupported; use WSL or Git Bash.
+> - **All platforms**: `curl`, `git`, `jq`, `gh` (or `glab`) are recommended. `/scv:help` flags any missing dependency on its first line.
+
 ---
 
 ## 5-Minute Walkthrough
@@ -167,6 +173,18 @@ When AI starts writing your team's code, three things break down.
 You can use BMAD/GSD for the spec → code phase, and let SCV's archive accumulate the regression net underneath.
 
 **For larger changes**: split a multi-feature change into multiple slugs grouped under one `epic:` (PLAN.md frontmatter). See `scv/PROMOTE.md` §8d for the epic + multi-slug pattern.
+
+### When `/scv:codegen` fits (TDD-first variant, v0.11.0+ · *experimental*)
+
+`/scv:work` writes code from PLAN. `/scv:codegen` flips it: **TESTS drive the code**, one case at a time (Red → Green, budget 3 per case). Use it when:
+
+- You trust the TESTS to define behavior precisely — concrete acceptance criteria, not placeholders.
+- The change is **backend / API / data** rather than UI-heavy (TDD for visual changes is awkward).
+- You want each commit to map 1:1 to a TESTS case, not to a planned step.
+
+It still hands archive/PR off to `/scv:work`, so the archive structure stays uniform. If TESTS are vague, stay with `/scv:work` — codegen will otherwise let the LLM guess at intent (cowork violation).
+
+`/scv:help` surfaces `/scv:codegen` as a suggestion only when the slug's `TESTS.md` has concrete acceptance criteria, so the default flow is unaffected.
 
 ## Architecture & Integrations
 
