@@ -73,12 +73,12 @@ This promote's PLAN.md / TESTS.md / FEATURE_ARCHITECTURE.md content + Mermaid la
 🌐 Promote language: 한국어 (cached: SCV_PROMOTE_LANG=korean in .env).
    Settings mismatch: settings.json language=korean, .env SCV_LANG=english.
    To change: edit .env or run:
-     sed -i 's/^SCV_PROMOTE_LANG=.*/SCV_PROMOTE_LANG=english/' .env
+     sed 's/^SCV_PROMOTE_LANG=.*/SCV_PROMOTE_LANG=english/' .env > .env.tmp && mv .env.tmp .env
    To clear cache and be asked again:
-     sed -i '/^SCV_PROMOTE_LANG=/d' .env
+     grep -v '^SCV_PROMOTE_LANG=' .env > .env.tmp && mv .env.tmp .env
 ```
 
-(Localize the prose in the user's preferred language; keep the `sed` commands verbatim — they are copy-paste safe.)
+(Localize the prose in the user's preferred language; keep the `sed` / `grep` commands verbatim — they are copy-paste safe on BSD (macOS) and GNU (Linux) — both avoid the non-portable `sed -i` flag.)
 
 **`AskUserQuestion` (mismatch, no cache or stale cache):**
 
@@ -91,7 +91,7 @@ will be saved to .env SCV_PROMOTE_LANG so I don't ask again."
 [1] English (`.env` value)
     description: "Saves SCV_PROMOTE_LANG=english to .env. Pick when your team's
     PRs are mainly English-readable. Sticks for all future promotes; clear with
-    sed -i '/^SCV_PROMOTE_LANG=/d' .env to be asked again."
+    `grep -v '^SCV_PROMOTE_LANG=' .env > .env.tmp && mv .env.tmp .env` to be asked again."
 
 [2] 한국어 (settings.json value)
     description: "Saves SCV_PROMOTE_LANG=korean. Pick when your team's PRs are
@@ -112,7 +112,8 @@ After choice [1]/[2]/[3], write the value to `.env`:
 ```bash
 # If .env doesn't exist, create it. If SCV_PROMOTE_LANG line exists, update; else append.
 if grep -q '^SCV_PROMOTE_LANG=' .env 2>/dev/null; then
-  sed -i 's/^SCV_PROMOTE_LANG=.*/SCV_PROMOTE_LANG=<chosen>/' .env
+  # Portable in-place edit (BSD + GNU): write to tmp, then mv.
+  sed 's/^SCV_PROMOTE_LANG=.*/SCV_PROMOTE_LANG=<chosen>/' .env > .env.tmp && mv .env.tmp .env
 else
   echo 'SCV_PROMOTE_LANG=<chosen>' >> .env
 fi
