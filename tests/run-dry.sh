@@ -45,7 +45,20 @@ fail() {
 }
 
 assert_file()        { [[ -f "$1" ]] && pass "file exists: ${1#"$APP/"}" || fail "file missing: ${1#"$APP/"}"; }
-assert_contains()    { grep -qF -- "$2" "$1" && pass "contains: ${1#"$APP/"} ← '${2:0:60}'" || fail "does NOT contain: ${1#"$APP/"} ← '${2:0:60}'"; }
+assert_contains() {
+  # README.md → also search README.ko.md / README.ja.md (split into language files since v0.11.5).
+  if [[ "$1" == */README.md ]]; then
+    local _dir="${1%/README.md}"
+    local _f
+    for _f in "$1" "$_dir/README.ko.md" "$_dir/README.ja.md"; do
+      [[ -f "$_f" ]] && grep -qF -- "$2" "$_f" \
+        && { pass "contains: README family ← '${2:0:60}'"; return 0; }
+    done
+    fail "does NOT contain: README family ← '${2:0:60}'"; return 1
+  fi
+  grep -qF -- "$2" "$1" && pass "contains: ${1#"$APP/"} ← '${2:0:60}'" \
+                        || fail "does NOT contain: ${1#"$APP/"} ← '${2:0:60}'"
+}
 assert_out_contains(){ printf '%s' "$2" | grep -qF -- "$1" && pass "$3" || fail "$3 — got: $(printf '%s' "$2" | head -3)"; }
 assert_ok_exit()     { [[ "$1" -eq 0 ]] && pass "$2" || fail "$2 (exit=$1)"; }
 
@@ -200,7 +213,7 @@ yes "log line" 2>/dev/null | head -c 25000 > "$APP/test-results/logs/run.log"
 
 echo
 echo "=== [6] report dry-run (Discord switch) ==="
-sed -i 's/^NOTIFIER_PROVIDER=.*/NOTIFIER_PROVIDER=discord/' "$APP/.env"
+sed 's/^NOTIFIER_PROVIDER=.*/NOTIFIER_PROVIDER=discord/' "$APP/.env" > "$APP/.env.tmp" && mv "$APP/.env.tmp" "$APP/.env"
 cat >> "$APP/.env" <<'ENV'
 DISCORD_BOT_TOKEN=fake-discord
 DISCORD_CHANNEL_ID=111111111111111111
@@ -791,13 +804,14 @@ HA=$(mktemp -d)
 bash "$HYDRATE" init "$HA" >/dev/null 2>&1
 # Mark env + docs as active to pass those gates
 cp "$HA/.env.example.scv" "$HA/.env"
-sed -i 's/^NOTIFIER_PROVIDER=.*/NOTIFIER_PROVIDER=slack/' "$HA/.env"
-sed -i 's|^SLACK_BOT_TOKEN=.*|SLACK_BOT_TOKEN=xoxb-fake|' "$HA/.env"
+sed 's/^NOTIFIER_PROVIDER=.*/NOTIFIER_PROVIDER=slack/' "$HA/.env" > "$HA/.env.tmp" && mv "$HA/.env.tmp" "$HA/.env"
+sed 's|^SLACK_BOT_TOKEN=.*|SLACK_BOT_TOKEN=xoxb-fake|' "$HA/.env" > "$HA/.env.tmp" && mv "$HA/.env.tmp" "$HA/.env"
 # Default hydrate = adoption mode (N/A). Force all to active for this test so
 # downstream states (raw changes, plan priority) can be exercised without the
 # draft-docs branch taking priority.
 for d in DOMAIN ARCHITECTURE DESIGN AGENTS TESTING REPORTING RALPH_PROMPT; do
-  sed -i '0,/^status:/{s#^status: .*#status: active#}' "$HA/scv/$d.md"
+  # BSD/GNU portable: rewrite first matching status: line only.
+  awk 'BEGIN{done=0} !done && /^status:/ {sub(/^status: .*/, "status: active"); done=1} {print}' "$HA/scv/$d.md" > "$HA/scv/$d.md.tmp" && mv "$HA/scv/$d.md.tmp" "$HA/scv/$d.md"
 done
 
 (
@@ -831,7 +845,7 @@ done
   assert_out_contains "scv/archive has 1 completed plan" "$OUT"  "help: diagnosis includes archive count"
 
   # [5] priority: draft docs override raw/plan detection
-  sed -i '0,/^status:/{s#^status: .*#status: draft#}' scv/DOMAIN.md
+  awk 'BEGIN{done=0} !done && /^status:/ {sub(/^status: .*/, "status: draft"); done=1} {print}' scv/DOMAIN.md > scv/DOMAIN.md.tmp && mv scv/DOMAIN.md.tmp scv/DOMAIN.md
   OUT=$(bash "$HELP_SH" 2>&1)
   assert_out_contains "resume or"          "$OUT"                  "help/state-priority: draft docs take precedence (A/B prompt)"
   assert_out_contains "DOMAIN"             "$OUT"                   "help/state-priority: mentions specific draft doc"
@@ -1681,16 +1695,25 @@ echo "fake2" > /tmp/v2.webm
 SCV_ATTACHMENTS_BRANCH=scv-attachments attachments_upload merged-old 100 /tmp/v1.webm >/dev/null 2>&1
 SCV_ATTACHMENTS_BRANCH=scv-attachments attachments_upload still-open 200 /tmp/v2.webm >/dev/null 2>&1
 
-# Mock gh CLI
+# Portable "N days ago" — BSD (macOS) first, then GNU (Linux).
+days_ago() {
+  if date -v-${1}d >/dev/null 2>&1; then
+    date -u -v-${1}d +%Y-%m-%dT%H:%M:%SZ
+  else
+    date -u -d "${1} days ago" +%Y-%m-%dT%H:%M:%SZ
+  fi
+}
+C5=$(days_ago 5)
+
+# Mock gh CLI — unquoted heredoc embeds $C5; \$1/\$2/\$3 stay for runtime.
 MOCK=$(mktemp -d)
-cat > "$MOCK/gh" <<'GH'
+cat > "$MOCK/gh" <<GH
 #!/usr/bin/env bash
-if [[ "$1 $2" == "pr view" ]]; then
-  if [[ "$3" == "100" ]]; then
-    closed=$(date -u -d '5 days ago' +%Y-%m-%dT%H:%M:%SZ)
-    echo "{\"state\":\"MERGED\",\"closedAt\":\"$closed\"}"
-  elif [[ "$3" == "200" ]]; then
-    echo "{\"state\":\"OPEN\",\"closedAt\":null}"
+if [[ "\$1 \$2" == "pr view" ]]; then
+  if [[ "\$3" == "100" ]]; then
+    echo '{"state":"MERGED","closedAt":"$C5"}'
+  elif [[ "\$3" == "200" ]]; then
+    echo '{"state":"OPEN","closedAt":null}'
   fi
 fi
 GH
@@ -1837,18 +1860,35 @@ SCV_ATTACHMENTS_BRANCH=scv-attachments attachments_upload slug-open 200 /tmp/s2.
 SCV_ATTACHMENTS_BRANCH=scv-attachments attachments_upload slug-merged-recent 300 /tmp/s3.webm >/dev/null 2>&1
 
 MOCK=$(mktemp -d)
+
+# Portable "N days ago" — BSD (macOS) tries first, then GNU (Linux).
+days_ago() {
+  if date -v-${1}d >/dev/null 2>&1; then
+    date -u -v-${1}d +%Y-%m-%dT%H:%M:%SZ
+  else
+    date -u -d "${1} days ago" +%Y-%m-%dT%H:%M:%SZ
+  fi
+}
+
+# macOS bash 3.2 mis-parses `case ;;` inside nested quoted heredocs in
+# script-file mode, so the mock uses if-elif instead.
 make_real_mock() {
-cat > "$MOCK/gh" <<'GH'
+  local c5 c1
+  c5=$(days_ago 5)
+  c1=$(days_ago 1)
+  cat > "$MOCK/gh" <<GH
 #!/usr/bin/env bash
-if [[ "$1 $2" == "pr view" ]]; then
-  case "$3" in
-    100) c=$(date -u -d '5 days ago' +%Y-%m-%dT%H:%M:%SZ); echo "{\"state\":\"MERGED\",\"closedAt\":\"$c\"}" ;;
-    200) echo '{"state":"OPEN","closedAt":null}' ;;
-    300) c=$(date -u -d '1 day ago' +%Y-%m-%dT%H:%M:%SZ); echo "{\"state\":\"MERGED\",\"closedAt\":\"$c\"}" ;;
-  esac
+if [[ "\$1 \$2" == "pr view" ]]; then
+  if [[ "\$3" == "100" ]]; then
+    echo '{"state":"MERGED","closedAt":"$c5"}'
+  elif [[ "\$3" == "200" ]]; then
+    echo '{"state":"OPEN","closedAt":null}'
+  elif [[ "\$3" == "300" ]]; then
+    echo '{"state":"MERGED","closedAt":"$c1"}'
+  fi
 fi
 GH
-chmod +x "$MOCK/gh"
+  chmod +x "$MOCK/gh"
 }
 make_real_mock
 
@@ -2382,7 +2422,7 @@ HELP_DRAFT_OUT=$(bash <<INNER_EOF
 TMP=\$(mktemp -d)
 cd "\$TMP"
 bash $STANDARD_ROOT/scripts/hydrate.sh init . >/dev/null 2>&1
-sed -i 's/^status: N\/A\$/status: draft/' scv/DOMAIN.md
+sed 's/^status: N\/A\$/status: draft/' scv/DOMAIN.md > scv/DOMAIN.md.tmp && mv scv/DOMAIN.md.tmp scv/DOMAIN.md
 bash $STANDARD_ROOT/scripts/help.sh 2>&1
 cd /; rm -rf "\$TMP"
 INNER_EOF
@@ -3047,13 +3087,15 @@ echo
 echo "=== [11eee] v0.7.4 — README 재구성 (hero / The Loop / Architecture / Philosophy + Mermaid + 3-lang 병기 제거) ==="
 
 README="$STANDARD_ROOT/README.md"
+README_KO="$STANDARD_ROOT/README.ko.md"
+README_JA="$STANDARD_ROOT/README.ja.md"
 
 # Hero 한 줄 추가 (영어)
 assert_contains "$README" "The tests run forever — even after you've forgotten about them."
 
 # 3-lang 병기 제거됨 (영어 1 줄로 단순화)
 assert_contains "$README" "**Team collaboration plugin for Claude Code.**"
-if grep -qF 'Claude Code 팀 협업 플러그인 · Claude Code のチーム協業プラグイン' "$README"; then
+if grep -qF 'Claude Code 팀 협업 플러그인 · Claude Code のチーム協業プラグイン' "$README" "$README_KO" "$README_JA" 2>/dev/null; then
   fail "[11eee] 3-language concatenation still present (should be removed in v0.7.4)"
 else
   pass "[11eee] 3-language concatenation removed (single-language sections only)"
@@ -3105,11 +3147,12 @@ assert_contains "$README" "**V — Verify (検証).**"
 assert_contains "$README" "プラグインの名前はプラグインの契約"
 
 # Mermaid blocks — 6 새 다이어그램 (3 언어 × 2 섹션) — 정확히 6 추가
-mermaid_count=$(grep -c '^```mermaid' "$README")
+# v0.11.5+ split into README.md / README.ko.md / README.ja.md — sum across the family.
+mermaid_count=$(cat "$README" "$README_KO" "$README_JA" 2>/dev/null | grep -c '^```mermaid')
 if [[ "$mermaid_count" -ge 6 ]]; then
-  pass "[11eee] README has $mermaid_count mermaid blocks (≥6 expected: 3-lang × 2 sections)"
+  pass "[11eee] README family has $mermaid_count mermaid blocks (≥6 expected: 3-lang × 2 sections)"
 else
-  fail "[11eee] README has only $mermaid_count mermaid blocks (expected ≥6)"
+  fail "[11eee] README family has only $mermaid_count mermaid blocks (expected ≥6)"
 fi
 
 # Mermaid 노드 라벨이 그 언어로 (한국어 섹션 안엔 한국어 라벨)
@@ -3124,18 +3167,18 @@ assert_contains "$README" "実装<br>+ TESTS 実行"
 assert_contains "$README" "セーフティネット"
 assert_contains "$README" "実行可能なゲート"
 
-# End-to-End Flow ASCII 박스 제거됨 (3 언어 모두)
-if grep -qF 'meetings, sketches, PDFs, recordings — any format' "$README"; then
+# End-to-End Flow ASCII 박스 제거됨 (3 언어 모두) — search across README family.
+if grep -qF 'meetings, sketches, PDFs, recordings — any format' "$README" "$README_KO" "$README_JA" 2>/dev/null; then
   fail "[11eee] English End-to-End Flow ASCII box still present (should be replaced by The Loop)"
 else
   pass "[11eee] English End-to-End Flow ASCII box removed"
 fi
-if grep -qF '회의록·스케치·PDF·녹화 — 형식 자유' "$README"; then
+if grep -qF '회의록·스케치·PDF·녹화 — 형식 자유' "$README" "$README_KO" "$README_JA" 2>/dev/null; then
   fail "[11eee] Korean ASCII flow still present"
 else
   pass "[11eee] Korean ASCII flow removed"
 fi
-if grep -qF '会議録・スケッチ・PDF・録画 — 形式自由' "$README"; then
+if grep -qF '会議録・スケッチ・PDF・録画 — 形式自由' "$README" "$README_KO" "$README_JA" 2>/dev/null; then
   fail "[11eee] Japanese ASCII flow still present"
 else
   pass "[11eee] Japanese ASCII flow removed"
@@ -3145,7 +3188,7 @@ echo
 echo "=== [11hhh] v0.7.9 — Mermaid dark theme directive (검은 배경 + 흰 화살표) ==="
 
 # 모든 mermaid block 이 dark-theme directive 로 시작하는지 검증
-for FILE in "$STANDARD_ROOT/README.md" "$STANDARD_ROOT/commands/promote.md" "$STANDARD_ROOT/template/scv/PROMOTE.md"; do
+for FILE in "$STANDARD_ROOT/README.md" "$STANDARD_ROOT/README.ko.md" "$STANDARD_ROOT/README.ja.md" "$STANDARD_ROOT/commands/promote.md" "$STANDARD_ROOT/template/scv/PROMOTE.md"; do
   MM_COUNT=$(grep -cE '^.{0,3}mermaid$' "$FILE")
   THEME_COUNT=$(grep -c "^%%{init: {'theme':'base', 'themeVariables':" "$FILE")
   if [[ "$MM_COUNT" == "$THEME_COUNT" ]]; then

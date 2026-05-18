@@ -1,4 +1,13 @@
 #!/usr/bin/env bash
+# bash 4+ required (associative arrays). macOS ships 3.2 — auto-escalate to brew bash.
+if (( BASH_VERSINFO[0] < 4 )); then
+  for _b in /opt/homebrew/bin/bash /usr/local/bin/bash; do
+    [[ -x "$_b" ]] && exec "$_b" "$0" "$@"
+  done
+  echo "Error: SCV requires bash 4+. Install via 'brew install bash'." >&2
+  exit 1
+fi
+
 # Surface project metadata + scv/raw inventory + existing promote/archive
 # + raw diff + graphify skill availability for /scv:promote.
 # This script is read-only; it only prints context for Claude to work with.
@@ -76,8 +85,9 @@ if [[ "$GRAPHIFY_SKILL" == "available" ]]; then
     GRAPH_STATUS="built"
   else
     # Compare mtimes
-    graph_mt=$(stat -c %Y "$GRAPH_DIR" 2>/dev/null || echo 0)
-    state_mt=$(stat -c %Y "$STATE_FILE" 2>/dev/null || echo 0)
+    # BSD (macOS) and GNU (Linux) portable mtime in epoch seconds.
+    graph_mt=$(stat -c %Y "$GRAPH_DIR" 2>/dev/null || stat -f %m "$GRAPH_DIR" 2>/dev/null || echo 0)
+    state_mt=$(stat -c %Y "$STATE_FILE" 2>/dev/null || stat -f %m "$STATE_FILE" 2>/dev/null || echo 0)
     if [[ "$graph_mt" -ge "$state_mt" ]]; then
       GRAPH_STATUS="built"
     else

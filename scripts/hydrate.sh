@@ -118,7 +118,8 @@ if [[ $NEW_MODE -eq 0 ]]; then
   for doc in DOMAIN ARCHITECTURE DESIGN AGENTS TESTING REPORTING RALPH_PROMPT; do
     f="$TARGET/scv/$doc.md"
     [[ -f "$f" ]] || continue
-    sed -i '0,/^status: draft$/s#^status: draft$#status: N/A#' "$f"
+    # BSD/GNU sed portable: rewrite first matching `status: draft` line only.
+    awk 'BEGIN{d=0} !d && /^status: draft$/ {print "status: N/A"; d=1; next} {print}' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
   done
   echo "  standard docs seeded with status: N/A (adoption mode)"
 else

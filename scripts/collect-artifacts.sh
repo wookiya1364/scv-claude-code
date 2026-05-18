@@ -14,11 +14,15 @@ if [[ ! -d "$TR" ]]; then
 fi
 
 # Find the most recent matching file (by mtime).
+# BSD (macOS) and GNU (Linux) compatible — `find -printf` is GNU-only,
+# so we hand the list to `ls -t` which sorts by mtime on both.
 _latest() {
   # Usage: _latest <pattern_args...>
+  local matches
   # shellcheck disable=SC2068
-  find "$TR" -maxdepth 6 -type f \( $@ \) -printf '%T@ %p\n' 2>/dev/null \
-    | sort -rn | head -n 1 | cut -d' ' -f2-
+  matches=$(find "$TR" -maxdepth 6 -type f \( $@ \) 2>/dev/null)
+  [[ -z "$matches" ]] && return 0
+  printf '%s\n' "$matches" | tr '\n' '\0' | xargs -0 ls -t 2>/dev/null | head -n 1
 }
 
 SCREENSHOT=$(_latest -name "*.png")

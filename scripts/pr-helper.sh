@@ -1,4 +1,13 @@
 #!/usr/bin/env bash
+# bash 4+ required (associative arrays). macOS ships 3.2 — auto-escalate to brew bash.
+if (( BASH_VERSINFO[0] < 4 )); then
+  for _b in /opt/homebrew/bin/bash /usr/local/bin/bash; do
+    [[ -x "$_b" ]] && exec "$_b" "$0" "$@"
+  done
+  echo "Error: SCV requires bash 4+. Install via 'brew install bash'." >&2
+  exit 1
+fi
+
 # pr-helper.sh — Assemble a PR body for an archived plan and (optionally)
 # create the PR via `gh pr create`.
 #
@@ -504,7 +513,8 @@ fi
 if [[ ${#SCREENSHOTS[@]} -gt 0 ]]; then
   _ACTUAL_HEAD_SHA=$(git rev-parse HEAD 2>/dev/null || echo "")
   if [[ -n "$_ACTUAL_HEAD_SHA" ]]; then
-    sed -i "s|__SCV_HEAD_SHA__|$_ACTUAL_HEAD_SHA|g" "$TMP_BODY"
+    # BSD/GNU sed portable in-place edit
+    sed "s|__SCV_HEAD_SHA__|$_ACTUAL_HEAD_SHA|g" "$TMP_BODY" > "$TMP_BODY.tmp" && mv "$TMP_BODY.tmp" "$TMP_BODY"
   fi
 fi
 

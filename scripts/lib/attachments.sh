@@ -509,7 +509,8 @@ _attachments_git_orphan_status() {
     cache_file="/tmp/scv-attachments-status-${owner_repo//\//_}-${RETENTION_DAYS}.json"
     if [[ -f "$cache_file" ]] && command -v python3 >/dev/null 2>&1; then
       local cached_age cached_sha cached_stale
-      cached_age=$(( $(date +%s) - $(stat -c %Y "$cache_file" 2>/dev/null || echo 0) ))
+      # BSD/GNU portable mtime — stat -c is GNU, stat -f is BSD.
+      cached_age=$(( $(date +%s) - $(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null || echo 0) ))
       cached_sha=$(python3 -c "import json,sys;sys.stdout.write(str(json.load(open('$cache_file')).get('head_sha','')))" 2>/dev/null)
       cached_stale=$(python3 -c "import json,sys;sys.stdout.write(str(json.load(open('$cache_file')).get('stale','?')))" 2>/dev/null)
       if [[ "$cached_sha" == "$head_sha" && "$cached_age" -lt "$ttl" && "$cached_stale" =~ ^[0-9]+$ ]]; then

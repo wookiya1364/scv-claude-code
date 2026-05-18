@@ -1,4 +1,13 @@
 #!/usr/bin/env bash
+# bash 4+ required (associative arrays). macOS ships 3.2 — auto-escalate to brew bash.
+if (( BASH_VERSINFO[0] < 4 )); then
+  for _b in /opt/homebrew/bin/bash /usr/local/bin/bash; do
+    [[ -x "$_b" ]] && exec "$_b" "$0" "$@"
+  done
+  echo "Error: SCV requires bash 4+. Install via 'brew install bash'." >&2
+  exit 1
+fi
+
 # readpath.sh — track changes in scv/raw/ via scv/readpath.json
 #
 # Subcommands:

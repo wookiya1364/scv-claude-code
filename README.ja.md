@@ -1,0 +1,313 @@
+<div align="center">
+
+<img src="assets/scv-circle.png" width="160" height="160" alt="SCV mascot" />
+
+<h1>SCV</h1>
+
+<p><b>Standard · Cowork · Verify</b></p>
+
+<p><b>A Claude Code plugin for teams.<br>
+Every change ships with a plan and tests. The tests run forever — even after you've forgotten about them.</b></p>
+
+<p>
+Drop materials → Claude refines them with you → implementation runs the tests → tests stay in your regression suite. Your next change is automatically checked against everything you've ever shipped.
+</p>
+
+<p>
+<b>SCV is a <i>process-first</i> plugin with an optional codegen variant (<code>/scv:codegen</code>, v0.11.0+).</b> It makes the team work from the same plan and the same tests. Speed comes as a side effect.
+</p>
+
+<img src="assets/scv-demo.gif" width="720" alt="SCV 30-second walkthrough — /scv:help → /scv:promote → /scv:work → auto PR" />
+
+<p>
+<a href="https://github.com/wookiya1364/scv-claude-code/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/wookiya1364/scv-claude-code?label=release&color=blue&cacheSeconds=300" /></a>
+<img alt="License" src="https://img.shields.io/badge/license-MIT-green" />
+<img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude%20Code-plugin-D97757" />
+<img alt="Regression" src="https://img.shields.io/badge/tests-830_PASS-brightgreen" />
+<img alt="i18n" src="https://img.shields.io/badge/i18n-EN_·_KO_·_JA-purple" />
+</p>
+
+<p>
+<a href="#quick-start--four-steps">Quick Start</a> ·
+<a href="#5-minute-walkthrough">5-min walkthrough</a> ·
+<a href="#the-loop">The Loop</a> ·
+<a href="#slash-commands">Commands</a> ·
+<a href="#why-scv">Why SCV?</a> ·
+<a href="#architecture--integrations">Architecture</a> ·
+<a href="#philosophy-standard--cowork--verify">Philosophy</a> ·
+<a href="https://github.com/wookiya1364/scv-claude-code/releases">Releases</a>
+</p>
+
+</div>
+
+---
+
+> **言語**: [English](./README.md) · [한국어](./README.ko.md) · 日本語
+
+> **SCV は *プロセス中心* プラグインです — オプションの codegen 変形 (`/scv:codegen`, v0.11.0+) を含みます。** チームが同じ plan と同じテストで仕事をするための道具です。スピードは副次効果として付いてきます。
+
+## クイックスタート
+
+> **覚えるべきコマンドは `/scv:help` ひとつだけ。**
+> プロジェクトの状態を診断し、次に何をすべきか教えてくれます。覚えるフラグなし、先に読むドキュメントなし — プラグインがステップごとに案内します。
+
+```bash
+# Claude Code セッション内で:
+
+# 1. インストール
+/plugin marketplace add https://github.com/wookiya1364/scv-claude-code
+/plugin install scv@scv-claude-code
+
+# 2. ここから先は /scv:help が引き継ぎます。
+#    初回実行時に hydrate も一度確認して自動で進めます。
+/scv:help
+```
+
+これだけです。**覚えるコマンドは `/scv:help` 一つ** — プロジェクトを診断し、次に使うコマンドへ案内します。開始行を選んでください:
+
+| 状況 | コマンド |
+|---|---|
+| 次に何をすべきか分からない | `/scv:help` |
+| アイデアだけあって資料はまだない | `/scv:help "払い戻しボタンを追加したい"` (v0.9.0+) |
+| 過去の archive を探したい | `/scv:help "先四半期の決済関連 archive を見せて"` (v0.10.0+) |
+
+---
+
+## 5 分ウォークスルー
+
+**シナリオ**: "決済ページに払い戻しボタンを追加"
+
+| 分 | ステップ | 結果 |
+|---|---|---|
+| 1 | `scv/raw/` に資料投入 | 議事録 + 仕様書 PDF (Jira URL 含む) |
+| 2 | `/scv:promote` | URL 検出 · slug + title 質問 · `PLAN.md + TESTS.md + FEATURE_ARCHITECTURE.md` を生成 |
+| 3 | `/scv:work <slug>` | 実装 · Playwright e2e · `.webm` キャプチャ |
+| 4 | 自動 PR | PR が開く · GIF プレビュー · Mermaid 図 · Jira リンクがすべて自動添付 |
+| 5 | レビュー → マージ → archive | レビュアーが GIF で 5 秒確認 · マージで archive · `/scv:regression` スイートに合流 |
+
+**どのステップで詰まっても** `/scv:help` — プロジェクトの現在の状態を見て、次に何をすべきか教えてくれます。
+
+---
+
+## ループ
+
+資料投入 → プラン + テストへ精製 → 実装 → archive。すべての archive のテストは**累積する回帰テスト**へ合流し、未来のあらゆる変更に対して自動で回ります。
+
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#1e1e1e','primaryTextColor':'#fff','primaryBorderColor':'#888','lineColor':'#fff','secondaryColor':'#2d2d2d','tertiaryColor':'#1e1e1e','background':'#0d1117','edgeLabelBackground':'#1e1e1e'}}}%%
+flowchart LR
+  Raw["scv/raw/<br>(議事録、仕様書、<br>スクリーンショット)"]
+  Promote["scv/promote/&lt;slug&gt;/<br>PLAN.md + TESTS.md<br>+ FEATURE_ARCHITECTURE.md"]
+  Work["実装<br>+ TESTS 実行"]
+  Archive["scv/archive/<br>(累積された N 個のプラン)"]
+  Regression["/scv:regression<br>(archived TESTS すべて実行)"]
+
+  Raw -->|"/scv:promote<br>(対話)"| Promote
+  Promote -->|"/scv:work &lt;slug&gt;"| Work
+  Work -->|"テスト合格<br>+ ユーザー承認"| Archive
+  Archive -->|"各 archive が<br>回帰スイートに合流"| Regression
+  Regression -.->|"次の変更の<br>セーフティネット"| Promote
+
+  classDef key fill:#FFE082,stroke:#F57C00,stroke-width:2px,color:#000
+  class Promote,Regression key
+```
+
+**なぜこのループが重要か**. 6 か月後、誰かが知らない古い機能を壊しても、その機能の archive されたテストが自動で検出します。チームが SCV と長く使うほど、セーフティネットが厚くなります。
+
+---
+
+## スラッシュコマンド
+
+**覚える必要はありません** — `/scv:help` が各ステップで適切なコマンドを案内します。参考用の表:
+
+| コマンド | やること |
+|---|---|
+| **`/scv:help`** | 次に何をすべきか教えてくれます。<br/>引数あり時はアイデア対話モード または archive 検索 (回顧的質問)。<br/>例はクイックスタートの表参照。 |
+| `/scv:status` | raw 資料 · アクティブな promote · epic 進捗 |
+| `/scv:promote` | `scv/raw/` → plan フォルダ (`scv/promote/<slug>/`) — PLAN + TESTS + Mermaid 図 |
+| `/scv:work <slug>` | 実装 · テスト実行 · 通過時に archive · e2e 動画添付の PR を自動作成 |
+| `/scv:codegen <slug>` | **TDD-first 変形** (v0.11.0+, *experimental*).<br/>TESTS がコードのドライバ。case 単位の Red→Green (budget 3)。<br/>PLAN.md `scope:` / `invariants:` をガードとして使用。<br/>archive/PR は `/scv:work` に委譲。 |
+| `/scv:update` | **プラグイン self-update ガイド** (v0.11.2+).<br/>インストール済み vs 最新バージョン表示。<br/>`/plugin marketplace update scv-claude-code` + `/reload-plugins` への案内。<br/>read-only。 |
+| `/scv:regression` | archive された全 TESTS を回帰として実行 |
+| `/scv:report` | フェーズ結果を Slack / Discord に通知 |
+| `/scv:sync` | **2 ステップ sync** (v0.11.3+).<br/>(1) プラグイン template → 標準ドキュメント (`merge_policy`)。<br/>(2) コード ↔ active promote slug の drift 検出 (`scope:` git diff + TESTS run)。<br/>archive は immutable。 |
+| `/scv:install-deps` | 不足 CLI 自動検出 + インストール案内 (`gh` / `glab` / `jq` / `ffmpeg`) |
+
+---
+
+## なぜ SCV?
+
+AI がチームのコードを書き始めると、3 つのことが噛み合わなくなります。
+
+| 問題 | SCV の答え |
+|---|---|
+| AI の diff、結局自分で動かして確かめる羽目に。 | `/scv:work` が e2e + GIF プレビューを PR に自動添付。 |
+| 同じ変更が チケット · PR · コメント の 3 か所でずれる。 | PLAN.md が単一 source。チケットは `refs:` でリンクのみ。 |
+| 古い archive が誰も検索しない墓場になる。 | `supersedes:` と `/scv:regression` で archive を*生かす*。 |
+| 1 名メンテナ / 将来リスク。 | bash + markdown のみ — NPM / MCP サーバー / 外部サービスなし。fork コスト低い、LLM/IDE 変化が core に与える影響最小。 |
+
+## SCV が合うとき
+
+- Claude Code がチームの main IDE。
+
+- 変更単位が通常小さい — single feature / refactor / fix。
+  - 多月にわたる深い-spec-driven メガ-initiative ではない。
+
+- 累積する回帰セーフティネットの価値を*深い事前 spec dialog* より高く評価。
+
+- 1 名運用者が SCV の bash + markdown core を回せる。
+  - NPM / MCP サーバー / 外部サービスなし。
+
+**組み合わせ可能**: `PLAN.md` / `TESTS.md` / `archive/` は plain markdown — commit 可能なテキスト。
+
+BMAD/GSD で spec → code フェーズを進めて、SCV の archive がその下で回帰セーフティネットを累積。
+
+**より大きな変更の場合**: multi-feature 変更を *複数 slug* に分割し、同じ `epic:` (PLAN.md frontmatter) 下にグループ化。`scv/PROMOTE.md` §8d の epic + multi-slug パターン参照。
+
+
+## アーキテクチャと外部統合
+
+PLAN.md が単一の source of truth。外部ツール (Jira / Linear / Confluence / Google Doc) は `refs:` で*リンク*のみ — 複製しない。出力 (PR / MR / Slack / Discord) は同じ source から自動生成。
+
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#1e1e1e','primaryTextColor':'#fff','primaryBorderColor':'#888','lineColor':'#fff','secondaryColor':'#2d2d2d','tertiaryColor':'#1e1e1e','background':'#0d1117','edgeLabelBackground':'#1e1e1e'}}}%%
+flowchart TB
+  subgraph SCV["SCV (リポジトリ内)"]
+    PLAN["PLAN.md<br>(プラン + refs)"]
+    TESTS["TESTS.md<br>(実行可能なゲート)"]
+    FA["FEATURE_ARCHITECTURE.md<br>(Mermaid 図 2 つ)"]
+    Archive["scv/archive/<br>(累積回帰スイート)"]
+  end
+
+  subgraph External["外部 (refs: でリンク)"]
+    Jira[(Jira)]
+    Linear[(Linear)]
+    Confluence[(Confluence)]
+    Doc[(Google Doc / Notion)]
+  end
+
+  subgraph Output["出力チャネル"]
+    GH[GitHub PR]
+    GL[GitLab MR]
+    Slack[Slack]
+    Discord[Discord]
+  end
+
+  PLAN -.->|refs:| Jira
+  PLAN -.->|refs:| Linear
+  PLAN -.->|refs:| Confluence
+  PLAN -.->|refs:| Doc
+
+  PLAN -->|"/scv:work Step 9d<br>(.webm + .gif inline)"| GH
+  PLAN -->|"/scv:work Step 9d"| GL
+  Archive -->|"/scv:regression<br>(全 TESTS 自動実行)"| TESTS
+  TESTS -->|"/scv:report"| Slack
+  TESTS -->|"/scv:report"| Discord
+
+  classDef key fill:#FFE082,stroke:#F57C00,stroke-width:2px,color:#000
+  class PLAN,Archive key
+```
+
+**重要な性質**
+
+- 単一の source of truth — PLAN.md は一度だけ書く · PR / regression / Slack すべてここから読む。
+- 外部ツールは外部に — `refs:` でチケットへリンク · 本文の複製なし · チケット更新時もリンクは有効。
+- vendor-agnostic バックエンド — `lib/pr-platform.sh` 経由で `gh` / `glab` first-class · Bitbucket / Gitea 追加 = 新アダプター。
+- 多言語デフォルト — PR / Mermaid / commit すべて `SCV_LANG` に従う (English · 한국어 · 日本語)。
+
+## 哲学: Standard · Cowork · Verify
+
+AI 協業チーム開発の 3 つの失敗モード — SCV が拒否するもの。
+
+**S — Standard (標準).** 標準ドキュメント (DOMAIN, ARCHITECTURE, DESIGN, TESTING, …) は `status: N/A` でシードされ、ユーザーが lift するまでそのまま。
+
+N/A は backlog ではなく定常状態。
+
+**C — Cowork (協業).** `/scv:promote` は対話であって生成ではありません。
+
+Claude が `scv/raw/` を読み構造を提案、ユーザーが個別に承認。
+
+PLAN.md に入るのはユーザーが言ったこと — LLM が推測したものではありません。
+
+**V — Verify (検証).** TESTS.md は実行可能なものであって願望ではありません。
+
+archived plan のテストは次の変更の回帰として回ります。
+
+失敗は regression / obsolete / flaky にトリアージ — 黙ってスキップされません。
+
+> プラグインの名前はプラグインの契約。
+
+<details>
+<summary><b>リファレンス — プロジェクトディレクトリ / 外部 Refs / 通知設定</b></summary>
+
+### プロジェクトディレクトリ (hydrate 後)
+
+```
+my-project/
+├── CLAUDE.md           # (任意 · ユーザー所有 — SCV は触らない)
+├── scv/                # SCV が所有する領域
+│   ├── CLAUDE.md       # SCV ワークフローのインデックス
+│   ├── INTAKE.md PROMOTE.md DOMAIN.md ARCHITECTURE.md DESIGN.md
+│   ├── AGENTS.md TESTING.md REPORTING.md RALPH_PROMPT.md
+│   ├── readpath.json   # raw 変更スナップショット (自動管理)
+│   ├── promote/        # アクティブな計画 (YYYYMMDD-author-slug フォルダ)
+│   ├── archive/        # 完了した計画 (/scv:work が移動)
+│   └── raw/            # 自由投入スペース
+├── .env.example.scv    # SCV 専用 Notifier 変数テンプレート
+└── .gitignore          # SCV ルール append; 既存保持
+```
+
+**Non-destructive**: ルート `CLAUDE.md` / `.env.example` はそのまま保持。SCV は `scv/` のみ作成、`.env.example.scv` を別途追加 + 既存 `.gitignore` に append。
+
+**標準ドキュメントは任意**。adoption モード (default) は 9 ドキュメントのうち 7 つを `status: N/A` で seed し lift を決めるまでそのまま。N/A は backlog ではなく定常状態。
+
+### 外部 Refs (Jira / Linear / PR / ドキュメント) — 自動検出
+
+PLAN.md frontmatter の vendor-agnostic な `refs:` 配列。`/scv:promote` が以下の source の URL を自動検出:
+
+- `scv/raw/` 内ファイル (議事録にチケット URL を含める)
+- `/scv:promote "...URL..."` 呼び出し引数
+- dialog 回答中の URL (自動 parse)
+
+`.env` に `JIRA_BASE_URL` / `LINEAR_BASE_URL` / `CONFLUENCE_BASE_URL` を設定すると PLAN.md は `id: PAY-1234` のみ保存 (URL 表示時に推論)。未設定なら full URL 保存。`template/.env.example.scv` 参照。
+
+### 通知ツール設定 (.env) — 任意
+
+```bash
+cp .env.example.scv .env
+$EDITOR .env
+```
+
+Slack:
+```bash
+NOTIFIER_PROVIDER=slack
+SLACK_BOT_TOKEN=xoxb-...
+SLACK_CHANNEL_ID=C0XXXXX0
+SLACK_CHANNEL_ID_PHASE_COMPLETE=C0XXXXX1
+SLACK_CHANNEL_ID_E2E_FAILURE=C0XXXXX2
+```
+
+Discord: `NOTIFIER_PROVIDER=discord` + `DISCORD_BOT_TOKEN` + `DISCORD_CHANNEL_ID_*`。
+
+既存 `.env` がある場合: `cat .env.example.scv >> .env`。`.env` は絶対に git にコミット禁止。
+
+### `demo/` (リポジトリ専用 — プラグイン本体とは別)
+
+`demo/` ディレクトリは README の GIF (`scv-demo.gif`、`the-loop.gif`、`architecture.gif`) を生成する Remotion コンポジションを含みます。独自の `pnpm` workspace として動き、プラグインの動作とは無関係です — 利用者が触る必要はありません。
+
+</details>
+
+## さらに詳しく
+
+- 各コマンドの詳細: `/scv:<command> --help`
+- プロジェクト固有の案内: `/scv:help`
+
+## コントリビューション
+
+- PR の前に `tests/run-dry.sh` を通す
+- `VERSION` は SemVer に従う
+
+
+---
+
+**License**: [MIT](./LICENSE) © 2026 wookiya1364
