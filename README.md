@@ -137,7 +137,7 @@ flowchart LR
 | `/scv:update` | **Plugin self-update guide** — show installed vs latest version, walk through `/plugin marketplace update scv-claude-code` + `/reload-plugins`. Read-only. (v0.11.2+) |
 | `/scv:regression` | Run every archived TESTS as a regression suite |
 | `/scv:report` | Post a phase result to Slack or Discord |
-| `/scv:sync` | Apply plugin updates to standard docs |
+| `/scv:sync` | **Two-step sync** (v0.11.3+): (1) template re-sync to standard docs (`merge_policy` based), (2) drift detection between code and active promote slugs (`scope:` git diff + TESTS run). Archive immutable. |
 | `/scv:install-deps` | Detect & install missing CLIs (`gh` / `glab` / `jq` / `ffmpeg`) |
 
 ---
@@ -391,7 +391,7 @@ flowchart LR
 | `/scv:update` | **플러그인 self-update 안내** — 설치된 vs 최신 버전 표시, `/plugin marketplace update scv-claude-code` + `/reload-plugins` 안내. read-only. (v0.11.2+) |
 | `/scv:regression` | archive 된 모든 TESTS 를 회귀로 실행 |
 | `/scv:report` | 단계 결과를 Slack / Discord 에 보고 |
-| `/scv:sync` | 플러그인 업데이트를 표준 문서에 반영 |
+| `/scv:sync` | **2-step sync** (v0.11.3+): (1) 플러그인 template → 표준 문서 (`merge_policy`), (2) 코드 ↔ active promote slug 의 drift 검출 (`scope:` git diff + TESTS run). archive 는 immutable. |
 | `/scv:install-deps` | 누락 CLI 자동 감지 + 설치 안내 (`gh` / `glab` / `jq` / `ffmpeg`) |
 
 ---
@@ -642,7 +642,7 @@ flowchart LR
 | `/scv:update` | **プラグイン self-update ガイド** — インストール済み vs 最新バージョン表示、`/plugin marketplace update scv-claude-code` + `/reload-plugins` への案内。read-only。(v0.11.2+) |
 | `/scv:regression` | archive された全 TESTS を回帰として実行 |
 | `/scv:report` | フェーズ結果を Slack / Discord に通知 |
-| `/scv:sync` | プラグイン更新を標準ドキュメントに反映 |
+| `/scv:sync` | **2 ステップ sync** (v0.11.3+): (1) プラグイン template → 標準ドキュメント (`merge_policy`)、(2) コード ↔ active promote slug の drift 検出 (`scope:` git diff + TESTS run)。archive は immutable。 |
 | `/scv:install-deps` | 不足 CLI 自動検出 + インストール案内 (`gh` / `glab` / `jq` / `ffmpeg`) |
 
 ---

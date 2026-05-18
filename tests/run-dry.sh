@@ -464,6 +464,50 @@ assert_contains "$UPDATE_CMD" "UP_TO_DATE"
 assert_contains "$UPDATE_CMD" "Read-only"
 
 echo
+echo "=== [11g''''] /scv:sync Step 2 — drift detection (v0.11.3+) ==="
+DRIFT_SH="$STANDARD_ROOT/scripts/drift-detect.sh"
+SYNC_CMD="$STANDARD_ROOT/commands/sync.md"
+assert_file "$DRIFT_SH"
+[[ -x "$DRIFT_SH" ]] && pass "drift-detect.sh executable" || fail "drift-detect.sh not executable"
+
+# Helper smoke test — no promote slugs in tmp dir
+DRIFT_TMP=$(mktemp -d)
+PROMOTE_DIR="$DRIFT_TMP/scv/promote" OUT=$(cd "$DRIFT_TMP" && PROMOTE_DIR=scv/promote bash "$DRIFT_SH" 2>&1)
+assert_out_contains "(no active promote slugs" "$OUT" "drift-detect: empty promote dir → safe message"
+
+# Sample slug with scope: → exercise the scope branch
+mkdir -p "$DRIFT_TMP/scv/promote/sample-drift-slug"
+cat > "$DRIFT_TMP/scv/promote/sample-drift-slug/PLAN.md" <<'P'
+---
+title: Sample
+slug: sample-drift-slug
+scope:
+  - "src/sample/**"
+---
+P
+cat > "$DRIFT_TMP/scv/promote/sample-drift-slug/TESTS.md" <<'T'
+## How to run
+
+```bash
+echo OK
+```
+T
+# Init a tiny git repo (no diff → DRIFT: no in scope mode)
+( cd "$DRIFT_TMP" && git init -q && git add -A && git -c user.email=t@t -c user.name=t commit -q -m init ) >/dev/null 2>&1
+OUT=$(cd "$DRIFT_TMP" && PROMOTE_DIR=scv/promote bash "$DRIFT_SH" 2>&1)
+assert_out_contains "=== sample-drift-slug ===" "$OUT" "drift-detect: emits slug header"
+assert_out_contains "SCOPE_DEFINED: yes"        "$OUT" "drift-detect: scope branch active"
+assert_out_contains "DRIFT: no"                  "$OUT" "drift-detect: clean repo → no drift"
+rm -rf "$DRIFT_TMP"
+
+# sync.md content checks
+assert_contains "$SYNC_CMD" "Step 2"
+assert_contains "$SYNC_CMD" "Drift detection"
+assert_contains "$SYNC_CMD" "drift-detect.sh"
+assert_contains "$SYNC_CMD" "Archive immutability"
+assert_contains "$SYNC_CMD" "code → docs"
+
+echo
 echo "=== [11g''] /scv:codegen tests-smell.sh helper (P6 MVP static lint) ==="
 TESTS_SMELL_SH="$STANDARD_ROOT/scripts/tests-smell.sh"
 assert_file "$TESTS_SMELL_SH"
@@ -3195,8 +3239,8 @@ assert_contains "$README" 'how did we handle refunds last quarter?"` (v0.10.0+)'
 assert_contains "$README" '지난 분기 결제 archive 보여줘"` (v0.10.0+)'
 assert_contains "$README" '先四半期の決済関連 archive を見せて"` (v0.10.0+)'
 
-# plugin.json — version 0.11.2
-assert_contains "$STANDARD_ROOT/.claude-plugin/plugin.json" '"version": "0.11.2"'
+# plugin.json — version 0.11.3
+assert_contains "$STANDARD_ROOT/.claude-plugin/plugin.json" '"version": "0.11.3"'
 
 # v0.10.2 — heredoc-quoted $ARGUMENTS so raw user input survives shell evaluation
 assert_contains "$HELP_CMD" "__SCV_HELP_ARG_EOF__"
