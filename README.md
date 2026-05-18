@@ -92,6 +92,9 @@ That's it. **You only need to remember `/scv:help`** — it diagnoses your proje
 
 ---
 
+<details>
+<summary><b>How it works — The Loop · Commands · Why · When</b></summary>
+
 ## The Loop
 
 Drop material → refine into a plan + tests → implement → archive. Every archived plan's tests join the **accumulating regression suite** that runs against every future change.
@@ -171,6 +174,11 @@ You can use BMAD/GSD for the spec → code phase, and let SCV's archive accumula
 
 **For larger changes**: split a multi-feature change into multiple slugs grouped under one `epic:` (PLAN.md frontmatter). See `scv/PROMOTE.md` §8d for the epic + multi-slug pattern.
 
+</details>
+
+<details>
+<summary><b>Architecture · Philosophy</b></summary>
+
 ## Architecture & Integrations
 
 PLAN.md is the single source of truth. External tools (Jira / Linear / Confluence / Google Doc) are linked via `refs:` — never copied. Outputs (PR / MR / Slack / Discord) are auto-generated from the same source.
@@ -247,6 +255,11 @@ Failures triage into regression / obsolete / flaky — never silently skipped.
 
 > The plugin's name is the plugin's contract.
 
+</details>
+
+<details>
+<summary><b>Reference · Learn More · Contributing</b></summary>
+
 <details>
 <summary><b>Reference — project layout, external refs, notifier setup</b></summary>
 
@@ -319,6 +332,8 @@ The `demo/` directory holds Remotion compositions that produce the README's GIFs
 
 </details>
 
+</details>
+
 <details>
 <summary><b>한국어</b></summary>
 
@@ -366,6 +381,9 @@ The `demo/` directory holds Remotion compositions that produce the README's GIFs
 **어느 단계든 막히면** `/scv:help` — 프로젝트의 현재 상태를 보고 다음에 뭐 할지 알려줍니다.
 
 ---
+
+<details>
+<summary><b>흐름 한눈에 · 슬래시 커맨드 · 왜 SCV · 언제 맞는가</b></summary>
 
 ## 흐름 한눈에
 
@@ -444,6 +462,10 @@ BMAD/GSD 로 spec → code 단계 진행하고, SCV 의 archive 가 그 밑에�
 
 `scv/PROMOTE.md` §8d 의 epic + multi-slug 패턴 참조.
 
+</details>
+
+<details>
+<summary><b>아키텍처 · 철학</b></summary>
 
 ## 아키텍처 & 외부 통합
 
@@ -517,6 +539,11 @@ PLAN.md 에 들어가는 건 사용자가 말한 것 — LLM 이 추측한 게 �
 
 > 플러그인 이름은 플러그인의 계약.
 
+</details>
+
+<details>
+<summary><b>레퍼런스 · 더 알아보기 · 기여</b></summary>
+
 <details>
 <summary><b>레퍼런스 — 프로젝트 디렉토리 / 외부 Refs / 협업툴 설정</b></summary>
 
@@ -589,6 +616,8 @@ Discord: `NOTIFIER_PROVIDER=discord` + `DISCORD_BOT_TOKEN` + `DISCORD_CHANNEL_ID
 
 </details>
 
+</details>
+
 <details>
 <summary><b>日本語</b></summary>
 
@@ -636,6 +665,9 @@ Discord: `NOTIFIER_PROVIDER=discord` + `DISCORD_BOT_TOKEN` + `DISCORD_CHANNEL_ID
 **どのステップで詰まっても** `/scv:help` — プロジェクトの現在の状態を見て、次に何をすべきか教えてくれます。
 
 ---
+
+<details>
+<summary><b>ループ · スラッシュコマンド · なぜ SCV · 適合する時</b></summary>
 
 ## ループ
 
@@ -712,6 +744,10 @@ BMAD/GSD で spec → code フェーズを進めて、SCV の archive がその�
 
 **より大きな変更の場合**: multi-feature 変更を *複数 slug* に分割し、同じ `epic:` (PLAN.md frontmatter) 下にグループ化。`scv/PROMOTE.md` §8d の epic + multi-slug パターン参照。
 
+</details>
+
+<details>
+<summary><b>アーキテクチャ · 哲学</b></summary>
 
 ## アーキテクチャと外部統合
 
@@ -785,6 +821,11 @@ archived plan のテストは次の変更の回帰として回ります。
 
 > プラグインの名前はプラグインの契約。
 
+</details>
+
+<details>
+<summary><b>リファレンス · さらに詳しく · コントリビューション</b></summary>
+
 <details>
 <summary><b>リファレンス — プロジェクトディレクトリ / 外部 Refs / 通知設定</b></summary>
 
@@ -854,6 +895,8 @@ Discord: `NOTIFIER_PROVIDER=discord` + `DISCORD_BOT_TOKEN` + `DISCORD_CHANNEL_ID
 
 - PR の前に `tests/run-dry.sh` を通す
 - `VERSION` は SemVer に従う
+
+</details>
 
 </details>
 

@@ -109,6 +109,8 @@ On choice [1]: run `bash "$CLAUDE_PLUGIN_ROOT/scripts/hydrate.sh" init .`. On [2
 
 If hydrate is already complete (or just completed in Step A0), re-present the rest of the script's output in the resolved language: translate descriptions, recommended next-step explanations, and section headers. Keep slash command names (`/scv:help`, `/scv:promote`, …), file paths, and SCV technical terms (`promote`, `archive`, `orphan branch`, `epic`, `supersedes`) as-is. **If `UNFINISHED_CONVERSATIONS:` is non-empty**, also list them in your output: "You have N unfinished conversation(s). Run `/scv:help` with an idea (e.g., `/scv:help \"continue the refund button\"`) to resume — or start a new one."
 
+**Mention `/scv:codegen` when applicable**: if the recommended next step is `/scv:work <slug>` AND that slug's `TESTS.md` already contains concrete acceptance criteria (i.e., not just placeholders), append one line: "Or, if you trust the tests to define behavior, try `/scv:codegen <slug>` — TDD-first variant (v0.11.0+, experimental): TESTS drives code Red→Green per case, archive/PR is handed off to `/scv:work`." Skip this line if TESTS.md is empty/placeholder or if the slug is UI-heavy (where TDD-first is awkward).
+
 ### If `ARG_CONVERSATION:` is non-empty → classify intent first
 
 #### Step B-classify — Future-leaning vs Retrospective vs Ambiguous
