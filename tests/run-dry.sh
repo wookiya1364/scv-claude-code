@@ -1695,13 +1695,19 @@ echo "fake2" > /tmp/v2.webm
 SCV_ATTACHMENTS_BRANCH=scv-attachments attachments_upload merged-old 100 /tmp/v1.webm >/dev/null 2>&1
 SCV_ATTACHMENTS_BRANCH=scv-attachments attachments_upload still-open 200 /tmp/v2.webm >/dev/null 2>&1
 
-# Portable "N days ago" — BSD (macOS) first, then GNU (Linux).
+# Portable "N days ago" across BSD (macOS), GNU (Linux), and busybox (Alpine).
+# Strategy: compute epoch seconds, then format. Relative-date syntax (`5 days ago`)
+# is GNU-only; busybox date rejects it.
+#   BSD:     date -r EPOCH '+FMT'
+#   GNU/busybox: date -d @EPOCH '+FMT'
 days_ago() {
-  if date -v-${1}d >/dev/null 2>&1; then
-    date -u -v-${1}d +%Y-%m-%dT%H:%M:%SZ
-  else
-    date -u -d "${1} days ago" +%Y-%m-%dT%H:%M:%SZ
-  fi
+  local days_param epoch
+  days_param=$1
+  epoch=$(date -u +%s)
+  epoch=$((epoch - days_param * 86400))
+  date -u -r "$epoch" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || \
+    date -u -d "@$epoch" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || \
+    echo ""
 }
 C5=$(days_ago 5)
 
@@ -1861,13 +1867,16 @@ SCV_ATTACHMENTS_BRANCH=scv-attachments attachments_upload slug-merged-recent 300
 
 MOCK=$(mktemp -d)
 
-# Portable "N days ago" — BSD (macOS) tries first, then GNU (Linux).
+# Portable "N days ago" across BSD (macOS), GNU (Linux), and busybox (Alpine).
+# See [11ii] above for rationale (epoch arithmetic; relative-date is GNU-only).
 days_ago() {
-  if date -v-${1}d >/dev/null 2>&1; then
-    date -u -v-${1}d +%Y-%m-%dT%H:%M:%SZ
-  else
-    date -u -d "${1} days ago" +%Y-%m-%dT%H:%M:%SZ
-  fi
+  local days_param epoch
+  days_param=$1
+  epoch=$(date -u +%s)
+  epoch=$((epoch - days_param * 86400))
+  date -u -r "$epoch" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || \
+    date -u -d "@$epoch" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || \
+    echo ""
 }
 
 # macOS bash 3.2 mis-parses `case ;;` inside nested quoted heredocs in
