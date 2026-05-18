@@ -250,6 +250,7 @@ Then use `AskUserQuestion` for the batch (questions stay clean — do NOT mix th
 2. **Slug(s)**: For each folder, ask: "Slug for this promote folder? (kebab-case, 3~5 words)". Combine with `TODAY` and `AUTHOR` from the helper to produce `<YYYYMMDD>-<AUTHOR>-<slug>/`.
 3. **Title**: "One-line title for `<folder>`?" (will go in PLAN.md frontmatter `title`).
 4. **Raw sources**: For each folder, confirm which raw file paths belong to it (default: all changed raws; user may split).
+5. **Invariants** (optional, v0.11.0+): "Any existing behavior this plan must NOT break? (e.g., '기존 결제 한도 체크 유지', '음수 환불 금지'. Skip if nothing comes to mind — this is a focused list, not a general regression list.)" The answer becomes PLAN.md frontmatter `invariants:` (string array). `/scv:codegen` uses it as a per-iteration self-check (T5 logic-skip guard). Empty answer is fine — most plans don't need it.
 
 #### Step 3.1.5 — Parse URLs from dialog answers (URL pattern → ref type)
 
@@ -305,6 +306,9 @@ refs: []
 #   - type: confluence
 #     url: https://...
 # (Same type may repeat. See scv/PROMOTE.md §4 for full spec.)
+# Optional — populate from Step 3.1 question 5 (invariants). Used by /scv:codegen as a per-iteration self-check.
+# invariants:
+#   - "<existing behavior that must not break, e.g. 기존 결제 한도 체크 유지>"
 ---
 
 # <TITLE>

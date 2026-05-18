@@ -158,7 +158,24 @@ build_supersede_skip_list() {
 }
 
 # Return slugs with status: obsolete in archive
+# v0.11.0+ — Tries scv/archive/INDEX.yaml first (fast path, frontmatter-only).
+# Falls back to per-PLAN.md scan when INDEX is absent (older projects, fresh repos).
+# Known limitation: INDEX may lag if archive folders were created outside /scv:work --archive;
+# fallback path is exact. /scv:work always regenerates INDEX on archive, so drift is rare.
 get_obsolete_slugs() {
+  local index_file="$ARCHIVE_DIR/INDEX.yaml"
+  if [[ -f "$index_file" ]]; then
+    awk '
+      /^  - slug:/ {
+        if (cur != "" && obs == 1) print cur
+        cur = $3; obs = 0
+        next
+      }
+      /^    status:[[:space:]]*obsolete/ { obs = 1 }
+      END { if (cur != "" && obs == 1) print cur }
+    ' "$index_file"
+    return
+  fi
   shopt -s nullglob
   for d in "$ARCHIVE_DIR"/*/; do
     local plan="${d}PLAN.md"

@@ -411,6 +411,73 @@ assert_contains "$WORK_CMD" "--archive"
 assert_contains "$WORK_CMD" "in_progress"
 assert_contains "$WORK_CMD" "document-split"
 
+echo
+echo "=== [11g'] /scv:codegen command (TDD-first variant of /scv:work) ==="
+CODEGEN_CMD="$STANDARD_ROOT/commands/codegen.md"
+assert_file "$CODEGEN_CMD"
+
+# command protocol content checks
+assert_contains "$CODEGEN_CMD" "TDD-first"
+assert_contains "$CODEGEN_CMD" "Red pre-flight"
+assert_contains "$CODEGEN_CMD" "Green iteration"
+assert_contains "$CODEGEN_CMD" "AskUserQuestion"
+assert_contains "$CODEGEN_CMD" "iteration budget"
+assert_contains "$CODEGEN_CMD" "3 attempts"
+assert_contains "$CODEGEN_CMD" "Never modify the body of TESTS.md"
+assert_contains "$CODEGEN_CMD" "Step 6.1"
+assert_contains "$CODEGEN_CMD" "/scv:work"
+assert_contains "$CODEGEN_CMD" "Scope guard"
+assert_contains "$CODEGEN_CMD" "Invariants self-check"
+PROMOTE_TPL="$STANDARD_ROOT/template/scv/PROMOTE.md"
+assert_contains "$PROMOTE_TPL" "scope:"
+assert_contains "$PROMOTE_TPL" "v0.11.0+"
+assert_contains "$PROMOTE_TPL" "invariants:"
+assert_contains "$PROMOTE_TPL" "T5 logic-skip"
+assert_contains "$PROMOTE_CMD" "Invariants"
+assert_contains "$PROMOTE_CMD" "invariants:"
+
+echo
+echo "=== [11g''] /scv:codegen tests-smell.sh helper (P6 MVP static lint) ==="
+TESTS_SMELL_SH="$STANDARD_ROOT/scripts/tests-smell.sh"
+assert_file "$TESTS_SMELL_SH"
+[[ -x "$TESTS_SMELL_SH" ]] && pass "tests-smell.sh executable" || fail "tests-smell.sh not executable"
+
+# Run against the (loose) sample TESTS still in the hydrated APP (echo-only file)
+# — must report warnings, not clean
+SAMPLE_TESTS="$TMP/sample-tests-loose.md"
+cat > "$SAMPLE_TESTS" <<'LOOSE'
+# Loose Tests
+## 실행 방법
+echo "ok"
+## 통과 판정
+- prints ok
+LOOSE
+OUT=$(bash "$TESTS_SMELL_SH" "$SAMPLE_TESTS" 2>&1)
+assert_out_contains "TESTS_SMELL: warnings" "$OUT" "tests-smell: loose TESTS → warnings"
+assert_out_contains "scenarios: 0"           "$OUT" "tests-smell: detects 0 scenarios in loose TESTS"
+assert_out_contains "low scenario diversity" "$OUT" "tests-smell: emits scenario-diversity warning"
+
+# A reasonable TESTS file — must report clean
+SAMPLE_OK="$TMP/sample-tests-ok.md"
+cat > "$SAMPLE_OK" <<'OK'
+# Reasonable Tests
+## T1. Valid login
+- expect(login("user", "pass")).toBe(true)
+- expect(login("user", "pass").role).toEqual("member")
+## T2. Bad password rejection
+- expect(login("user", "wrong")).toBe(false)
+- expect(loginAttempts("user")).toBe(1)
+## T3. Lockout after 5 fails
+- expect(loginAttempts("user")).toBe(5)
+- expect(login("user", "pass")).toBe(false)
+OK
+OUT=$(bash "$TESTS_SMELL_SH" "$SAMPLE_OK" 2>&1)
+assert_out_contains "TESTS_SMELL: clean" "$OUT" "tests-smell: reasonable TESTS → clean"
+assert_out_contains "scenarios: 3"       "$OUT" "tests-smell: detects 3 scenarios"
+
+# codegen.md references the helper
+assert_contains "$CODEGEN_CMD" "tests-smell.sh"
+
 # Build a minimal promote plan in the hydrated APP and exercise work.sh
 mkdir -p "$APP/scv/promote/20260420-wookiya1364-sample-feature"
 cat > "$APP/scv/promote/20260420-wookiya1364-sample-feature/PLAN.md" <<'PLAN'
@@ -472,6 +539,24 @@ TESTS
   [[ -d scv/archive/20260420-wookiya1364-sample-feature ]]  && pass "work --archive: folder moved to archive" || fail "work --archive: folder not moved"
   [[ ! -d scv/promote/20260420-wookiya1364-sample-feature ]] && pass "work --archive: promote folder removed" || fail "work --archive: promote folder still present"
   [[ -f scv/archive/20260420-wookiya1364-sample-feature/ARCHIVED_AT.md ]] && pass "work --archive: ARCHIVED_AT.md written" || fail "work --archive: ARCHIVED_AT.md missing"
+
+  # v0.11.0+ — scv/archive/INDEX.yaml auto-managed
+  [[ -f scv/archive/INDEX.yaml ]] && pass "work --archive: INDEX.yaml generated" || fail "work --archive: INDEX.yaml missing"
+  assert_contains scv/archive/INDEX.yaml "auto-managed by /scv:work --archive"
+  assert_contains scv/archive/INDEX.yaml "generated_at:"
+  assert_contains scv/archive/INDEX.yaml "  - slug: 20260420-wookiya1364-sample-feature"
+  assert_contains scv/archive/INDEX.yaml "    title: \"Sample Feature\""
+
+  # v0.11.0+ — Consumers: help.sh archive search uses INDEX fast path
+  OUT=$(bash "$HELP_SH" "search refund" 2>&1)
+  assert_out_contains "ARCHIVE_INDEX:" "$OUT"                              "help (INDEX path): ARCHIVE_INDEX emitted on retrospective arg"
+  assert_out_contains "20260420-wookiya1364-sample-feature" "$OUT"         "help (INDEX path): lists archived sample"
+  assert_out_contains "Sample Feature" "$OUT"                              "help (INDEX path): title via INDEX (no PLAN.md grep)"
+  assert_out_contains "2026-04-20" "$OUT"                                  "help (INDEX path): created date derived from slug prefix"
+
+  # v0.11.0+ — regression.sh get_obsolete_slugs reads INDEX (sample has no obsolete → empty output, no error)
+  assert_contains "$REGRESSION_SH" "INDEX.yaml"
+  assert_contains "$REGRESSION_SH" "fast path"
   assert_contains "$APP/scv/archive/20260420-wookiya1364-sample-feature/ARCHIVED_AT.md" "tests passed"
 
   # [6] archive again should fail (destination exists or no source)
@@ -3058,8 +3143,8 @@ assert_contains "$README" 'how did we handle refunds last quarter?"` (v0.10.0+)'
 assert_contains "$README" '지난 분기 결제 archive 보여줘"` (v0.10.0+)'
 assert_contains "$README" '先四半期の決済関連 archive を見せて"` (v0.10.0+)'
 
-# plugin.json — version 0.10.2
-assert_contains "$STANDARD_ROOT/.claude-plugin/plugin.json" '"version": "0.10.2"'
+# plugin.json — version 0.11.0
+assert_contains "$STANDARD_ROOT/.claude-plugin/plugin.json" '"version": "0.11.0"'
 
 # v0.10.2 — heredoc-quoted $ARGUMENTS so raw user input survives shell evaluation
 assert_contains "$HELP_CMD" "__SCV_HELP_ARG_EOF__"

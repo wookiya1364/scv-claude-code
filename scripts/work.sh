@@ -213,6 +213,34 @@ EOF
 
   echo "ARCHIVED: $TARGET_DIR -> $DEST"
   echo "WROTE: $DEST/ARCHIVED_AT.md"
+
+  # v0.11.0+ — Regenerate scv/archive/INDEX.yaml (auto-managed).
+  # Frontmatter-only index for fast routing by regression.sh and help.sh
+  # (archive search / supersede skip graph) without reading PLAN.md bodies.
+  INDEX_FILE="$ARCHIVE_DIR/INDEX.yaml"
+  {
+    echo "# scv/archive/INDEX.yaml — auto-managed by /scv:work --archive (v0.11.0+)."
+    echo "# Do not edit manually. Regenerated on every archive."
+    echo "generated_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "archives:"
+    for plan_file in "$ARCHIVE_DIR"/*/PLAN.md; do
+      [[ -f "$plan_file" ]] || continue
+      idx_slug=$(basename "$(dirname "$plan_file")")
+      idx_title=$(yaml_get "$plan_file" title)
+      idx_kind=$(yaml_get "$plan_file" kind)
+      idx_status=$(yaml_get "$plan_file" status)
+      idx_epic=$(yaml_get "$plan_file" epic)
+      idx_obsoleted_by=$(yaml_get "$plan_file" obsoleted_by)
+      echo "  - slug: $idx_slug"
+      [[ -n "$idx_title" ]] && echo "    title: \"$idx_title\""
+      [[ -n "$idx_kind" ]] && echo "    kind: $idx_kind"
+      [[ -n "$idx_status" ]] && echo "    status: $idx_status"
+      [[ -n "$idx_epic" ]] && echo "    epic: $idx_epic"
+      [[ -n "$idx_obsoleted_by" ]] && echo "    obsoleted_by: $idx_obsoleted_by"
+    done
+  } > "$INDEX_FILE"
+  echo "WROTE: $INDEX_FILE"
+
   exit 0
 fi
 

@@ -196,6 +196,16 @@ supersedes:
   - 20260115-sspark-user-auth-v1      # Replaces all of v1 → v1's TESTS skipped permanently in regression
 supersedes_scenarios:
   - 20251201-kmlee-legacy-login:T3    # Only T3 of legacy-login is retired; other T's still run
+# Optional — file-path globs this plan is allowed to touch (used by /scv:codegen as a guard).
+# If omitted, the natural scope from PLAN.md Steps applies (current /scv:work behavior).
+scope:
+  - "src/auth/**"
+  - "tests/auth/**"
+# Optional — existing behaviors this plan must NOT break (used by /scv:codegen as a self-check).
+# Capture only the invariants that are easy to violate during a focused change (T5 logic-skip).
+invariants:
+  - "기존 비밀번호 정책 (8자 이상, 특수문자 1개) 유지"
+  - "session token 저장 위치 변경 금지"
 ---
 
 # {{title}}
@@ -257,6 +267,8 @@ supersedes_scenarios:
 | `epic` | — | When splitting a large user request into multiple features, group them under the same epic slug (count is content-driven — Claude proposes + user adjusts). `/scv:status` shows epic progress; `/scv:work`'s PR auto-creation uses the epic branch as base. See §8d |
 | `kind` | — | `feature` (default) / `refactor` (epic-closing integration cleanup) / `retirement` (pure removal — §8c). Used by Claude for epic flow / refactor guidance |
 | `lang` | — | (v0.7.3+) The resolved language for this promote's content + diagrams + commit/PR text. Set by `/scv:promote` Step 0 — auto-resolved from `settings.json language` and `.env SCV_LANG`, or via `AskUserQuestion` when those mismatch. Read by `/scv:work` Step 9d and `pr-helper.sh` for full localization (PR title, body labels like `## Summary` / `## 요약` / `## 概要`, footer `🗂 Archived` / `🗂 보관됨` / `🗂 アーカイブ済み`). Values: `english` / `korean` / `japanese` / free-form. Empty / unknown → English fallback. |
+| `scope` | — | (v0.11.0+) Optional file-path glob array this plan is allowed to touch. Used by `/scv:codegen` Step 7 as a guard — Edit/Write outside these globs emits a warning (does not block). If omitted, the natural scope from PLAN.md Steps applies (current `/scv:work` behavior, unchanged). Example: `["src/auth/**", "tests/auth/**"]`. |
+| `invariants` | — | (v0.11.0+) Optional string array of *existing behaviors this plan must NOT break*. Used by `/scv:codegen` Step 7 as a per-iteration self-check (LLM re-reads each item after every Green iteration; AskUserQuestion if unsure). Targets T5 logic-skip — the cheat pattern where a focused change silently omits an unrelated invariant. Capture only what's easy to violate; not a general regression list. Example: `["기존 결제 한도 체크 유지", "음수 환불 금지"]`. `/scv:work` does not enforce this field. |
 
 ### `refs:` spec — vendor-neutral external references
 
@@ -304,6 +316,31 @@ CONFLUENCE_BASE_URL=https://confluence.example.com
 ```
 
 ---
+
+## 4.5. `scv/archive/INDEX.yaml` — frontmatter-only index (v0.11.0+, auto-managed)
+
+`/scv:work --archive` regenerates `scv/archive/INDEX.yaml` on every archive — a flat YAML index of every archived plan's frontmatter scalars (`slug`, `title`, `kind`, `status`, `epic`, `obsoleted_by`). PLAN.md bodies are not read for this file.
+
+**Purpose**: fast routing without scanning every archived PLAN.md.
+- `/scv:regression` can consult INDEX for the supersede skip graph (`status: obsolete` entries) before opening any PLAN body.
+- `/scv:help` archive search (Mode B') can do a first-pass filter on `tags` / `kind` / `title` via INDEX, opening PLAN bodies only for matches.
+
+**Rules**:
+- Auto-managed — never edit manually. `/scv:work --archive` overwrites it.
+- Committable — INDEX moves with the archive folders.
+- May lag by *one archive cycle* if a frontmatter field is edited outside `/scv:work` (e.g., obsolete propagation Step 9c). Re-running any `/scv:work --archive` (or a future `--regen-index` flag) refreshes it.
+
+Schema (example):
+
+```yaml
+generated_at: 2026-05-18T12:34:56Z
+archives:
+  - slug: 20260420-sspark-user-auth-refactor
+    title: "User authentication flow refactor"
+    kind: feature
+    status: done
+    epic: 20260424-payment-overhaul
+```
 
 ## 5. TESTS.md template
 

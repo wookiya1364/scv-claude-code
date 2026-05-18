@@ -79,22 +79,51 @@ if [[ -n "$CONV_ARG" ]]; then
     # Newest archives first, capped at 30 entries to keep prompt size bounded.
     echo "ARCHIVE_INDEX:"
     found_any=0
-    while IFS= read -r dir; do
-      [[ -z "$dir" ]] && continue
-      folder=$(basename "$dir")
-      plan="$dir/PLAN.md"
-      if [[ -f "$plan" ]]; then
-        title=$(grep -m1 '^title:' "$plan" 2>/dev/null \
-          | sed 's/^title:[[:space:]]*//; s/^["'"'"']//; s/["'"'"']$//')
-        created=$(grep -m1 '^created_at:' "$plan" 2>/dev/null \
-          | sed 's/^created_at:[[:space:]]*//')
-        printf '  %s | %s | %s\n' "$folder" "${title:-<no title>}" "${created:-<no date>}"
-      else
-        printf '  %s | <no PLAN.md>\n' "$folder"
+    # v0.11.0+ — INDEX.yaml fast path (frontmatter-only, no PLAN.md body reads).
+    # Falls back to per-folder PLAN.md scan when INDEX is absent.
+    index_file="$ARCHIVE_DIR/INDEX.yaml"
+    if [[ -f "$index_file" ]]; then
+      # Parse INDEX entries; derive created date from slug's YYYYMMDD prefix.
+      INDEX_OUT=$(awk '
+        function print_entry() {
+          created = substr(slug, 1, 4) "-" substr(slug, 5, 2) "-" substr(slug, 7, 2)
+          printf "  %s | %s | %s\n", slug, (title == "" ? "<no title>" : title), created
+        }
+        /^  - slug:/ {
+          if (slug != "") print_entry()
+          slug = $3; title = ""
+          next
+        }
+        /^    title:/ {
+          line = $0
+          sub(/^[[:space:]]*title:[[:space:]]*"?/, "", line)
+          sub(/"$/, "", line)
+          title = line
+        }
+        END { if (slug != "") print_entry() }
+      ' "$index_file" | sort -r | head -30)
+      if [[ -n "$INDEX_OUT" ]]; then
+        printf '%s\n' "$INDEX_OUT"
+        found_any=1
       fi
-      found_any=1
-    done < <(find "$ARCHIVE_DIR" -mindepth 1 -maxdepth 1 -type d 2>/dev/null \
-              | sort -r | head -30)
+    else
+      while IFS= read -r dir; do
+        [[ -z "$dir" ]] && continue
+        folder=$(basename "$dir")
+        plan="$dir/PLAN.md"
+        if [[ -f "$plan" ]]; then
+          title=$(grep -m1 '^title:' "$plan" 2>/dev/null \
+            | sed 's/^title:[[:space:]]*//; s/^["'"'"']//; s/["'"'"']$//')
+          created=$(grep -m1 '^created_at:' "$plan" 2>/dev/null \
+            | sed 's/^created_at:[[:space:]]*//')
+          printf '  %s | %s | %s\n' "$folder" "${title:-<no title>}" "${created:-<no date>}"
+        else
+          printf '  %s | <no PLAN.md>\n' "$folder"
+        fi
+        found_any=1
+      done < <(find "$ARCHIVE_DIR" -mindepth 1 -maxdepth 1 -type d 2>/dev/null \
+                | sort -r | head -30)
+    fi
     if [[ "$found_any" -eq 0 ]]; then
       echo "  (empty)"
     fi
@@ -130,6 +159,7 @@ Commands
   /scv:status     scv/raw/ change detection + active promote plans + graph status
   /scv:promote    scv/raw/ → scv/promote/<YYYYMMDD>-<author>-<slug>/ + graph refresh
   /scv:work       Implement promote plan → test → optionally archive
+  /scv:codegen    TDD-first variant of /scv:work — TESTS drives code (Red→Green per case)
   /scv:regression Run accumulated archived regression + auto-skip supersedes/obsolete + failure triage
   /scv:report     Phase report to Slack/Discord (with artifacts)
   /scv:sync       Safe merge on template version bump

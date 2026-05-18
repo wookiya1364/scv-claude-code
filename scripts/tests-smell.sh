@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# tests-smell.sh — TESTS.md quality heuristic lint (v0.11.0+).
+#
+# Static check that flags TESTS likely to be passable by cheat code:
+# - low scenario diversity
+# - low assertion density per scenario
+# - type-only assertion concentration
+#
+# Used by /scv:codegen Step 6.1. Warn-only — never blocks codegen.
+#
+# Usage:
+#   tests-smell.sh <path/to/TESTS.md>
+#
+# Output (stdout):
+#   TESTS_SMELL: clean | warnings
+#   scenarios: <N>
+#   assertions: <M>
+#   [warnings:]
+#   [  - <warning line>]
+#
+# Exit code: 0 always (warn-only). Exit 1 only on missing arg / file.
+
+set -uo pipefail
+
+TESTS_FILE="${1:-}"
+if [[ -z "$TESTS_FILE" || ! -f "$TESTS_FILE" ]]; then
+  echo "ERROR: tests-smell.sh requires an existing TESTS.md path" >&2
+  exit 1
+fi
+
+# Scenario headings — match common patterns:
+#   ## T1. ..., ## E2E-001 ..., ## U-1 ..., ## UT-1 ..., ## Scenario 1
+scenarios=$(grep -cE '^##[[:space:]]+(T[0-9]+|E2E-[0-9]+|U-[0-9]+|UT-[0-9]+|Scenario[[:space:]]+[0-9]+)' "$TESTS_FILE" 2>/dev/null || true)
+
+# Assertion-style keywords (JS/TS, Python, Go, Java/JUnit, RSpec)
+assertions=$(grep -cE 'expect\(|assert[A-Z]|\.toBe\(|\.toEqual\(|\.toMatch\(|should[A-Z]|assertEquals|assertTrue|assertFalse|assertThat' "$TESTS_FILE" 2>/dev/null || true)
+
+# Type-only assertions: typeof.*toBe or typeof.*===.*"string"
+type_only=$(grep -cE 'typeof[^.=]*\.toBe|typeof[^=]+===?[[:space:]]*"[a-z]+"' "$TESTS_FILE" 2>/dev/null || true)
+
+warnings=()
+
+if (( scenarios < 2 )); then
+  warnings+=("low scenario diversity: only $scenarios scenario heading(s) — consider adding more cases")
+fi
+
+if (( scenarios > 0 )) && (( assertions < scenarios * 2 )); then
+  warnings+=("low assertion density: $assertions assertions across $scenarios scenarios — recommend 2+ per scenario")
+fi
+
+if (( assertions > 0 )) && (( type_only * 2 > assertions )); then
+  warnings+=("type-heavy assertions: $type_only of $assertions assertions are typeof checks — codegen may pass with empty stubs")
+fi
+
+if [[ ${#warnings[@]} -eq 0 ]]; then
+  echo "TESTS_SMELL: clean"
+else
+  echo "TESTS_SMELL: warnings"
+fi
+echo "scenarios: $scenarios"
+echo "assertions: $assertions"
+
+if [[ ${#warnings[@]} -gt 0 ]]; then
+  echo "warnings:"
+  for w in "${warnings[@]}"; do
+    echo "  - $w"
+  done
+fi
+
+exit 0

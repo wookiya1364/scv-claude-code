@@ -23,7 +23,7 @@ Drop materials → Claude refines them with you → implementation runs the test
 <a href="https://github.com/wookiya1364/scv-claude-code/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/wookiya1364/scv-claude-code?label=release&color=blue&cacheSeconds=300" /></a>
 <img alt="License" src="https://img.shields.io/badge/license-MIT-green" />
 <img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude%20Code-plugin-D97757" />
-<img alt="Regression" src="https://img.shields.io/badge/tests-792_PASS-brightgreen" />
+<img alt="Regression" src="https://img.shields.io/badge/tests-830_PASS-brightgreen" />
 <img alt="i18n" src="https://img.shields.io/badge/i18n-EN_·_KO_·_JA-purple" />
 </p>
 
@@ -133,6 +133,7 @@ flowchart LR
 | `/scv:status` | Inspect raw materials · active promotes · epic progress |
 | `/scv:promote` | `scv/raw/` → plan folder (`scv/promote/<slug>/`) with PLAN + TESTS + Mermaid diagrams |
 | `/scv:work <slug>` | Implement · run tests · archive on pass · open PR with e2e video |
+| `/scv:codegen <slug>` | **TDD-first variant** of `/scv:work` — TESTS drives code (Red→Green per case, budget 3). Uses optional PLAN.md `scope:` / `invariants:` as guards. Hands archive/PR off to `/scv:work`. (v0.11.0+) |
 | `/scv:regression` | Run every archived TESTS as a regression suite |
 | `/scv:report` | Post a phase result to Slack or Discord |
 | `/scv:sync` | Apply plugin updates to standard docs |
@@ -375,6 +376,7 @@ flowchart LR
 | `/scv:status` | raw 자료 · 진행 중인 promote · epic 진척도 |
 | `/scv:promote` | `scv/raw/` → plan 폴더 (`scv/promote/<slug>/`) — PLAN + TESTS + Mermaid 도식 |
 | `/scv:work <slug>` | 구현 · 테스트 실행 · 통과 시 archive · e2e 비디오 첨부한 PR 생성 |
+| `/scv:codegen <slug>` | **TDD-first 변형** — TESTS 가 코드를 driver. case 단위 Red→Green (budget 3). PLAN.md `scope:` / `invariants:` 를 가드로 사용. archive/PR 은 `/scv:work` 에 위임. (v0.11.0+) |
 | `/scv:regression` | archive 된 모든 TESTS 를 회귀로 실행 |
 | `/scv:report` | 단계 결과를 Slack / Discord 에 보고 |
 | `/scv:sync` | 플러그인 업데이트를 표준 문서에 반영 |
@@ -614,6 +616,7 @@ flowchart LR
 | `/scv:status` | raw 資料 · アクティブな promote · epic 進捗 |
 | `/scv:promote` | `scv/raw/` → plan フォルダ (`scv/promote/<slug>/`) — PLAN + TESTS + Mermaid 図 |
 | `/scv:work <slug>` | 実装 · テスト実行 · 通過時に archive · e2e 動画添付の PR を自動作成 |
+| `/scv:codegen <slug>` | **TDD-first 変形** — TESTS がコードのドライバ。case 単位の Red→Green (budget 3)。PLAN.md `scope:` / `invariants:` をガードとして使用。archive/PR は `/scv:work` に委譲。(v0.11.0+) |
 | `/scv:regression` | archive された全 TESTS を回帰として実行 |
 | `/scv:report` | フェーズ結果を Slack / Discord に通知 |
 | `/scv:sync` | プラグイン更新を標準ドキュメントに反映 |
