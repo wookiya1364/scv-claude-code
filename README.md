@@ -133,11 +133,11 @@ flowchart LR
 | `/scv:status` | Inspect raw materials · active promotes · epic progress |
 | `/scv:promote` | `scv/raw/` → plan folder (`scv/promote/<slug>/`) with PLAN + TESTS + Mermaid diagrams |
 | `/scv:work <slug>` | Implement · run tests · archive on pass · open PR with e2e video |
-| `/scv:codegen <slug>` | **TDD-first variant** of `/scv:work` — TESTS drives code (Red→Green per case, budget 3). Uses optional PLAN.md `scope:` / `invariants:` as guards. Hands archive/PR off to `/scv:work`. (v0.11.0+, *experimental*) |
+| `/scv:codegen <slug>` | **TDD-first variant** of `/scv:work` (v0.11.0+, *experimental*).<br/>TESTS drives code (Red→Green per case, budget 3).<br/>Uses optional PLAN.md `scope:` / `invariants:` as guards.<br/>Hands archive/PR off to `/scv:work`. |
 | `/scv:update` | **Plugin self-update guide** — show installed vs latest version, walk through `/plugin marketplace update scv-claude-code` + `/reload-plugins`. Read-only. (v0.11.2+) |
 | `/scv:regression` | Run every archived TESTS as a regression suite |
 | `/scv:report` | Post a phase result to Slack or Discord |
-| `/scv:sync` | **Two-step sync** (v0.11.3+): (1) template re-sync to standard docs (`merge_policy` based), (2) drift detection between code and active promote slugs (`scope:` git diff + TESTS run). Archive immutable. |
+| `/scv:sync` | **Two-step sync** (v0.11.3+).<br/>(1) Template re-sync to standard docs (`merge_policy`).<br/>(2) Drift detection between code and active promote slugs (`scope:` git diff + TESTS run).<br/>Archive immutable. |
 | `/scv:install-deps` | Detect & install missing CLIs (`gh` / `glab` / `jq` / `ffmpeg`) |
 
 ---
@@ -156,11 +156,18 @@ When AI starts writing your team's code, three things break down.
 ## When SCV fits
 
 - Claude Code is your team's primary IDE.
-- Changes are typically small (single feature / refactor / fix) — not multi-month, deep-spec-driven mega-initiatives.
-- You value an accumulating regression net more than deep up-front spec dialog.
-- A 1-person operator can run SCV's bash + markdown core (no NPM, no MCP server, no service).
 
-**Composition is allowed**: `PLAN.md` / `TESTS.md` / `archive/` are plain markdown — committable text. You can use BMAD/GSD for the spec → code phase, and let SCV's archive accumulate the regression net underneath.
+- Changes are typically small — single feature / refactor / fix.
+  - Not multi-month, deep-spec-driven mega-initiatives.
+
+- You value an accumulating regression net more than deep up-front spec dialog.
+
+- A 1-person operator can run SCV's bash + markdown core.
+  - No NPM, no MCP server, no service.
+
+**Composition is allowed**: `PLAN.md` / `TESTS.md` / `archive/` are plain markdown — committable text.
+
+You can use BMAD/GSD for the spec → code phase, and let SCV's archive accumulate the regression net underneath.
 
 **For larger changes**: split a multi-feature change into multiple slugs grouped under one `epic:` (PLAN.md frontmatter). See `scv/PROMOTE.md` §8d for the epic + multi-slug pattern.
 
@@ -222,11 +229,21 @@ flowchart TB
 
 Three failure modes of AI-assisted team development — and what SCV refuses to do about each.
 
-**S — Standard.** Standard docs (DOMAIN, ARCHITECTURE, DESIGN, TESTING, …) seed at `status: N/A` and stay that way until you lift one. N/A is a steady state, not a backlog.
+**S — Standard.** Standard docs (DOMAIN, ARCHITECTURE, DESIGN, TESTING, …) seed at `status: N/A` and stay that way until you lift one.
 
-**C — Cowork.** `/scv:promote` is a dialog, not a generation. Claude reads `scv/raw/` and proposes a structure; you approve per-candidate. PLAN.md ends up with what you said, not what the LLM guessed.
+N/A is a steady state, not a backlog.
 
-**V — Verify.** TESTS.md is executable, not aspirational. Every archived plan's tests run as regression on the next change. Failures triage into regression / obsolete / flaky — never silently skipped.
+**C — Cowork.** `/scv:promote` is a dialog, not a generation.
+
+Claude reads `scv/raw/` and proposes a structure; you approve per-candidate.
+
+PLAN.md ends up with what you said, not what the LLM guessed.
+
+**V — Verify.** TESTS.md is executable, not aspirational.
+
+Every archived plan's tests run as regression on the next change.
+
+Failures triage into regression / obsolete / flaky — never silently skipped.
 
 > The plugin's name is the plugin's contract.
 
@@ -387,11 +404,11 @@ flowchart LR
 | `/scv:status` | raw 자료 · 진행 중인 promote · epic 진척도 |
 | `/scv:promote` | `scv/raw/` → plan 폴더 (`scv/promote/<slug>/`) — PLAN + TESTS + Mermaid 도식 |
 | `/scv:work <slug>` | 구현 · 테스트 실행 · 통과 시 archive · e2e 비디오 첨부한 PR 생성 |
-| `/scv:codegen <slug>` | **TDD-first 변형** — TESTS 가 코드를 driver. case 단위 Red→Green (budget 3). PLAN.md `scope:` / `invariants:` 를 가드로 사용. archive/PR 은 `/scv:work` 에 위임. (v0.11.0+, *experimental*) |
+| `/scv:codegen <slug>` | **TDD-first 변형** (v0.11.0+, *experimental*).<br/>TESTS 가 코드를 driver. case 단위 Red→Green (budget 3).<br/>PLAN.md `scope:` / `invariants:` 를 가드로 사용.<br/>archive/PR 은 `/scv:work` 에 위임. |
 | `/scv:update` | **플러그인 self-update 안내** — 설치된 vs 최신 버전 표시, `/plugin marketplace update scv-claude-code` + `/reload-plugins` 안내. read-only. (v0.11.2+) |
 | `/scv:regression` | archive 된 모든 TESTS 를 회귀로 실행 |
 | `/scv:report` | 단계 결과를 Slack / Discord 에 보고 |
-| `/scv:sync` | **2-step sync** (v0.11.3+): (1) 플러그인 template → 표준 문서 (`merge_policy`), (2) 코드 ↔ active promote slug 의 drift 검출 (`scope:` git diff + TESTS run). archive 는 immutable. |
+| `/scv:sync` | **2-step sync** (v0.11.3+).<br/>(1) 플러그인 template → 표준 문서 (`merge_policy`).<br/>(2) 코드 ↔ active promote slug 의 drift 검출 (`scope:` git diff + TESTS run).<br/>archive 는 immutable. |
 | `/scv:install-deps` | 누락 CLI 자동 감지 + 설치 안내 (`gh` / `glab` / `jq` / `ffmpeg`) |
 
 ---
@@ -410,13 +427,22 @@ AI 가 팀 코드를 짜기 시작하면 세 가지가 어긋납니다.
 ## SCV 가 맞을 때
 
 - Claude Code 가 팀의 main IDE.
-- 변경 단위가 보통 작음 (single feature / refactor / fix) — 다개월 깊은-spec-driven mega-initiative 가 아님.
+
+- 변경 단위가 보통 작음 — single feature / refactor / fix.
+  - 다개월 깊은-spec-driven mega-initiative 가 아님.
+
 - 누적되는 회귀 안전망의 가치를 *깊은 사전 spec dialog* 보다 높게 봄.
-- 1 인 운영자가 SCV 의 bash + markdown core 를 돌릴 수 있음 (NPM / MCP server / 외부 service 없음).
 
-**조합 가능**: `PLAN.md` / `TESTS.md` / `archive/` 는 plain markdown — commit 가능한 텍스트. BMAD/GSD 로 spec → code 단계 진행하고, SCV 의 archive 가 그 밑에서 회귀 안전망 누적.
+- 1 인 운영자가 SCV 의 bash + markdown core 를 돌릴 수 있음.
+  - NPM / MCP server / 외부 service 없음.
 
-**더 큰 변경의 경우**: multi-feature 변경을 *여러 slug* 으로 분할하고 동일한 `epic:` (PLAN.md frontmatter) 아래 묶음. `scv/PROMOTE.md` §8d 의 epic + multi-slug 패턴 참조.
+**조합 가능**: `PLAN.md` / `TESTS.md` / `archive/` 는 plain markdown — commit 가능한 텍스트.
+
+BMAD/GSD 로 spec → code 단계 진행하고, SCV 의 archive 가 그 밑에서 회귀 안전망 누적.
+
+**더 큰 변경의 경우**: multi-feature 변경을 *여러 slug* 으로 분할하고 동일한 `epic:` (PLAN.md frontmatter) 아래 묶음.
+
+`scv/PROMOTE.md` §8d 의 epic + multi-slug 패턴 참조.
 
 
 ## 아키텍처 & 외부 통합
@@ -473,11 +499,21 @@ flowchart TB
 
 AI 협업 팀 개발의 세 가지 실패 모드 — SCV 가 거부하는 것.
 
-**S — Standard (표준).** 표준 문서 (DOMAIN, ARCHITECTURE, DESIGN, TESTING, …) 는 `status: N/A` 로 시드되고 사용자가 lift 할 때까지 그대로. N/A 는 backlog 가 아니라 정상 상태.
+**S — Standard (표준).** 표준 문서 (DOMAIN, ARCHITECTURE, DESIGN, TESTING, …) 는 `status: N/A` 로 시드되고 사용자가 lift 할 때까지 그대로.
 
-**C — Cowork (협업).** `/scv:promote` 는 대화이지 생성이 아닙니다. Claude 가 `scv/raw/` 를 읽고 구조를 제안, 사용자가 건건이 승인. PLAN.md 에 들어가는 건 사용자가 말한 것 — LLM 이 추측한 게 아닙니다.
+N/A 는 backlog 가 아니라 정상 상태.
 
-**V — Verify (검증).** TESTS.md 는 실행 가능한 것이지 희망 사항이 아닙니다. 모든 archived plan 의 테스트가 다음 변경의 회귀로 돕니다. 실패는 regression / obsolete / flaky 로 triage — 조용히 skip 안 됨.
+**C — Cowork (협업).** `/scv:promote` 는 대화이지 생성이 아닙니다.
+
+Claude 가 `scv/raw/` 를 읽고 구조를 제안, 사용자가 건건이 승인.
+
+PLAN.md 에 들어가는 건 사용자가 말한 것 — LLM 이 추측한 게 아닙니다.
+
+**V — Verify (검증).** TESTS.md 는 실행 가능한 것이지 희망 사항이 아닙니다.
+
+모든 archived plan 의 테스트가 다음 변경의 회귀로 돕니다.
+
+실패는 regression / obsolete / flaky 로 triage — 조용히 skip 안 됨.
 
 > 플러그인 이름은 플러그인의 계약.
 
@@ -634,15 +670,15 @@ flowchart LR
 
 | コマンド | やること |
 |---|---|
-| **`/scv:help`** | 次に何をすべきか教えてくれます。引数あり時は分岐 — アイデアは対話モード、回顧的な質問は archive 検索。例はクイックスタートの表参照。 |
+| **`/scv:help`** | 次に何をすべきか教えてくれます。<br/>引数あり時はアイデア対話モード または archive 検索 (回顧的質問)。<br/>例はクイックスタートの表参照。 |
 | `/scv:status` | raw 資料 · アクティブな promote · epic 進捗 |
 | `/scv:promote` | `scv/raw/` → plan フォルダ (`scv/promote/<slug>/`) — PLAN + TESTS + Mermaid 図 |
 | `/scv:work <slug>` | 実装 · テスト実行 · 通過時に archive · e2e 動画添付の PR を自動作成 |
-| `/scv:codegen <slug>` | **TDD-first 変形** — TESTS がコードのドライバ。case 単位の Red→Green (budget 3)。PLAN.md `scope:` / `invariants:` をガードとして使用。archive/PR は `/scv:work` に委譲。(v0.11.0+, *experimental*) |
-| `/scv:update` | **プラグイン self-update ガイド** — インストール済み vs 最新バージョン表示、`/plugin marketplace update scv-claude-code` + `/reload-plugins` への案内。read-only。(v0.11.2+) |
+| `/scv:codegen <slug>` | **TDD-first 変形** (v0.11.0+, *experimental*).<br/>TESTS がコードのドライバ。case 単位の Red→Green (budget 3)。<br/>PLAN.md `scope:` / `invariants:` をガードとして使用。<br/>archive/PR は `/scv:work` に委譲。 |
+| `/scv:update` | **プラグイン self-update ガイド** (v0.11.2+).<br/>インストール済み vs 最新バージョン表示。<br/>`/plugin marketplace update scv-claude-code` + `/reload-plugins` への案内。<br/>read-only。 |
 | `/scv:regression` | archive された全 TESTS を回帰として実行 |
 | `/scv:report` | フェーズ結果を Slack / Discord に通知 |
-| `/scv:sync` | **2 ステップ sync** (v0.11.3+): (1) プラグイン template → 標準ドキュメント (`merge_policy`)、(2) コード ↔ active promote slug の drift 検出 (`scope:` git diff + TESTS run)。archive は immutable。 |
+| `/scv:sync` | **2 ステップ sync** (v0.11.3+).<br/>(1) プラグイン template → 標準ドキュメント (`merge_policy`)。<br/>(2) コード ↔ active promote slug の drift 検出 (`scope:` git diff + TESTS run)。<br/>archive は immutable。 |
 | `/scv:install-deps` | 不足 CLI 自動検出 + インストール案内 (`gh` / `glab` / `jq` / `ffmpeg`) |
 
 ---
@@ -661,11 +697,18 @@ AI がチームのコードを書き始めると、3 つのことが噛み合わ
 ## SCV が合うとき
 
 - Claude Code がチームの main IDE。
-- 変更単位が通常小さい (single feature / refactor / fix) — 多月にわたる深い-spec-driven メガ-initiative ではない。
-- 累積する回帰セーフティネットの価値を*深い事前 spec dialog* より高く評価。
-- 1 名運用者が SCV の bash + markdown core を回せる (NPM / MCP サーバー / 外部サービスなし)。
 
-**組み合わせ可能**: `PLAN.md` / `TESTS.md` / `archive/` は plain markdown — commit 可能なテキスト。BMAD/GSD で spec → code フェーズを進めて、SCV の archive がその下で回帰セーフティネットを累積。
+- 変更単位が通常小さい — single feature / refactor / fix。
+  - 多月にわたる深い-spec-driven メガ-initiative ではない。
+
+- 累積する回帰セーフティネットの価値を*深い事前 spec dialog* より高く評価。
+
+- 1 名運用者が SCV の bash + markdown core を回せる。
+  - NPM / MCP サーバー / 外部サービスなし。
+
+**組み合わせ可能**: `PLAN.md` / `TESTS.md` / `archive/` は plain markdown — commit 可能なテキスト。
+
+BMAD/GSD で spec → code フェーズを進めて、SCV の archive がその下で回帰セーフティネットを累積。
 
 **より大きな変更の場合**: multi-feature 変更を *複数 slug* に分割し、同じ `epic:` (PLAN.md frontmatter) 下にグループ化。`scv/PROMOTE.md` §8d の epic + multi-slug パターン参照。
 
@@ -724,11 +767,21 @@ flowchart TB
 
 AI 協業チーム開発の 3 つの失敗モード — SCV が拒否するもの。
 
-**S — Standard (標準).** 標準ドキュメント (DOMAIN, ARCHITECTURE, DESIGN, TESTING, …) は `status: N/A` でシードされ、ユーザーが lift するまでそのまま。N/A は backlog ではなく定常状態。
+**S — Standard (標準).** 標準ドキュメント (DOMAIN, ARCHITECTURE, DESIGN, TESTING, …) は `status: N/A` でシードされ、ユーザーが lift するまでそのまま。
 
-**C — Cowork (協業).** `/scv:promote` は対話であって生成ではありません。Claude が `scv/raw/` を読み構造を提案、ユーザーが個別に承認。PLAN.md に入るのはユーザーが言ったこと — LLM が推測したものではありません。
+N/A は backlog ではなく定常状態。
 
-**V — Verify (検証).** TESTS.md は実行可能なものであって願望ではありません。archived plan のテストは次の変更の回帰として回ります。失敗は regression / obsolete / flaky にトリアージ — 黙ってスキップされません。
+**C — Cowork (協業).** `/scv:promote` は対話であって生成ではありません。
+
+Claude が `scv/raw/` を読み構造を提案、ユーザーが個別に承認。
+
+PLAN.md に入るのはユーザーが言ったこと — LLM が推測したものではありません。
+
+**V — Verify (検証).** TESTS.md は実行可能なものであって願望ではありません。
+
+archived plan のテストは次の変更の回帰として回ります。
+
+失敗は regression / obsolete / flaky にトリアージ — 黙ってスキップされません。
 
 > プラグインの名前はプラグインの契約。
 
