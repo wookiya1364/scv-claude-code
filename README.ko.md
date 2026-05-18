@@ -28,7 +28,7 @@ Drop materials → Claude refines them with you → implementation runs the test
 </p>
 
 <p>
-<a href="#quick-start--four-steps">Quick Start</a> ·
+<a href="#quick-start">Quick Start</a> ·
 <a href="#5-minute-walkthrough">5-min walkthrough</a> ·
 <a href="#the-loop">The Loop</a> ·
 <a href="#slash-commands">Commands</a> ·
@@ -46,7 +46,7 @@ Drop materials → Claude refines them with you → implementation runs the test
 
 > **SCV 는 *프로세스 중심* 플러그인입니다 — 옵션 codegen 변형 (`/scv:codegen`, v0.11.0+) 포함.** 팀이 같은 plan 과 같은 테스트로 일하게 만드는 도구입니다. 속도는 부수 효과로 따라옵니다.
 
-## 빠른 시작
+## 빠른 시작 <a id="quick-start"></a>
 
 > **외울 명령어는 `/scv:help` 하나뿐입니다.**
 > 프로젝트 상태를 진단하고 다음에 뭘 해야 할지 알려줍니다. 플래그 외울 필요 없고, 먼저 읽을 문서도 없습니다 — 플러그인이 단계마다 알려줍니다.
@@ -73,7 +73,7 @@ Drop materials → Claude refines them with you → implementation runs the test
 
 ---
 
-## 5 분 워크스루
+## 5 분 워크스루 <a id="5-minute-walkthrough"></a>
 
 **시나리오**: "결제 페이지에 환불 버튼 추가"
 
@@ -89,7 +89,7 @@ Drop materials → Claude refines them with you → implementation runs the test
 
 ---
 
-## 흐름 한눈에
+## 흐름 한눈에 <a id="the-loop"></a>
 
 자료 투입 → 계획 + 테스트로 정제 → 구현 → archive. 모든 archive 의 테스트는 **누적되는 회귀 테스트** 로 합류해 미래의 모든 변경에 대해 자동으로 돕니다.
 
@@ -116,7 +116,7 @@ flowchart LR
 
 ---
 
-## 슬래시 커맨드
+## 슬래시 커맨드 <a id="slash-commands"></a>
 
 **외울 필요 없습니다** — `/scv:help` 가 매 단계마다 알맞은 명령을 안내합니다. 아래는 참고용 표:
 
@@ -135,7 +135,7 @@ flowchart LR
 
 ---
 
-## 왜 SCV?
+## 왜 SCV? <a id="why-scv"></a>
 
 AI 가 팀 코드를 짜기 시작하면 세 가지가 어긋납니다.
 
@@ -167,7 +167,7 @@ BMAD/GSD 로 spec → code 단계 진행하고, SCV 의 archive 가 그 밑에�
 `scv/PROMOTE.md` §8d 의 epic + multi-slug 패턴 참조.
 
 
-## 아키텍처 & 외부 통합
+## 아키텍처 & 외부 통합 <a id="architecture--integrations"></a>
 
 PLAN.md 가 단일 source of truth. 외부 도구 (Jira / Linear / Confluence / Google Doc) 는 `refs:` 로 *링크* 만 — 복사 안 함. 출력 (PR / MR / Slack / Discord) 은 같은 source 에서 자동 생성.
 
@@ -217,7 +217,7 @@ flowchart TB
 - vendor-agnostic 백엔드 — `lib/pr-platform.sh` 통해 `gh` / `glab` first-class · Bitbucket / Gitea 추가 = 새 어댑터.
 - 다국어 default — PR / Mermaid / commit 모두 `SCV_LANG` 따라감 (English · 한국어 · 日本語).
 
-## 철학: Standard · Cowork · Verify
+## 철학: Standard · Cowork · Verify <a id="philosophy-standard--cowork--verify"></a>
 
 AI 협업 팀 개발의 세 가지 실패 모드 — SCV 가 거부하는 것.
 

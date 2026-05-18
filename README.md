@@ -28,7 +28,7 @@ Drop materials → Claude refines them with you → implementation runs the test
 </p>
 
 <p>
-<a href="#quick-start--four-steps">Quick Start</a> ·
+<a href="#quick-start">Quick Start</a> ·
 <a href="#5-minute-walkthrough">5-min walkthrough</a> ·
 <a href="#the-loop">The Loop</a> ·
 <a href="#slash-commands">Commands</a> ·

@@ -28,7 +28,7 @@ Drop materials → Claude refines them with you → implementation runs the test
 </p>
 
 <p>
-<a href="#quick-start--four-steps">Quick Start</a> ·
+<a href="#quick-start">Quick Start</a> ·
 <a href="#5-minute-walkthrough">5-min walkthrough</a> ·
 <a href="#the-loop">The Loop</a> ·
 <a href="#slash-commands">Commands</a> ·
@@ -46,7 +46,7 @@ Drop materials → Claude refines them with you → implementation runs the test
 
 > **SCV は *プロセス中心* プラグインです — オプションの codegen 変形 (`/scv:codegen`, v0.11.0+) を含みます。** チームが同じ plan と同じテストで仕事をするための道具です。スピードは副次効果として付いてきます。
 
-## クイックスタート
+## クイックスタート <a id="quick-start"></a>
 
 > **覚えるべきコマンドは `/scv:help` ひとつだけ。**
 > プロジェクトの状態を診断し、次に何をすべきか教えてくれます。覚えるフラグなし、先に読むドキュメントなし — プラグインがステップごとに案内します。
@@ -73,7 +73,7 @@ Drop materials → Claude refines them with you → implementation runs the test
 
 ---
 
-## 5 分ウォークスルー
+## 5 分ウォークスルー <a id="5-minute-walkthrough"></a>
 
 **シナリオ**: "決済ページに払い戻しボタンを追加"
 
@@ -89,7 +89,7 @@ Drop materials → Claude refines them with you → implementation runs the test
 
 ---
 
-## ループ
+## ループ <a id="the-loop"></a>
 
 資料投入 → プラン + テストへ精製 → 実装 → archive。すべての archive のテストは**累積する回帰テスト**へ合流し、未来のあらゆる変更に対して自動で回ります。
 
@@ -116,7 +116,7 @@ flowchart LR
 
 ---
 
-## スラッシュコマンド
+## スラッシュコマンド <a id="slash-commands"></a>
 
 **覚える必要はありません** — `/scv:help` が各ステップで適切なコマンドを案内します。参考用の表:
 
@@ -135,7 +135,7 @@ flowchart LR
 
 ---
 
-## なぜ SCV?
+## なぜ SCV? <a id="why-scv"></a>
 
 AI がチームのコードを書き始めると、3 つのことが噛み合わなくなります。
 
@@ -165,7 +165,7 @@ BMAD/GSD で spec → code フェーズを進めて、SCV の archive がその�
 **より大きな変更の場合**: multi-feature 変更を *複数 slug* に分割し、同じ `epic:` (PLAN.md frontmatter) 下にグループ化。`scv/PROMOTE.md` §8d の epic + multi-slug パターン参照。
 
 
-## アーキテクチャと外部統合
+## アーキテクチャと外部統合 <a id="architecture--integrations"></a>
 
 PLAN.md が単一の source of truth。外部ツール (Jira / Linear / Confluence / Google Doc) は `refs:` で*リンク*のみ — 複製しない。出力 (PR / MR / Slack / Discord) は同じ source から自動生成。
 
@@ -215,7 +215,7 @@ flowchart TB
 - vendor-agnostic バックエンド — `lib/pr-platform.sh` 経由で `gh` / `glab` first-class · Bitbucket / Gitea 追加 = 新アダプター。
 - 多言語デフォルト — PR / Mermaid / commit すべて `SCV_LANG` に従う (English · 한국어 · 日本語)。
 
-## 哲学: Standard · Cowork · Verify
+## 哲学: Standard · Cowork · Verify <a id="philosophy-standard--cowork--verify"></a>
 
 AI 協業チーム開発の 3 つの失敗モード — SCV が拒否するもの。
 
