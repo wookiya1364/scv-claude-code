@@ -61,7 +61,9 @@ update_file() {
   local has_line current
   if grep -qE '^model: ' "$file"; then
     has_line=1
-    current="$(grep -E '^model: ' "$file" | head -n1 | sed 's/^model: *//')"
+    # Strip trailing CR so CRLF-quirked checkouts (Windows git core.autocrlf=true)
+    # don't make current="haiku\r" mismatch target="haiku".
+    current="$(grep -E '^model: ' "$file" | head -n1 | sed 's/^model: *//' | tr -d '\r')"
   else
     has_line=0
     current=""
@@ -88,11 +90,14 @@ update_file() {
     rm -f "$file.bak"
     echo "  $cmd: $current -> $target"
   else
-    # Insert "model: $target" before the closing --- of frontmatter (the 2nd --- line)
+    # Insert "model: $target" before the closing --- of frontmatter (the 2nd --- line).
+    # Compare against a CR-stripped copy so CRLF checkouts still match "---".
     awk -v target="$target" '
       BEGIN { fm = 0; inserted = 0 }
       {
-        if ($0 == "---") {
+        line = $0
+        sub(/\r$/, "", line)
+        if (line == "---") {
           fm++
           if (fm == 2 && !inserted) {
             print "model: " target

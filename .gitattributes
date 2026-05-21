@@ -1,0 +1,8 @@
+# Force LF line endings for text files so Windows checkouts with
+# core.autocrlf=true don't break shell scripts and awk/sed-based tooling.
+* text=auto eol=lf
+*.sh text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
