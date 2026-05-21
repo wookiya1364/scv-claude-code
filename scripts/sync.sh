@@ -217,3 +217,14 @@ if [[ $DRY_RUN -eq 1 ]]; then
   echo
   echo "(dry-run) re-run without --dry-run to apply."
 fi
+
+# v0.12+: reapply model policy from .env (SCV_MODEL_POLICY) onto plugin commands/*.md
+# Silent no-op when SCV_MODEL_POLICY is unset or .env is missing.
+if [[ $DRY_RUN -eq 0 ]]; then
+  POLICY_SCRIPT="$(dirname "${BASH_SOURCE[0]}")/apply-model-policy.sh"
+  if [[ -x "$POLICY_SCRIPT" ]]; then
+    echo
+    echo "Model policy (from .env SCV_MODEL_POLICY):"
+    SCV_PROJECT_DIR="$PROJECT_DIR" "$POLICY_SCRIPT" --from-env 2>&1 | sed 's/^/  /'
+  fi
+fi

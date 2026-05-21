@@ -37,6 +37,7 @@ Semantics:
 - Files with `merge_policy: merge-on-markers` (incl. scv/CLAUDE.md, scv/TESTING.md, scv/REPORTING.md) → template replaces file, but the `PROJECT:LOCAL` block is restored from the local copy
 - `scv/promote/*.md` → never touched
 - All modified files are backed up to `.scv-backup/<timestamp>/` before changes
+- **Model policy reapply (v0.12+)**: after the template merge finishes, the script reads `SCV_MODEL_POLICY` from `.env` and reapplies it to every plugin `commands/*.md` `model:` frontmatter. This keeps user-chosen policies (`/scv:set-models`) from being lost when plugin updates ship a new default. If `SCV_MODEL_POLICY` is unset, this step is a silent no-op.
 
 The above is **Step 1 — template re-sync**. After it finishes (or is skipped), proceed to Step 2 below.
 
