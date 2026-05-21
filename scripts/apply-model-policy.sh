@@ -70,10 +70,11 @@ update_file() {
   fi
 
   if [[ -z "$target" ]]; then
-    # session-default: ensure no model: line
+    # session-default: ensure no model: line.
+    # Use stdin/stdout + mv (NOT `sed -i`) — BSD sed (macOS) parses -i differently
+    # than GNU sed; the stdin/stdout form is portable.
     if [[ "$has_line" == "1" ]]; then
-      sed -i.bak '/^model: /d' "$file"
-      rm -f "$file.bak"
+      sed '/^model: /d' "$file" > "$file.tmp" && mv "$file.tmp" "$file"
       echo "  $cmd: removed (was: $current)"
     else
       echo "  $cmd: ok (no model line)"
@@ -86,8 +87,7 @@ update_file() {
       echo "  $cmd: ok ($current)"
       return 0
     fi
-    sed -i.bak "s/^model: .*/model: $target/" "$file"
-    rm -f "$file.bak"
+    sed "s/^model: .*/model: $target/" "$file" > "$file.tmp" && mv "$file.tmp" "$file"
     echo "  $cmd: $current -> $target"
   else
     # Insert "model: $target" before the closing --- of frontmatter (the 2nd --- line).
