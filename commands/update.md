@@ -4,6 +4,7 @@ argument-hint: ""
 allowed-tools:
   - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/update.sh:*)"
   - "AskUserQuestion"
+model: haiku
 ---
 
 # /scv:update

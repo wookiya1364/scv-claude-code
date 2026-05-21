@@ -7,6 +7,7 @@ allowed-tools:
   - "AskUserQuestion"
   - "Read"
   - "Edit"
+model: opus
 ---
 
 # /scv:sync

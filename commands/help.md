@@ -2,6 +2,7 @@
 description: "Show SCV workflow + diagnose project + recommend next step. With an argument, talk through an idea OR search the archive for past work — SCV picks the right mode from your wording."
 argument-hint: "[\"natural-language idea OR retrospective question (optional)\"]"
 allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/help.sh:*)", "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/hydrate.sh:*)", "Bash(mkdir:*)", "Bash(cat:*)", "Bash(grep:*)", "Bash(echo:*)", "Bash(test:*)", "Bash(date:*)", "AskUserQuestion", "Read", "Write", "Edit"]
+model: opus
 ---
 
 # /scv:help

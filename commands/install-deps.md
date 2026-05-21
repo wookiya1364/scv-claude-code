@@ -4,6 +4,7 @@ argument-hint: ""
 allowed-tools:
   - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/install-deps.sh:*)"
   - "AskUserQuestion"
+model: haiku
 ---
 
 # /scv:install-deps

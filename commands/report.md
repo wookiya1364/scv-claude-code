@@ -2,6 +2,7 @@
 description: "Post a phase/status report to the team channel per REPORTING.md. Reads .env NOTIFIER_PROVIDER (slack|discord) and uploads E2E artifacts from test-results/."
 argument-hint: "\"<phase-name>\" <status>"
 allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/report.sh:*)"]
+model: haiku
 ---
 
 # /scv:report

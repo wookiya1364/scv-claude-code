@@ -11,6 +11,7 @@ allowed-tools:
   - "Grep"
   - "Write"
   - "Edit"
+model: opus
 ---
 
 # /scv:promote
