@@ -1,0 +1,131 @@
+name: Cross-OS — model policy script
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/apply-model-policy.sh'
+      - 'commands/*.md'
+      - '.github/workflows/test-model-policy.yml'
+  pull_request:
+    paths:
+      - 'scripts/apply-model-policy.sh'
+      - 'commands/*.md'
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Print runner info
+        run: |
+          uname -a || true
+          bash --version | head -1
+          sed --version 2>&1 | head -1 || sed --help 2>&1 | head -1 || true
+          awk --version 2>&1 | head -1 || awk -W version 2>&1 | head -1 || true
+
+      - name: Syntax check
+        run: bash -n scripts/apply-model-policy.sh
+
+      - name: chmod +x
+        run: chmod +x scripts/apply-model-policy.sh
+
+      - name: Policy — all-opus (11 files → opus)
+        run: |
+          ./scripts/apply-model-policy.sh --policy all-opus > /dev/null
+          n=$(grep -l '^model: opus' commands/*.md | wc -l)
+          [ "$(echo $n)" = "11" ] || { echo "expected 11 opus, got $n"; exit 1; }
+
+      - name: Policy — all-haiku (11 files → haiku)
+        run: |
+          ./scripts/apply-model-policy.sh --policy all-haiku > /dev/null
+          n=$(grep -l '^model: haiku' commands/*.md | wc -l)
+          [ "$(echo $n)" = "11" ] || { echo "expected 11 haiku, got $n"; exit 1; }
+
+      - name: Policy — all-sonnet (11 files → sonnet)
+        run: |
+          ./scripts/apply-model-policy.sh --policy all-sonnet > /dev/null
+          n=$(grep -l '^model: sonnet' commands/*.md | wc -l)
+          [ "$(echo $n)" = "11" ] || { echo "expected 11 sonnet, got $n"; exit 1; }
+
+      - name: Policy — session-default (0 files with model:)
+        run: |
+          ./scripts/apply-model-policy.sh --policy session-default > /dev/null
+          n=$(grep -l '^model:' commands/*.md 2>/dev/null | wc -l || echo 0)
+          [ "$(echo $n)" = "0" ] || { echo "expected 0 model lines, got $n"; exit 1; }
+
+      - name: Policy — recommended (5 haiku, 6 opus)
+        run: |
+          ./scripts/apply-model-policy.sh --policy recommended > /dev/null
+          h=$(grep -l '^model: haiku' commands/*.md | wc -l)
+          o=$(grep -l '^model: opus' commands/*.md | wc -l)
+          [ "$(echo $h)" = "5" ] || { echo "expected 5 haiku, got $h"; exit 1; }
+          [ "$(echo $o)" = "6" ] || { echo "expected 6 opus, got $o"; exit 1; }
+
+      - name: Idempotent — recommended re-apply produces no changes
+        run: |
+          out=$(./scripts/apply-model-policy.sh --policy recommended)
+          if echo "$out" | grep -E '(->|added|removed)' > /dev/null; then
+            echo "Not idempotent. Output:"
+            echo "$out"
+            exit 1
+          fi
+
+      - name: Invalid policy → exit 2
+        run: |
+          set +e
+          ./scripts/apply-model-policy.sh --policy bogus 2>/dev/null
+          code=$?
+          set -e
+          [ "$code" = "2" ] || { echo "expected exit 2, got $code"; exit 1; }
+
+      - name: --from-env flow
+        run: |
+          TMP=$(mktemp -d)
+          echo "SCV_MODEL_POLICY=all-haiku" > "$TMP/.env"
+          SCV_PROJECT_DIR="$TMP" ./scripts/apply-model-policy.sh --from-env > /dev/null
+          n=$(grep -l '^model: haiku' commands/*.md | wc -l)
+          [ "$(echo $n)" = "11" ] || { echo "from-env: expected 11 haiku, got $n"; exit 1; }
+          ./scripts/apply-model-policy.sh --policy recommended > /dev/null
+
+      - name: --from-env with missing .env (silent skip)
+        run: |
+          out=$(SCV_PROJECT_DIR=/tmp/no-such-dir-$$ ./scripts/apply-model-policy.sh --from-env)
+          echo "$out" | grep -q 'skipping' || { echo "expected skip message, got: $out"; exit 1; }
+
+      - name: CRLF input — replace path
+        run: |
+          TMP=$(mktemp -d)
+          mkdir -p "$TMP/scripts" "$TMP/commands"
+          cp scripts/apply-model-policy.sh "$TMP/scripts/"
+          chmod +x "$TMP/scripts/apply-model-policy.sh"
+          printf -- '---\r\ndescription: "x"\r\nmodel: opus\r\n---\r\nbody\r\n' > "$TMP/commands/status.md"
+          for c in report update install-deps set-models sync help promote codegen regression work; do
+            printf -- '---\r\nx: y\r\n---\r\n' > "$TMP/commands/$c.md"
+          done
+          "$TMP/scripts/apply-model-policy.sh" --policy all-haiku > /dev/null
+          n=$(grep -l '^model: haiku' "$TMP"/commands/*.md | wc -l)
+          [ "$(echo $n)" = "11" ] || { echo "CRLF: expected 11 haiku, got $n"; exit 1; }
+          # idempotent on CRLF
+          out=$("$TMP/scripts/apply-model-policy.sh" --policy all-haiku)
+          if echo "$out" | grep -E '(->|added|removed)' > /dev/null; then
+            echo "CRLF not idempotent. Output:"
+            echo "$out"
+            exit 1
+          fi
+
+      - name: Final state — restore recommended baseline
+        run: ./scripts/apply-model-policy.sh --policy recommended > /dev/null
+
+      - name: Summary
+        run: echo "✅ All cross-OS checks passed on ${{ matrix.os }}"
