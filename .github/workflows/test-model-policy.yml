@@ -40,37 +40,43 @@ jobs:
       - name: chmod +x
         run: chmod +x scripts/apply-model-policy.sh
 
+      # Count helper: avoid `wc -l` + pipefail interactions that vary across
+      # macOS BSD wc (whitespace-padded) and GNU wc. Loop + `if grep -q` is
+      # uniform on every shell.
       - name: Policy — all-opus (11 files → opus)
         run: |
           ./scripts/apply-model-policy.sh --policy all-opus > /dev/null
-          n=$(grep -l '^model: opus' commands/*.md | wc -l)
-          [ "$(echo $n)" = "11" ] || { echo "expected 11 opus, got $n"; exit 1; }
+          n=0; for f in commands/*.md; do if grep -q '^model: opus' "$f"; then n=$((n+1)); fi; done
+          [ "$n" = "11" ] || { echo "expected 11 opus, got $n"; exit 1; }
 
       - name: Policy — all-haiku (11 files → haiku)
         run: |
           ./scripts/apply-model-policy.sh --policy all-haiku > /dev/null
-          n=$(grep -l '^model: haiku' commands/*.md | wc -l)
-          [ "$(echo $n)" = "11" ] || { echo "expected 11 haiku, got $n"; exit 1; }
+          n=0; for f in commands/*.md; do if grep -q '^model: haiku' "$f"; then n=$((n+1)); fi; done
+          [ "$n" = "11" ] || { echo "expected 11 haiku, got $n"; exit 1; }
 
       - name: Policy — all-sonnet (11 files → sonnet)
         run: |
           ./scripts/apply-model-policy.sh --policy all-sonnet > /dev/null
-          n=$(grep -l '^model: sonnet' commands/*.md | wc -l)
-          [ "$(echo $n)" = "11" ] || { echo "expected 11 sonnet, got $n"; exit 1; }
+          n=0; for f in commands/*.md; do if grep -q '^model: sonnet' "$f"; then n=$((n+1)); fi; done
+          [ "$n" = "11" ] || { echo "expected 11 sonnet, got $n"; exit 1; }
 
       - name: Policy — session-default (0 files with model:)
         run: |
           ./scripts/apply-model-policy.sh --policy session-default > /dev/null
-          n=$(grep -l '^model:' commands/*.md 2>/dev/null | wc -l || echo 0)
-          [ "$(echo $n)" = "0" ] || { echo "expected 0 model lines, got $n"; exit 1; }
+          n=0; for f in commands/*.md; do if grep -q '^model:' "$f"; then n=$((n+1)); fi; done
+          [ "$n" = "0" ] || { echo "expected 0 model lines, got $n"; exit 1; }
 
       - name: Policy — recommended (5 haiku, 6 opus)
         run: |
           ./scripts/apply-model-policy.sh --policy recommended > /dev/null
-          h=$(grep -l '^model: haiku' commands/*.md | wc -l)
-          o=$(grep -l '^model: opus' commands/*.md | wc -l)
-          [ "$(echo $h)" = "5" ] || { echo "expected 5 haiku, got $h"; exit 1; }
-          [ "$(echo $o)" = "6" ] || { echo "expected 6 opus, got $o"; exit 1; }
+          h=0; o=0
+          for f in commands/*.md; do
+            if grep -q '^model: haiku' "$f"; then h=$((h+1)); fi
+            if grep -q '^model: opus'  "$f"; then o=$((o+1)); fi
+          done
+          [ "$h" = "5" ] || { echo "expected 5 haiku, got $h"; exit 1; }
+          [ "$o" = "6" ] || { echo "expected 6 opus, got $o"; exit 1; }
 
       - name: Idempotent — recommended re-apply produces no changes
         run: |
@@ -94,8 +100,8 @@ jobs:
           TMP=$(mktemp -d)
           echo "SCV_MODEL_POLICY=all-haiku" > "$TMP/.env"
           SCV_PROJECT_DIR="$TMP" ./scripts/apply-model-policy.sh --from-env > /dev/null
-          n=$(grep -l '^model: haiku' commands/*.md | wc -l)
-          [ "$(echo $n)" = "11" ] || { echo "from-env: expected 11 haiku, got $n"; exit 1; }
+          n=0; for f in commands/*.md; do if grep -q '^model: haiku' "$f"; then n=$((n+1)); fi; done
+          [ "$n" = "11" ] || { echo "from-env: expected 11 haiku, got $n"; exit 1; }
           ./scripts/apply-model-policy.sh --policy recommended > /dev/null
 
       - name: --from-env with missing .env (silent skip)
@@ -103,7 +109,7 @@ jobs:
           out=$(SCV_PROJECT_DIR=/tmp/no-such-dir-$$ ./scripts/apply-model-policy.sh --from-env)
           echo "$out" | grep -q 'skipping' || { echo "expected skip message, got: $out"; exit 1; }
 
-      - name: CRLF input — replace path
+      - name: CRLF input — replace + insert paths
         run: |
           TMP=$(mktemp -d)
           mkdir -p "$TMP/scripts" "$TMP/commands"
@@ -114,8 +120,8 @@ jobs:
             printf -- '---\r\nx: y\r\n---\r\n' > "$TMP/commands/$c.md"
           done
           "$TMP/scripts/apply-model-policy.sh" --policy all-haiku > /dev/null
-          n=$(grep -l '^model: haiku' "$TMP"/commands/*.md | wc -l)
-          [ "$(echo $n)" = "11" ] || { echo "CRLF: expected 11 haiku, got $n"; exit 1; }
+          n=0; for f in "$TMP"/commands/*.md; do if grep -q '^model: haiku' "$f"; then n=$((n+1)); fi; done
+          [ "$n" = "11" ] || { echo "CRLF: expected 11 haiku, got $n"; exit 1; }
           # idempotent on CRLF
           out=$("$TMP/scripts/apply-model-policy.sh" --policy all-haiku)
           if echo "$out" | grep -E '(->|added|removed)' > /dev/null; then
@@ -128,4 +134,4 @@ jobs:
         run: ./scripts/apply-model-policy.sh --policy recommended > /dev/null
 
       - name: Summary
-        run: echo "✅ All cross-OS checks passed on ${{ matrix.os }}"
+        run: echo "All cross-OS checks passed on ${{ matrix.os }}"
