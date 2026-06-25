@@ -138,6 +138,23 @@ flowchart LR
 | `/scv:report` | 단계 결과를 Slack / Discord 에 보고 |
 | `/scv:sync` | **2-step sync** (v0.11.3+).<br/>(1) 플러그인 template → 표준 문서 (`merge_policy`).<br/>(2) 코드 ↔ active promote slug 의 drift 검출 (`scope:` git diff + TESTS run).<br/>archive 는 immutable. |
 | `/scv:install-deps` | 누락 CLI 자동 감지 + 설치 안내 (`gh` / `glab` / `jq` / `ffmpeg`) |
+| `/scv:workspace` | **멀티레포(nested workspace)** — 대화형 셋업: 우산에 자식으로 합류 / 우산(root) 생성 / 분리. 긴 플래그 불필요. |
+| `/scv:handoff` | **멀티레포** — 다른 레포의 대응개발 필요를 선언 → 우산 scv repo 에 handoff(+ 결정 + 대화) 기록 (push 는 매번 동의, 팀 알림 선택). |
+
+---
+
+## 멀티레포 (nested workspace) <a id="multi-repo"></a>
+
+SCV 는 기본이 단일 레포입니다. 시스템이 여러 레포(예: FE / BE / AI 에이전트)로 나뉠 때, 단독 레포 동작은 그대로 둔 채 하나의 **우산(umbrella)** scv repo 아래 nest 할 수 있습니다.
+
+- **탈부착 오버레이.** 모드(단일 / 자식 / 우산)는 매 명령마다 로컬 파일로 재계산됩니다. 워크스페이스 링크가 없는 레포는 일반 SCV 와 *byte-identical* 로 동작하고, 링크를 지우면 분리됩니다 — 양방향 migration 없음.
+- **명령 하나로 셋업.** `/scv:workspace` — 우산에 자식으로 합류 / 우산 생성 / 분리. 긴 플래그 불필요.
+- **선언으로, git 을 통해 조정.** 자식 레포에서 `/scv:handoff` 가 "이 다른 레포의 대응개발이 필요하다"(결정 + 이유)를 우산 repo 에 기록합니다. 상대 레포가 pull 하면 `/scv:status` / `/scv:help` 가 들어온 handoff 를 표면화합니다. `/scv:promote`(handoff 로부터 `PLAN.md` + `TESTS.md` 스캐폴드) → `/scv:codegen` 으로 채택.
+- **lifecycle + 알림.** handoff 는 우산이 추적하는 상태(open → claimed → done)를 가집니다. push 성공 시 Slack/Discord 채널로 best-effort 알림 가능.
+
+cross-repo 의존은 **명시적으로 선언**합니다 — diff 로 추론하지 않습니다. "FE 변경 → BE 테스트가 CI 에서 red" 같은 기계적 전파는 여기 범위 밖이며, 공유 계약(OpenAPI/AsyncAPI + 계약 테스트)이 필요합니다.
+
+**셋업:** 우산 repo 에서 `/scv:workspace` → *우산 만들기*, 각 자식 레포에서 `/scv:workspace` → *합류*.
 
 ---
 

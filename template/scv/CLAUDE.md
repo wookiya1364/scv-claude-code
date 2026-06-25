@@ -136,6 +136,20 @@ project-root/
 <!-- Project-wide rules belong in the root CLAUDE.md — not this file. -->
 <!-- PROJECT:LOCAL END -->
 
+## SCV workspace (multi-repo nesting)
+
+<!-- SCV:WORKSPACE START -->
+<!-- EMPTY = single-repo mode (default). SCV behaves exactly as standalone. -->
+<!-- A child repo joins a workspace via:  /scv:sync --join <root-scv-git-url>  (fills the fields below). -->
+<!-- Detaching = clearing `root:` (or removing this block) restores single-repo behavior with zero migration. -->
+```yaml
+repo_id:
+role:
+root:
+workspace:
+```
+<!-- SCV:WORKSPACE END -->
+
 ## SCV template metadata
 
 - Template version: <!-- STANDARD:VERSION -->1.0.0<!-- /STANDARD:VERSION -->

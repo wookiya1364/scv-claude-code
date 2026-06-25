@@ -28,6 +28,10 @@ source "$SCRIPT_DIR/lib/merge.sh"
 PROJECT_DIR="."
 DRY_RUN=0
 FORCE_FILES=()
+JOIN_ROOT=""
+JOIN_ID=""
+JOIN_ROLE=""
+JOIN_WS=""
 
 usage() {
   cat <<'EOF'
@@ -42,6 +46,15 @@ Options:
   --force FILE         Force-overwrite a file whose merge_policy is 'preserve'.
                        Use the relative path under the project (e.g. scv/DOMAIN.md).
                        May be passed multiple times.
+
+Workspace join (multi-repo):
+  --join ROOT_URL      Make this repo a CHILD of the workspace whose umbrella
+                       scv repo is ROOT_URL (a git URL or local path). Stamps
+                       the SCV:WORKSPACE block in scv/CLAUDE.md and exits — no
+                       template merge. Re-runnable; clearing it detaches.
+  --id ID              Workspace-global repo id (default: project dir basename).
+  --role ROLE          Repo role (e.g. frontend, backend, ai-agent).
+  --workspace NAME     Workspace name (optional, for cache namespacing).
 EOF
 }
 
@@ -50,6 +63,10 @@ while [[ $# -gt 0 ]]; do
     --project-dir) PROJECT_DIR="$2"; shift 2 ;;
     --dry-run)     DRY_RUN=1; shift ;;
     --force)       FORCE_FILES+=("$2"); shift 2 ;;
+    --join)        JOIN_ROOT="$2"; shift 2 ;;
+    --id)          JOIN_ID="$2"; shift 2 ;;
+    --role)        JOIN_ROLE="$2"; shift 2 ;;
+    --workspace)   JOIN_WS="$2"; shift 2 ;;
     -h|--help)     usage; exit 0 ;;
     *) echo "Unknown flag: $1" >&2; usage >&2; exit 1 ;;
   esac
@@ -59,6 +76,30 @@ if [[ ! -f "$PROJECT_DIR/scv/CLAUDE.md" ]]; then
   echo "✖ $PROJECT_DIR does not look like a hydrated project (missing scv/CLAUDE.md)" >&2
   echo "  Use hydrate.sh init <dir> for new projects." >&2
   exit 1
+fi
+
+# --join: stamp the SCV:WORKSPACE block (make this repo a workspace CHILD) and exit.
+# Focused operation — does NOT run the template merge.
+if [[ -n "$JOIN_ROOT" ]]; then
+  CLAUDE="$PROJECT_DIR/scv/CLAUDE.md"
+  [[ -z "$JOIN_ID" ]] && JOIN_ID="$(basename "$(cd "$PROJECT_DIR" && pwd)")"
+  body=$(printf '```yaml\nrepo_id: %s\nrole: %s\nroot: %s\nworkspace: %s\n```' \
+    "$JOIN_ID" "$JOIN_ROLE" "$JOIN_ROOT" "$JOIN_WS")
+  if has_marker_block "$CLAUDE" "SCV:WORKSPACE START"; then
+    replace_marker_block "$CLAUDE" "SCV:WORKSPACE START" "SCV:WORKSPACE END" "$body"
+  else
+    {
+      echo ""
+      echo "## SCV workspace (multi-repo nesting)"
+      echo ""
+      echo "<!-- SCV:WORKSPACE START -->"
+      echo "$body"
+      echo "<!-- SCV:WORKSPACE END -->"
+    } >> "$CLAUDE"
+  fi
+  echo "✓ Joined workspace as CHILD: repo_id=$JOIN_ID role=${JOIN_ROLE:-<unset>} root=$JOIN_ROOT"
+  echo "  Detach anytime by clearing root: in scv/CLAUDE.md's SCV:WORKSPACE block."
+  exit 0
 fi
 
 REMOTE_VERSION=$(tr -d '[:space:]' < "$STANDARD_ROOT/VERSION")
@@ -94,16 +135,25 @@ is_forced() {
   return 1
 }
 
-# merge-on-markers: copy template, restore local PROJECT:LOCAL block
+# merge-on-markers: copy template, restore local marker blocks that are
+# project-owned (never overwritten by a template update).
+#   PROJECT:LOCAL  — project-specific SCV-scope rules
+#   SCV:WORKSPACE  — multi-repo nesting identity (a child's join must survive sync)
 apply_merge_on_markers() {
   local src="$1" dst="$2"
-  local preserved=""
+  local pl="" ws="" pl_have=0 ws_have=0
   if has_marker_block "$dst" "PROJECT:LOCAL START"; then
-    preserved=$(extract_marker_block "$dst" "PROJECT:LOCAL START" "PROJECT:LOCAL END")
+    pl=$(extract_marker_block "$dst" "PROJECT:LOCAL START" "PROJECT:LOCAL END"); pl_have=1
+  fi
+  if has_marker_block "$dst" "SCV:WORKSPACE START"; then
+    ws=$(extract_marker_block "$dst" "SCV:WORKSPACE START" "SCV:WORKSPACE END"); ws_have=1
   fi
   cp "$src" "$dst"
-  if [[ -n "$preserved" ]]; then
-    replace_marker_block "$dst" "PROJECT:LOCAL START" "PROJECT:LOCAL END" "$preserved" || true
+  if [[ $pl_have -eq 1 ]]; then
+    replace_marker_block "$dst" "PROJECT:LOCAL START" "PROJECT:LOCAL END" "$pl" || true
+  fi
+  if [[ $ws_have -eq 1 ]]; then
+    replace_marker_block "$dst" "SCV:WORKSPACE START" "SCV:WORKSPACE END" "$ws" || true
   fi
 }
 

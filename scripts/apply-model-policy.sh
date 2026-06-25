@@ -20,13 +20,13 @@ set -euo pipefail
 PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMMANDS_DIR="$PLUGIN_ROOT/commands"
 
-COMMANDS=(status report update install-deps set-models sync help promote codegen regression work)
+COMMANDS=(status report update install-deps set-models sync help promote codegen regression work workspace handoff)
 
 # recommended policy mapping (single source of truth)
 recommended_for() {
   case "$1" in
-    status|report|update|install-deps|set-models) echo "haiku" ;;
-    sync|help|promote|codegen|regression|work) echo "opus" ;;
+    status|report|update|install-deps|set-models|workspace) echo "haiku" ;;
+    sync|help|promote|codegen|regression|work|handoff) echo "opus" ;;
     *) echo "" ;;
   esac
 }
