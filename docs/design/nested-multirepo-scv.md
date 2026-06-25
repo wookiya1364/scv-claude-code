@@ -185,7 +185,7 @@ BE: /scv:promote (이 handoff 로부터) → /scv:codegen
 
 | 단계 | 행동 | 명령 | 재사용 |
 |---|---|---|---|
-| 0. 셋업(1회) | 루트 scv repo 생성 + `WORKSPACE.yaml`; 각 자식 join → `SCV:WORKSPACE` 블록 stamp | (수동 / `hydrate --root`, `sync --join <url>`) | merge.sh 마커 |
+| 0. 셋업(1회) | 루트 scv repo 생성 + `WORKSPACE.yaml`; 각 자식 join → `SCV:WORKSPACE` 블록 stamp | **`/scv:workspace`** (대화형 — 내부적으로 `hydrate --root` / `sync --join` 실행. 긴 플래그 불필요) | merge.sh 마커 |
 | 1. FE 선언 | 대응개발 필요 명시 → handoff 파일 + decision + conversation 작성 | `/scv:handoff` | refs 3필드, AUTHOR |
 | 2. 루트 전파 | `git -C <root> pull --rebase` → write → 명시 path add → commit → **동의 후 push** | (workspace.sh 내부) | work.sh archive 훅 |
 | 3. BE 인지 | pull 후 "너에게 온 handoff" 표시 | `/scv:status` [7] | status.sh [6] 패턴, readpath |
@@ -198,6 +198,7 @@ BE: /scv:promote (이 handoff 로부터) → /scv:codegen
 
 | 명령 | 변경 | 단일 모드 |
 |---|---|---|
+| `/scv:workspace` (**신규**) | **대화형 멀티레포 셋업**: 합류(자식)/우산 만들기(루트)/분리. 내부적으로 `sync --join`·`init-root`·`detach` 실행 (긴 플래그 불필요). `scripts/workspace-helper.sh` | SINGLE이면 "합류/우산/단일" 선택지 제시 |
 | `/scv:handoff` (**신규**) | 대응개발 필요 **명시 선언** → handoff/decision/conversation 작성 → 루트에 write → 동의 후 push | `--`: "single-repo: 전파할 workspace 없음" no-op |
 | `/scv:promote` | **handoff-aware 확장**: handoff_id 주면 그 수용기준으로 PLAN+TESTS 스캐폴드(back-link ref) | 인자 없으면 오늘과 동일 |
 | `/scv:codegen` | **변경 없음**. 스캐폴드된 promote를 TDD Red→Green으로 구현 | 동일 |

@@ -163,6 +163,8 @@ Commands
   /scv:regression Run accumulated archived regression + auto-skip supersedes/obsolete + failure triage
   /scv:report     Phase report to Slack/Discord (with artifacts)
   /scv:sync       Safe merge on template version bump
+  /scv:workspace  Multi-repo setup: join an umbrella / create a root / detach (interactive, no flags)
+  /scv:handoff    Multi-repo: declare another repo needs corresponding dev (→ root scv repo)
   /scv:update     Plugin self-update guide (/plugin marketplace update + /reload-plugins) [v0.11.2+]
 
 EOF
