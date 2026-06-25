@@ -4,6 +4,7 @@ argument-hint: ""
 allowed-tools:
   - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/promote-helper.sh:*)"
   - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/readpath.sh:*)"
+  - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/handoff.sh:*)"
   - "Skill(graphify)"
   - "AskUserQuestion"
   - "Read"
@@ -17,6 +18,16 @@ model: opus
 # /scv:promote
 
 You — Claude — will help the user refine material from `scv/raw/` into a structured promote folder at `scv/promote/<YYYYMMDD>-<author>-<slug>/` with `PLAN.md` + `TESTS.md`. See the full convention in `scv/PROMOTE.md`.
+
+## Handoff-aware (multi-repo, nested workspace)
+
+If the user is acting on an **incoming cross-repo handoff** (shown by `/scv:status` section [7] in a nested workspace — another repo declared this repo needs corresponding dev), don't start from `scv/raw/`. Instead scaffold the promote folder directly from the handoff spec:
+
+```!
+"${CLAUDE_PLUGIN_ROOT}/scripts/handoff.sh" adopt <handoff_id>
+```
+
+This writes a local `scv/promote/<slug>/PLAN.md` + `TESTS.md` seeded from the handoff's "what to build" + acceptance criteria, with a `refs: type=handoff-origin` back-link. It is **local-only** (no write to the workspace root). Then refine the scaffolded PLAN/TESTS with the user and implement via `/scv:codegen <slug>` (TDD-first) or `/scv:work <slug>`. The rest of this document (raw → promote) is the normal, single-repo path.
 
 ## Language preference
 

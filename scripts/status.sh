@@ -32,6 +32,8 @@ source "$SCRIPT_DIR/lib/yaml.sh"
 source "$SCRIPT_DIR/lib/env.sh"
 # shellcheck source=lib/attachments.sh
 source "$SCRIPT_DIR/lib/attachments.sh"
+# shellcheck source=lib/workspace.sh
+source "$SCRIPT_DIR/lib/workspace.sh"
 env_load 2>/dev/null || true
 
 ACK=0
@@ -328,3 +330,31 @@ else
 fi
 
 echo ""
+
+# ---------- [7] workspace handoffs (multi-repo) ----------
+# Additive + gated: printed only in a nested workspace (ROOT/CHILD). A plain
+# single repo never enters this block, so its [1]..[6] output is byte-identical.
+# Non-network: shows only handoffs already synced locally (user pulls explicitly).
+if scv_is_multi; then
+  myid="$(scv_repo_id)"; myid="${myid:-?}"
+  echo "[scv workspace — cross-repo handoffs]"
+  echo "  mode: $(scv_resolve_mode) · repo_id: $myid · root: $(scv_root)"
+  if scv_root_reachable; then
+    incoming="$("$SCRIPT_DIR/handoff.sh" list --to "$myid" 2>/dev/null)"
+    if [[ -n "$incoming" ]]; then
+      n=$(printf '%s\n' "$incoming" | grep -c .)
+      echo "  incoming ($n) — corresponding dev requested of this repo:"
+      while IFS='|' read -r hid _to st title; do
+        [[ -z "$hid" ]] && continue
+        echo "    · [$st] $hid"
+        echo "        $title"
+      done <<< "$incoming"
+      echo "  → adopt one: /scv:promote (handoff) then /scv:codegen"
+    else
+      echo "  no incoming handoffs addressed to '$myid'."
+    fi
+  else
+    echo "  (workspace root not synced locally — 'git pull' the root, or check root: path)"
+  fi
+  echo ""
+fi
