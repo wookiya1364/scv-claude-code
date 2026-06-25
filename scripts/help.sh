@@ -511,6 +511,12 @@ if [[ "$WS_MODE" == "CHILD" && "${WS_INCOMING:-0}" -gt 0 ]]; then
   echo "       /scv:codegen <slug>   # implement (TDD)"
   echo "       /scv:status           # see all incoming handoffs"
 fi
+if [[ "$WS_MODE" == "ROOT" && "${WS_OPEN:-0}" -gt 0 ]]; then
+  echo ""
+  echo "  ⮕ Workspace (umbrella): ${WS_OPEN} open handoff(s) coordinating across repos."
+  echo "       /scv:status           # full cross-repo handoff list (per target repo)"
+  echo "       Each child repo pulls this umbrella, then /scv:promote → /scv:codegen."
+fi
 
 echo ""
 echo "──────────────────────────────────────────────────────────────────────"

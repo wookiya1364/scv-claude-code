@@ -228,13 +228,17 @@ cmd_list() {
       *) shift ;;
     esac
   done
-  if [[ "$(scv_resolve_mode)" == "SINGLE" ]]; then
-    return 0
-  fi
   # list is non-network: only what is already synced locally (user pulls explicitly).
-  local ROOT
-  ROOT="$(scv_root_path)" || return 0
-  local d="$ROOT/scv/handoffs/raw"
+  local mode; mode="$(scv_resolve_mode)"
+  local d
+  if [[ "$mode" == "ROOT" ]]; then
+    d="$SCV_DIR/handoffs/raw"            # umbrella: handoffs live in THIS repo
+  elif [[ "$mode" == "CHILD" ]]; then
+    local ROOT; ROOT="$(scv_root_path)" || return 0
+    d="$ROOT/scv/handoffs/raw"
+  else
+    return 0                              # SINGLE
+  fi
   [[ -d "$d" ]] || return 0
   shopt -s nullglob
   local f to st title hid

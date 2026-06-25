@@ -336,25 +336,46 @@ echo ""
 # single repo never enters this block, so its [1]..[6] output is byte-identical.
 # Non-network: shows only handoffs already synced locally (user pulls explicitly).
 if scv_is_multi; then
-  myid="$(scv_repo_id)"; myid="${myid:-?}"
   echo "[scv workspace — cross-repo handoffs]"
-  echo "  mode: $(scv_resolve_mode) · repo_id: $myid · root: $(scv_root)"
-  if scv_root_reachable; then
-    incoming="$("$SCRIPT_DIR/handoff.sh" list --to "$myid" 2>/dev/null)"
-    if [[ -n "$incoming" ]]; then
-      n=$(printf '%s\n' "$incoming" | grep -c .)
-      echo "  incoming ($n) — corresponding dev requested of this repo:"
-      while IFS='|' read -r hid _to st title; do
+  wsmode="$(scv_resolve_mode)"
+  if [[ "$wsmode" == "ROOT" ]]; then
+    # Umbrella: handoffs live in THIS repo — show a coordination overview.
+    echo "  mode: ROOT (umbrella) · workspace: $(scv_workspace)"
+    all="$("$SCRIPT_DIR/handoff.sh" list 2>/dev/null)"
+    if [[ -n "$all" ]]; then
+      n=$(printf '%s\n' "$all" | grep -c .)
+      echo "  open handoffs ($n) — per target repo:"
+      printf '%s\n' "$all" | awk -F'|' 'NF{c[$2]++} END{for(r in c) printf "    → %s: %d\n", r, c[r]}' | sort
+      while IFS='|' read -r hid to st title; do
         [[ -z "$hid" ]] && continue
-        echo "    · [$st] $hid"
+        echo "    · [$st → $to] $hid"
         echo "        $title"
-      done <<< "$incoming"
-      echo "  → adopt one: /scv:promote (handoff) then /scv:codegen"
+      done <<< "$all"
+      echo "  (each child repo pulls this umbrella, then /scv:promote → /scv:codegen)"
     else
-      echo "  no incoming handoffs addressed to '$myid'."
+      echo "  no handoffs yet."
     fi
   else
-    echo "  (workspace root not synced locally — 'git pull' the root, or check root: path)"
+    # Child: show handoffs addressed to me (requires the external root synced locally).
+    myid="$(scv_repo_id)"; myid="${myid:-?}"
+    echo "  mode: CHILD · repo_id: $myid · root: $(scv_root)"
+    if scv_root_reachable; then
+      incoming="$("$SCRIPT_DIR/handoff.sh" list --to "$myid" 2>/dev/null)"
+      if [[ -n "$incoming" ]]; then
+        n=$(printf '%s\n' "$incoming" | grep -c .)
+        echo "  incoming ($n) — corresponding dev requested of this repo:"
+        while IFS='|' read -r hid _to st title; do
+          [[ -z "$hid" ]] && continue
+          echo "    · [$st] $hid"
+          echo "        $title"
+        done <<< "$incoming"
+        echo "  → adopt one: /scv:promote (handoff) then /scv:codegen"
+      else
+        echo "  no incoming handoffs addressed to '$myid'."
+      fi
+    else
+      echo "  (workspace root not synced locally — 'git pull' the root, or check root: path)"
+    fi
   fi
   echo ""
 fi
