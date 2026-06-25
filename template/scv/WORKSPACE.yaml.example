@@ -1,0 +1,22 @@
+# scv/WORKSPACE.yaml — umbrella (root) workspace registry.
+#
+# The mere PRESENCE of this file marks a repo as the workspace ROOT.
+# Child repos do NOT have this file; they point here via their own
+# scv/CLAUDE.md SCV:WORKSPACE block (set by `/scv:sync --join <root-url>`).
+#
+# Copy to scv/WORKSPACE.yaml in the umbrella repo and fill in members.
+# Format is flat + a simple `members:` list (parsed without nested-mapping support).
+
+workspace_id: my-platform
+
+# One entry per repo in this system.
+members:
+  - id: fe
+    role: frontend
+    url: git@github.com:org/fe.git
+  - id: be
+    role: backend
+    url: git@github.com:org/be.git
+  - id: ai
+    role: ai-agent
+    url: git@github.com:org/ai.git

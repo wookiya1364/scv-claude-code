@@ -32,6 +32,8 @@ Modes (default = adoption mode — for existing projects):
                      only when starting a brand-new project from scratch.
 
 Other options:
+  --root             Make this the umbrella (workspace ROOT) repo: also creates
+                     scv/WORKSPACE.yaml from the example so child repos can join.
   --force            Allow copying into a directory that already has scv/.
   -h, --help         Show this help.
 EOF
@@ -54,10 +56,12 @@ shift || true
 
 FORCE=0
 NEW_MODE=0
+ROOT_MODE=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --force) FORCE=1; shift ;;
     --new)   NEW_MODE=1; shift ;;
+    --root)  ROOT_MODE=1; shift ;;
     *) echo "Unknown flag: $1" >&2; exit 1 ;;
   esac
 done
@@ -124,6 +128,18 @@ if [[ $NEW_MODE -eq 0 ]]; then
   echo "  standard docs seeded with status: N/A (adoption mode)"
 else
   echo "  standard docs seeded with status: draft (greenfield — /scv:help drives INTAKE)"
+fi
+
+# --root: promote this repo to the workspace umbrella by creating scv/WORKSPACE.yaml.
+if [[ $ROOT_MODE -eq 1 ]]; then
+  if [[ -f "$TARGET/scv/WORKSPACE.yaml" ]]; then
+    echo "  scv/WORKSPACE.yaml already exists — left untouched (this repo is the ROOT)."
+  elif [[ -f "$TARGET/scv/WORKSPACE.yaml.example" ]]; then
+    cp "$TARGET/scv/WORKSPACE.yaml.example" "$TARGET/scv/WORKSPACE.yaml"
+    echo "  scv/WORKSPACE.yaml created (this repo is the workspace ROOT) — edit its members."
+  else
+    echo "  ⚠ WORKSPACE.yaml.example missing from template — cannot create WORKSPACE.yaml." >&2
+  fi
 fi
 
 cat <<EOF
