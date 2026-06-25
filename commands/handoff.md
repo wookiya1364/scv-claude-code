@@ -2,7 +2,7 @@
 description: "Declare that another repo needs corresponding development: write a handoff (+ decision + conversation) into the workspace root scv repo. Multi-repo (nested) only."
 argument-hint: "[to-repo and what they must build]"
 allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/handoff.sh:*)", "Write", "AskUserQuestion"]
-model: sonnet
+model: opus
 ---
 
 # /scv:handoff
