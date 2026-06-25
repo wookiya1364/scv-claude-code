@@ -112,6 +112,8 @@ If hydrate is already complete (or just completed in Step A0), re-present the re
 
 **Mention `/scv:codegen` when applicable**: if the recommended next step is `/scv:work <slug>` AND that slug's `TESTS.md` already contains concrete acceptance criteria (i.e., not just placeholders), append one line: "Or, if you trust the tests to define behavior, try `/scv:codegen <slug>` — TDD-first variant (v0.11.0+, experimental): TESTS drives code Red→Green per case, archive/PR is handed off to `/scv:work`." Skip this line if TESTS.md is empty/placeholder or if the slug is UI-heavy (where TDD-first is awkward).
 
+**Multi-repo workspace (when present)**: if the script output contains a `Workspace:` diagnosis line (this repo is a `CHILD` or `ROOT`), relay it. If it shows a `⮕ Workspace: N incoming handoff(s)` block, treat that as a **top recommended next action** in the resolved language: another repo declared this repo needs corresponding dev — guide the user to `/scv:status` to review, then `/scv:promote` (scaffolds PLAN+TESTS from the handoff) and `/scv:codegen <slug>` to implement. If the line says the root is *not synced locally*, tell them to `git pull` the umbrella repo first. For a plain single repo (no `Workspace:` line) say nothing about workspaces.
+
 ### If `ARG_CONVERSATION:` is non-empty → classify intent first
 
 #### Step B-classify — Future-leaning vs Retrospective vs Ambiguous

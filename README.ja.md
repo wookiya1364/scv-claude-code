@@ -138,6 +138,23 @@ flowchart LR
 | `/scv:report` | フェーズ結果を Slack / Discord に通知 |
 | `/scv:sync` | **2 ステップ sync** (v0.11.3+).<br/>(1) プラグイン template → 標準ドキュメント (`merge_policy`)。<br/>(2) コード ↔ active promote slug の drift 検出 (`scope:` git diff + TESTS run)。<br/>archive は immutable。 |
 | `/scv:install-deps` | 不足 CLI 自動検出 + インストール案内 (`gh` / `glab` / `jq` / `ffmpeg`) |
+| `/scv:workspace` | **マルチレポ(nested workspace)** — 対話型セットアップ: アンブレラに子として参加 / アンブレラ(root)作成 / 分離。長いフラグ不要。 |
+| `/scv:handoff` | **マルチレポ** — 他レポの対応開発が必要だと宣言 → アンブレラ scv repo に handoff(+ 決定 + 会話)を記録(push は毎回同意、チーム通知は任意)。 |
+
+---
+
+## マルチレポ (nested workspace) <a id="multi-repo"></a>
+
+SCV はデフォルトで単一レポです。システムが複数のレポ(例: FE / BE / AI エージェント)にまたがる場合、単独レポの挙動はそのままに、1 つの **アンブレラ(umbrella)** scv repo の下にネストできます。
+
+- **着脱可能なオーバーレイ。** モード(単一 / 子 / アンブレラ)は毎コマンド、ローカルファイルから再計算されます。ワークスペースリンクの無いレポは通常の SCV と *byte-identical* に動作し、リンクを消すと分離します — 双方向の migration なし。
+- **コマンド 1 つでセットアップ。** `/scv:workspace` — アンブレラに子として参加 / アンブレラ作成 / 分離。長いフラグ不要。
+- **宣言で、git を通じて調整。** 子レポで `/scv:handoff` が「この別のレポの対応開発が必要」(決定 + 理由)をアンブレラ repo に記録します。相手レポが pull すると `/scv:status` / `/scv:help` が届いた handoff を表示します。`/scv:promote`(handoff から `PLAN.md` + `TESTS.md` を生成)→ `/scv:codegen` で採用。
+- **ライフサイクル + 通知。** handoff はアンブレラが追跡するステータス(open → claimed → done)を持ちます。push 成功時に Slack/Discord チャンネルへ best-effort 通知が可能。
+
+cross-repo の依存は **明示的に宣言** します — diff から推論しません。「FE 変更 → BE テストが CI で red」のような機械的な伝播はここでは範囲外で、共有契約(OpenAPI/AsyncAPI + 契約テスト)が必要です。
+
+**セットアップ:** アンブレラ repo で `/scv:workspace` → *アンブレラ作成*、各子レポで `/scv:workspace` → *参加*。
 
 ---
 

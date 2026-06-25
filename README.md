@@ -142,6 +142,23 @@ flowchart LR
 | `/scv:report` | Post a phase result to Slack or Discord |
 | `/scv:sync` | **Two-step sync** (v0.11.3+).<br/>(1) Template re-sync to standard docs (`merge_policy`).<br/>(2) Drift detection between code and active promote slugs (`scope:` git diff + TESTS run).<br/>Archive immutable. |
 | `/scv:install-deps` | Detect & install missing CLIs (`gh` / `glab` / `jq` / `ffmpeg`) |
+| `/scv:workspace` | **Multi-repo (nested workspace)** — interactive setup: join an umbrella as a child / create the umbrella (root) / detach. No long flags. |
+| `/scv:handoff` | **Multi-repo** — declare another repo needs corresponding dev → writes a handoff (+ decision + conversation) into the umbrella scv repo (push consent-gated; optional team ping). |
+
+---
+
+## Multi-repo (nested workspace) <a id="multi-repo"></a>
+
+SCV is single-repo by default. When your system spans several repos (e.g. FE / BE / AI agent), you can nest them under one **umbrella** scv repo — without changing how a standalone repo behaves.
+
+- **Detachable overlay.** Mode (single / child / umbrella) is recomputed from local files on every command. A repo with no workspace link behaves *byte-identically* to plain SCV; clearing the link detaches it — no migration either way.
+- **One command to set up.** `/scv:workspace` — join an umbrella as a child, create the umbrella, or detach. No long flags.
+- **Coordinate by declaration, over git.** In a child repo, `/scv:handoff` records "this other repo needs corresponding dev" (the decision + the why) into the umbrella repo. The other repo pulls, and `/scv:status` / `/scv:help` surface the incoming handoff. Adopt it with `/scv:promote` (scaffolds `PLAN.md` + `TESTS.md` from the handoff) → `/scv:codegen`.
+- **Lifecycle + ping.** Handoffs carry a status the umbrella tracks (open → claimed → done); a successful push can best-effort ping your Slack/Discord channel.
+
+Cross-repo dependency is **declared explicitly** — never inferred from a diff. Mechanical "FE change → BE test goes red in CI" is out of scope here; that needs a shared contract (OpenAPI/AsyncAPI + contract tests).
+
+**Setup:** in the umbrella repo run `/scv:workspace` → *create umbrella*; in each child repo run `/scv:workspace` → *join*.
 
 ---
 

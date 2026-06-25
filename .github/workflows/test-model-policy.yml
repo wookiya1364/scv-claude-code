@@ -25,7 +25,7 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Print runner info
         run: |
@@ -43,23 +43,23 @@ jobs:
       # Count helper: avoid `wc -l` + pipefail interactions that vary across
       # macOS BSD wc (whitespace-padded) and GNU wc. Loop + `if grep -q` is
       # uniform on every shell.
-      - name: Policy — all-opus (11 files → opus)
+      - name: Policy — all-opus (13 files → opus)
         run: |
           ./scripts/apply-model-policy.sh --policy all-opus > /dev/null
           n=0; for f in commands/*.md; do if grep -q '^model: opus' "$f"; then n=$((n+1)); fi; done
-          [ "$n" = "11" ] || { echo "expected 11 opus, got $n"; exit 1; }
+          [ "$n" = "13" ] || { echo "expected 13 opus, got $n"; exit 1; }
 
-      - name: Policy — all-haiku (11 files → haiku)
+      - name: Policy — all-haiku (13 files → haiku)
         run: |
           ./scripts/apply-model-policy.sh --policy all-haiku > /dev/null
           n=0; for f in commands/*.md; do if grep -q '^model: haiku' "$f"; then n=$((n+1)); fi; done
-          [ "$n" = "11" ] || { echo "expected 11 haiku, got $n"; exit 1; }
+          [ "$n" = "13" ] || { echo "expected 13 haiku, got $n"; exit 1; }
 
-      - name: Policy — all-sonnet (11 files → sonnet)
+      - name: Policy — all-sonnet (13 files → sonnet)
         run: |
           ./scripts/apply-model-policy.sh --policy all-sonnet > /dev/null
           n=0; for f in commands/*.md; do if grep -q '^model: sonnet' "$f"; then n=$((n+1)); fi; done
-          [ "$n" = "11" ] || { echo "expected 11 sonnet, got $n"; exit 1; }
+          [ "$n" = "13" ] || { echo "expected 13 sonnet, got $n"; exit 1; }
 
       - name: Policy — session-default (0 files with model:)
         run: |
@@ -67,7 +67,7 @@ jobs:
           n=0; for f in commands/*.md; do if grep -q '^model:' "$f"; then n=$((n+1)); fi; done
           [ "$n" = "0" ] || { echo "expected 0 model lines, got $n"; exit 1; }
 
-      - name: Policy — recommended (5 haiku, 6 opus)
+      - name: Policy — recommended (6 haiku, 7 opus)
         run: |
           ./scripts/apply-model-policy.sh --policy recommended > /dev/null
           h=0; o=0
@@ -75,8 +75,8 @@ jobs:
             if grep -q '^model: haiku' "$f"; then h=$((h+1)); fi
             if grep -q '^model: opus'  "$f"; then o=$((o+1)); fi
           done
-          [ "$h" = "5" ] || { echo "expected 5 haiku, got $h"; exit 1; }
-          [ "$o" = "6" ] || { echo "expected 6 opus, got $o"; exit 1; }
+          [ "$h" = "6" ] || { echo "expected 6 haiku, got $h"; exit 1; }
+          [ "$o" = "7" ] || { echo "expected 7 opus, got $o"; exit 1; }
 
       - name: Idempotent — recommended re-apply produces no changes
         run: |
@@ -101,7 +101,7 @@ jobs:
           echo "SCV_MODEL_POLICY=all-haiku" > "$TMP/.env"
           SCV_PROJECT_DIR="$TMP" ./scripts/apply-model-policy.sh --from-env > /dev/null
           n=0; for f in commands/*.md; do if grep -q '^model: haiku' "$f"; then n=$((n+1)); fi; done
-          [ "$n" = "11" ] || { echo "from-env: expected 11 haiku, got $n"; exit 1; }
+          [ "$n" = "13" ] || { echo "from-env: expected 13 haiku, got $n"; exit 1; }
           ./scripts/apply-model-policy.sh --policy recommended > /dev/null
 
       - name: --from-env with missing .env (silent skip)

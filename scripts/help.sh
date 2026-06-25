@@ -20,6 +20,10 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # slash command, $CLAUDE_PLUGIN_ROOT is set; fall back to ../ of SCRIPT_DIR.
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 
+# Multi-repo workspace awareness (no-op / silent for single repos).
+# shellcheck source=lib/workspace.sh
+source "$SCRIPT_DIR/lib/workspace.sh"
+
 # Emit conversation arg + unfinished list to the LLM (commands/help.md reads).
 # Both lines are always emitted so the prompt can branch deterministically.
 echo "ARG_CONVERSATION: ${CONV_ARG}"
@@ -163,6 +167,8 @@ Commands
   /scv:regression Run accumulated archived regression + auto-skip supersedes/obsolete + failure triage
   /scv:report     Phase report to Slack/Discord (with artifacts)
   /scv:sync       Safe merge on template version bump
+  /scv:workspace  Multi-repo setup: join an umbrella / create a root / detach (interactive, no flags)
+  /scv:handoff    Multi-repo: declare another repo needs corresponding dev (→ root scv repo)
   /scv:update     Plugin self-update guide (/plugin marketplace update + /reload-plugins) [v0.11.2+]
 
 EOF
@@ -380,6 +386,25 @@ if [[ -d "scv/archive" ]]; then
   fi
 fi
 
+# Workspace (multi-repo nesting). Silent for single repos → single-repo output
+# stays byte-identical. WS_MODE / WS_INCOMING are reused by Recommended next action.
+WS_MODE="$(scv_resolve_mode 2>/dev/null || echo SINGLE)"
+WS_INCOMING=0
+if [[ "$WS_MODE" == "CHILD" ]]; then
+  WS_ID="$(scv_repo_id)"
+  echo "  [i] Workspace: CHILD · repo_id: ${WS_ID:-?} · role: $(scv_role) · root: $(scv_root)"
+  if scv_root_reachable; then
+    WS_INCOMING=$("$SCRIPT_DIR/handoff.sh" list --to "$WS_ID" 2>/dev/null | grep -c '^' || true)
+    echo "      incoming handoffs addressed to this repo: $WS_INCOMING"
+  else
+    echo "      (workspace root not synced locally — 'git pull' the root to see handoffs)"
+  fi
+elif [[ "$WS_MODE" == "ROOT" ]]; then
+  WS_MEMBERS=$(grep -cE '^[[:space:]]*-[[:space:]]*id:' "$WS_MANIFEST" 2>/dev/null || echo 0)
+  WS_OPEN=$(find scv/handoffs/raw -name 'HANDOFF-*.md' 2>/dev/null | wc -l | tr -d ' ')
+  echo "  [i] Workspace: ROOT (umbrella) · members: $WS_MEMBERS · handoffs: ${WS_OPEN:-0}"
+fi
+
 echo ""
 echo "──────────────────────────────────────────────────────────────────────"
 echo " Recommended next action"
@@ -475,6 +500,22 @@ else
   - Ralph Loop autoloop      : /ralph-loop  (external command — needs ralph-template-scv.md)
   - Manual phase report      : /scv:report "Phase 1 — ..." passed --summary "..."
 EOF
+fi
+
+# Additive workspace recommendation — surfaces incoming cross-repo work regardless
+# of the main next-action above. Only fires for a CHILD with pending handoffs.
+if [[ "$WS_MODE" == "CHILD" && "${WS_INCOMING:-0}" -gt 0 ]]; then
+  echo ""
+  echo "  ⮕ Workspace: $WS_INCOMING incoming handoff(s) — another repo asked this repo for corresponding dev:"
+  echo "       /scv:promote          # scaffold PLAN+TESTS from a handoff"
+  echo "       /scv:codegen <slug>   # implement (TDD)"
+  echo "       /scv:status           # see all incoming handoffs"
+fi
+if [[ "$WS_MODE" == "ROOT" && "${WS_OPEN:-0}" -gt 0 ]]; then
+  echo ""
+  echo "  ⮕ Workspace (umbrella): ${WS_OPEN} handoff(s) coordinating across repos."
+  echo "       /scv:status           # full list with status (open/claimed/done) per target"
+  echo "       Each child repo pulls this umbrella, then /scv:promote → /scv:codegen."
 fi
 
 echo ""
