@@ -54,7 +54,15 @@ _ws_field() {
 scv_repo_id()   { _ws_field repo_id; }
 scv_role()      { _ws_field role; }
 scv_root()      { _ws_field root; }
-scv_workspace() { _ws_field workspace; }
+scv_workspace() {
+  # From the SCV:WORKSPACE block (a CHILD's join value). If empty (e.g. a ROOT,
+  # which has no block value), fall back to WORKSPACE.yaml's workspace_id.
+  local v; v="$(_ws_field workspace)"
+  if [[ -z "$v" && -f "$WS_MANIFEST" ]]; then
+    v="$(awk '/^workspace_id:[[:space:]]*/{sub(/^workspace_id:[[:space:]]*/,""); gsub(/^"|"$/,""); print; exit}' "$WS_MANIFEST")"
+  fi
+  printf '%s\n' "$v"
+}
 
 scv_resolve_mode() {
   # Print SINGLE | ROOT | CHILD. Always exits 0. Pure-local, no network.

@@ -93,6 +93,12 @@ eq "unreachable still CHILD" "CHILD" "$(run_mode "$WORK/unreach/CLAUDE.md" "$WOR
 make_claude "$WORK/detach" "fe" "frontend" "" ""
 eq "cleared root → SINGLE (detach)" "SINGLE" "$(run_mode "$WORK/detach/CLAUDE.md" "$WORK/detach/WORKSPACE.yaml")"
 
+# 7. ROOT workspace name falls back to WORKSPACE.yaml workspace_id (block empty)
+make_claude "$WORK/wsname" "" "" "" ""
+printf 'workspace_id: acme-platform\nmembers:\n' > "$WORK/wsname/WORKSPACE.yaml"
+WSN="$(WS_CLAUDE="$WORK/wsname/CLAUDE.md" WS_MANIFEST="$WORK/wsname/WORKSPACE.yaml" bash -c 'source "'"$LIB"'"; scv_workspace')"
+eq "ROOT workspace from manifest" "acme-platform" "$WSN"
+
 echo ""
 echo "── result: $PASS passed, $FAIL failed ──"
 [[ "$FAIL" -eq 0 ]]

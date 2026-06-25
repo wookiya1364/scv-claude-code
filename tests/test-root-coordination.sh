@@ -40,6 +40,7 @@ LN=$(printf '%s\n' "$LIST" | grep -c .)
 # 2. status [7] in the umbrella → coordination overview, NOT the 'not synced' bug
 SOUT="$( cd "$WORK/root" && bash "$STATUS" 2>/dev/null )"
 has   "status: ROOT umbrella header"      "$SOUT" "ROOT (umbrella)"
+has   "status: workspace name from manifest" "$SOUT" "workspace: my-platform"
 has   "status: open handoffs (2)"         "$SOUT" "open handoffs (2)"
 has   "status: per-target ai: 1"          "$SOUT" "→ ai: 1"
 has   "status: per-target be: 1"          "$SOUT" "→ be: 1"
