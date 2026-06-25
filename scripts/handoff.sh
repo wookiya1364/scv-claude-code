@@ -211,11 +211,42 @@ cmd_write() {
   echo "PUSH: pending — after explicit user consent, run: handoff.sh push"
 }
 
+_notify_handoff() {
+  # Best-effort team ping after a successful push. NEVER fails the push.
+  # Silent no-op unless a notifier is configured (NOTIFIER_PROVIDER in .env/env).
+  local ROOT="$1"
+  source "$SCRIPT_DIR/lib/env.sh" 2>/dev/null || return 0
+  env_load 2>/dev/null || true
+  local prov="${NOTIFIER_PROVIDER:-}"
+  [[ -n "$prov" ]] || return 0
+  [[ -f "$SCRIPT_DIR/notifiers/$prov.sh" ]] || return 0
+  source "$SCRIPT_DIR/notifiers/common.sh" 2>/dev/null || return 0
+  source "$SCRIPT_DIR/notifiers/$prov.sh" 2>/dev/null || return 0
+  if ! notifier_validate_env >/dev/null 2>&1; then
+    echo "  (notifier configured but env incomplete — team not pinged)" >&2
+    return 0
+  fi
+  local ch
+  ch="$(notifier_resolve_channel handoff 2>/dev/null)" || {
+    echo "  (no notifier channel for 'handoff' — team not pinged)" >&2; return 0; }
+  local ws subj
+  ws="$(scv_workspace)"; ws="${ws:-workspace}"
+  subj="$(git -C "$ROOT" log -1 --format=%s 2>/dev/null)"
+  # stdout (thread ref) suppressed; stderr (dry-run marker / errors) flows through.
+  if notifier_post_message "$ch" "SCV handoff → $ws" \
+      "New cross-repo handoff: \`$subj\`. Pull the umbrella scv repo and run \`/scv:status\` to see what your repo needs." >/dev/null; then
+    echo "  ✓ team notified via $prov"
+  else
+    echo "  (notification failed — handoff is pushed regardless)" >&2
+  fi
+}
+
 cmd_push() {
   local ROOT
   ROOT="$(resolve_root)" || die "cannot reach workspace root."
   if git -C "$ROOT" push 2>&1; then
     echo "✓ pushed workspace root."
+    _notify_handoff "$ROOT"
   else
     die "push failed (check remote/auth). Files remain committed locally in $ROOT."
   fi

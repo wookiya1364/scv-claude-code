@@ -64,6 +64,9 @@ technical identifiers as-is (`repo_id`, `handoff_id`, slash commands, paths).
    ```
 
    Never push without that explicit consent (no standing license from a prior push).
+   On a successful push, if a notifier is configured (`.env` `NOTIFIER_PROVIDER` =
+   slack|discord, with a channel), SCV best-effort pings the team channel so the
+   other repo's owner knows to pull. No notifier configured → silent no-op.
 
 5. **Summarize**: the `HANDOFF_ID`, the target repo, and the next step for the
    receiver — *"In the `<to_repo>` repo: `git pull` the root, then `/scv:status`
