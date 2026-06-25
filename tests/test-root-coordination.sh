@@ -41,7 +41,8 @@ LN=$(printf '%s\n' "$LIST" | grep -c .)
 SOUT="$( cd "$WORK/root" && bash "$STATUS" 2>/dev/null )"
 has   "status: ROOT umbrella header"      "$SOUT" "ROOT (umbrella)"
 has   "status: workspace name from manifest" "$SOUT" "workspace: my-platform"
-has   "status: open handoffs (2)"         "$SOUT" "open handoffs (2)"
+has   "status: handoffs (2)"              "$SOUT" "handoffs (2)"
+has   "status: status summary"            "$SOUT" "open 2 · claimed 0 · done 0"
 has   "status: per-target ai: 1"          "$SOUT" "→ ai: 1"
 has   "status: per-target be: 1"          "$SOUT" "→ be: 1"
 has   "status: shows a handoff title"     "$SOUT" "AI: emit risk score"
@@ -49,8 +50,8 @@ hasnt "status: NOT the 'not synced' bug"  "$SOUT" "not synced locally"
 
 # 3. help in the umbrella → coordination recommendation
 HOUT="$( cd "$WORK/root" && bash "$HELP" 2>/dev/null )"
-has   "help: umbrella open-handoff count" "$HOUT" "open handoffs: 2"
-has   "help: umbrella recommendation"     "$HOUT" "open handoff(s) coordinating across repos"
+has   "help: umbrella handoff count"      "$HOUT" "handoffs: 2"
+has   "help: umbrella recommendation"     "$HOUT" "handoff(s) coordinating across repos"
 
 echo ""
 echo "── result: $PASS passed, $FAIL failed ──"

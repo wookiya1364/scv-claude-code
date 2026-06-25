@@ -9,6 +9,7 @@
 #   push    Push the root repo. Call ONLY after explicit user consent.
 #   list    List handoffs in the root (local-only), filtered by --to <repo_id>.
 #   adopt   Consumer side: scaffold a local promote folder from a root handoff.
+#   mark    Set a handoff's lifecycle status (open|claimed|done) in the root + commit.
 #
 # Mode behavior (resolved per-call, local files only — see lib/workspace.sh):
 #   SINGLE  write/list are no-ops (exit 0 with a notice). Byte-identical world.
@@ -383,6 +384,36 @@ cmd_adopt() {
   echo "NEXT: refine $dir/PLAN.md + TESTS.md, then /scv:codegen $localslug (or /scv:work $localslug)"
 }
 
+cmd_mark() {
+  # Set a handoff's lifecycle status in the root + local commit (push is separate).
+  local HID="${1:-}" STATE="${2:-}"
+  [[ -n "$HID" && -n "$STATE" ]] || die "usage: handoff.sh mark <handoff_id> <open|claimed|done>"
+  case "$STATE" in open|claimed|done) ;; *) die "state must be open|claimed|done" ;; esac
+
+  local mode; mode="$(scv_resolve_mode)"
+  [[ "$mode" != "SINGLE" ]] || die "single-repo: no workspace handoffs to mark."
+  local ROOT
+  if [[ "$mode" == "ROOT" ]]; then
+    ROOT="$(pwd)"
+  else
+    ROOT="$(resolve_root)" || die "cannot reach workspace root."
+  fi
+  local hf="$ROOT/scv/handoffs/raw/HANDOFF-$HID.md"
+  [[ -f "$hf" ]] || die "handoff not found in root: $HID"
+
+  awk -v s="$STATE" 'BEGIN{d=0} /^status:[[:space:]]/ && !d {print "status: " s; d=1; next} {print}' "$hf" > "$hf.tmp" && mv "$hf.tmp" "$hf"
+
+  git -C "$ROOT" add "scv/handoffs/raw/HANDOFF-$HID.md" 2>/dev/null || true
+  if git -C "$ROOT" diff --cached --quiet 2>/dev/null; then
+    echo "ℹ no change (already $STATE): $HID"
+  elif git -C "$ROOT" commit -m "handoff($HID): status → $STATE" >/dev/null 2>&1; then
+    echo "✓ marked $HID as $STATE in root"
+  else
+    echo "⚠ updated file but commit failed — check git identity in the root repo ($ROOT)."
+  fi
+  echo "PUSH: pending — after explicit user consent, run: handoff.sh push"
+}
+
 usage() {
   sed -n '2,20p' "$0"
 }
@@ -393,6 +424,7 @@ case "$SUB" in
   push)  cmd_push "$@" ;;
   list)  cmd_list "$@" ;;
   adopt) cmd_adopt "$@" ;;
+  mark)  cmd_mark "$@" ;;
   -h|--help|"") usage ;;
-  *) die "unknown subcommand: $SUB (use write|push|list|adopt)" ;;
+  *) die "unknown subcommand: $SUB (use write|push|list|adopt|mark)" ;;
 esac

@@ -344,7 +344,9 @@ if scv_is_multi; then
     all="$("$SCRIPT_DIR/handoff.sh" list 2>/dev/null)"
     if [[ -n "$all" ]]; then
       n=$(printf '%s\n' "$all" | grep -c .)
-      echo "  open handoffs ($n) — per target repo:"
+      summary="$(printf '%s\n' "$all" | awk -F'|' 'NF{c[$3]++} END{printf "open %d · claimed %d · done %d", c["open"]+0, c["claimed"]+0, c["done"]+0}')"
+      echo "  handoffs ($n) — $summary"
+      echo "  per target repo:"
       printf '%s\n' "$all" | awk -F'|' 'NF{c[$2]++} END{for(r in c) printf "    → %s: %d\n", r, c[r]}' | sort
       while IFS='|' read -r hid to st title; do
         [[ -z "$hid" ]] && continue

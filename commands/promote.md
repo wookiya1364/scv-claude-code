@@ -29,6 +29,14 @@ If the user is acting on an **incoming cross-repo handoff** (shown by `/scv:stat
 
 This writes a local `scv/promote/<slug>/PLAN.md` + `TESTS.md` seeded from the handoff's "what to build" + acceptance criteria, with a `refs: type=handoff-origin` back-link. It is **local-only** (no write to the workspace root). Then refine the scaffolded PLAN/TESTS with the user and implement via `/scv:codegen <slug>` (TDD-first) or `/scv:work <slug>`. The rest of this document (raw → promote) is the normal, single-repo path.
 
+Optionally, so the umbrella's `/scv:status` reflects that this work is underway, mark the handoff **claimed** in the root (then push with the user's consent — same rule as `/scv:handoff`):
+
+```!
+"${CLAUDE_PLUGIN_ROOT}/scripts/handoff.sh" mark <handoff_id> claimed
+```
+
+After the work is archived, mark it `done` the same way.
+
 ## Language preference
 
 Resolve the user's preferred language with this priority, then use it for ALL user-facing output (AskUserQuestion text, status messages, summaries):

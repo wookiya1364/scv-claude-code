@@ -402,7 +402,7 @@ if [[ "$WS_MODE" == "CHILD" ]]; then
 elif [[ "$WS_MODE" == "ROOT" ]]; then
   WS_MEMBERS=$(grep -cE '^[[:space:]]*-[[:space:]]*id:' "$WS_MANIFEST" 2>/dev/null || echo 0)
   WS_OPEN=$(find scv/handoffs/raw -name 'HANDOFF-*.md' 2>/dev/null | wc -l | tr -d ' ')
-  echo "  [i] Workspace: ROOT (umbrella) · members: $WS_MEMBERS · open handoffs: ${WS_OPEN:-0}"
+  echo "  [i] Workspace: ROOT (umbrella) · members: $WS_MEMBERS · handoffs: ${WS_OPEN:-0}"
 fi
 
 echo ""
@@ -513,8 +513,8 @@ if [[ "$WS_MODE" == "CHILD" && "${WS_INCOMING:-0}" -gt 0 ]]; then
 fi
 if [[ "$WS_MODE" == "ROOT" && "${WS_OPEN:-0}" -gt 0 ]]; then
   echo ""
-  echo "  ⮕ Workspace (umbrella): ${WS_OPEN} open handoff(s) coordinating across repos."
-  echo "       /scv:status           # full cross-repo handoff list (per target repo)"
+  echo "  ⮕ Workspace (umbrella): ${WS_OPEN} handoff(s) coordinating across repos."
+  echo "       /scv:status           # full list with status (open/claimed/done) per target"
   echo "       Each child repo pulls this umbrella, then /scv:promote → /scv:codegen."
 fi
 
