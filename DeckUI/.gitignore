@@ -1,0 +1,5 @@
+node_modules/
+dist-deck/
+dist/
+.vite/
+*.tsbuildinfo

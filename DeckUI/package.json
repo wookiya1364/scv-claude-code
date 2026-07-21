@@ -1,0 +1,38 @@
+{
+  "name": "deckui",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "description": "DeckUI — reusable planning-deck UI kit for SCV /scv:deck (extracted from ai_tm_center DesignSystem). Renders markdown into a spec-grade deck; keeps the raw markdown in a side panel.",
+  "scripts": {
+    "dev": "vite",
+    "build:deck": "vite build --config vite.config.deck.ts",
+    "typecheck": "tsc --noEmit",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@base-ui/react": "^1.6.0",
+    "@fontsource-variable/inter": "^5.2.8",
+    "@tailwindcss/vite": "^4",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "shadcn": "^4.12.0",
+    "tailwind-merge": "^3.6.0",
+    "tailwindcss": "^4",
+    "tw-animate-css": "^1.4.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/typography": "^0.5.20",
+    "@types/node": "^24",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6",
+    "typescript": "~6",
+    "vite": "^8",
+    "vite-plugin-singlefile": "^2.3.3"
+  }
+}
