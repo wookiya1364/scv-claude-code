@@ -46,7 +46,9 @@ done
 if [[ -z "$SLUG" ]]; then
   SLUG=$(basename "$MD"); SLUG="${SLUG%.md}"
 fi
-SLUG=$(printf '%s' "$SLUG" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' '-' | sed 's/^-*//; s/-*$//')
+# -cs: complement + squeeze so runs of non-alnum collapse to ONE dash — must
+# match md-to-deck.mjs's /[^a-z0-9]+/→"-" or the built deck.json won't be found.
+SLUG=$(printf '%s' "$SLUG" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-*//; s/-*$//')
 [[ -n "$SLUG" ]] || SLUG="deck"
 [[ -z "$OUT" ]] && OUT="$PWD/${SLUG}-deck.html"
 [[ "$OUT" != /* ]] && OUT="$PWD/$OUT"
