@@ -99,7 +99,11 @@ scv_root_path() {
   if [[ "$root" != /* && "$SCV_DIR" == */* ]]; then
     anchor="$(dirname "$SCV_DIR")"
     if [[ -d "$anchor/$root" ]]; then
-      ( cd "$anchor/$root" && pwd )
+      # -P (physical): dereference any symlink in "$anchor" BEFORE applying the
+      # relative root, so a symlinked module resolves to its REAL umbrella rather
+      # than the symlink's logical parent (bash's default `cd` collapses "x/.."
+      # textually and never follows the link). Non-symlinked paths are unaffected.
+      ( cd -P "$anchor/$root" && pwd )
       return 0
     fi
   fi
