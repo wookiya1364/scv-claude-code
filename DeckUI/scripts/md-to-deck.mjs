@@ -129,23 +129,30 @@ for (const node of tree.children) {
 }
 pushCur();
 
-// Post-process: a "목표 / 비목표" slide whose bullets are prefixed (목표: / 비목표:)
-// → a Goals/Non-goals split block. Faithful — only reorganizes the author's own
-// bullets, adds nothing.
+// Post-process: a slide that COMBINES prefixed 목표:/비목표: bullets → a
+// Goals/Non-goals split. Guards (avoid the "비목표 contains 목표" inversion and
+// stripping a word like "목표수립…"): the prefix needs a mandatory delimiter,
+// BOTH buckets must be non-empty, and there must be no stray unprefixed bullet.
+// A standalone 비목표 (or 목표) section stays plain bullets. Faithful — only
+// regroups the author's own bullets, adds nothing.
 for (const s of slides) {
-  if (!/목표|goal/i.test(s.title) || !/비목표|non-?goal|out.?of.?scope|범위 밖/i.test(s.title)) continue;
   const bi = s.blocks.findIndex((b) => b.type === "bullets");
   if (bi < 0) continue;
   const goals = [];
   const nongoals = [];
+  const plain = [];
   for (const it of s.blocks[bi].items) {
-    if (/^\s*(비목표|non-?goals?|out of scope)/i.test(it)) {
-      nongoals.push(it.replace(/^\s*(비목표|non-?goals?|out of scope)\s*[:：·\-]?\s*/i, ""));
+    if (/^\s*(비목표|non-?goals?|out of scope)\s*[:：·\-]/i.test(it)) {
+      nongoals.push(it.replace(/^\s*(비목표|non-?goals?|out of scope)\s*[:：·\-]\s*/i, ""));
+    } else if (/^\s*(목표|goals?)\s*[:：·\-]/i.test(it)) {
+      goals.push(it.replace(/^\s*(목표|goals?)\s*[:：·\-]\s*/i, ""));
     } else {
-      goals.push(it.replace(/^\s*(목표|goals?)\s*[:：·\-]?\s*/i, ""));
+      plain.push(it);
     }
   }
-  if (goals.length || nongoals.length) s.blocks[bi] = { type: "goals", goals, nongoals };
+  if (goals.length > 0 && nongoals.length > 0 && plain.length === 0) {
+    s.blocks[bi] = { type: "goals", goals, nongoals };
+  }
 }
 
 // Lint: canonical planning-doc sections (KO/EN aliases). Warn — never fill in.

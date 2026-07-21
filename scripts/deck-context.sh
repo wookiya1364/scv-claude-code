@@ -41,6 +41,10 @@ for a in "$@"; do
   esac
 done
 
+# /scv:deck may pass a markdown PATH where a slug is expected — derive the slug
+# from the basename so FEATURE_ARCHITECTURE-by-slug detection can still fire.
+if [[ -n "$SLUG" ]]; then SLUG="${SLUG##*/}"; SLUG="${SLUG%.md}"; fi
+
 # Resolve scv/ (monorepo-nested aware). Sets SCV_DIR/PROMOTE_DIR/ARCHIVE_DIR.
 scv_init_paths "$TARGET"
 
