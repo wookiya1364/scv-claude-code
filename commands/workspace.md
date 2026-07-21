@@ -72,3 +72,8 @@ Read `scv/WORKSPACE.yaml` and list members. Offer to add/edit a member (Edit the
 
 - Join / detach are reversible and lossless — mode is recomputed from local files on every command, so there is no migration either way.
 - This is just a friendly wrapper. The underlying mechanics are the same as the manual `sync --join` / `hydrate --root`; power users can still use those directly.
+- **Monorepo (one repo, nested scv/)** — the umbrella `scv/` and each module's `scv/` live in the SAME git repo (`repo-root/scv` + `repo-root/fe/scv` + `repo-root/be/scv`). Join a module from inside it with a portable relative root:
+  ```
+  cd fe && /scv:sync --project-dir . --join .. --id fe --role frontend
+  ```
+  `..` is the module dir's parent = the repo root that holds the umbrella `scv/`. No URL, no clone — handoffs commit straight into the in-repo umbrella. Address a module without cd-ing via the leading arg: `/scv:status fe`, `/scv:handoff fe write …`. Running a command from the repo root targets the umbrella `scv/` (macro); from a module dir targets that module (micro).

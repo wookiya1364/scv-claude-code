@@ -5,7 +5,24 @@
 # scv/CLAUDE.md SCV:WORKSPACE block (set by `/scv:sync --join <root-url>`).
 #
 # Copy to scv/WORKSPACE.yaml in the umbrella repo and fill in members.
-# Format is flat + a simple `members:` list (parsed without nested-mapping support).
+# Format is flat + a simple `members:` list. Member entries are informational
+# (SCV counts them for the umbrella overview; the fields are not parsed further),
+# so use whatever encoding documents your setup — a git url: (separate-repo) or a
+# path: (monorepo module dir).
+#
+# Two topologies, same machinery:
+#   • Separate repos  — umbrella is its own repo; children join by git URL
+#                       (`/scv:sync --join git@github.com:org/fe.git`).
+#   • Monorepo        — umbrella scv/ and the module scvs live in ONE git repo
+#                       (repo-root/scv + repo-root/fe/scv + repo-root/be/scv).
+#                       Each module joins the in-repo umbrella with a PORTABLE
+#                       relative root (run from the module dir):
+#                         cd fe && /scv:sync --project-dir . --join .. --id fe --role frontend
+#                       `..` is the module dir's parent = the repo root (the dir
+#                       that holds the umbrella scv/). No URL, no clone. Handoffs
+#                       commit straight into repo-root/scv/. Address a module
+#                       without cd-ing via the leading arg: `/scv:handoff fe ...`,
+#                       `/scv:status fe`.
 
 workspace_id: my-platform
 
