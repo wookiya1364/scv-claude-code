@@ -133,6 +133,7 @@ flowchart LR
 | `/scv:promote` | `scv/raw/` → plan フォルダ (`scv/promote/<slug>/`) — PLAN + TESTS + Mermaid 図 |
 | `/scv:work <slug>` | 実装 · テスト実行 · 通過時に archive · e2e 動画添付の PR を自動作成 |
 | `/scv:codegen <slug>` | **TDD-first 変形** (v0.11.0+, *experimental*).<br/>TESTS がコードのドライバ。case 単位の Red→Green (budget 3)。<br/>PLAN.md `scope:` / `invariants:` をガードとして使用。<br/>archive/PR は `/scv:work` に委譲。 |
+| `/scv:deck [<md>]` | **Markdown → 仕様レベルのデッキ** (DeckUI).<br/>決定論的変換: 見出し→スライド, GFM テーブル, ` ```mermaid ` 図, KPI タイル, As-Is/To-Be, 品質 lint — 元の Markdown は右パネルに保持。<br/>全体像(アーキテクチャ)を context-first で構成、捏造しない。Node+pnpm 必要(このコマンドのみ)。 |
 | `/scv:update` | **プラグイン self-update ガイド** (v0.11.2+).<br/>インストール済み vs 最新バージョン表示。<br/>`/plugin marketplace update scv-claude-code` + `/reload-plugins` への案内。<br/>read-only。 |
 | `/scv:regression` | archive された全 TESTS を回帰として実行 |
 | `/scv:report` | フェーズ結果を Slack / Discord に通知 |
@@ -155,6 +156,8 @@ SCV はデフォルトで単一レポです。システムが複数のレポ(例
 cross-repo の依存は **明示的に宣言** します — diff から推論しません。「FE 変更 → BE テストが CI で red」のような機械的な伝播はここでは範囲外で、共有契約(OpenAPI/AsyncAPI + 契約テスト)が必要です。
 
 **セットアップ:** アンブレラ repo で `/scv:workspace` → *アンブレラ作成*、各子レポで `/scv:workspace` → *参加*。
+
+**モノレポ(1 つの repo に複数の `scv/`)。** 上のクロスレポ・アンブレラとは別: 1 つの repo がモジュール別 `scv/`(例 `FE/scv`, `BE/scv`)+ 任意の root `scv/` を持つ場合、各コマンドはコンテキストから使う `scv/` を解決(モジュールディレクトリで実行)、または先頭引数で明示指定します — `/scv:status FE`, `/scv:work FE <slug>`, `/scv:deck FE`。単一 `scv` の repo は影響なし(byte-identical)。
 
 ---
 
