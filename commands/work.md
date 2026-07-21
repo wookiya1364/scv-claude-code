@@ -1,6 +1,6 @@
 ---
 description: "Implement a scv/promote/<slug>/ plan. Reads PLAN.md + TESTS.md, proposes/loads Related Documents as needed, runs the tests, and optionally archives on success."
-argument-hint: "[<slug>]"
+argument-hint: "[<module>] [<slug>]"
 allowed-tools:
   - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/work.sh:*)"
   - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/readpath.sh:*)"
@@ -46,6 +46,8 @@ First, gather context:
 ```!
 "${CLAUDE_PLUGIN_ROOT}/scripts/work.sh" $ARGUMENTS
 ```
+
+> **Monorepo (nested scv)** — pass a module dir as the first argument to target its scv: `/scv:work FE <slug>` operates on `FE/scv`. Omit it to use the current dir's `scv/` (or nearest parent).
 
 Parse the header (`MODE:`, `TARGET_SLUG:`, `PLAN_FILE:`, `TESTS_FILE:`, `GRAPHIFY_SKILL:`, `GRAPH_STATUS:`) and the three content blocks (`=== active promote plans ===`, `=== related documents (from PLAN.md) ===`, `=== external refs (from PLAN.md frontmatter refs:) ===`).
 
