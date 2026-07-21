@@ -34,14 +34,13 @@ source "$SCRIPT_DIR/lib/env.sh"
 source "$SCRIPT_DIR/lib/attachments.sh"
 # shellcheck source=lib/workspace.sh
 source "$SCRIPT_DIR/lib/workspace.sh"
+# shellcheck source=lib/scvroot.sh
+source "$SCRIPT_DIR/lib/scvroot.sh"
 env_load 2>/dev/null || true
 
 ACK=0
 VERBOSE=0
-RAW_DIR="${RAW_DIR:-scv/raw}"
-STATE_FILE="${STATE_FILE:-scv/readpath.json}"
-PROMOTE_DIR="${PROMOTE_DIR:-scv/promote}"
-ARCHIVE_DIR="${ARCHIVE_DIR:-scv/archive}"
+SCV_TARGET=""
 
 for a in "$@"; do
   case "$a" in
@@ -49,9 +48,24 @@ for a in "$@"; do
     --verbose) VERBOSE=1 ;;
     -h|--help)
       sed -n '2,20p' "$0"; exit 0 ;;
-    *) echo "Unknown flag: $a" >&2; exit 1 ;;
+    -*) echo "Unknown flag: $a" >&2; exit 1 ;;
+    *)
+      if [[ -z "$SCV_TARGET" ]] && scv_target_path "$a" >/dev/null 2>&1; then
+        SCV_TARGET="$a"
+      else
+        echo "Unknown arg: $a (expected a module dir like 'FE' that contains scv/)" >&2; exit 1
+      fi
+      ;;
   esac
 done
+
+# Resolve scv/ for this context (optional module target, e.g. `status FE`).
+scv_init_paths "$SCV_TARGET"
+# Keep the workspace section (below) consistent with the resolved scv root:
+# workspace.sh froze WS_CLAUDE/WS_MANIFEST from SCV_DIR at source time (before
+# scv_init_paths re-resolved it), so re-derive them here.
+WS_CLAUDE="$SCV_DIR/CLAUDE.md"
+WS_MANIFEST="$SCV_DIR/WORKSPACE.yaml"
 
 PROJECT_PWD="$(pwd)"
 

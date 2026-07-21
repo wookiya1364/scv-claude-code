@@ -739,6 +739,7 @@ Summarize:
 - `--dry-run` — Emit inventory + diff + plan without calling the graphify skill, writing scaffolds, or updating readpath.json. Safe "what would happen" preview.
 - `--graph-only` — Only refresh the docs graph (if possible); skip dialog, scaffolds, and readpath update.
 - `--topic SLUG` — Pre-fills the slug suggestion for a single-folder scenario (still requires user confirmation).
+- `<module>` — Optional leading arg naming a module dir that contains `scv/` (monorepo). `/scv:promote FE` operates on `FE/scv`; omit to use the current dir's `scv/` (or nearest parent).
 
 ## Never
 

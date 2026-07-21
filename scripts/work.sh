@@ -31,10 +31,14 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 READPATH="$SCRIPT_DIR/readpath.sh"
 # shellcheck source=lib/yaml.sh
 source "$SCRIPT_DIR/lib/yaml.sh"
+# shellcheck source=lib/env.sh
+source "$SCRIPT_DIR/lib/env.sh"
+# shellcheck source=lib/scvroot.sh
+source "$SCRIPT_DIR/lib/scvroot.sh"
+env_load 2>/dev/null || true
 
-PROMOTE_DIR="${PROMOTE_DIR:-scv/promote}"
-ARCHIVE_DIR="${ARCHIVE_DIR:-scv/archive}"
-STATE_FILE="${STATE_FILE:-scv/readpath.json}"
+# Resolve scv/ (monorepo-nested aware) → PROMOTE_DIR/ARCHIVE_DIR/STATE_FILE (+RAW_DIR).
+scv_init_paths
 
 MODE="prepare"
 TARGET_SLUG=""
