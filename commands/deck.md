@@ -30,6 +30,28 @@ markdown stays visible in a side panel** (the slide and the source always agree)
 
 Do **not** fabricate a doc. `/scv:deck` renders what exists.
 
+## Step 0.5 — Compose a planner-grade structure (act like a 기획자)
+
+A deck is only as good as its source. A real 기획서 does **not** just list features
+— it opens with the **whole picture**, locates the change **inside** it, states the
+**delta**, and explains **why**. A flat feature list produces the reaction "그래서
+이게 어디에 붙는 건데?". Before building, make the source have this shape — pulling
+context from the project's own docs, **never inventing** a system it can't see.
+
+**Big-picture sources (priority):**
+1. `scv/promote/<slug>/FEATURE_ARCHITECTURE.md` — if this is a promote plan, it already has a "position in whole" diagram with `:::new` nodes.
+2. `scv/ARCHITECTURE.md` + the graphify docs graph (`.graphify/docs/`) — the existing system structure (the As-Is whole).
+3. The feature's `PLAN.md` (problem, goals/non-goals, steps) — the delta + the why.
+
+**Target section order** (compose into the source, or a `*-deck.md` working copy, with user approval):
+1. **배경 / 왜 지금인가** — problem, impact, why-now (from PLAN / problem statement).
+2. **전체 구조 (As-Is)** — a mermaid diagram of the existing system (from ARCHITECTURE / graphify).
+3. **이 기능의 위치 (To-Be)** — the same diagram with **new/changed nodes highlighted** (`classDef new/changed` + `:::new` / `:::changed`) so "이 부분이 바뀐다"가 한눈에 보인다.
+4. **변경점 (As-Is → To-Be)** — a per-area table of what changes.
+5. Details — 목표/비목표, 요구사항, 화면, 데이터, 성공지표, 예외처리.
+
+**Faithfulness (non-negotiable):** the big picture must come from real docs. If no `ARCHITECTURE.md` / graphify graph / `FEATURE_ARCHITECTURE.md` exists, do **not** invent a system diagram — tell the user the deck can't show the whole until one exists (offer to draft `ARCHITECTURE.md`, or run `/scv:promote` which generates `FEATURE_ARCHITECTURE.md`), and proceed with what's available plus a lint warning. Use `AskUserQuestion` before rewriting the user's source.
+
 ## Step 1 — Build the deck
 
 ```!
