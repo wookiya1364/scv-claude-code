@@ -23,6 +23,8 @@ set -uo pipefail
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # shellcheck source=lib/workspace.sh
 source "$SCRIPT_DIR/lib/workspace.sh"
+# shellcheck source=lib/scvroot.sh
+source "$SCRIPT_DIR/lib/scvroot.sh"
 # shellcheck source=lib/yaml.sh
 source "$SCRIPT_DIR/lib/yaml.sh"
 
@@ -44,9 +46,19 @@ _md_section() {
 resolve_root() {
   # Print absolute path to the root scv working copy (clone a URL into cache if
   # needed). Return 1 when unresolvable so callers can degrade.
-  local root ws cache
+  local root ws cache anchor
   root="$(scv_root)"
   [[ -n "$root" ]] || return 1
+  # Monorepo module-arg context (see workspace.sh scv_root_path): anchor a
+  # relative root: to the module dir (parent of a NESTED SCV_DIR) so `handoff fe
+  # write ...` from the repo root targets the same umbrella as running inside fe.
+  if [[ "$root" != /* && "$SCV_DIR" == */* ]]; then
+    anchor="$(dirname "$SCV_DIR")"
+    if [[ -d "$anchor/$root" ]]; then
+      ( cd "$anchor/$root" && pwd )
+      return 0
+    fi
+  fi
   if [[ -d "$root" ]]; then
     ( cd "$root" && pwd )
     return 0
@@ -425,7 +437,12 @@ cmd_mark() {
   [[ "$mode" != "SINGLE" ]] || die "single-repo: no workspace handoffs to mark."
   local ROOT
   if [[ "$mode" == "ROOT" ]]; then
-    ROOT="$(pwd)"
+    # The umbrella repo dir = parent of SCV_DIR (SCV_DIR is "<root>/scv"). With a
+    # module target this is a NESTED path (e.g. "fe/scv" → "fe", "../scv" → ".."),
+    # so derive it rather than assuming CWD == umbrella — matching cmd_list's
+    # $SCV_DIR/handoffs/raw. For the plain cd-into-umbrella case (SCV_DIR="scv")
+    # dirname is "." → $(pwd), byte-identical to the previous behavior.
+    ROOT="$(cd "$(dirname "$SCV_DIR")" && pwd)"
   else
     ROOT="$(resolve_root)" || die "cannot reach workspace root."
   fi
@@ -448,6 +465,22 @@ cmd_mark() {
 usage() {
   sed -n '2,20p' "$0"
 }
+
+# Optional leading module target (monorepo): `handoff.sh fe write ...` → fe/scv.
+# Peel it ONLY when $1 is not a subcommand AND resolves to an existing module
+# scv/ dir. With no target, nothing changes (workspace.sh's CWD defaults stand),
+# so single-repo and cd-into-child behavior stays byte-identical.
+case "${1:-}" in
+  write|push|list|adopt|mark|-h|--help|"") ;;
+  *)
+    if scv_target_path "$1" >/dev/null 2>&1; then
+      scv_init_paths "$1"
+      WS_CLAUDE="$SCV_DIR/CLAUDE.md"
+      WS_MANIFEST="$SCV_DIR/WORKSPACE.yaml"
+      shift
+    fi
+    ;;
+esac
 
 SUB="${1:-}"; shift || true
 case "$SUB" in
