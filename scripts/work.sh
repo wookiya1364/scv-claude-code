@@ -66,6 +66,9 @@ scv_init_paths "$SCV_TARGET"
 
 # ---------- header ----------
 echo "MODE: $MODE"
+# Emit the resolved scv dir so downstream steps (regression / archive / PR) can
+# thread the same module target. "scv" = standalone/root; else a nested module.
+echo "SCV_DIR: $SCV_DIR"
 echo "TODAY: $(date +%Y-%m-%d)"
 
 AUTHOR=""
