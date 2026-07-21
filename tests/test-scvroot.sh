@@ -105,6 +105,19 @@ ck "work FE <slug> → slug not swallowed"        "20260101-x-demo" "$sl_fe"
 td_root=$(cd "$BASE/wk"; bash "$SCRIPTS/work.sh" 20260101-x-demo 2>/dev/null | sed -n 's/^TARGET_DIR: //p')
 ck "work <slug> (no module) → root scv/promote"  "scv/promote/20260101-x-demo" "$td_root"
 
+# ---- regression: a set-u-hostile .env must not abort scripts (env_load) ----
+mkdir -p "$BASE/hostile/scv/raw"; printf 'note' > "$BASE/hostile/scv/raw/n.txt"
+printf 'DB_URL=postgres://${UNSET_USER}@h/db\nSECRET=ab$1cd\n' > "$BASE/hostile/.env"
+ok "hostile .env: readpath scan runs (no set-u abort)" bash -c "cd '$BASE/hostile' && bash '$SCRIPTS/readpath.sh' scan >/dev/null 2>&1"
+ck "hostile .env: readpath still scans raw"  "1" "$(cd "$BASE/hostile" && bash "$SCRIPTS/readpath.sh" scan 2>/dev/null | grep -c 'n.txt')"
+ok "hostile .env: promote-helper runs"       bash -c "cd '$BASE/hostile' && bash '$SCRIPTS/promote-helper.sh' --dry-run >/dev/null 2>&1"
+
+# ---- regression: walk-up must not cross the git repo boundary ----
+mkdir -p "$BASE/outer/scv/raw" "$BASE/outer/inner"
+( cd "$BASE/outer" && git init -q 2>/dev/null; git config user.email t@t; git config user.name t )
+( cd "$BASE/outer/inner" && git init -q 2>/dev/null; git config user.email t@t; git config user.name t )
+ck "inner repo (no scv) does NOT attach outer/scv" "scv" "$(cd "$BASE/outer/inner" && source "$LIB" && scv_root_dir)"
+
 echo ""
 echo "── test-scvroot: $pass passed, $fail failed ──"
 exit $(( fail > 0 ? 1 : 0 ))
