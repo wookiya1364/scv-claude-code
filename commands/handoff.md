@@ -1,6 +1,6 @@
 ---
 description: "Declare that another repo needs corresponding development: write a handoff (+ decision + conversation) into the workspace root scv repo. Multi-repo (nested) only."
-argument-hint: "[to-repo and what they must build]"
+argument-hint: "[module] [to-repo and what they must build]"
 allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/handoff.sh:*)", "Write", "AskUserQuestion"]
 model: opus
 ---
@@ -71,6 +71,27 @@ technical identifiers as-is (`repo_id`, `handoff_id`, slash commands, paths).
 5. **Summarize**: the `HANDOFF_ID`, the target repo, and the next step for the
    receiver — *"In the `<to_repo>` repo: `git pull` the root, then `/scv:status`
    shows it; `/scv:promote` from the handoff, then `/scv:codegen`."*
+
+## Monorepo (nested scv) — optional module target
+
+When the umbrella and its modules live in one git repo, you can address a module
+without `cd`-ing into it by giving its dir as the **leading** argument:
+
+```!
+"${CLAUDE_PLUGIN_ROOT}/scripts/handoff.sh" <module> write --to <to_repo> --slug <slug> --title "<title>" …
+```
+
+e.g. `handoff.sh fe write …` operates on `fe/scv` exactly as if run from inside
+`fe/`. Omit the module to use the current directory's `scv/` — single-repo and
+`cd`-into-child behavior is unchanged (byte-identical). The same optional
+leading module arg works for `list` / `adopt` / `mark` / `push`.
+
+> **Reserved names.** The leading arg is only peeled when it is NOT a subcommand
+> keyword. So a module directory named exactly `write` / `push` / `list` /
+> `adopt` / `mark` cannot be reached by the leading-arg form (the subcommand
+> wins) — address such a module by `cd`-ing into it instead. Keep module dir
+> names distinct from these keywords (the `FE` / `BE` / `AI` convention already
+> is).
 
 ## Notes
 
