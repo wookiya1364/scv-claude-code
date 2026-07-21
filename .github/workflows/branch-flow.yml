@@ -1,0 +1,20 @@
+name: branch-flow
+
+# PR 타겟이 보호 브랜치(main/stage/develop)일 때 소스 브랜치 규칙을 강제 (CLAUDE.md §10)
+on:
+  pull_request:
+    branches: [main, stage, develop]
+
+permissions:
+  contents: read
+
+jobs:
+  check-branch-flow:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce branch flow (CLAUDE.md §10)
+        env:
+          TARGET_BRANCH: ${{ github.base_ref }}
+          SOURCE_BRANCH: ${{ github.head_ref }}
+        run: sh scripts/check-branch-flow.sh
