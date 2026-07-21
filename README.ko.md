@@ -23,7 +23,7 @@ Drop materials → Claude refines them with you → implementation runs the test
 <a href="https://github.com/wookiya1364/scv-claude-code/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/wookiya1364/scv-claude-code?label=release&color=blue&cacheSeconds=300" /></a>
 <img alt="License" src="https://img.shields.io/badge/license-MIT-green" />
 <img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude%20Code-plugin-D97757" />
-<img alt="Regression" src="https://img.shields.io/badge/tests-866_PASS-brightgreen" />
+<img alt="Regression" src="https://img.shields.io/badge/tests-867_PASS-brightgreen" />
 <img alt="i18n" src="https://img.shields.io/badge/i18n-EN_·_KO_·_JA-purple" />
 </p>
 
@@ -133,6 +133,7 @@ flowchart LR
 | `/scv:promote` | `scv/raw/` → plan 폴더 (`scv/promote/<slug>/`) — PLAN + TESTS + Mermaid 도식 |
 | `/scv:work <slug>` | 구현 · 테스트 실행 · 통과 시 archive · e2e 비디오 첨부한 PR 생성 |
 | `/scv:codegen <slug>` | **TDD-first 변형** (v0.11.0+, *experimental*).<br/>TESTS 가 코드를 driver. case 단위 Red→Green (budget 3).<br/>PLAN.md `scope:` / `invariants:` 를 가드로 사용.<br/>archive/PR 은 `/scv:work` 에 위임. |
+| `/scv:deck [<md>]` | **마크다운 → 기획서급 덱** (DeckUI).<br/>결정론적 변환: 제목→슬라이드, GFM 표, ` ```mermaid ` 다이어그램, KPI 타일, As-Is/To-Be, 품질 린트 — 원문 마크다운은 우측 패널에 그대로.<br/>큰 그림(아키텍처)을 context-first 로 구성, 지어내지 않음. Node+pnpm 필요(이 명령만). |
 | `/scv:update` | **플러그인 self-update 안내** — 설치된 vs 최신 버전 표시, `/plugin marketplace update scv-claude-code` + `/reload-plugins` 안내. read-only. (v0.11.2+) |
 | `/scv:regression` | archive 된 모든 TESTS 를 회귀로 실행 |
 | `/scv:report` | 단계 결과를 Slack / Discord 에 보고 |
@@ -155,6 +156,8 @@ SCV 는 기본이 단일 레포입니다. 시스템이 여러 레포(예: FE / B
 cross-repo 의존은 **명시적으로 선언**합니다 — diff 로 추론하지 않습니다. "FE 변경 → BE 테스트가 CI 에서 red" 같은 기계적 전파는 여기 범위 밖이며, 공유 계약(OpenAPI/AsyncAPI + 계약 테스트)이 필요합니다.
 
 **셋업:** 우산 repo 에서 `/scv:workspace` → *우산 만들기*, 각 자식 레포에서 `/scv:workspace` → *합류*.
+
+**모노레포(한 repo 에 여러 `scv/`).** 위 크로스레포 우산과는 별개: 한 repo 가 모듈별 `scv/`(예 `FE/scv`, `BE/scv`) + 선택적 root `scv/` 를 가질 때, 각 명령은 컨텍스트로 사용할 `scv/` 를 해석(모듈 디렉토리에서 실행)하거나 선두 인자로 명시 지목합니다 — `/scv:status FE`, `/scv:work FE <slug>`, `/scv:deck FE`. 단일 `scv` repo 는 영향 없음(byte-identical).
 
 ---
 

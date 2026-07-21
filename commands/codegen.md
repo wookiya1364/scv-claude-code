@@ -1,6 +1,6 @@
 ---
 description: "TDD-first codegen for a scv/promote/<slug>/ plan. Verifies TESTS fail first (Red), then iteratively writes the minimum code to pass each case (Green). Hands off archive/PR/regression to /scv:work."
-argument-hint: "[<slug>]"
+argument-hint: "[<module>] [<slug>]"
 allowed-tools:
   - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/work.sh:*)"
   - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/readpath.sh:*)"
@@ -42,7 +42,9 @@ First, gather context (same helper as `/scv:work`):
 "${CLAUDE_PLUGIN_ROOT}/scripts/work.sh" $ARGUMENTS
 ```
 
-Parse the header (`MODE:`, `TARGET_SLUG:`, `PLAN_FILE:`, `TESTS_FILE:`, `GRAPHIFY_SKILL:`, `GRAPH_STATUS:`) and the three content blocks (`=== active promote plans ===`, `=== related documents (from PLAN.md) ===`, `=== external refs (from PLAN.md frontmatter refs:) ===`) identically to `/scv:work` Step 0.
+> **Monorepo (nested scv)** — same as `/scv:work`: an optional leading module dir targets its scv, e.g. `/scv:codegen FE <slug>` → `FE/scv`.
+
+Parse the header (`MODE:`, `SCV_DIR:`, `TARGET_SLUG:`, `PLAN_FILE:`, `TESTS_FILE:`, `GRAPHIFY_SKILL:`, `GRAPH_STATUS:`) and the three content blocks (`=== active promote plans ===`, `=== related documents (from PLAN.md) ===`, `=== external refs (from PLAN.md frontmatter refs:) ===`) identically to `/scv:work` Step 0. In a monorepo, thread a non-`scv` `SCV_DIR` module target through Step 9 exactly as `/scv:work` does.
 
 ## Protocol
 

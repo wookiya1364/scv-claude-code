@@ -1,0 +1,11 @@
+node_modules/
+dist-deck/
+dist/
+.vite/
+*.tsbuildinfo
+
+# /scv:deck generated decks are build artifacts — ignore them, keep only the
+# committed sample fixtures (so a real run never dirties the plugin tree).
+src/deck/decks/*/deck.json
+!src/deck/decks/demo-prd/deck.json
+!src/deck/decks/refund/deck.json
