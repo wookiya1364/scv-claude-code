@@ -55,7 +55,9 @@ resolve_root() {
   if [[ "$root" != /* && "$SCV_DIR" == */* ]]; then
     anchor="$(dirname "$SCV_DIR")"
     if [[ -d "$anchor/$root" ]]; then
-      ( cd "$anchor/$root" && pwd )
+      # -P: dereference symlinks physically (see workspace.sh scv_root_path) so a
+      # symlinked module resolves to its real umbrella; non-symlinked unaffected.
+      ( cd -P "$anchor/$root" && pwd )
       return 0
     fi
   fi
