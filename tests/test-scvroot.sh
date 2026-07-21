@@ -93,6 +93,18 @@ ck "promote @root CWD → root version"      "1.0.0-ROOT" "$ver_root"
 ver_topic=$(cd "$BASE/ph"; bash "$SCRIPTS/promote-helper.sh" --topic FE --dry-run 2>/dev/null | sed -n 's/^STANDARD_VERSION: //p')
 ck "--topic FE not hijacked → root version" "1.0.0-ROOT" "$ver_topic"
 
+# ---- follow-up: work.sh (+ codegen via delegation) accepts a leading module target ----
+mkdir -p "$BASE/wk/FE/scv/promote/20260101-x-demo" "$BASE/wk/scv/promote/20260101-x-demo"
+for d in "$BASE/wk/FE/scv/promote/20260101-x-demo" "$BASE/wk/scv/promote/20260101-x-demo"; do
+  printf '# plan\n' > "$d/PLAN.md"; printf '# tests\n' > "$d/TESTS.md"
+done
+td_fe=$(cd "$BASE/wk"; bash "$SCRIPTS/work.sh" FE 20260101-x-demo 2>/dev/null | sed -n 's/^TARGET_DIR: //p')
+ck "work FE <slug> → FE/scv/promote"           "FE/scv/promote/20260101-x-demo" "$td_fe"
+sl_fe=$(cd "$BASE/wk"; bash "$SCRIPTS/work.sh" FE 20260101-x-demo 2>/dev/null | sed -n 's/^TARGET_SLUG: //p')
+ck "work FE <slug> → slug not swallowed"        "20260101-x-demo" "$sl_fe"
+td_root=$(cd "$BASE/wk"; bash "$SCRIPTS/work.sh" 20260101-x-demo 2>/dev/null | sed -n 's/^TARGET_DIR: //p')
+ck "work <slug> (no module) → root scv/promote"  "scv/promote/20260101-x-demo" "$td_root"
+
 echo ""
 echo "── test-scvroot: $pass passed, $fail failed ──"
 exit $(( fail > 0 ? 1 : 0 ))
