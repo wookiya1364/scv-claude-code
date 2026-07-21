@@ -32,11 +32,14 @@ set -uo pipefail
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # shellcheck source=lib/yaml.sh
 source "$SCRIPT_DIR/lib/yaml.sh"
-
-PROMOTE_DIR="${PROMOTE_DIR:-scv/promote}"
-ARCHIVE_DIR="${ARCHIVE_DIR:-scv/archive}"
+# shellcheck source=lib/env.sh
+source "$SCRIPT_DIR/lib/env.sh"
+# shellcheck source=lib/scvroot.sh
+source "$SCRIPT_DIR/lib/scvroot.sh"
+env_load 2>/dev/null || true
 
 # ---- flag defaults ----
+SCV_TARGET=""            # optional leading module dir (monorepo), e.g. FE
 SLUG_PREFIX=""
 TAG_FILTER=""
 INCLUDE_PROMOTE=0
@@ -67,12 +70,19 @@ while [[ $# -gt 0 ]]; do
     -h|--help)           usage; exit 0 ;;
     -*)                  echo "Unknown flag: $1" >&2; exit 1 ;;
     *)
-      if [[ -z "$SLUG_PREFIX" ]]; then SLUG_PREFIX="$1"
+      if [[ -z "$SCV_TARGET" && -z "$SLUG_PREFIX" ]] && scv_target_path "$1" >/dev/null 2>&1; then
+        SCV_TARGET="$1"          # leading module dir (monorepo): regression.sh FE
+      elif [[ -z "$SLUG_PREFIX" ]]; then SLUG_PREFIX="$1"
       else echo "Multiple slug prefixes not supported: $1" >&2; exit 1
       fi
       shift ;;
   esac
 done
+
+# Resolve scv/ (monorepo-nested aware; optional leading module target) →
+# PROMOTE_DIR/ARCHIVE_DIR. Without this, /scv:work FE <slug>'s Step-9a regression
+# pre-flight would run against the wrong scv and pass without testing (false green).
+scv_init_paths "$SCV_TARGET"
 
 TODAY=$(date +%Y-%m-%d)
 AUTHOR=""
