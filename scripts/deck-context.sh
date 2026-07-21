@@ -47,14 +47,48 @@ scv_init_paths "$TARGET"
 echo "SCV_DIR: $SCV_DIR"
 
 present=0
-_report() { # KEY path
-  if [[ -e "$2" ]]; then echo "$1: present $2"; present=1; else echo "$1: absent"; fi
+
+# A doc counts as a real "big picture" only if it is NOT an unfilled SCV
+# template — the template scaffolds sections with <TODO ...> placeholders.
+_doc_is_real() {
+  [[ -f "$1" ]] || return 1
+  local todos; todos=$(grep -c '<TODO' "$1" 2>/dev/null)  # grep -c prints 0 on no-match
+  [[ "${todos:-0}" -ge 2 ]] && return 1
+  return 0
 }
 
-_report ARCHITECTURE "$SCV_DIR/ARCHITECTURE.md"
+if [[ -f "$SCV_DIR/ARCHITECTURE.md" ]]; then
+  if _doc_is_real "$SCV_DIR/ARCHITECTURE.md"; then
+    echo "ARCHITECTURE: present $SCV_DIR/ARCHITECTURE.md"; present=1
+  else
+    echo "ARCHITECTURE: template (unfilled <TODO> — not counted as big picture)"
+  fi
+else
+  echo "ARCHITECTURE: absent"
+fi
 # DESIGN/DOMAIN are extra context (do not by themselves count as the big picture).
 [[ -e "$SCV_DIR/DESIGN.md" ]]  && echo "DESIGN: present $SCV_DIR/DESIGN.md"   || echo "DESIGN: absent"
 [[ -e "$SCV_DIR/DOMAIN.md" ]]  && echo "DOMAIN: present $SCV_DIR/DOMAIN.md"   || echo "DOMAIN: absent"
+
+# Real architecture / screen / system / IA docs under docs/ (project root) or
+# <scv-parent>/docs — a strong big-picture source (e.g. a screens/IA doc).
+_bases=("docs")
+_pdir="$(dirname "$SCV_DIR")"
+[[ "$_pdir" != "." && -d "$_pdir/docs" ]] && _bases+=("$_pdir/docs")
+_docs=()
+for _base in "${_bases[@]}"; do
+  [[ -d "$_base" ]] || continue
+  while IFS= read -r _f; do
+    if basename "$_f" | grep -qiE 'arch|screen|structure|system|화면|기획|[-_]ia'; then
+      _doc_is_real "$_f" && _docs+=("$_f")
+    fi
+  done < <(find "$_base" -maxdepth 2 -type f -iname '*.md' 2>/dev/null | LC_ALL=C sort)
+done
+if [[ ${#_docs[@]} -gt 0 ]]; then
+  echo "DOCS_CONTEXT: present ${_docs[*]}"; present=1
+else
+  echo "DOCS_CONTEXT: absent"
+fi
 
 # graphify docs graph (project-root relative, matching /scv:work convention).
 if [[ -d ".graphify/docs/graphify-out" ]]; then
