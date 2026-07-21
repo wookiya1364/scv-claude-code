@@ -84,12 +84,25 @@ scv_is_multi() {
 
 scv_root_path() {
   # Resolve the local working-copy path of the root scv repo (CHILD only).
-  #   root: is a filesystem path that exists       -> print it
-  #   root: is a git URL with a populated cache dir -> print the cache path
+  #   root: relative + module-arg context          -> anchored to the module dir
+  #   root: is a filesystem path that exists        -> print it
+  #   root: is a git URL with a populated cache dir  -> print the cache path
   # Print nothing and return 1 when unresolvable (caller must degrade).
-  local root ws cache
+  local root ws cache anchor
   root="$(scv_root)"
   [[ -n "$root" ]] || return 1
+  # Monorepo module-arg context: SCV_DIR is a NESTED path (e.g. "fe/scv"), so the
+  # command targeted a sibling module and CWD is NOT that module dir. A portable
+  # relative root: (e.g. "..") must anchor to the module dir (parent of SCV_DIR)
+  # so it resolves the same as running from inside the module. The plain
+  # cd-into-module case (SCV_DIR="scv") and absolute/URL roots stay untouched.
+  if [[ "$root" != /* && "$SCV_DIR" == */* ]]; then
+    anchor="$(dirname "$SCV_DIR")"
+    if [[ -d "$anchor/$root" ]]; then
+      ( cd "$anchor/$root" && pwd )
+      return 0
+    fi
+  fi
   if [[ -d "$root" ]]; then
     echo "$root"
     return 0
