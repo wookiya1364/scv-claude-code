@@ -13,6 +13,7 @@ fi
 # Usage:
 #   work.sh                       List active promote plans (no slug → prompt user)
 #   work.sh <slug>                Resolve folder, emit PLAN / TESTS / Related docs
+#   work.sh <module> <slug>       (monorepo) target <module>/scv, e.g. work.sh FE add-x
 #   work.sh <slug> --archive      Move promote/<slug>/ → archive/<slug>/
 #                                 Auto-writes ARCHIVED_AT.md.
 #   work.sh <slug> --archive --reason="..."
@@ -37,28 +38,31 @@ source "$SCRIPT_DIR/lib/env.sh"
 source "$SCRIPT_DIR/lib/scvroot.sh"
 env_load 2>/dev/null || true
 
-# Resolve scv/ (monorepo-nested aware) → PROMOTE_DIR/ARCHIVE_DIR/STATE_FILE (+RAW_DIR).
-scv_init_paths
-
 MODE="prepare"
 TARGET_SLUG=""
 REASON=""
+SCV_TARGET=""
 
 for a in "$@"; do
   case "$a" in
     --archive)    MODE="archive" ;;
     --reason=*)   REASON="${a#--reason=}" ;;
     -h|--help)
-      sed -n '2,15p' "$0"; exit 0 ;;
+      sed -n '2,16p' "$0"; exit 0 ;;
     -*)  echo "Unknown flag: $a" >&2; exit 1 ;;
     *)
-      if [[ -z "$TARGET_SLUG" ]]; then
+      if [[ -z "$SCV_TARGET" && -z "$TARGET_SLUG" ]] && scv_target_path "$a" >/dev/null 2>&1; then
+        SCV_TARGET="$a"          # leading module dir (monorepo), e.g. `work FE <slug>`
+      elif [[ -z "$TARGET_SLUG" ]]; then
         TARGET_SLUG="$a"
       else
         echo "Multiple slugs not supported: $a" >&2; exit 1
       fi ;;
   esac
 done
+
+# Resolve scv/ (monorepo-nested aware; optional leading module target).
+scv_init_paths "$SCV_TARGET"
 
 # ---------- header ----------
 echo "MODE: $MODE"
