@@ -67,19 +67,23 @@ scv_root_dir() {
     return 0
   fi
 
-  # 2. Walk up parents for a marked scv/ (session opened inside a deeper subdir).
+  # 2. Walk up parents for a marked scv/ (session opened inside a deeper subdir),
+  #    but never cross the current git repo boundary — otherwise an outer repo's
+  #    scv/ could be silently read/written/moved from an unrelated inner repo.
+  local top; top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
   local d; d="$(dirname "$PWD")"
   while [[ -n "$d" && "$d" != "/" ]]; do
+    # only inspect dirs INSIDE the current git repo — never attach an outer
+    # (unrelated) repo's scv/. If we know the repo root, break once we'd step
+    # above it (or start above it, e.g. CWD is itself a nested inner repo).
+    if [[ -n "$top" && "$d" != "$top" && "$d" != "$top"/* ]]; then break; fi
     if _scv_is_root "$d/scv"; then
       printf '%s\n' "$d/scv"
       return 0
     fi
+    [[ -n "$top" && "$d" == "$top" ]] && break   # reached the repo root
     d="$(dirname "$d")"
   done
-  if _scv_is_root "/scv"; then
-    printf '/scv\n'
-    return 0
-  fi
 
   # 3. SCV_DIR env — quiet fallback only (opt-in escape hatch, not required).
   if [[ -n "${SCV_DIR:-}" && "${SCV_DIR}" != "scv" && -d "${SCV_DIR}" ]]; then
