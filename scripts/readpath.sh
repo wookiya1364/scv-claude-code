@@ -29,8 +29,18 @@ fi
 
 set -uo pipefail
 
-RAW_DIR="${RAW_DIR:-scv/raw}"
-STATE_FILE="${STATE_FILE:-scv/readpath.json}"
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+# shellcheck source=lib/env.sh
+source "$SCRIPT_DIR/lib/env.sh"
+# shellcheck source=lib/scvroot.sh
+source "$SCRIPT_DIR/lib/scvroot.sh"
+env_load 2>/dev/null || true
+
+# Resolve the scv/ location (monorepo-nested aware) → derive RAW_DIR/STATE_FILE.
+# An explicit RAW_DIR/STATE_FILE passed by a caller still wins (env-override).
+# This is what lets a bare `readpath.sh update` (promote Step 7) write to a
+# nested scv/ (e.g. FE/scv) instead of silently targeting a nonexistent root scv/.
+scv_init_paths
 
 usage() {
   cat <<'EOF'

@@ -1,6 +1,6 @@
 ---
 description: "Show raw changes since last index + list of active promote plans."
-argument-hint: ""
+argument-hint: "[module]"
 allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/status.sh:*)"]
 model: haiku
 ---
@@ -33,6 +33,13 @@ Technical identifiers stay as-is: file paths, slash command names, env var names
 
 - `--ack` — After showing changes, overwrite `scv/readpath.json` with the current state. Use this when you've reviewed the changes but are deferring `/scv:promote`.
 - `--verbose` — Show every changed path (default collapses to 10 per bucket).
+
+## Monorepo (nested scv)
+
+SCV resolves which `scv/` to use from context: `./scv`, else the nearest parent `scv/`. In a monorepo with a per-module scv (e.g. `FE/scv`, `BE/scv`) plus a root umbrella `scv/`, either run from the module dir, or name the module as the first argument:
+
+- `/scv:status FE` — status for `FE/scv` (micro)
+- `/scv:status` from the repo root — status for the root umbrella `scv/` (macro)
 
 ## Typical flow
 

@@ -15,20 +15,34 @@ set -uo pipefail
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 READPATH="$SCRIPT_DIR/readpath.sh"
-
-RAW_DIR="${RAW_DIR:-scv/raw}"
-PROMOTE_DIR="${PROMOTE_DIR:-scv/promote}"
-ARCHIVE_DIR="${ARCHIVE_DIR:-scv/archive}"
-STATE_FILE="${STATE_FILE:-scv/readpath.json}"
+# shellcheck source=lib/env.sh
+source "$SCRIPT_DIR/lib/env.sh"
+# shellcheck source=lib/scvroot.sh
+source "$SCRIPT_DIR/lib/scvroot.sh"
+env_load 2>/dev/null || true
 
 MODE="promote"       # promote | dry-run | graph-only
+SCV_TARGET=""
 
-for a in "$@"; do
-  case "$a" in
+while (( $# )); do
+  case "$1" in
     --dry-run)    MODE="dry-run" ;;
     --graph-only) MODE="graph-only" ;;
+    --topic)      shift ;;   # value-taking flag: consume its SLUG so the value
+                             # is not mistaken for a module target below
+    --topic=*)    ;;         # inline form — nothing extra to consume
+    -*)           ;;         # other/unknown flags ignored (forward-compat)
+    *)
+      if [[ -z "$SCV_TARGET" ]] && scv_target_path "$1" >/dev/null 2>&1; then
+        SCV_TARGET="$1"
+      fi
+      ;;
   esac
+  shift
 done
+
+# Resolve scv/ for this context (optional module target, e.g. `promote FE`).
+scv_init_paths "$SCV_TARGET"
 
 echo "MODE: $MODE"
 echo "TODAY: $(date +%Y-%m-%d)"
@@ -46,7 +60,7 @@ echo "AUTHOR: $AUTHOR"
 
 # Extract STANDARD:VERSION value from scv/CLAUDE.md if present
 # (marker name kept as STANDARD:* for backward compatibility; internal-only)
-if [[ -f scv/CLAUDE.md ]]; then
+if [[ -f "$SCV_DIR/CLAUDE.md" ]]; then
   ver=$(awk '
     {
       s = index($0, "<!-- STANDARD:VERSION -->")
@@ -58,7 +72,7 @@ if [[ -f scv/CLAUDE.md ]]; then
           exit
         }
       }
-    }' scv/CLAUDE.md)
+    }' "$SCV_DIR/CLAUDE.md")
   echo "STANDARD_VERSION: ${ver:-unknown}"
 fi
 
