@@ -1,10 +1,15 @@
 import { SlideDeck } from "@/deck/SlideDeck";
 import { getDeck } from "@/deck/decks";
+import { MarkdownDeck, loadGeneratedDeck } from "@/deck/MarkdownDeck";
 
-// pnpm dev / build:deck = 주제별 기획서 덱.
-// 어느 주제를 볼지는 VITE_DECK_SLUG로 선택(없으면 기본 덱). 주제별로 소스·산출물이 분리된다.
+// VITE_DECK_SLUG selects the deck. A generated (data-driven) deck.json wins;
+// otherwise fall back to a hand-authored deck (the sample). Missing → sample.
 export function App() {
-  const deck = getDeck(import.meta.env.VITE_DECK_SLUG);
+  const slug = import.meta.env.VITE_DECK_SLUG;
+  const generated = loadGeneratedDeck(slug);
+  if (generated) return <MarkdownDeck data={generated} />;
+
+  const deck = getDeck(slug);
   return <SlideDeck slides={deck.slides} deckTitle={deck.title} />;
 }
 
