@@ -7,12 +7,13 @@ model: haiku
 
 # /scv:status
 
-Inspects the project's SCV state (four sections):
+Inspects the project's SCV state:
 
 - **Raw changes**: files under `scv/raw/` added / modified / removed since `scv/readpath.json` was last updated.
 - **Active promote plans**: entries under `scv/promote/` waiting for implementation.
 - **Docs graph**: graphify skill presence + docs graph freshness (`missing` / `built` / `stale` / skill-not-installed).
 - **Archive**: count of completed plans under `scv/archive/`.
+- **Workspace** (multi-repo / monorepo only; silent for single repos): for a CHILD, the incoming handoffs addressed to this repo; for the ROOT umbrella, a coordination view grouping handoffs by target repo and status.
 
 ## Language preference
 
