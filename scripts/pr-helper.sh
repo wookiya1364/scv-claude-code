@@ -43,10 +43,13 @@ source "$SCRIPT_DIR/lib/attachments.sh"
 # shellcheck source=lib/pr-platform.sh
 source "$SCRIPT_DIR/lib/pr-platform.sh"
 
+# shellcheck source=lib/scvroot.sh
+source "$SCRIPT_DIR/lib/scvroot.sh"
 # Load project .env so SCV_ATTACHMENTS_* vars are visible
 env_load 2>/dev/null || true
 
-ARCHIVE_DIR="${ARCHIVE_DIR:-scv/archive}"
+# ARCHIVE_DIR is resolved after arg parsing (scv_init_paths) so an optional
+# leading module target (monorepo) points at the right scv/.
 ARTIFACTS_DIR="${ARTIFACTS_DIR:-.scv-pr-artifacts}"
 TEST_RESULTS_DIR="${TEST_RESULTS_DIR:-test-results}"
 VIDEO_PLACEHOLDER="<!-- SCV_VIDEO_PLACEHOLDER -->"
@@ -74,6 +77,7 @@ DRY_RUN=0
 NO_PUSH=0
 NO_CREATE=0
 SLUG=""
+SCV_TARGET=""            # optional leading module dir (monorepo), e.g. FE
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -83,12 +87,17 @@ while [[ $# -gt 0 ]]; do
     -h|--help)   usage; exit 0 ;;
     -*)          echo "Unknown flag: $1" >&2; exit 1 ;;
     *)
-      if [[ -z "$SLUG" ]]; then SLUG="$1"
+      if [[ -z "$SCV_TARGET" && -z "$SLUG" ]] && scv_target_path "$1" >/dev/null 2>&1; then
+        SCV_TARGET="$1"          # leading module dir (monorepo): pr-helper.sh FE <slug>
+      elif [[ -z "$SLUG" ]]; then SLUG="$1"
       else echo "Multiple slug arguments not supported: $1" >&2; exit 1
       fi
       shift ;;
   esac
 done
+
+# Resolve scv/ (monorepo-nested aware) → ARCHIVE_DIR points at the right scv/.
+scv_init_paths "$SCV_TARGET"
 
 if [[ -z "$SLUG" ]]; then
   echo "ERROR: <slug> is required" >&2

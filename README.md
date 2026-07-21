@@ -23,7 +23,7 @@ Drop materials → Claude refines them with you → implementation runs the test
 <a href="https://github.com/wookiya1364/scv-claude-code/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/wookiya1364/scv-claude-code?label=release&color=blue&cacheSeconds=300" /></a>
 <img alt="License" src="https://img.shields.io/badge/license-MIT-green" />
 <img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude%20Code-plugin-D97757" />
-<img alt="Regression" src="https://img.shields.io/badge/tests-866_PASS-brightgreen" />
+<img alt="Regression" src="https://img.shields.io/badge/tests-867_PASS-brightgreen" />
 <img alt="i18n" src="https://img.shields.io/badge/i18n-EN_·_KO_·_JA-purple" />
 </p>
 
@@ -137,6 +137,7 @@ flowchart LR
 | `/scv:promote` | `scv/raw/` → plan folder (`scv/promote/<slug>/`) with PLAN + TESTS + Mermaid diagrams |
 | `/scv:work <slug>` | Implement · run tests · archive on pass · open PR with e2e video |
 | `/scv:codegen <slug>` | **TDD-first variant** of `/scv:work` (v0.11.0+, *experimental*).<br/>TESTS drives code (Red→Green per case, budget 3).<br/>Uses optional PLAN.md `scope:` / `invariants:` as guards.<br/>Hands archive/PR off to `/scv:work`. |
+| `/scv:deck [<md>]` | **Markdown → spec-grade deck** (DeckUI).<br/>Deterministic transform: headings→slides, GFM tables, ` ```mermaid ` diagrams, KPI tiles, As-Is/To-Be, quality lint — the raw markdown stays in a side panel.<br/>Composes the big picture (architecture) context-first; never invents. Node + pnpm required (this command only). |
 | `/scv:update` | **Plugin self-update guide** — show installed vs latest version, walk through `/plugin marketplace update scv-claude-code` + `/reload-plugins`. Read-only. (v0.11.2+) |
 | `/scv:regression` | Run every archived TESTS as a regression suite |
 | `/scv:report` | Post a phase result to Slack or Discord |
@@ -159,6 +160,8 @@ SCV is single-repo by default. When your system spans several repos (e.g. FE / B
 Cross-repo dependency is **declared explicitly** — never inferred from a diff. Mechanical "FE change → BE test goes red in CI" is out of scope here; that needs a shared contract (OpenAPI/AsyncAPI + contract tests).
 
 **Setup:** in the umbrella repo run `/scv:workspace` → *create umbrella*; in each child repo run `/scv:workspace` → *join*.
+
+**Monorepo (multiple `scv/` in one repo).** Distinct from the cross-repo umbrella above: when a single repo holds a per-module `scv/` (e.g. `FE/scv`, `BE/scv`) plus an optional root `scv/`, every command resolves which `scv/` to use from context (run it from the module dir), or you target one explicitly as a leading arg — `/scv:status FE`, `/scv:work FE <slug>`, `/scv:deck FE`. A standalone single-`scv` repo is unaffected (byte-identical).
 
 ---
 

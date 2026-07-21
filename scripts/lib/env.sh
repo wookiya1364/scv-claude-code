@@ -4,11 +4,20 @@
 env_load() {
   # Load .env from current working directory (project root) if present.
   # Values with spaces should be quoted in .env.
+  #
+  # A user .env may reference unset vars (e.g. DATABASE_URL=...${DB_USER}...) or
+  # hold a $-containing secret. Sourcing it while a caller has `set -u` (nounset)
+  # active would ABORT the whole script — and a `|| true` on the caller does NOT
+  # catch a nounset abort. So relax nounset only around the source, then restore.
   if [[ -f "./.env" ]]; then
+    local _u_was_set=0
+    [[ -o nounset ]] && _u_was_set=1
     set -a
+    set +u
     # shellcheck disable=SC1091
     source "./.env"
     set +a
+    (( _u_was_set )) && set -u
   fi
 }
 
