@@ -3,6 +3,7 @@ description: "Turn a markdown planning doc into a spec-grade single-HTML deck (D
 argument-hint: "[<path-to-markdown>]"
 allowed-tools:
   - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/deck.sh:*)"
+  - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/deck-context.sh:*)"
   - "AskUserQuestion"
   - "Read"
   - "Glob"
@@ -37,6 +38,17 @@ A deck is only as good as its source. A real 기획서 does **not** just list fe
 **delta**, and explains **why**. A flat feature list produces the reaction "그래서
 이게 어디에 붙는 건데?". Before building, make the source have this shape — pulling
 context from the project's own docs, **never inventing** a system it can't see.
+
+**Detect what exists (this drives the B→A flow):**
+
+```!
+"${CLAUDE_PLUGIN_ROOT}/scripts/deck-context.sh" $ARGUMENTS
+```
+
+Parse `BIG_PICTURE:` + `MODE_HINT:` (and the `ARCHITECTURE` / `GRAPHIFY_GRAPH` / `FEATURE_ARCH` source lines).
+
+- **B — `BIG_PICTURE: absent`** → the deck can't show a whole that isn't documented, and you must not invent one. **Establish it first.** Offer via `AskUserQuestion` (default: draft): (1) **draft `<SCV_DIR>/ARCHITECTURE.md`** — a mermaid overview of the existing services/screens/data + short prose, built only from what the repo/user actually shows (user corrects real values); (2) **run `/scv:promote <slug>`** — generates `FEATURE_ARCHITECTURE.md` (a "position in whole" diagram); (3) **proceed feature-only** with a lint warning that the big picture is missing (the minimum). Once it exists, continue to A.
+- **A — `BIG_PICTURE: present`** → pull the sources below and compose the context-first structure.
 
 **Big-picture sources (priority):**
 1. `scv/promote/<slug>/FEATURE_ARCHITECTURE.md` — if this is a promote plan, it already has a "position in whole" diagram with `:::new` nodes.
