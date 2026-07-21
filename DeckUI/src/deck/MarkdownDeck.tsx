@@ -1,6 +1,6 @@
 import { SlideDeck, type Slide } from "@/deck/SlideDeck";
 import { SlideShell, Bullets, Callout, SpecTable } from "@/deck/primitives";
-import { DataTable, Mermaid } from "@/deck/blocks";
+import { DataTable, Mermaid, KpiPanel, GoalsNonGoals } from "@/deck/blocks";
 
 // Data-driven deck: md-to-deck.mjs (deterministic transform) emits a deck.json
 // matching this shape; this component maps typed blocks → DeckUI primitives.
@@ -13,6 +13,8 @@ export type Block =
   | { type: "kv"; rows: [string, string][] }
   | { type: "mermaid"; code: string }
   | { type: "code"; lang?: string; text: string }
+  | { type: "kpi"; items: { label: string; baseline?: string; target?: string }[] }
+  | { type: "goals"; goals: string[]; nongoals: string[] }
   | { type: "callout"; tone: "info" | "good" | "warn" | "danger" | "next"; title?: string; text: string };
 
 export interface DeckSlideData {
@@ -45,6 +47,10 @@ function BlockView({ b }: { b: Block }) {
       return <SpecTable rows={b.rows} />;
     case "mermaid":
       return <Mermaid code={b.code} />;
+    case "kpi":
+      return <KpiPanel items={b.items} />;
+    case "goals":
+      return <GoalsNonGoals goals={b.goals} nongoals={b.nongoals} />;
     case "code":
       return (
         <pre className="overflow-auto rounded-lg border bg-card/40 p-3 font-mono text-xs leading-relaxed text-foreground/90">

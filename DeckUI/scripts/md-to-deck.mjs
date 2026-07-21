@@ -67,6 +67,17 @@ function blockOf(node) {
     case "table": {
       const rows = node.children.map((tr) => tr.children.map((td) => txt(td).trim()));
       const [headers, ...body] = rows;
+      const H = (headers || []).map((h) => h.toLowerCase());
+      const iL = H.findIndex((h) => /지표|metric|kpi/.test(h));
+      const iB = H.findIndex((h) => /현재|baseline|as-?is/.test(h));
+      const iT = H.findIndex((h) => /목표|target|to-?be/.test(h));
+      if (iL >= 0 && iB >= 0 && iT >= 0) {
+        // metric table → KPI tiles (baseline → target)
+        return {
+          type: "kpi",
+          items: body.map((r) => ({ label: r[iL] || "", baseline: r[iB] || "", target: r[iT] || "" })),
+        };
+      }
       return { type: "table", headers: headers || [], rows: body };
     }
     case "blockquote": {
@@ -117,6 +128,25 @@ for (const node of tree.children) {
   }
 }
 pushCur();
+
+// Post-process: a "목표 / 비목표" slide whose bullets are prefixed (목표: / 비목표:)
+// → a Goals/Non-goals split block. Faithful — only reorganizes the author's own
+// bullets, adds nothing.
+for (const s of slides) {
+  if (!/목표|goal/i.test(s.title) || !/비목표|non-?goal|out.?of.?scope|범위 밖/i.test(s.title)) continue;
+  const bi = s.blocks.findIndex((b) => b.type === "bullets");
+  if (bi < 0) continue;
+  const goals = [];
+  const nongoals = [];
+  for (const it of s.blocks[bi].items) {
+    if (/^\s*(비목표|non-?goals?|out of scope)/i.test(it)) {
+      nongoals.push(it.replace(/^\s*(비목표|non-?goals?|out of scope)\s*[:：·\-]?\s*/i, ""));
+    } else {
+      goals.push(it.replace(/^\s*(목표|goals?)\s*[:：·\-]?\s*/i, ""));
+    }
+  }
+  if (goals.length || nongoals.length) s.blocks[bi] = { type: "goals", goals, nongoals };
+}
 
 // Lint: canonical planning-doc sections (KO/EN aliases). Warn — never fill in.
 const headingTexts = tree.children.filter((n) => n.type === "heading").map((n) => txt(n).toLowerCase());
