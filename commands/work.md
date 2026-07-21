@@ -49,7 +49,9 @@ First, gather context:
 
 > **Monorepo (nested scv)** — pass a module dir as the first argument to target its scv: `/scv:work FE <slug>` operates on `FE/scv`. Omit it to use the current dir's `scv/` (or nearest parent).
 
-Parse the header (`MODE:`, `TARGET_SLUG:`, `PLAN_FILE:`, `TESTS_FILE:`, `GRAPHIFY_SKILL:`, `GRAPH_STATUS:`) and the three content blocks (`=== active promote plans ===`, `=== related documents (from PLAN.md) ===`, `=== external refs (from PLAN.md frontmatter refs:) ===`).
+Parse the header (`MODE:`, `SCV_DIR:`, `TARGET_SLUG:`, `PLAN_FILE:`, `TESTS_FILE:`, `GRAPHIFY_SKILL:`, `GRAPH_STATUS:`) and the three content blocks (`=== active promote plans ===`, `=== related documents (from PLAN.md) ===`, `=== external refs (from PLAN.md frontmatter refs:) ===`).
+
+> **Monorepo module threading** — if `SCV_DIR:` is **not** plain `scv` (i.e. the user targeted a nested module, e.g. `/scv:work FE <slug>` → `SCV_DIR: FE/scv`), pass that `SCV_DIR` value as the **leading arg** to every lifecycle helper in Step 9 — `regression.sh <SCV_DIR>`, `work.sh <SCV_DIR> <slug> --archive`, `pr-helper.sh <SCV_DIR> <slug>` — so Steps 9a/9b/9d all operate on the SAME scv/. Omitting it makes the Step-9a regression gate run against the wrong scv and pass **without testing (false green)**. For a plain `scv` (standalone/root), pass nothing extra.
 
 ## Protocol
 
@@ -208,7 +210,7 @@ Options:
 If Yes:
 
 ```
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/regression.sh --quiet
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/regression.sh [<SCV_DIR>] --quiet
 ```
 
 Result handling:
@@ -226,7 +228,7 @@ Only if tests fully passed in Step 7 (and Step 9a passed or was skipped):
 
 | User posture | Action |
 |---|---|
-| Pre-declared (e.g., "auto-archive when tests pass" / "tests 통과하면 알아서 archive 해", spoken earlier in this conversation) | Auto-invoke: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/work.sh <slug> --archive --reason="tests passed"`. Report the ARCHIVED: line. |
+| Pre-declared (e.g., "auto-archive when tests pass" / "tests 통과하면 알아서 archive 해", spoken earlier in this conversation) | Auto-invoke: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/work.sh [<SCV_DIR>] <slug> --archive --reason="tests passed"`. Report the ARCHIVED: line. |
 | No pre-declaration | Use `AskUserQuestion`: "All tests passed. Archive `<slug>` now?" with options: **Archive now** / **Keep in promote** / **Let me review first**. Proceed per answer. |
 | User says no (keep in promote) | Update PLAN.md frontmatter `status: done` but leave the folder in `scv/promote/`. |
 
@@ -417,7 +419,7 @@ options:
 **On [1] Yes**:
 
 ```
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/pr-helper.sh <slug>
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/pr-helper.sh [<SCV_DIR>] <slug>
 ```
 
 The helper reads `archive/<slug>/PLAN.md`'s `epic:` / `kind:` to determine the base branch and performs commit + push + gh pr create. The last line of the output should be `PR created: <URL>` — report that URL to the user.
