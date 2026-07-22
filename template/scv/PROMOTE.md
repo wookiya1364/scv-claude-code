@@ -387,8 +387,42 @@ npm run test:auth
 -->
 ```
 
+### Per-slug E2E spec — video-faithful PRs (v0.16.0+)
+
+When a plan ships or changes **user-facing behavior** (Playwright project), give it
+its **own** E2E spec and scope `## How to run` to that spec only — that spec is what
+`/scv:work` / `/scv:codegen` record into the PR video:
+
+```bash
+pnpm exec playwright test e2e/<YYYYMMDD>-<AUTHOR>-<slug>.spec.ts   # this plan's spec ONLY (use your testDir)
+```
+
+- The PR video then shows **that feature**, not a shared smoke or the whole suite.
+  Feature videos on green PRs require `video: 'on'` (the template default — see §3.3
+  in `scv/TESTING.md`; `retain-on-failure` would leave a passing feature PR videoless).
+- `/scv:regression` re-runs each *archived* slug's `## How to run`, so the feature is
+  re-verified exactly as in its PR; the accumulated per-slug specs are the full suite.
+- Keep the block to the **spec only** — don't bundle project-wide `tsc -b` / lint: a
+  multi-line block gates on the last command's exit only, and a global typecheck in
+  every slug fails all slugs at once on one unrelated error.
+- Pure-logic plans keep a unit `## How to run` and no e2e spec (test pyramid).
+  Non-Playwright (Cypress/…) projects: SCV auto-attach is Playwright-only.
+- `/scv:promote` offers to scaffold this for UI plans (spec stub + scoped `## How to
+  run`, with your approval; it writes into your test tree, e.g. `e2e/`). If you later
+  remove a feature's spec, supersede/obsolete its slug so the archived command doesn't dangle.
+
 ### TESTS.md minimum requirements (for pass judgment)
 
+**The floor is the user's features.** Every feature / behavior the user described — in
+the `/scv:help` conversation or the `/scv:promote` dialog — must appear as a concrete,
+**detailed** `## Test scenarios` entry. That set is the **minimum requirement**, and it
+equals what the PR ships: never drop, merge away, or vaguen a user-stated feature to
+make authoring easier. You MAY *add* supplementary tests on top (e.g. unit tests for
+pure logic, extra edge cases) — additions are welcome; only falling **below** the
+user-stated features is forbidden. For a UI plan, the per-slug E2E spec (above) must
+assert these same user-facing features, so the PR video shows what the user asked for.
+
+- [ ] **Every user-stated feature/behavior is a detailed TESTS scenario** (the floor above — this = the PR's shipped features)
 - [ ] **How to run** is written as a clear command (`bash` / `npm` / `pnpm` / etc.)
 - [ ] **Pass criterion** for each scenario is stated as an observable form
 - [ ] **Pass criteria** block contains the "overall done declaration condition"
