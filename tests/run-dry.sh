@@ -3302,8 +3302,8 @@ assert_contains "$README" 'how did we handle refunds last quarter?"` (v0.10.0+)'
 assert_contains "$README" '지난 분기 결제 archive 보여줘"` (v0.10.0+)'
 assert_contains "$README" '先四半期の決済関連 archive を見せて"` (v0.10.0+)'
 
-# plugin.json — version 0.15.1
-assert_contains "$STANDARD_ROOT/.claude-plugin/plugin.json" '"version": "0.15.1"'
+# plugin.json — version 0.16.0
+assert_contains "$STANDARD_ROOT/.claude-plugin/plugin.json" '"version": "0.16.0"'
 
 # v0.10.2 — heredoc-quoted $ARGUMENTS so raw user input survives shell evaluation
 assert_contains "$HELP_CMD" "__SCV_HELP_ARG_EOF__"
