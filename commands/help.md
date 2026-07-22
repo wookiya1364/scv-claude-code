@@ -227,6 +227,8 @@ Use `Edit` (append) — never overwrite. The file persists turn-by-turn so the u
 
 You decide when the three goals (goal / scope / acceptance) are clear enough. **Be soft, not strict**: if scope is mostly clear and there's at least one concrete acceptance criterion, that's enough — the user can refine more during `/scv:promote`.
 
+**The features/acceptance that come out of this conversation are the minimum requirement.** When you promote, each becomes a **detailed TESTS.md scenario** — that set equals what the PR ships. You may add supplementary tests on top (e.g. unit tests), but never author TESTS that fall below the user-stated features. (See `scv/PROMOTE.md` → "TESTS.md minimum requirements".)
+
 Also offer the choice when:
 - The user asks "is this enough yet?" / "should we move forward?"
 - 8+ turns have happened (sanity cap — don't let it drag on forever)
