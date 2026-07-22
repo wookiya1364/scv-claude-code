@@ -42,7 +42,7 @@ merge_policy: merge-on-markers
 | Type | Path pattern | Notes |
 |---|---|---|
 | Screenshot | `test-results/**/*.png` | by recent mtime |
-| Video | `test-results/**/*.{webm,mp4}` | failed tests |
+| Video | `test-results/**/*.{webm,mp4}` | all runs (`video: 'on'`) |
 | Trace | `test-results/**/trace.zip` | optional |
 | MCP artifact | `test-results/mcp/**` | manual scenarios |
 | Log | `test-results/logs/*.log` | tail 20KB on failure |
@@ -62,8 +62,9 @@ export default defineConfig({
   ],
   use: {
     trace: 'retain-on-failure',
-    screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
+    screenshot: 'only-on-failure', // PR screenshots are committed to the PR branch — keep off on green (history bloat)
+    video: 'on',                   // SCV attaches this to the PR (§3.3); green runs MUST record
+    //                             // (retain-on-failure would leave a passing feature PR with no video)
   },
 });
 ```
