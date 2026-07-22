@@ -452,6 +452,17 @@ assert_contains "$PROMOTE_CMD" "invariants:"
 assert_contains "$PROMOTE_CMD" "Socratic deepening"
 assert_contains "$PROMOTE_CMD" "v0.11.1+"
 assert_contains "$PROMOTE_CMD" "shallow-base + opt-in-depth"
+# v0.16.0+ — per-slug E2E spec (video-faithful PRs): promote scaffolds e2e/<slug>.spec.ts
+# and scopes TESTS ## How to run to that spec (see PROMOTE.md §5).
+assert_contains "$PROMOTE_CMD" "Per-slug E2E spec (video-faithful, v0.16.0+)"
+assert_contains "$PROMOTE_CMD" "pnpm exec playwright test <testDir>/<FOLDER_NAME>.spec.ts"
+assert_contains "$PROMOTE_TPL" "Per-slug E2E spec — video-faithful PRs (v0.16.0+)"
+assert_contains "$PROMOTE_TPL" "pnpm exec playwright test e2e/<YYYYMMDD>-<AUTHOR>-<slug>.spec.ts"
+# v0.16.0+ — TESTS minimum requirement: every user-conversation-derived feature is a
+# detailed scenario (= the PR's shipped features); supplementary tests may be added, never fewer.
+assert_contains "$PROMOTE_TPL" "Every user-stated feature/behavior is a detailed TESTS scenario"
+assert_contains "$PROMOTE_CMD" "minimum requirement"
+assert_contains "$HELP_CMD" "features/acceptance that come out of this conversation are the minimum requirement"
 
 echo
 echo "=== [11g'''] /scv:update — plugin update guide (v0.11.2+) ==="
@@ -3291,8 +3302,8 @@ assert_contains "$README" 'how did we handle refunds last quarter?"` (v0.10.0+)'
 assert_contains "$README" '지난 분기 결제 archive 보여줘"` (v0.10.0+)'
 assert_contains "$README" '先四半期の決済関連 archive を見せて"` (v0.10.0+)'
 
-# plugin.json — version 0.15.1
-assert_contains "$STANDARD_ROOT/.claude-plugin/plugin.json" '"version": "0.15.1"'
+# plugin.json — version 0.16.0
+assert_contains "$STANDARD_ROOT/.claude-plugin/plugin.json" '"version": "0.16.0"'
 
 # v0.10.2 — heredoc-quoted $ARGUMENTS so raw user input survives shell evaluation
 assert_contains "$HELP_CMD" "__SCV_HELP_ARG_EOF__"
