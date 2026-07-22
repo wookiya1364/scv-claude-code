@@ -153,9 +153,20 @@ If user picks **[1] Yes**: use `Edit` to insert `video: 'on'` into the `use:` bl
 
 If user picks **[2] No**: continue without modifying config.
 
-If `video:` is already `'on'` / `'retain-on-failure'` / `'retry-with-video'`: skip silently (already configured).
+If `video:` is already `'on'`: skip silently (already records every run — nothing to do).
 
-This flow runs **once per project** in practice — after first Yes, video config is permanent.
+If `video:` is `'retain-on-failure'` or `'retry-with-video'`: these record **nothing on a passing run**, so a **green** feature PR would have no video. Surface it via `AskUserQuestion` (default Yes):
+
+   ```
+   Question: "Playwright video is set to `<mode>`, which records nothing on a passing run — so feature PRs won't get a video. Switch to video: 'on'?"
+   options:
+   [1] "Yes — switch to video: 'on' (recommended for feature-visible PRs)"
+   [2] "No — keep `<mode>` (green PRs stay videoless)"
+   ```
+
+   On **Yes**, `Edit` the mode to `'on'`. On **No**, leave the config untouched.
+
+This flow runs **once per project** in practice — after the config is `'on'` (or the user declines), it stays put.
 
 ##### Non-Playwright notice (Cypress / Puppeteer / others)
 

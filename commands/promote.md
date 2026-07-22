@@ -396,7 +396,7 @@ refs: []
 - Related PRs:
 ```
 
-**`scv/promote/<folder>/TESTS.md`**:
+**`scv/promote/<folder>/TESTS.md`** — author `## Test scenarios` so that **every feature / behavior from the source** (the `/scv:help` conversation and/or `scv/raw/`) is its **own concrete, detailed** scenario. That set is the **minimum requirement** and equals what the PR ships — never drop, merge away, or vaguen a user-stated feature. You MAY add supplementary tests on top (e.g. unit tests for pure logic, edge cases); additions are welcome, subtractions are not. For a UI plan, the per-slug E2E spec must assert these same user-facing features.
 
 ```markdown
 # Test Plan — <TITLE>
@@ -431,6 +431,20 @@ refs: []
 - [`tests/e2e-scenarios.md`](./tests/e2e-scenarios.md)
 -->
 ```
+
+**Per-slug E2E spec (video-faithful, v0.16.0+)** — when the plan ships or changes **user-facing behavior** AND the project is a Playwright project (`playwright.config.*` exists), give the plan its **own** E2E spec and scope its `## How to run` to that spec. This is what makes the PR video show *this* feature. (Non-Playwright project — Cypress/Puppeteer/none: see `/scv:work` Step 5b's framework notice; SCV auto-attach is Playwright-only, so adapt the command or skip. Pure-logic plan: keep a unit `## How to run`, no e2e spec — test pyramid in `scv/TESTING.md`.)
+
+- **Offer to create** (per the explicit-approval rule above — this writes into the project's test tree, *outside* `scv/`) `<testDir>/<FOLDER_NAME>.spec.ts`, reading `testDir` from `playwright.config.*` (commonly `e2e/`). Author it from PLAN.md as the feature's happy-path flow — log in, navigate to the feature's route, assert the key behavior:
+  - **feature / new UI** → write it **TDD Red** (fails now, passes once implemented) — aligns with `/scv:codegen` Step 6.
+  - **UI refactor (same behavior)** → assert the unchanged behavior (may already pass — a regression guard, not Red).
+  - **retirement** → assert the removal (e.g. route 404 / element gone).
+- Set the plan's `## How to run` to **that spec only** — match the file's `testDir`, and do **not** use the whole-suite `pnpm test:e2e`:
+  ```bash
+  pnpm exec playwright test <testDir>/<FOLDER_NAME>.spec.ts
+  ```
+  Keep project-wide checks (typecheck / lint) **out** of the per-slug block: `/scv:regression` runs the block as one shell call, so a multi-line block gates on the **last** command's exit only, and a whole-project `tsc -b` in every slug would make one unrelated type error fail *every* archived slug at once. Project-wide checks belong in CI or their own regression entry.
+
+**Why per-slug**: `/scv:work` / `/scv:codegen` record whatever `## How to run` executes (Playwright records video when `video: 'on'` — SCV's template default, Step 5b) and attach it to the PR, so scoping to this slug's spec makes the **PR video show THIS feature** instead of a shared login→dashboard smoke or every test at once. `/scv:regression` later re-runs each *archived* slug's `## How to run`, so the feature is re-verified exactly as in its PR and the accumulated per-slug specs form the full E2E suite. The per-slug spec is a **test contract** — `/scv:codegen` must not weaken it just to reach Green (same spirit as the TESTS.md-immutability rule, even though the spec is editable code). The full-slug filename is unique per plan; if you later remove a feature and its spec, **supersede/obsolete that slug** so the archived command doesn't dangle. In a nested monorepo module, create the spec under the module's own `testDir` and run from the module dir.
 
 **Populating `refs:`**: replace the `refs: []` placeholder with the merged set from Step 2.1 (deliberate-source extraction) + Step 3.1.5 (dialog-answer extraction). Use the canonical YAML form:
 
