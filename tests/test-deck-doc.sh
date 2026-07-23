@@ -41,6 +41,10 @@
 #      scripts/render-template.sh (anything unrecognized falls back to English); the
 #      doc/slide byte-identical invariant holds under a non-default SCV_LANG too (both
 #      CLIs read the same env var).
+#  16. screen-mockup theme override (project-token priority): absent by default (scv
+#      skin), a valid `theme` field emits validated inline --wf-* vars with COMPUTED
+#      on-primary/tint derivatives, and invalid/malicious values are dropped silently
+#      (never reach the HTML in any form — no CSS/attribute injection).
 set -uo pipefail
 
 HERE="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -365,6 +369,28 @@ if diff -q "$ROOT/DeckUI/src/deck/decks/$SLUG/deck.json" "$TMP/$SLUG.deck.json" 
 else
   echo "  ✗ doc/slide transform diverge under SCV_LANG=korean (lint messages must match between the two CLIs)"; fail=$((fail+1))
 fi
+
+# 16. screen-mockup "theme" override — scv-native skin is the default (1순위=project
+#     tokens only when told, 2순위=scv skin otherwise); Claude supplies base hex only,
+#     render.mjs derives readable on-primary text + translucent badge tints itself
+#     (never repeat the WCAG hardcoded-white bug for a project-supplied color either).
+printf '# T\n\n## S\n\n```screen\n{"theme":{"primary":"#5a6cff","success":"#22c55e"},"body":[{"type":"button","label":"x","variant":"primary"},{"type":"badge","label":"y","tone":"good"}]}\n```\n' > "$TMP/theme-ok.md"
+node "$DECKDOC/doc.mjs" "$TMP/theme-ok.md" --out "$TMP/theme-ok.html" --no-source >/dev/null 2>&1
+has "$TMP/theme-ok.html" 'style="--wf-primary:#5a6cff' "valid theme.primary emits an inline --wf-primary override"
+has "$TMP/theme-ok.html" '--wf-primary-fg:#ffffff'     "on-primary text is COMPUTED (luminance), not left at the scv-native default"
+has "$TMP/theme-ok.html" '--wf-success-bg:rgba(34,197,94,0.15)' "translucent badge background is derived from the base hex, not authored by hand"
+
+printf '# T\n\n## S\n\n```screen\n{"body":[{"type":"text","value":"no theme field at all"}]}\n```\n' > "$TMP/theme-absent.md"
+node "$DECKDOC/doc.mjs" "$TMP/theme-absent.md" --out "$TMP/theme-absent.html" --no-source >/dev/null 2>&1
+hasnt "$TMP/theme-absent.html" 'style="--wf-' "no theme field → no inline style at all (scv-native skin, unchanged from before this feature)"
+
+# malicious/invalid values (CSS/attribute-injection attempt + garbage) are dropped
+# silently, never reach the emitted HTML in ANY form.
+printf '# T\n\n## S\n\n```screen\n{"theme":{"primary":"javascript:alert(1)","bg":"not-a-color","radius":"10px; }</style><script>alert(1)</script>"},"body":[{"type":"text","value":"x"}]}\n```\n' > "$TMP/theme-bad.md"
+node "$DECKDOC/doc.mjs" "$TMP/theme-bad.md" --out "$TMP/theme-bad.html" --no-source >/dev/null 2>&1
+hasnt "$TMP/theme-bad.html" 'javascript:'  "an invalid/malicious primary value never reaches the output"
+hasnt "$TMP/theme-bad.html" '10px; }'      "the attribute-breakout PAYLOAD (not the document's own, always-present, unrelated </style> tag) never reaches the output"
+hasnt "$TMP/theme-bad.html" '<script>alert(1)</script>' "no raw <script> ever gets injected via a theme field"
 
 echo ""
 echo "test-deck-doc: $pass passed, $fail failed"
