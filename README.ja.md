@@ -133,7 +133,7 @@ flowchart LR
 | `/scv:promote` | `scv/raw/` → plan フォルダ (`scv/promote/<slug>/`) — PLAN + TESTS + Mermaid 図 |
 | `/scv:work <slug>` | 実装 · テスト実行 · 通過時に archive · e2e 動画添付の PR を自動作成 |
 | `/scv:codegen <slug>` | **TDD-first 変形** (v0.11.0+, *experimental*).<br/>TESTS がコードのドライバ。case 単位の Red→Green (budget 3)。<br/>PLAN.md `scope:` / `invariants:` をガードとして使用。<br/>archive/PR は `/scv:work` に委譲。 |
-| `/scv:deck [<md>]` | **Markdown → 仕様レベルのデッキ** (DeckUI).<br/>決定論的変換: 見出し→スライド, GFM テーブル, ` ```mermaid ` 図, KPI タイル, As-Is/To-Be, 品質 lint — 元の Markdown は右パネルに保持。<br/>全体像(アーキテクチャ)を context-first で構成、捏造しない。Node+pnpm 必要(このコマンドのみ)。 |
+| `/scv:deck [<md>]` | **Markdown → 企画書 HTML.** 既定: ビルド不要の自己完結**ドキュメント**(上から下へ読み、PDF 印刷); **スライドプレゼン**を頼めば DeckUI デッキに。<br/>決定論的変換: 見出し→セクション, GFM テーブル, ` ```mermaid ` 図(CDN, オフライン時はコードテキストへ自動フォールバック), KPI タイル, As-Is/To-Be, 品質 lint — 元の Markdown が一緒に付く。<br/>全体像(アーキテクチャ)を context-first で構成、捏造しない。Node+pnpm 必要(このコマンドのみ; ドキュメント経路はスリム ~7MB のみ)。 |
 | `/scv:update` | **プラグイン self-update ガイド** (v0.11.2+).<br/>インストール済み vs 最新バージョン表示。<br/>`/plugin marketplace update scv-claude-code` + `/reload-plugins` への案内。<br/>read-only。 |
 | `/scv:regression` | archive された全 TESTS を回帰として実行 |
 | `/scv:report` | フェーズ結果を Slack / Discord に通知 |

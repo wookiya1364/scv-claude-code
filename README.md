@@ -137,7 +137,7 @@ flowchart LR
 | `/scv:promote` | `scv/raw/` → plan folder (`scv/promote/<slug>/`) with PLAN + TESTS + Mermaid diagrams |
 | `/scv:work <slug>` | Implement · run tests · archive on pass · open PR with e2e video |
 | `/scv:codegen <slug>` | **TDD-first variant** of `/scv:work` (v0.11.0+, *experimental*).<br/>TESTS drives code (Red→Green per case, budget 3).<br/>Uses optional PLAN.md `scope:` / `invariants:` as guards.<br/>Hands archive/PR off to `/scv:work`. |
-| `/scv:deck [<md>]` | **Markdown → spec-grade deck** (DeckUI).<br/>Deterministic transform: headings→slides, GFM tables, ` ```mermaid ` diagrams, KPI tiles, As-Is/To-Be, quality lint — the raw markdown stays in a side panel.<br/>Composes the big picture (architecture) context-first; never invents. Node + pnpm required (this command only). |
+| `/scv:deck [<md>]` | **Markdown → 기획서 HTML.** Default: a buildless, self-contained **document** (scroll top-to-bottom, prints to PDF); ask for a **slide presentation** to build the DeckUI deck instead.<br/>Deterministic transform: headings→sections, GFM tables, ` ```mermaid ` diagrams (CDN, with offline text fallback), KPI tiles, As-Is/To-Be, quality lint — the raw markdown travels with it.<br/>Composes the big picture (architecture) context-first; never invents. Node + pnpm required (this command only; the document path installs just a slim ~7MB stack). |
 | `/scv:update` | **Plugin self-update guide** — show installed vs latest version, walk through `/plugin marketplace update scv-claude-code` + `/reload-plugins`. Read-only. (v0.11.2+) |
 | `/scv:regression` | Run every archived TESTS as a regression suite |
 | `/scv:report` | Post a phase result to Slack or Discord |
