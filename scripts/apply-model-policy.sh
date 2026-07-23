@@ -155,7 +155,10 @@ if [[ "$FROM_ENV" == "1" ]]; then
     echo "no .env at $ENV_FILE — skipping model policy apply."
     exit 0
   fi
-  POLICY="$(grep -E '^SCV_MODEL_POLICY=' "$ENV_FILE" | tail -n1 | sed 's/^SCV_MODEL_POLICY=//' | tr -d '"' | tr -d "'" | tr -d '[:space:]')"
+  # `grep` exits 1 when SCV_MODEL_POLICY= isn't in .env (a valid, expected case —
+  # handled below by the -z check). Under `set -o pipefail` that non-zero would
+  # otherwise abort the whole script before reaching that check; `|| true` neutralizes it.
+  POLICY="$(grep -E '^SCV_MODEL_POLICY=' "$ENV_FILE" | tail -n1 | sed 's/^SCV_MODEL_POLICY=//' | tr -d '"' | tr -d "'" | tr -d '[:space:]' || true)"
   if [[ -z "$POLICY" ]]; then
     echo "SCV_MODEL_POLICY not set in $ENV_FILE — skipping."
     exit 0
