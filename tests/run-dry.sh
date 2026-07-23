@@ -2675,6 +2675,20 @@ assert_contains "$PROMOTE_CMD" "Never invent a screen, a data column, or a butto
 assert_contains "$PROMOTE_CMD" "always static illustrations"
 assert_contains "$PROMOTE_CMD" "Added N screen mockup(s)"
 
+# Step 6.4 — style priority: scv skin default, project tokens only when told (v0.19.0+)
+assert_contains "$PROMOTE_CMD" "Style priority — scv skin first, project tokens only when told"
+assert_contains "$PROMOTE_CMD" "2순위 default: the scv-native skin"
+assert_contains "$PROMOTE_CMD" "do not go hunting for the project's real colors unprompted"
+assert_contains "$PROMOTE_CMD" "1순위 override: only when the user has told you this project has its own design tokens"
+assert_contains "$PROMOTE_CMD" 'DESIGN.md` §5 "Design tokens"'
+assert_contains "$PROMOTE_CMD" '"primary": "#5a6cff", "success": "#22c55e", "danger": "#f4556d"'
+assert_contains "$PROMOTE_CMD" "Base hex colors only"
+assert_contains "$PROMOTE_CMD" "Do **not** compute paired values yourself"
+assert_contains "$PROMOTE_CMD" "failed WCAG contrast for some palettes"
+assert_contains "$PROMOTE_CMD" "silently dropped by the renderer and falls back to the scv-native default"
+assert_contains "$PROMOTE_CMD" "Glass/blur/translucency effects"
+assert_contains "$PROMOTE_CMD" "not** supported by this override yet"
+
 assert_contains "$PROMOTE_CMD" "Step 6.5 — Self-review"
 assert_contains "$PROMOTE_CMD" "silently re-read the FEATURE_ARCHITECTURE.md"
 assert_contains "$PROMOTE_CMD" "Coverage**: every component named in PLAN.md"
@@ -2687,6 +2701,10 @@ assert_contains "$PROMOTE_CMD" "Dashed edges"
 assert_contains "$PROMOTE_CMD" "Mermaid fence"
 assert_contains "$PROMOTE_CMD" "Screen mockups valid JSON"
 assert_contains "$PROMOTE_CMD" "Screen mockups faithful"
+assert_contains "$PROMOTE_CMD" "Screen mockup \`theme\` only when told"
+assert_contains "$PROMOTE_CMD" "confirm the user actually said this project has design tokens"
+assert_contains "$PROMOTE_CMD" "remove \`theme\` if you added it speculatively"
+assert_contains "$PROMOTE_CMD" "copied verbatim from the real source"
 assert_contains "$PROMOTE_CMD" "Self-review: added 1 missing component"
 
 # work.md Step 9d-main — FEATURE_ARCHITECTURE.md inline 도식 안내
@@ -3335,8 +3353,8 @@ assert_contains "$README" 'how did we handle refunds last quarter?"` (v0.10.0+)'
 assert_contains "$README" '지난 분기 결제 archive 보여줘"` (v0.10.0+)'
 assert_contains "$README" '先四半期の決済関連 archive を見せて"` (v0.10.0+)'
 
-# plugin.json — version 0.18.0
-assert_contains "$STANDARD_ROOT/.claude-plugin/plugin.json" '"version": "0.18.0"'
+# plugin.json — version 0.19.0
+assert_contains "$STANDARD_ROOT/.claude-plugin/plugin.json" '"version": "0.19.0"'
 
 # v0.10.2 — heredoc-quoted $ARGUMENTS so raw user input survives shell evaluation
 assert_contains "$HELP_CMD" "__SCV_HELP_ARG_EOF__"
