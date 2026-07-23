@@ -2602,7 +2602,7 @@ assert_contains "$PROMOTE_CMD" "FEATURE_ARCHITECTURE.md if generated"
 
 # commands/promote.md — Step 7 passes the already-resolved LANG_RESOLVED to deck.sh
 # (deck UI chrome must match the language Steps 5/6 already wrote PLAN/TESTS/FEATURE_ARCHITECTURE in)
-assert_contains "$PROMOTE_CMD" '--lang <LANG_RESOLVED>'
+assert_contains "$PROMOTE_CMD" '--lang "<LANG_RESOLVED>"'
 assert_contains "$PROMOTE_CMD" "already resolved in Step 0 — the deck's UI chrome"
 
 # commands/deck.md — Language preference section + --lang pass-through to deck.sh
@@ -2615,8 +2615,25 @@ assert_contains "$DECK_CMD" "never the user's own PLAN.md/TESTS.md/screen-mockup
 
 # commands/work.md — archive-time deck refresh passes the archived PLAN's own lang:
 # frontmatter (not a fresh Step-0-style resolve) so chrome matches the plan's content language
-assert_contains "$WORK_CMD" '--lang <PLAN_LANG>'
+assert_contains "$WORK_CMD" '--lang "<PLAN_LANG>"'
 assert_contains "$WORK_CMD" "the same field Step 9d reads"
+
+# Placeholder shell-redirection collision fix (v0.19.2+): a bare `<name>` after a
+# space in an executable ```! fence is a live bash input-redirection operator, not
+# just documentation — if Claude ever executes the fence without substituting the
+# placeholder first, bash tries to open a file literally named after it instead of
+# erroring clearly. Reported for real: promote.md's `handoff.sh mark <handoff_id>
+# claimed` on an unrelated project produced "no such file or directory: handoff_id".
+# Fix: quote every such placeholder so an unsubstituted run degrades to a literal,
+# script-level argument instead of a cryptic shell error (substituted runs are
+# unaffected — quoting a single-word value changes nothing).
+HANDOFF_CMD="$STANDARD_ROOT/commands/handoff.md"
+WORKSPACE_CMD="$STANDARD_ROOT/commands/workspace.md"
+assert_contains "$PROMOTE_CMD" 'adopt "<handoff_id>"'
+assert_contains "$PROMOTE_CMD" 'mark "<handoff_id>" claimed'
+assert_contains "$HANDOFF_CMD" '--to "<to_repo>" --slug "<slug>" --title "<title>" --decision "<needed|maybe|not-needed>" [--from-slug "<slug>"] [--ref-pr "<url>"]'
+assert_contains "$HANDOFF_CMD" '"${CLAUDE_PLUGIN_ROOT}/scripts/handoff.sh" "<module>" write --to "<to_repo>" --slug "<slug>" --title "<title>"'
+assert_contains "$WORKSPACE_CMD" '--root "<URL>" --id "<id>" --role "<role>" --workspace "<ws>"'
 
 # template/scv/PROMOTE.md — §5b spec 추가
 assert_contains "$PROMOTE_DOC" "## 5b. FEATURE_ARCHITECTURE.md"
@@ -3353,8 +3370,8 @@ assert_contains "$README" 'how did we handle refunds last quarter?"` (v0.10.0+)'
 assert_contains "$README" '지난 분기 결제 archive 보여줘"` (v0.10.0+)'
 assert_contains "$README" '先四半期の決済関連 archive を見せて"` (v0.10.0+)'
 
-# plugin.json — version 0.19.1
-assert_contains "$STANDARD_ROOT/.claude-plugin/plugin.json" '"version": "0.19.1"'
+# plugin.json — version 0.19.2
+assert_contains "$STANDARD_ROOT/.claude-plugin/plugin.json" '"version": "0.19.2"'
 
 # v0.10.2 — heredoc-quoted $ARGUMENTS so raw user input survives shell evaluation
 assert_contains "$HELP_CMD" "__SCV_HELP_ARG_EOF__"
