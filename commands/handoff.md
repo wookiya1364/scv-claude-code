@@ -48,7 +48,7 @@ technical identifiers as-is (`repo_id`, `handoff_id`, slash commands, paths).
 3. **Write + commit to the root** (commits locally; does NOT push):
 
    ```!
-   "${CLAUDE_PLUGIN_ROOT}/scripts/handoff.sh" write --to <to_repo> --slug <slug> --title "<title>" --decision <needed|maybe|not-needed> [--from-slug <slug>] [--ref-pr <url>] --body-file /tmp/scv-handoff-body.md --why-file /tmp/scv-handoff-why.md
+   "${CLAUDE_PLUGIN_ROOT}/scripts/handoff.sh" write --to "<to_repo>" --slug "<slug>" --title "<title>" --decision "<needed|maybe|not-needed>" [--from-slug "<slug>"] [--ref-pr "<url>"] --body-file /tmp/scv-handoff-body.md --why-file /tmp/scv-handoff-why.md
    ```
 
    If it prints a graceful-degrade message (root unreachable), tell the user the
@@ -78,7 +78,7 @@ When the umbrella and its modules live in one git repo, you can address a module
 without `cd`-ing into it by giving its dir as the **leading** argument:
 
 ```!
-"${CLAUDE_PLUGIN_ROOT}/scripts/handoff.sh" <module> write --to <to_repo> --slug <slug> --title "<title>" …
+"${CLAUDE_PLUGIN_ROOT}/scripts/handoff.sh" "<module>" write --to "<to_repo>" --slug "<slug>" --title "<title>" …
 ```
 
 e.g. `handoff.sh fe write …` operates on `fe/scv` exactly as if run from inside
