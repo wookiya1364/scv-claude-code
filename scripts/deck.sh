@@ -21,7 +21,12 @@ fi
 # Both share ONE transform (deckdoc/transform.mjs → deck data) so the document and
 # the slide deck can never diverge; neither ever invents content.
 #
-# Usage:  deck.sh <input.md> [slug] [--slides] [--out <path>] [--mermaid cdn|none] [--no-source]
+# Usage:  deck.sh <input.md> [slug] [--slides] [--out <path>] [--mermaid cdn|none]
+#                  [--lang english|korean|japanese] [--no-source]
+#   --lang: the deck UI chrome's language (English default — same SCV_LANG convention
+#   as scripts/render-template.sh). Caller (commands/deck.md) resolves LANG_RESOLVED
+#   the same way every other command does and passes it here; omit to fall back to
+#   the project's .env SCV_LANG, or English if that's unset too.
 # Emits (for commands/deck.md to parse):
 #   DECK_SLUG: <slug>
 #   LINT: <n> warning(s)   (+ one "  ⚠ ..." line each)
@@ -35,7 +40,7 @@ DECKDOC="$DECKUI/scripts/deckdoc"
 die() { echo "ERROR: $*" >&2; exit 1; }
 
 # ---- args ----
-MD=""; SLUG=""; OUT=""; MODE="doc"; MERMAID="cdn"; SOURCE_FLAG=""
+MD=""; SLUG=""; OUT=""; MODE="doc"; MERMAID="cdn"; SOURCE_FLAG=""; LANG_ARG=""
 while (( $# )); do
   case "$1" in
     --slides) MODE="slides" ;;
@@ -44,8 +49,10 @@ while (( $# )); do
     --out=*) OUT="${1#--out=}" ;;
     --mermaid) MERMAID="${2:-cdn}"; shift ;;
     --mermaid=*) MERMAID="${1#--mermaid=}" ;;
+    --lang) LANG_ARG="${2:-}"; shift ;;
+    --lang=*) LANG_ARG="${1#--lang=}" ;;
     --no-source) SOURCE_FLAG="--no-source" ;;
-    -h|--help) sed -n '11,32p' "$0"; exit 0 ;;
+    -h|--help) sed -n '11,36p' "$0"; exit 0 ;;
     -*) die "unknown flag: $1" ;;
     *) if [[ -z "$MD" ]]; then MD="$1"; elif [[ -z "$SLUG" ]]; then SLUG="$1"; fi ;;
   esac
@@ -87,14 +94,17 @@ if [[ ! -d "$DECKDOC/node_modules" ]]; then
   ( cd "$DECKDOC" && pnpm install ) >&2 || die "pnpm install failed in $DECKDOC"
 fi
 
+LANG_FLAG=""
+[[ -n "$LANG_ARG" ]] && LANG_FLAG="--lang $LANG_ARG"
+
 # ---- DEFAULT: buildless document (no Vite/React) ----
 if [[ "$MODE" == "doc" ]]; then
   # doc.mjs prints DECK_SLUG / LINT / DECK_HTML itself. Omit --out for a slug
   # folder so doc.mjs defaults the file into the folder.
   if [[ -n "$OUT" ]]; then
-    node "$DECKDOC/doc.mjs" "$MD" "$SLUG" --out "$OUT" --mermaid "$MERMAID" $SOURCE_FLAG || die "document build failed"
+    node "$DECKDOC/doc.mjs" "$MD" "$SLUG" --out "$OUT" --mermaid "$MERMAID" $SOURCE_FLAG $LANG_FLAG || die "document build failed"
   else
-    node "$DECKDOC/doc.mjs" "$MD" "$SLUG" --mermaid "$MERMAID" $SOURCE_FLAG || die "document build failed"
+    node "$DECKDOC/doc.mjs" "$MD" "$SLUG" --mermaid "$MERMAID" $SOURCE_FLAG $LANG_FLAG || die "document build failed"
   fi
   exit 0
 fi
@@ -104,8 +114,13 @@ if [[ ! -d "$DECKUI/node_modules" ]]; then
   echo "Installing DeckUI (slide) dependencies (first run)..." >&2
   ( cd "$DECKUI" && pnpm install ) >&2 || die "pnpm install failed in $DECKUI"
 fi
-# transform: md → deck.json (deterministic; prints DECK_SLUG/LINT)
-node "$DECKUI/scripts/md-to-deck.mjs" "$MD" "$SLUG" || die "transform failed"
+# transform: md → deck.json (deterministic; prints DECK_SLUG/LINT). md-to-deck.mjs has
+# no --lang flag (only reads SCV_LANG), so an explicit --lang here is passed via env.
+if [[ -n "$LANG_ARG" ]]; then
+  SCV_LANG="$LANG_ARG" node "$DECKUI/scripts/md-to-deck.mjs" "$MD" "$SLUG" || die "transform failed"
+else
+  node "$DECKUI/scripts/md-to-deck.mjs" "$MD" "$SLUG" || die "transform failed"
+fi
 # build: self-contained single HTML
 ( cd "$DECKUI" && VITE_DECK_SLUG="$SLUG" pnpm build:deck ) >&2 || die "deck build failed"
 [[ -f "$DECKUI/dist-deck/index.html" ]] || die "build produced no HTML"

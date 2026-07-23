@@ -2,7 +2,7 @@
 # test-deck-doc.sh — regression tests for the buildless /scv:deck DOCUMENT path.
 #
 # Body/structural assertions target a --no-source render (NS) so a grep can NEVER
-# accidentally match the embedded raw-markdown <details> dump (that mistake let
+# accidentally match the raw-markdown side panel / print appendix (that mistake let
 # several fixes pass even when reverted). Covers:
 #   1. document (default) is a scrollable HTML, NOT the React slide SPA
 #   2. every deck block type renders (para/bullets/goals/kpi/table/mermaid/code/callout/subhead)
@@ -18,6 +18,29 @@
 #   8. the renderer is zero-dependency (no bare-specifier imports)
 #   9. slug-folder input combines PLAN + FEATURE_ARCHITECTURE + TESTS into one <slug>.deck.html
 #      (missing files handled; a non-spine file's frontmatter/H1 does NOT leak as a section)
+#  10. scv:deck's defining trait — the raw markdown is an ALWAYS-ON side panel (not a
+#      footnote): single source = no tabs, multi-source (slug combine) = one tab per
+#      file with the pristine (unstripped) text; toggle button + print-only appendix.
+#  11. screen-by-screen paging (‹›  arrows, dots, jump-nav, arrow keys) with the side
+#      panel auto-tracking the current page (tab switch + <mark> highlight); mermaid
+#      is scoped to the active page only (a hidden-page render sizes to zero and mermaid
+#      never retries it) with a beforeprint pass so print/PDF still gets every diagram.
+#  12. dark-default theme with a header toggle (pre-paint init from localStorage, no
+#      flash-of-light) + a draggable side-panel resize handle (same bounds as the
+#      original SourcePanel: 320px floor, main content keeps ≥420px).
+#  13. ```screen fenced JSON → wireframe mockup (Claude-authored, per commands/promote.md
+#      Step 6.4): valid JSON renders the dark scv-native wf-* skin; malformed JSON never
+#      crashes the build — it becomes a visible error callout instead.
+#  14. v0.18.0 pre-release fixes (adversarial review): array-type-confusion crash guards,
+#      card recursion depth cap, BADGE_TONE prototype-chain guard, screen-fence type-key
+#      override guard, WCAG contrast fix (on-primary/on-warn), resize breakpoint fix,
+#      single-page pagination-UI gating.
+#  15. i18n — English is the DEFAULT UI-chrome language (buttons/headings/lint text; the
+#      user's own PLAN.md/TESTS.md/screen-mockup CONTENT is never translated); --lang /
+#      SCV_LANG select korean/japanese, same SCV_LANG convention as
+#      scripts/render-template.sh (anything unrecognized falls back to English); the
+#      doc/slide byte-identical invariant holds under a non-default SCV_LANG too (both
+#      CLIs read the same env var).
 set -uo pipefail
 
 HERE="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -45,18 +68,18 @@ trap 'rm -rf "$TMP"; rm -rf "$ROOT/DeckUI/src/deck/decks/$SLUG"' EXIT
 # ---- renders: default (with source) + --no-source (structural asserts target NS) ----
 node "$DECKDOC/doc.mjs" "$FIX" "$SLUG" --out "$TMP/doc.html" --emit-json > "$TMP/out.txt" 2>&1
 node "$DECKDOC/doc.mjs" "$FIX" "$SLUG" --out "$TMP/ns.html" --no-source >/dev/null 2>&1
-DOC="$TMP/doc.html"   # includes the raw-source <details>
-NS="$TMP/ns.html"     # NO source dump — body/structural greps target THIS
+DOC="$TMP/doc.html"   # includes the side panel + print appendix
+NS="$TMP/ns.html"     # NO source panel — body/structural greps target THIS
 has "$TMP/out.txt" "DECK_HTML:" "emits DECK_HTML"
 has "$TMP/out.txt" "LINT: 1 warning" "lint = 1 (acceptance criteria missing)"
-has "$TMP/out.txt" "인수기준" "lint names the missing acceptance section"
+has "$TMP/out.txt" "Acceptance" "lint names the missing acceptance section (English default)"
 
 # 1. document shape (not slides) + source travels by default
 has   "$NS" 'class="wrap"'    "document wrapper present"
 hasnt "$NS" 'id="root"'       "no React slide root (#root)"
 has   "$NS" 'nav class="toc"' "table of contents present"
-has   "$DOC" '기획서 원문'    "raw markdown travels with the doc by default"
-hasnt "$NS"  '기획서 원문'    "--no-source drops the source section"
+has   "$DOC" 'Source'         "raw markdown travels with the doc by default (English default label)"
+hasnt "$NS"  'class="panel-toggle"' "--no-source drops the source panel/toggle entirely"
 
 # 2. every block type (rendered body only)
 has "$NS" '<p>'                  "paragraph block"
@@ -97,7 +120,7 @@ has "$NS" 'mermaid.run'      "mermaid CDN run script"
 has "$NS" 'mermaid-fallback' "offline text-fallback styling"
 
 # 6. quality lint section + HTML escaping (body, not source dump)
-has   "$NS" '품질 리포트' "quality report section rendered"
+has   "$NS" 'Quality Report' "quality report section rendered (English default)"
 has   "$NS" '&lt;script&gt;alert(1)&lt;/script&gt;' "source content HTML-escaped in the body"
 hasnt "$NS" '<script>alert(1)</script>' "raw <script> never emitted"
 
@@ -142,8 +165,8 @@ COMBINED="$SLUGDIR/20260101-tester-combine.deck.html"
 CNS="$TMP/combine-ns.html"
 if [[ -f "$COMBINED" ]]; then pass=$((pass+1)); else echo "  ✗ slug combine: <slug>.deck.html not written into the folder"; fail=$((fail+1)); fi
 has   "$CNS" '<h1>결합 기획'               "slug combine: PLAN H1 becomes the doc title"
-has   "$CNS" '구조 · FEATURE_ARCHITECTURE' "slug combine: FEATURE_ARCHITECTURE section merged"
-has   "$CNS" '테스트 · 인수기준'           "slug combine: TESTS section merged"
+has   "$CNS" 'Structure · FEATURE_ARCHITECTURE'         "slug combine: FEATURE_ARCHITECTURE section merged (English default)"
+has   "$CNS" 'Tests · Acceptance Criteria'              "slug combine: TESTS section merged (English default)"
 has   "$CNS" 'pre class="mermaid"'         "slug combine: FEATURE_ARCHITECTURE mermaid rendered"
 hasnt "$CNS" 'status: planned'             "non-spine frontmatter NOT leaked into the body"
 hasnt "$CNS" '아키텍처 위치'               "non-spine H1 stripped (already under the divider)"
@@ -173,7 +196,175 @@ printf '# 계획만\n\n## 배경\n\n본문\n' > "$SLUGDIR2/PLAN.md"
 node "$DECKDOC/doc.mjs" "$SLUGDIR2" >/dev/null 2>&1
 PLANONLY="$SLUGDIR2/20260101-tester-planonly.deck.html"
 if [[ -f "$PLANONLY" ]]; then pass=$((pass+1)); else echo "  ✗ slug combine: PLAN-only slug failed to build"; fail=$((fail+1)); fi
-hasnt "$PLANONLY" '테스트 · 인수기준' "slug combine: no TESTS divider when TESTS.md absent"
+hasnt "$PLANONLY" 'Tests · Acceptance Criteria' "slug combine: no TESTS divider when TESTS.md absent (English default)"
+
+# 10. side panel — single source (no tabs) vs slug-combine (tabs, pristine per-file text)
+has   "$DOC" 'id="scvSourcePanel"'      "side panel present by default"
+has   "$DOC" 'panel-toggle'             "header toggle button present"
+hasnt "$DOC" '<div class="panel-tabs">' "single source: no tabs (only one document)"
+has   "$DOC" 'scvSourcePanel'           "panel toggle/select script wired"
+
+node "$DECKDOC/doc.mjs" "$SLUGDIR" --out "$TMP/combine-panel.html" >/dev/null 2>&1
+CPANEL="$TMP/combine-panel.html"
+has "$CPANEL" '<div class="panel-tabs">'                                  "slug combine: tabs render (3 files)"
+has "$CPANEL" '>PLAN.md<'                                                 "slug combine: PLAN.md tab labeled"
+has "$CPANEL" '>FEATURE_ARCHITECTURE.md<'                                 "slug combine: FEATURE_ARCHITECTURE.md tab labeled"
+has "$CPANEL" '>TESTS.md<'                                                "slug combine: TESTS.md tab labeled"
+has "$CPANEL" 'status: planned'                                           "panel shows the PRISTINE (unstripped) file — frontmatter visible here, unlike the rendered body"
+has "$CPANEL" '<h3>PLAN.md</h3>'                                          "print appendix: one heading per source file"
+has "$CPANEL" '<h3>FEATURE_ARCHITECTURE.md</h3>'                          "print appendix: FEATURE_ARCHITECTURE.md heading"
+has "$CPANEL" 'class="print-source"'                                     "print-only appendix present (hidden on screen, shown at print via CSS)"
+
+# 11. pagination + highlight-sync (screen-only paging; print always shows everything)
+has   "$NS" 'class="slide-page active"'    "first page starts active"
+has   "$NS" 'class="deck-nav"'             "page jump-nav (pill buttons) present"
+has   "$NS" 'id="scvPrev"'                 "footer prev/next controls present"
+has   "$NS" 'class="deck-dots"'            "dot indicators present"
+has   "$NS" 'function scvGoto'             "pagination controller present"
+has   "$NS" 'function scvHighlight'        "source-panel highlight-sync present"
+has   "$NS" "SCV_ANCHORS"                  "per-page anchor list embedded for highlight lookup"
+has   "$NS" "'ArrowRight'"                 "arrow-key navigation wired"
+has   "$NS" "'ArrowLeft'"                  "arrow-key navigation wired (left)"
+# nav.toc is print-only now (deck-nav replaced it as the on-screen jump mechanism)
+has   "$NS" '@media screen{nav.toc{display:none}}' "table of contents hidden on screen (deck-nav replaces it)"
+# regression guard for the real bug the reverify caught: mermaid measured while its
+# page was display:none comes out zero-sized AND gets marked processed (never fixed by
+# a later broad re-run) — the initial/on-navigate run MUST be scoped to the active page.
+has "$DOC" '".slide-page.active pre.mermaid"' "mermaid run is scoped to the ACTIVE page only (not run on documentwide-hidden pages)"
+has "$DOC" 'beforeprint'                      "printing forces a full (unscoped) mermaid pass so unvisited pages still render"
+
+# 12. dark-default theme (toggle button, pre-paint init, no FOUC) + draggable panel resize
+has   "$NS" ":root{--fg:#e7e9f0"            "dark palette is the :root default"
+has   "$NS" 'html[data-theme="light"]'      "light palette is an explicit override, not the default"
+has   "$NS" 'id="scvThemeBtn"'              "theme toggle button present in the header"
+has   "$NS" 'function scvToggleTheme'       "theme toggle handler present"
+has   "$NS" "localStorage.getItem('scv-deck-theme'"  "theme choice is read back from localStorage"
+has   "$DOC" "localStorage.getItem('scv-deck-theme')==='light')document.documentElement.setAttribute" "pre-paint theme init runs before <style>/<body> (no flash of the wrong theme)"
+has   "$DOC" 'id="scvResizeHandle"'          "panel resize handle present (needs a source panel — checked on DOC, not NS)"
+has   "$DOC" "addEventListener('mousedown'"  "resize drag handler wired"
+has   "$DOC" 'Math.max(320, window.innerWidth - 420)' "resize clamps to the original SourcePanel bounds (min 320px, main keeps ≥420px)"
+
+# 13. ```screen fenced JSON → wireframe mockup; malformed JSON never crashes the build
+has   "$NS" 'class="wf-frame"'          "valid screen block renders the wireframe frame"
+has   "$NS" 'class="wf-nav-item active"' "screen mockup nav renders with the active item marked"
+has   "$NS" 'class="wf-badge wf-badge-muted"' "screen mockup table cell renders as a badge"
+has   "$NS" '전화번호부 관리'            "screen mockup content is faithful to the fixture JSON (no invented text)"
+has   "$NS" 'Screen Mockup Parse Error'  "malformed screen JSON renders a visible error callout (English default)"
+has   "$NS" 'class="callout danger"'    "the parse-error callout uses the danger tone"
+hasnt "$NS" 'class="wf-frame"><div class="wf-screen-label">/campaigns' "malformed block does not silently fall back to a (wrong) wireframe"
+# dark scv-native skin, scoped independently of the document's own light/dark toggle
+has   "$DOC" '--wf-bg:#0a0a0b'          "screen mockup skin is dark by default (DesignSystem-distilled, not the document's own theme)"
+has   "$DOC" '.wf-screen{'              "wireframe CSS variables are scoped to .wf-screen (isolated from --bg/--fg used by the document chrome)"
+
+# 14. v0.18.0 pre-release fixes (adversarial review) — each locked so it can't silently regress.
+
+# 14a. wrong-but-truthy types in the screen DSL degrade gracefully instead of crashing
+#      doc.mjs (a malformed "rows"/"body"/"items" as a string/object, not null/undefined,
+#      used to throw past the `x || []` guards and produce ZERO output for the whole doc).
+printf '# T\n\n## S\n\n```screen\n{"body":[{"type":"table","columns":["A"],"rows":"not-an-array"},{"type":"toolbar","items":{"not":"an array either"}}]}\n```\n' > "$TMP/badtypes.md"
+if node "$DECKDOC/doc.mjs" "$TMP/badtypes.md" --out "$TMP/badtypes.html" --no-source >/dev/null 2>&1; then
+  pass=$((pass+1))
+else
+  echo "  ✗ wrong-typed screen-DSL fields (string/object instead of array) crash doc.mjs"; fail=$((fail+1))
+fi
+has "$TMP/badtypes.html" 'class="wf-table"' "malformed rows/items degrade to an empty render, not a crash"
+
+# 14b. runaway card-in-card nesting is capped, not a stack overflow
+node -e '
+  const N = 500;
+  let inner = { type: "text", value: "bottom" };
+  for (let i = 0; i < N; i++) inner = { type: "card", body: [inner] };
+  const fs = require("node:fs");
+  fs.writeFileSync(process.argv[1], "# T\n\n## S\n\n```screen\n" + JSON.stringify({ body: [inner] }) + "\n```\n");
+' "$TMP/deepnest.md"
+if node "$DECKDOC/doc.mjs" "$TMP/deepnest.md" --out "$TMP/deepnest.html" --no-source >/dev/null 2>&1; then
+  pass=$((pass+1))
+else
+  echo "  ✗ deep card-in-card nesting (500 levels) crashes doc.mjs"; fail=$((fail+1))
+fi
+has "$TMP/deepnest.html" 'nesting too deep' "nesting past the depth cap renders a truncation notice instead of overflowing (English default)"
+
+# 14c. BADGE_TONE lookup is hasOwnProperty-guarded — a tone of "__proto__"/"constructor"
+#      must NOT resolve through the prototype chain into a native function/[object Object].
+printf '# T\n\n## S\n\n```screen\n{"body":[{"type":"badge","label":"x","tone":"__proto__"}]}\n```\n' > "$TMP/prototone.md"
+node "$DECKDOC/doc.mjs" "$TMP/prototone.md" --out "$TMP/prototone.html" --no-source >/dev/null 2>&1
+has   "$TMP/prototone.html" 'wf-badge-muted'    "tone:\"__proto__\" falls back to the muted class, not a prototype-chain hit"
+hasnt "$TMP/prototone.html" '[object Object]'   "the unguarded lookup's actual leak shape (Object.prototype stringified) never appears"
+
+# 14d. a `type` key inside the fence body cannot hijack the block away from "screen"
+#      (spread-then-pin: the literal type is applied AFTER the JSON spread).
+printf '# T\n\n## S\n\n```screen\n{"type":"table","body":[{"type":"text","value":"still a screen"}]}\n```\n' > "$TMP/typehijack.md"
+node "$DECKDOC/doc.mjs" "$TMP/typehijack.md" --out "$TMP/typehijack.html" --no-source >/dev/null 2>&1
+has "$TMP/typehijack.html" 'class="wf-frame"' "a \"type\":\"table\" key inside the fence cannot hijack the block away from the wireframe renderer"
+
+# 14e. WCAG contrast fixes — the two previously-hardcoded white-on-accent rules now use
+#      theme-aware on-* variables (dark-default primary #7c93ff read 2.81:1 with white).
+has "$NS" '--on-primary:#12163a' "dark theme defines a readable on-primary text color (not hardcoded white)"
+has "$NS" '--on-primary:#ffffff' "light theme's on-primary override is declared explicitly"
+has "$NS" '--on-warn'            "on-warn text color variable defined (lint-count badge)"
+has "$NS" 'color:var(--on-primary)' "active nav pill uses the theme-aware on-primary color"
+has "$NS" 'color:var(--on-warn)'    "lint-count badge uses the theme-aware on-warn color"
+hasnt "$NS" '.deck-nav-item.active{background:var(--primary);color:#fff' "active nav pill no longer hardcodes white text"
+hasnt "$NS" '.lint-count{display:inline-block;background:var(--warn);color:#fff' "lint-count badge no longer hardcodes white text"
+
+# 14f. resize no longer permanently defeats the mobile/narrow breakpoints — a window
+#      resize listener clears/reclamps the inline width so CSS can reassert control.
+has "$DOC" "addEventListener('resize'" "a window resize listener exists to reconcile the drag-set inline width"
+has "$DOC" "panel.style.width = ''"    "dropping below the mobile breakpoint clears the inline width entirely"
+has "$DOC" 'ev.buttons === 0'          "a lost mouseup (button released outside the window) is detected and cleaned up"
+
+# 14g. single-page docs hide the pagination UI entirely (previously deckNav showed an
+#      always-active, functionally-inert pill while deckFooter stayed hidden). Built by
+#      calling renderHtml directly with lint:[] so the page count is exactly 1 — going
+#      through the md pipeline would always add a 2nd (lint) page for an unlabeled doc.
+node -e '
+  import("'"$DECKDOC"'/render.mjs").then(({ renderHtml }) => {
+    const data = { title: "Single", slug: "single", slides: [
+      { id: "s0", nav: "One", title: "One", anchor: "One", blocks: [{ type: "para", text: "hi" }] },
+    ], lint: [] };
+    require("node:fs").writeFileSync(process.argv[1], renderHtml(data, { source: false }));
+  });
+' "$TMP/onepage.html"
+hasnt "$TMP/onepage.html" 'class="deck-nav"'    "single-page doc: no jump-nav (nothing to jump to)"
+hasnt "$TMP/onepage.html" 'class="deck-footer"' "single-page doc: no ‹›/dots footer either (gate now matches deck-nav)"
+
+# 15. i18n — English default, --lang/SCV_LANG select korean/japanese, unrecognized
+#     falls back to English (render-template.sh's SCV_LANG rule), content never
+#     translated, and the doc/slide invariant survives a non-default SCV_LANG.
+node "$DECKDOC/doc.mjs" "$FIX" "$SLUG" --out "$TMP/lang-en.html" --no-source >/dev/null 2>&1
+has   "$TMP/lang-en.html" '<html lang="en">' "default language is English (no --lang, no SCV_LANG)"
+has   "$TMP/lang-en.html" '‹ Prev'            "English default: footer prev button"
+has   "$TMP/lang-en.html" 'Next ›'            "English default: footer next button"
+has   "$TMP/lang-en.html" 'Table of Contents' "English default: table-of-contents heading (print-only, but always emitted)"
+
+node "$DECKDOC/doc.mjs" "$FIX" "$SLUG" --out "$TMP/lang-ko.html" --lang korean >/dev/null 2>&1
+has "$TMP/lang-ko.html" '<html lang="ko">' "--lang korean sets the html lang attribute"
+has "$TMP/lang-ko.html" '기획서 원문'       "--lang korean: panel/toggle label in Korean (needs the source panel — no --no-source here)"
+has "$TMP/lang-ko.html" '품질 리포트'       "--lang korean: quality-report heading in Korean"
+has "$TMP/lang-ko.html" '리스크'            "--lang korean: fixture CONTENT (H3 heading text) unaffected by the UI-chrome language"
+
+node "$DECKDOC/doc.mjs" "$FIX" "$SLUG" --out "$TMP/lang-ja.html" --no-source --lang japanese >/dev/null 2>&1
+has "$TMP/lang-ja.html" '<html lang="ja">' "--lang japanese sets the html lang attribute"
+has "$TMP/lang-ja.html" '品質レポート'      "--lang japanese: quality-report heading in Japanese"
+
+node "$DECKDOC/doc.mjs" "$FIX" "$SLUG" --out "$TMP/lang-bogus.html" --no-source --lang klingon >/dev/null 2>&1
+has "$TMP/lang-bogus.html" '<html lang="en">' "an unrecognized --lang value falls back to English, not a crash"
+
+SCV_LANG=korean node "$DECKDOC/doc.mjs" "$FIX" "$SLUG" --out "$TMP/lang-env.html" --no-source >/dev/null 2>&1
+has "$TMP/lang-env.html" '<html lang="ko">' "SCV_LANG env var is respected when --lang is not passed"
+
+# slug-combine dividers are ALSO localized (doc.mjs's own SLUG_PARTS labels, not just render.mjs)
+node "$DECKDOC/doc.mjs" "$SLUGDIR" --out "$TMP/combine-ko.html" --no-source --lang korean >/dev/null 2>&1
+has "$TMP/combine-ko.html" '구조 · FEATURE_ARCHITECTURE' "slug combine divider labels localize too (Korean)"
+
+# byte-identical invariant must survive a non-default SCV_LANG (both CLIs read the same var)
+SCV_LANG=korean node "$MD2DECK" "$FIX" "$SLUG" >/dev/null 2>&1
+SCV_LANG=korean node "$DECKDOC/doc.mjs" "$FIX" "$SLUG" --out "$TMP/lang-inv.html" --emit-json >/dev/null 2>&1
+if diff -q "$ROOT/DeckUI/src/deck/decks/$SLUG/deck.json" "$TMP/$SLUG.deck.json" >/dev/null 2>&1; then
+  pass=$((pass+1))
+else
+  echo "  ✗ doc/slide transform diverge under SCV_LANG=korean (lint messages must match between the two CLIs)"; fail=$((fail+1))
+fi
 
 echo ""
 echo "test-deck-doc: $pass passed, $fail failed"
