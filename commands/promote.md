@@ -25,7 +25,7 @@ You — Claude — will help the user refine material from `scv/raw/` into a str
 If the user is acting on an **incoming cross-repo handoff** (shown by `/scv:status` section [7] in a nested workspace — another repo declared this repo needs corresponding dev), don't start from `scv/raw/`. Instead scaffold the promote folder directly from the handoff spec:
 
 ```!
-"${CLAUDE_PLUGIN_ROOT}/scripts/handoff.sh" adopt <handoff_id>
+"${CLAUDE_PLUGIN_ROOT}/scripts/handoff.sh" adopt "<handoff_id>"
 ```
 
 This writes a local `scv/promote/<slug>/PLAN.md` + `TESTS.md` seeded from the handoff's "what to build" + acceptance criteria, with a `refs: type=handoff-origin` back-link. It is **local-only** (no write to the workspace root). Then refine the scaffolded PLAN/TESTS with the user and implement via `/scv:codegen <slug>` (TDD-first) or `/scv:work <slug>`. The rest of this document (raw → promote) is the normal, single-repo path.
@@ -33,7 +33,7 @@ This writes a local `scv/promote/<slug>/PLAN.md` + `TESTS.md` seeded from the ha
 Optionally, so the umbrella's `/scv:status` reflects that this work is underway, mark the handoff **claimed** in the root (then push with the user's consent — same rule as `/scv:handoff`):
 
 ```!
-"${CLAUDE_PLUGIN_ROOT}/scripts/handoff.sh" mark <handoff_id> claimed
+"${CLAUDE_PLUGIN_ROOT}/scripts/handoff.sh" mark "<handoff_id>" claimed
 ```
 
 After the work is archived, mark it `done` the same way.
@@ -826,7 +826,7 @@ the artifact humans open). It is fast (no build), lives next to the markdown, an
 committed with the plan:
 
 ```
-!${CLAUDE_PLUGIN_ROOT}/scripts/deck.sh "scv/promote/<folder>" --lang <LANG_RESOLVED>
+!${CLAUDE_PLUGIN_ROOT}/scripts/deck.sh "scv/promote/<folder>" --lang "<LANG_RESOLVED>"
 ```
 
 Pass the **folder** (not a single file) so the three docs merge into one deck, and the
