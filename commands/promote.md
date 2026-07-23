@@ -5,6 +5,7 @@ allowed-tools:
   - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/promote-helper.sh:*)"
   - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/readpath.sh:*)"
   - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/handoff.sh:*)"
+  - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/deck.sh:*)"
   - "Skill(graphify)"
   - "AskUserQuestion"
   - "Read"
@@ -496,7 +497,7 @@ Question: "Add architecture diagrams to <folder> (FEATURE_ARCHITECTURE.md)?"
      'data flow perspective only' / 'wait, I'll write by hand'."
 ```
 
-If [2]: skip the rest of Step 6 for this folder, continue with Step 7.
+If [2]: skip the rest of Step 6 for this folder, continue with the remaining steps (7 deck → 8 readpath → 9 report).
 
 If [1] or [3]: generate the file via Step 6.1 + Step 6.2 + Step 6.3 below.
 
@@ -729,9 +730,29 @@ If a fix changed something user-visible (added a missing component / removed an 
 
 If self-review fixed nothing material, omit the "Self-review:" line.
 
-### Step 7 — Update readpath baseline
+### Step 7 — Generate the 기획서 deck (per created folder)
 
-After all approved folders are created (and any FEATURE_ARCHITECTURE.md is written), run:
+For each folder created/updated above, generate its human-readable **기획서** — one
+self-contained HTML that combines `PLAN.md` + `FEATURE_ARCHITECTURE.md` + `TESTS.md`
+into a single scrollable document (markdown alone is hard for people to read; this is
+the artifact humans open). It is fast (no build), lives next to the markdown, and is
+committed with the plan:
+
+```
+!${CLAUDE_PLUGIN_ROOT}/scripts/deck.sh "scv/promote/<folder>"
+```
+
+Pass the **folder** (not a single file) so the three docs merge into one deck. Output
+is `scv/promote/<folder>/<folder>.deck.html`; parse `DECK_HTML:` and surface it in the
+report. In a nested monorepo module, use that module's path (`<SCV_DIR>/promote/<folder>`,
+e.g. `FE/scv/promote/<folder>`). The first run installs a slim (~7MB) renderer; if
+Node/pnpm are missing, relay the error and point to `/scv:install-deps` — the plan is
+still valid without the deck. **Whenever PLAN.md / TESTS.md / FEATURE_ARCHITECTURE.md
+change later, re-run this** so the deck always tracks the plan.
+
+### Step 8 — Update readpath baseline
+
+After all approved folders are created (and any FEATURE_ARCHITECTURE.md + deck are written), run:
 
 ```
 !${CLAUDE_PLUGIN_ROOT}/scripts/readpath.sh update
@@ -739,14 +760,14 @@ After all approved folders are created (and any FEATURE_ARCHITECTURE.md is writt
 
 This marks the current raw state as the new baseline so future `/scv:help` / `/scv:status` won't keep flagging the consumed files.
 
-### Step 8 — Report to user
+### Step 9 — Report to user
 
 Summarize:
-- Created folders (list paths to PLAN.md + TESTS.md, and FEATURE_ARCHITECTURE.md if generated)
+- Created folders (list paths to PLAN.md + TESTS.md, FEATURE_ARCHITECTURE.md if generated, and the `<folder>.deck.html` 기획서)
 - Graph update status
 - Baseline updated? (yes)
 - Next suggested command: `/scv:work <slug>` for the first new plan.
-- Reminder: PLAN.md, TESTS.md, and FEATURE_ARCHITECTURE.md (when present) are **starting skeletons** — fill in the `<TODO>` spots and review the diagrams. Run `/scv:status` any time to see pending changes.
+- Reminder: PLAN.md, TESTS.md, and FEATURE_ARCHITECTURE.md (when present) are **starting skeletons** — fill in the `<TODO>` spots and review the diagrams; the deck re-generates from them. Run `/scv:status` any time to see pending changes.
 
 ## Flag semantics
 
