@@ -88,7 +88,7 @@ Parse `BIG_PICTURE:` + `MODE_HINT:` (and the `ARCHITECTURE` / `GRAPHIFY_GRAPH` /
 ## Step 1 — Build
 
 ```!
-"${CLAUDE_PLUGIN_ROOT}/scripts/deck.sh" $ARGUMENTS --lang <LANG_RESOLVED>
+"${CLAUDE_PLUGIN_ROOT}/scripts/deck.sh" $ARGUMENTS --lang "<LANG_RESOLVED>"
 ```
 
 This produces the **document** by default. If the user asked for a slide
