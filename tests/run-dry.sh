@@ -2600,6 +2600,24 @@ assert_contains "$PROMOTE_CMD" "Step 8 — Update readpath baseline"
 assert_contains "$PROMOTE_CMD" "Step 9 — Report to user"
 assert_contains "$PROMOTE_CMD" "FEATURE_ARCHITECTURE.md if generated"
 
+# commands/promote.md — Step 7 passes the already-resolved LANG_RESOLVED to deck.sh
+# (deck UI chrome must match the language Steps 5/6 already wrote PLAN/TESTS/FEATURE_ARCHITECTURE in)
+assert_contains "$PROMOTE_CMD" '--lang <LANG_RESOLVED>'
+assert_contains "$PROMOTE_CMD" "already resolved in Step 0 — the deck's UI chrome"
+
+# commands/deck.md — Language preference section + --lang pass-through to deck.sh
+DECK_CMD="$STANDARD_ROOT/commands/deck.md"
+assert_contains "$DECK_CMD" "## Language preference"
+assert_contains "$DECK_CMD" 'settings.json'
+assert_contains "$DECK_CMD" 'SCV_LANG'
+assert_contains "$DECK_CMD" '--lang <LANG_RESOLVED>'
+assert_contains "$DECK_CMD" "never the user's own PLAN.md/TESTS.md/screen-mockup content"
+
+# commands/work.md — archive-time deck refresh passes the archived PLAN's own lang:
+# frontmatter (not a fresh Step-0-style resolve) so chrome matches the plan's content language
+assert_contains "$WORK_CMD" '--lang <PLAN_LANG>'
+assert_contains "$WORK_CMD" "the same field Step 9d reads"
+
 # template/scv/PROMOTE.md — §5b spec 추가
 assert_contains "$PROMOTE_DOC" "## 5b. FEATURE_ARCHITECTURE.md"
 assert_contains "$PROMOTE_DOC" "Component data flow"
@@ -2645,8 +2663,19 @@ assert_contains "$PROMOTE_CMD" "Anti-patterns to avoid (diagram 2)"
 assert_contains "$PROMOTE_CMD" "Drawing every node from"
 assert_contains "$PROMOTE_CMD" "Inventing community names"
 
-# Step 6.4 — self-review 신규 단계
-assert_contains "$PROMOTE_CMD" "Step 6.4 — Self-review"
+# Step 6.4 — screen mockups (new sub-step) → self-review renumbered to Step 6.5
+assert_contains "$PROMOTE_CMD" "Step 6.4 — Screen mockups (optional, UI plans only)"
+assert_contains "$PROMOTE_CMD" '```screen` fenced JSON block'
+assert_contains "$PROMOTE_CMD" "generate wireframe mockups"
+assert_contains "$PROMOTE_CMD" "skip mockups"
+assert_contains "$PROMOTE_CMD" '"nav": { "items"'
+assert_contains "$PROMOTE_CMD" '| `table` | `{ type:"table"'
+assert_contains "$PROMOTE_CMD" "Faithfulness (non-negotiable, same rule as the diagrams)"
+assert_contains "$PROMOTE_CMD" "Never invent a screen, a data column, or a button"
+assert_contains "$PROMOTE_CMD" "always static illustrations"
+assert_contains "$PROMOTE_CMD" "Added N screen mockup(s)"
+
+assert_contains "$PROMOTE_CMD" "Step 6.5 — Self-review"
 assert_contains "$PROMOTE_CMD" "silently re-read the FEATURE_ARCHITECTURE.md"
 assert_contains "$PROMOTE_CMD" "Coverage**: every component named in PLAN.md"
 assert_contains "$PROMOTE_CMD" "No inventions**: every node in diagram 1 traces back to PLAN.md"
@@ -2656,6 +2685,8 @@ assert_contains "$PROMOTE_CMD" "Diagram 2 Source line"
 assert_contains "$PROMOTE_CMD" "\`:::new\` class"
 assert_contains "$PROMOTE_CMD" "Dashed edges"
 assert_contains "$PROMOTE_CMD" "Mermaid fence"
+assert_contains "$PROMOTE_CMD" "Screen mockups valid JSON"
+assert_contains "$PROMOTE_CMD" "Screen mockups faithful"
 assert_contains "$PROMOTE_CMD" "Self-review: added 1 missing component"
 
 # work.md Step 9d-main — FEATURE_ARCHITECTURE.md inline 도식 안내
@@ -3304,8 +3335,8 @@ assert_contains "$README" 'how did we handle refunds last quarter?"` (v0.10.0+)'
 assert_contains "$README" '지난 분기 결제 archive 보여줘"` (v0.10.0+)'
 assert_contains "$README" '先四半期の決済関連 archive を見せて"` (v0.10.0+)'
 
-# plugin.json — version 0.17.0
-assert_contains "$STANDARD_ROOT/.claude-plugin/plugin.json" '"version": "0.17.0"'
+# plugin.json — version 0.18.0
+assert_contains "$STANDARD_ROOT/.claude-plugin/plugin.json" '"version": "0.18.0"'
 
 # v0.10.2 — heredoc-quoted $ARGUMENTS so raw user input survives shell evaluation
 assert_contains "$HELP_CMD" "__SCV_HELP_ARG_EOF__"

@@ -33,6 +33,17 @@ when offline / on a closed network — the doc never shows an empty box.
 - The **transform is deterministic** (`scripts/deck.sh` → `DeckUI/scripts/deckdoc/transform.mjs`, remark-based). It never invents content: every rendered value comes from the source md.
 - **You (Claude)** assist around it: pick the input, surface the lint/gap report, and *offer* to improve the **source markdown** (never the generated output) when sections are missing — always with user approval.
 
+## Language preference
+
+Resolve the user's preferred language with this priority, then pass it to `deck.sh` as `--lang <LANG_RESOLVED>` in Step 1 — it selects the deck's UI chrome (buttons, headings, lint messages; never the user's own PLAN.md/TESTS.md/screen-mockup content, which always renders verbatim):
+
+1. `~/.claude/settings.json` (or project `.claude/settings.json` / `.claude/settings.local.json`) — `language` key (Claude Code official).
+2. Project `.env` — `SCV_LANG` (set by `/scv:help`'s first-time setup).
+3. Auto-detect from the user's most recent message language.
+4. Default to English.
+
+`LANG_RESOLVED` values: `english` (default) / `korean` / `japanese`; anything else falls back to English (same rule `deck.sh`/`doc.mjs` apply if `--lang` is omitted and `.env SCV_LANG` is unset).
+
 ## Step 0 — Resolve the input markdown
 
 `$ARGUMENTS` is a path to a markdown file. If empty:
@@ -77,7 +88,7 @@ Parse `BIG_PICTURE:` + `MODE_HINT:` (and the `ARCHITECTURE` / `GRAPHIFY_GRAPH` /
 ## Step 1 — Build
 
 ```!
-"${CLAUDE_PLUGIN_ROOT}/scripts/deck.sh" $ARGUMENTS
+"${CLAUDE_PLUGIN_ROOT}/scripts/deck.sh" $ARGUMENTS --lang <LANG_RESOLVED>
 ```
 
 This produces the **document** by default. If the user asked for a slide
@@ -94,7 +105,7 @@ If the helper errors (missing Node/pnpm), relay it and suggest `/scv:install-dep
 
 ## Step 2 — Report + quality coaching
 
-1. Tell the user it's built and **where**: `DECK_HTML`. One-line how-to-open (`open <path>` / double-click) and that it prints to PDF from the browser. The raw markdown travels with it — a collapsible "기획서 원문" section at the bottom of the document (or the side panel, toggle `S`, in `--slides`).
+1. Tell the user it's built and **where**: `DECK_HTML`. One-line how-to-open (`open <path>` / double-click) and that it prints to PDF from the browser. The raw markdown travels with it in an always-on **side panel** (toggle button or the `S` key) — a slug-folder combine shows one tab per file (PLAN.md / FEATURE_ARCHITECTURE.md / TESTS.md). Printing swaps the panel for a plain paginated appendix.
 2. If `LINT` > 0, surface the warnings plainly. These are the sections a professional 기획서 usually has but this doc lacks (비목표 / 성공지표 / 인수기준 / 예외처리, etc.).
 3. **Offer** (via `AskUserQuestion`, default: just report) to help draft the missing sections **into the source markdown** — then the user re-runs `/scv:deck`. Never write invented specifics; propose structure + `<TODO>` placeholders and let the user fill real values.
 
