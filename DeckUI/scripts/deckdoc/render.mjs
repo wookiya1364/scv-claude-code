@@ -118,6 +118,66 @@ const arr = (x) => (Array.isArray(x) ? x : []);
 const safeTone = (t) => (Object.prototype.hasOwnProperty.call(BADGE_TONE, t) ? BADGE_TONE[t] : BADGE_TONE.muted);
 const MAX_WF_DEPTH = 40; // guards runaway/adversarial card-in-card nesting from overflowing the stack
 
+// ---- project-token override (screen mockup "theme" field) ----
+// 1순위(프로젝트 실제 토큰) / 2순위(scv 자체 스킨) 판별: scv 자체 스킨이 기본이고, 사용자가
+// "우리 프로젝트엔 디자인 토큰이 있다"고 말한 경우에만(commands/promote.md Step 6.4가
+// scv/DESIGN.md §5 를 읽어 판단) Claude 가 screen JSON 에 `theme` 필드로 실제 hex 값만
+// 넘긴다. 그 외 파생값(투명 배지 배경, 명암비 안전한 on-primary 텍스트)은 여기서 항상
+// 계산한다 — Claude 가 매번 대비를 직접 판단하게 두면 v0.18.0 에서 실제로 터진 WCAG
+// 버그가 재발한다. 검증 실패한 값은 조용히 무시하고 scv 기본값을 유지한다(크래시 없음).
+const hex6 = (h) => {
+  const m = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.exec(String(h || "").trim());
+  if (!m) return null;
+  const s = m[1];
+  return (s.length === 3 ? s.split("").map((c) => c + c).join("") : s).toLowerCase();
+};
+const rgbOf = (h6) => [0, 2, 4].map((i) => parseInt(h6.slice(i, i + 2), 16));
+const relLuminance = ([r, g, b]) => {
+  const f = (c) => ((c /= 255), c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+  return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+};
+const onColorFor = (hex) => {
+  const h = hex6(hex);
+  return h ? (relLuminance(rgbOf(h)) > 0.5 ? "#12141a" : "#ffffff") : null;
+};
+const tint = (hex, alpha) => {
+  const h = hex6(hex);
+  if (!h) return null;
+  const [r, g, b] = rgbOf(h);
+  return `rgba(${r},${g},${b},${alpha})`;
+};
+const WF_RADIUS_RE = /^\d+(\.\d+)?(px|rem|em)$/;
+
+// A screen block's optional `theme` (base hex colors only — exactly what a project's
+// own scv/DESIGN.md §5 documents) → an inline `style="--wf-*:..."` string that overrides
+// the scv-native defaults declared on .wf-screen. Every value is independently
+// validated (hex/length regex) before use; anything that fails validation is dropped,
+// never inserted — the base CSS default silently takes over for that one property.
+function themeStyleOf(theme) {
+  if (!theme || typeof theme !== "object") return "";
+  const decls = [];
+  const put = (name, val) => val != null && decls.push(`--wf-${name}:${val}`);
+  put("bg", hex6(theme.bg) && `#${hex6(theme.bg)}`);
+  put("fg", hex6(theme.fg) && `#${hex6(theme.fg)}`);
+  put("card", hex6(theme.card) && `#${hex6(theme.card)}`);
+  put("border", hex6(theme.border) && `#${hex6(theme.border)}`);
+  put("muted", hex6(theme.muted) && `#${hex6(theme.muted)}`);
+  put("muted-fg", hex6(theme.mutedFg) && `#${hex6(theme.mutedFg)}`);
+  if (hex6(theme.primary)) {
+    put("primary", `#${hex6(theme.primary)}`);
+    put("primary-fg", onColorFor(theme.primary));
+  }
+  for (const role of ["success", "danger", "warn", "info"]) {
+    const v = theme[role];
+    if (!hex6(v)) continue;
+    put(role, `#${hex6(v)}`);
+    put(`${role}-bg`, tint(v, 0.15));
+    if (role === "success") put("success-border", tint(v, 0.4));
+  }
+  if (WF_RADIUS_RE.test(String(theme.radius || ""))) put("radius", theme.radius);
+  return decls.length ? ` style="${esc(decls.join(";"))}"` : "";
+}
+
 function renderCell(c) {
   if (c == null) return "";
   if (typeof c !== "object") return esc(c);
@@ -185,7 +245,9 @@ function renderScreen(b, t) {
   const body = arr(b.body)
     .map((x) => renderComponent(x, 0, t))
     .join("");
-  return `<div class="wf-screen">${b.title ? `<div class="wf-screen-label">${esc(b.title)}</div>` : ""}<div class="wf-frame">${nav}<div class="wf-body">${body}</div></div></div>`;
+  // theme absent (the common case — no project tokens told to us) → identical to before,
+  // zero behavior change. theme present → inline style overrides just the validated keys.
+  return `<div class="wf-screen"${themeStyleOf(b.theme)}>${b.title ? `<div class="wf-screen-label">${esc(b.title)}</div>` : ""}<div class="wf-frame">${nav}<div class="wf-body">${body}</div></div></div>`;
 }
 
 const CSS = `
