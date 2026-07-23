@@ -499,7 +499,7 @@ Question: "Add architecture diagrams to <folder> (FEATURE_ARCHITECTURE.md)?"
 
 If [2]: skip the rest of Step 6 for this folder, continue with the remaining steps (7 deck → 8 readpath → 9 report).
 
-If [1] or [3]: generate the file via Step 6.1 + Step 6.2 + Step 6.3 below.
+If [1] or [3]: generate the file via Step 6.1 + Step 6.2 + Step 6.3, then continue to Step 6.4 (screen mockups, optional) and Step 6.5 (self-review) below.
 
 #### Step 6.1 — First diagram (Component data flow)
 
@@ -704,7 +704,71 @@ Print one-line confirmation:
   ⚠ Review Mermaid syntax + node labels — LLM-generated.
 ```
 
-#### Step 6.4 — Self-review (before moving on)
+#### Step 6.4 — Screen mockups (optional, UI plans only)
+
+Markdown alone is hard to picture — "이게 화면이 어떻게 생겼는지 모르겠다." `/scv:deck` renders a `​```screen` fenced JSON block as an actual wireframe (dark scv-native skin, zero build). Skip this step entirely for a CLI/backend-only plan (no user-facing UI — same signal as `DESIGN.md: status: N/A`). Otherwise, ask:
+
+```
+Question: "이 계획에 화면 목업을 추가할까요? (실제 스크린샷이 아니라 PLAN/DESIGN 내용
+기반의 와이어프레임 — /scv:deck 이 그림으로 그려줍니다)"
+
+[1] "Yes — generate wireframe mockups" (recommended for UI-facing plans)
+    description:
+    "PLAN.md의 Steps/Approach Overview 와 DESIGN.md 의 화면 목록에서 이 계획이
+     건드리는 화면마다 하나씩 그림. 실제 화면 컴포넌트가 아니라 구조만 보여주는
+     중립 와이어프레임(다크, scv 자체 스킨) — 어떤 프로젝트의 실제 디자인도
+     흉내내지 않는다."
+
+[2] "No — skip mockups"
+    description:
+    "PLAN.md 텍스트만으로 충분하거나, 화면 변경이 없는 계획일 때."
+```
+
+If [2]: skip the rest of Step 6.4, continue with Step 6.5.
+
+If [1]: for **each screen this plan materially adds or changes** (named in PLAN.md's `Steps` / `Approach Overview`, or DESIGN.md's Screen list if this plan references it), author one `​```screen` fenced JSON block and append it under a new `## 3. Screen mockups` section in FEATURE_ARCHITECTURE.md, one `### <screen name>` subsection per screen.
+
+**Schema** (top-level object inside the fence):
+
+```jsonc
+{
+  "title": "/campaigns",              // optional — small route/label caption above the frame
+  "nav": { "items": ["대시보드", "캠페인 관리"], "active": "캠페인 관리" },  // optional top nav
+  "body": [ /* Component[] — top to bottom */ ]
+}
+```
+
+**Component types** (each object needs a `type`):
+
+| type | shape |
+|---|---|
+| `header` | `{ type:"header", title, subtitle? }` |
+| `toolbar` | `{ type:"toolbar", items: ToolbarItem[] }` — item = `{type:"button",label,variant?}` or `{type:"input",placeholder?}` |
+| `tabs` | `{ type:"tabs", items: string[], active? }` |
+| `table` | `{ type:"table", columns: string[], rows: Cell[][] }` — cell = a plain string, `{badge,tone?}`, or `{button,variant?}` |
+| `card` | `{ type:"card", title?, body: Component[] }` (nestable) |
+| `list` | `{ type:"list", items: [{label, action?}] }` |
+| `form` | `{ type:"form", fields: [{label, value?}] }` |
+| `badge` | `{ type:"badge", label, tone? }` |
+| `button` | `{ type:"button", label, variant? }` |
+| `text` | `{ type:"text", value }` |
+
+`variant`: `primary` \| `secondary` (default) \| `danger`. `tone`: `muted` (default, neutral) \| `info` (completed/informational) \| `good` (success/active) \| `warn` (caution) \| `danger` (risk/destructive).
+
+**Faithfulness (non-negotiable, same rule as the diagrams):**
+- Every nav item, table column, field, and button label must trace back to PLAN.md / TESTS.md / DESIGN.md. Never invent a screen, a data column, or a button that isn't in the source docs.
+- A table row that would NOT show a button in that state in the real product (e.g., an action only available for one status) must omit that cell's button too — mockups show real conditional UI, not a maximal one.
+- If you're unsure of an exact label, use the closest wording actually present in the source. When truly unknown, leave that block out — an incomplete but faithful mockup beats a fabricated one.
+- Buttons/inputs in a mockup are always static illustrations (the deck never makes them clickable) — describe the STATE shown, not an interaction.
+
+Print one-line confirmation:
+
+```
+✓ Added N screen mockup(s) to scv/promote/<folder>/FEATURE_ARCHITECTURE.md
+  Screens: <name1>, <name2>, ...
+```
+
+#### Step 6.5 — Self-review (before moving on)
 
 Before continuing to Step 7, silently re-read the FEATURE_ARCHITECTURE.md you just wrote and verify it against PLAN.md. Do **not** print this checklist to the user — fix problems silently and only mention if a fix changed something material.
 
@@ -718,6 +782,8 @@ Checklist (apply once per generated file):
 6. **`:::new` class** (diagram 2): every node introduced by this feature has `:::new`. Existing nodes do not.
 7. **Dashed edges** (diagram 2 with graphify source): edges from new components use `-.->` (dashed). Existing-to-existing edges use `-->`.
 8. **Mermaid fence**: the diagram is inside a ` ```mermaid ` ... ` ``` ` fence (not ` ```markdown ` or unfenced).
+9. **Screen mockups valid JSON** (if §3 present): each `​```screen` fence parses as JSON (a malformed one renders as a visible error callout, not silently). Fix any syntax mistakes.
+10. **Screen mockups faithful**: every nav item / column / field / button label in §3 traces back to PLAN.md / TESTS.md / DESIGN.md. Remove anything invented.
 
 If a fix changed something user-visible (added a missing component / removed an invented one), mention it in the confirmation:
 
@@ -739,16 +805,20 @@ the artifact humans open). It is fast (no build), lives next to the markdown, an
 committed with the plan:
 
 ```
-!${CLAUDE_PLUGIN_ROOT}/scripts/deck.sh "scv/promote/<folder>"
+!${CLAUDE_PLUGIN_ROOT}/scripts/deck.sh "scv/promote/<folder>" --lang <LANG_RESOLVED>
 ```
 
-Pass the **folder** (not a single file) so the three docs merge into one deck. Output
-is `scv/promote/<folder>/<folder>.deck.html`; parse `DECK_HTML:` and surface it in the
-report. In a nested monorepo module, use that module's path (`<SCV_DIR>/promote/<folder>`,
-e.g. `FE/scv/promote/<folder>`). The first run installs a slim (~7MB) renderer; if
-Node/pnpm are missing, relay the error and point to `/scv:install-deps` — the plan is
-still valid without the deck. **Whenever PLAN.md / TESTS.md / FEATURE_ARCHITECTURE.md
-change later, re-run this** so the deck always tracks the plan.
+Pass the **folder** (not a single file) so the three docs merge into one deck, and the
+SAME `LANG_RESOLVED` this promote already resolved in Step 0 — the deck's UI chrome
+(buttons, headings, lint messages) follows it; PLAN.md/TESTS.md/FEATURE_ARCHITECTURE.md
+content itself is untouched (it already IS in `LANG_RESOLVED`, written that way in
+Steps 5/6). Output is `scv/promote/<folder>/<folder>.deck.html`; parse `DECK_HTML:` and
+surface it in the report. In a nested monorepo module, use that module's path
+(`<SCV_DIR>/promote/<folder>`, e.g. `FE/scv/promote/<folder>`). The first run installs a
+slim (~7MB) renderer; if Node/pnpm are missing, relay the error and point to
+`/scv:install-deps` — the plan is still valid without the deck. **Whenever PLAN.md /
+TESTS.md / FEATURE_ARCHITECTURE.md change later, re-run this** so the deck always
+tracks the plan.
 
 ### Step 8 — Update readpath baseline
 
