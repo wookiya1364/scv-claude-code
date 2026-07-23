@@ -29,7 +29,10 @@ const slug =
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "") || "deck";
 
-const data = mdToDeck(raw, slug, basename(input));
+// Reads SCV_LANG the same way doc.mjs does — both CLIs must resolve the SAME
+// language from the SAME environment, or the byte-identical doc/slide invariant
+// breaks whenever a project sets SCV_LANG to anything but the shared default.
+const data = mdToDeck(raw, slug, basename(input), process.env.SCV_LANG || "english");
 
 const outDir = resolve(DECKS_DIR, slug);
 mkdirSync(outDir, { recursive: true });
