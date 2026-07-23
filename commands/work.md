@@ -5,6 +5,7 @@ allowed-tools:
   - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/work.sh:*)"
   - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/readpath.sh:*)"
   - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/pr-helper.sh:*)"
+  - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/deck.sh:*)"
   - "Bash"
   - "Skill(graphify)"
   - "AskUserQuestion"
@@ -246,6 +247,14 @@ Only if tests fully passed in Step 7 (and Step 9a passed or was skipped):
 After a successful archive, remind the user:
 - `scv/archive/<slug>/ARCHIVED_AT.md` has the archive record.
 - Future `/scv:status` will no longer flag this plan.
+
+**Refresh the 기획서 deck** — implementation may have edited PLAN.md / TESTS.md, so regenerate the archived plan's human-readable deck from the final docs:
+
+```
+!${CLAUDE_PLUGIN_ROOT}/scripts/deck.sh "scv/archive/<slug>"
+```
+
+This rewrites `scv/archive/<slug>/<slug>.deck.html` (combining PLAN + FEATURE_ARCHITECTURE + TESTS into one scrollable document) so it's committed with the archive. In a nested module, use the module's path (`<SCV_DIR>/archive/<slug>`). If Node/pnpm are missing, relay the error and continue — the archive itself is unaffected.
 
 #### Step 9b.1 — Conversation archive (v0.9.0+, optional)
 

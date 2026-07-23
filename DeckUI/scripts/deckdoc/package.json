@@ -1,0 +1,16 @@
+{
+  "name": "scv-deckdoc",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Buildless markdown → 기획서 document HTML for /scv:deck. Slim remark stack only — no React/Vite/build.",
+  "bin": {
+    "scv-deckdoc": "./doc.mjs"
+  },
+  "dependencies": {
+    "remark-frontmatter": "^5.0.0",
+    "remark-gfm": "^4.0.1",
+    "remark-parse": "^11.0.0",
+    "unified": "^11.0.5"
+  }
+}
