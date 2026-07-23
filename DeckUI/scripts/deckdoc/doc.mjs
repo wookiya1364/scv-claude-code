@@ -22,6 +22,7 @@ import { readFileSync, writeFileSync, mkdirSync, statSync, existsSync } from "no
 import { basename, dirname, resolve } from "node:path";
 import { mdToDeck, stripLeadingMeta } from "./transform.mjs";
 import { renderHtml } from "./render.mjs";
+import { makeT } from "./i18n.mjs";
 
 const normalizeSlug = (s) =>
   s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "deck";
@@ -29,36 +30,46 @@ const normalizeSlug = (s) =>
 // A slug folder's parts, in reading order. The first present file is the SPINE
 // (its H1 becomes the document title); the rest are appended under a labeled
 // divider with their own leading H1 stripped (the spine already titled the doc).
-const SLUG_PARTS = [
-  { file: "PLAN.md", label: null },
-  { file: "FEATURE_ARCHITECTURE.md", label: "📐 구조 · FEATURE_ARCHITECTURE" },
-  { file: "TESTS.md", label: "✅ 테스트 · 인수기준 (TESTS)" },
-];
-function buildSlugDoc(dir) {
-  const present = SLUG_PARTS.map((p) => ({ ...p, path: resolve(dir, p.file) })).filter((p) =>
-    existsSync(p.path),
-  );
+// Labels are resolved to `lang` (English default — see i18n.mjs).
+function slugParts(t) {
+  return [
+    { file: "PLAN.md", label: null },
+    { file: "FEATURE_ARCHITECTURE.md", label: t("featureArchitectureLabel") },
+    { file: "TESTS.md", label: t("testsLabel") },
+  ];
+}
+function buildSlugDoc(dir, t) {
+  const present = slugParts(t)
+    .map((p) => ({ ...p, path: resolve(dir, p.file) }))
+    .filter((p) => existsSync(p.path));
   if (!present.length)
     throw new Error(`slug folder has no PLAN.md / FEATURE_ARCHITECTURE.md / TESTS.md: ${dir}`);
   const parts = [];
+  const sources = []; // pristine per-file text for the side panel — never the stripped/joined version
   present.forEach((p, i) => {
     const text = readFileSync(p.path, "utf8").trim();
+    sources.push({ label: p.file, text });
     // Spine keeps its frontmatter (parsed at document start) + H1 as the doc title.
     // Non-spine parts get their leading frontmatter/title stripped (parser-based, so
     // a leading `---` rule or a following section heading is preserved).
     if (i === 0) parts.push(text);
     else parts.push(`\n\n---\n\n## ${p.label || p.file.replace(/\.md$/i, "")}\n\n${stripLeadingMeta(text)}`);
   });
-  return { raw: parts.join("\n"), label: present.map((p) => p.file).join(" + ") };
+  return { raw: parts.join("\n"), label: present.map((p) => p.file).join(" + "), sources };
 }
 
 // ---- args ----
+// Language resolution mirrors scripts/render-template.sh's SCV_LANG convention
+// (settings.json `language` → .env `SCV_LANG` resolve upstream, at the Claude/deck.sh
+// layer; this CLI only reads the already-resolved env var, English default). --lang
+// lets a caller override explicitly without touching the environment.
 let INPUT = "";
 let SLUG = "";
 let OUT = "";
 let MERMAID = "cdn";
 let SOURCE = true;
 let EMIT_JSON = false;
+let LANG = process.env.SCV_LANG || "english";
 const argv = process.argv.slice(2);
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
@@ -66,11 +77,13 @@ for (let i = 0; i < argv.length; i++) {
   else if (a.startsWith("--out=")) OUT = a.slice(6);
   else if (a === "--mermaid") MERMAID = argv[++i] || "cdn";
   else if (a.startsWith("--mermaid=")) MERMAID = a.slice(10);
+  else if (a === "--lang") LANG = argv[++i] || "english";
+  else if (a.startsWith("--lang=")) LANG = a.slice(7);
   else if (a === "--no-source") SOURCE = false;
   else if (a === "--emit-json") EMIT_JSON = true;
   else if (a === "-h" || a === "--help") {
     console.log(
-      "usage: doc.mjs <input.md|slug-dir> [slug] [--out <path>] [--mermaid cdn|none] [--no-source] [--emit-json]",
+      "usage: doc.mjs <input.md|slug-dir> [slug] [--out <path>] [--mermaid cdn|none] [--lang english|korean|japanese] [--no-source] [--emit-json]",
     );
     process.exit(0);
   } else if (a.startsWith("-")) {
@@ -79,6 +92,7 @@ for (let i = 0; i < argv.length; i++) {
   } else if (!INPUT) INPUT = a;
   else if (!SLUG) SLUG = a;
 }
+const t = makeT(LANG);
 if (!INPUT) {
   console.error("usage: doc.mjs <input.md|slug-dir> [slug] [--out <path>]");
   process.exit(1);
@@ -91,11 +105,11 @@ if (!existsSync(INPUT)) {
 
 // ---- resolve input → (raw markdown, slug, source label, default output) ----
 const isDir = statSync(INPUT).isDirectory();
-let raw, slug, sourceLabel, defaultOut;
+let raw, slug, sourceLabel, defaultOut, sources;
 if (isDir) {
   let combined;
   try {
-    combined = buildSlugDoc(INPUT);
+    combined = buildSlugDoc(INPUT, t);
   } catch (e) {
     console.error(e.message);
     process.exit(1);
@@ -103,16 +117,27 @@ if (isDir) {
   raw = combined.raw;
   slug = normalizeSlug(SLUG || basename(INPUT));
   sourceLabel = combined.label;
+  sources = combined.sources; // pristine PLAN.md/FEATURE_ARCHITECTURE.md/TESTS.md — one tab each
   defaultOut = resolve(INPUT, `${slug}.deck.html`); // lives next to the markdown, committed
 } else {
   raw = readFileSync(INPUT, "utf8");
   slug = normalizeSlug(SLUG || basename(INPUT).replace(/\.md$/i, ""));
   sourceLabel = basename(INPUT);
+  sources = [{ label: sourceLabel, text: raw }];
   defaultOut = resolve(process.cwd(), `${slug}-doc.html`);
 }
 
-const data = mdToDeck(raw, slug, sourceLabel);
-const html = renderHtml(data, { mermaid: MERMAID, source: SOURCE });
+const data = mdToDeck(raw, slug, sourceLabel, LANG);
+// render.mjs already guards the known crash vectors (wrong-typed screen-DSL fields,
+// runaway nesting); this catch is defense-in-depth for anything still unforeseen —
+// a clear error + nonzero exit beats a raw Node stack trace and zero bytes written.
+let html;
+try {
+  html = renderHtml(data, { mermaid: MERMAID, source: SOURCE, sources, lang: LANG });
+} catch (e) {
+  console.error(`render failed: ${e.message}`);
+  process.exit(1);
+}
 
 if (!OUT) OUT = defaultOut;
 OUT = resolve(OUT);
