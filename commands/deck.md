@@ -1,5 +1,5 @@
 ---
-description: "Turn a markdown planning doc into a spec-grade single-HTML deck (DeckUI). Deterministic md→deck transform + a quality/gap lint; the raw markdown stays visible in a side panel."
+description: "Turn a markdown planning doc into a spec-grade 기획서 HTML — a buildless, self-contained document by default, or an on-screen slide presentation when you ask for one. Deterministic md→deck transform + a quality/gap lint; the raw markdown travels with it."
 argument-hint: "[<path-to-markdown>]"
 allowed-tools:
   - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/deck.sh:*)"
@@ -12,16 +12,26 @@ allowed-tools:
 model: opus
 ---
 
-# /scv:deck — markdown → 기획서 덱
+# /scv:deck — markdown → 기획서 HTML
 
-Turn a plain markdown doc into a deck that reads like a **real planning document
-(기획서)** — headings become slides, GFM tables become data tables, ```mermaid
+Turn a plain markdown doc into something that reads like a **real planning document
+(기획서)** — headings become sections, GFM tables become data tables, ```mermaid
 fences become diagrams, `> [!NOTE]`/`[!WARNING]` become callouts — and the **raw
-markdown stays visible in a side panel** (the slide and the source always agree).
+markdown travels with the output** (the rendering and the source always agree).
+
+**Two output shapes (same deterministic transform → they never diverge):**
+- **Default — document.** A buildless, self-contained **single-HTML 기획서 document**
+  you scroll top-to-bottom and print to PDF. No Vite/React/build; only a slim remark
+  stack (~7MB), so it runs light. This is what most "마크다운만으론 이해가 안 된다" cases want.
+- **`--slides` — presentation.** The DeckUI on-screen slide deck (Vite+React single-file
+  build, heavier). Use when you want to present rather than read.
+
+Mermaid diagrams render from a CDN and **auto-fall back to the diagram's source text**
+when offline / on a closed network — the doc never shows an empty box.
 
 **Division of labor (deterministic + LLM-assist):**
-- The **transform is deterministic** (`scripts/deck.sh` → `DeckUI/scripts/md-to-deck.mjs`, remark-based). It never invents content: every rendered value comes from the source md.
-- **You (Claude)** assist around it: pick the input, surface the lint/gap report, and *offer* to improve the **source markdown** (never the generated deck) when sections are missing — always with user approval.
+- The **transform is deterministic** (`scripts/deck.sh` → `DeckUI/scripts/deckdoc/transform.mjs`, remark-based). It never invents content: every rendered value comes from the source md.
+- **You (Claude)** assist around it: pick the input, surface the lint/gap report, and *offer* to improve the **source markdown** (never the generated output) when sections are missing — always with user approval.
 
 ## Step 0 — Resolve the input markdown
 
@@ -64,26 +74,31 @@ Parse `BIG_PICTURE:` + `MODE_HINT:` (and the `ARCHITECTURE` / `GRAPHIFY_GRAPH` /
 
 **Faithfulness (non-negotiable):** the big picture must come from real docs. If no `ARCHITECTURE.md` / graphify graph / `FEATURE_ARCHITECTURE.md` exists, do **not** invent a system diagram — tell the user the deck can't show the whole until one exists (offer to draft `ARCHITECTURE.md`, or run `/scv:promote` which generates `FEATURE_ARCHITECTURE.md`), and proceed with what's available plus a lint warning. Use `AskUserQuestion` before rewriting the user's source.
 
-## Step 1 — Build the deck
+## Step 1 — Build
 
 ```!
 "${CLAUDE_PLUGIN_ROOT}/scripts/deck.sh" $ARGUMENTS
 ```
+
+This produces the **document** by default. If the user asked for a slide
+presentation, append `--slides`. Other flags: `--mermaid none` (skip the CDN
+script, always render mermaid as source text), `--no-source` (drop the raw-markdown
+section), `--out <path>`.
 
 Parse the emitted lines:
 - `DECK_SLUG:` — the deck id.
 - `LINT: <n> warning(s)` + each `  ⚠ ...` — missing canonical sections.
 - `DECK_HTML:` — absolute path to the built self-contained HTML.
 
-If the helper errors (missing Node/pnpm), relay it and suggest `/scv:install-deps` (Node + pnpm are `/scv:deck`-only deps). Do not auto-install globally.
+If the helper errors (missing Node/pnpm), relay it and suggest `/scv:install-deps` (Node + pnpm are `/scv:deck`-only deps). The **document** path needs only a slim ~7MB install; `--slides` additionally builds the full DeckUI. Do not auto-install globally.
 
 ## Step 2 — Report + quality coaching
 
-1. Tell the user the deck is built and **where**: `DECK_HTML`. One-line how-to-open (`open <path>` / double-click). Mention the raw markdown is in the side panel (toggle `S`).
+1. Tell the user it's built and **where**: `DECK_HTML`. One-line how-to-open (`open <path>` / double-click) and that it prints to PDF from the browser. The raw markdown travels with it — a collapsible "기획서 원문" section at the bottom of the document (or the side panel, toggle `S`, in `--slides`).
 2. If `LINT` > 0, surface the warnings plainly. These are the sections a professional 기획서 usually has but this doc lacks (비목표 / 성공지표 / 인수기준 / 예외처리, etc.).
 3. **Offer** (via `AskUserQuestion`, default: just report) to help draft the missing sections **into the source markdown** — then the user re-runs `/scv:deck`. Never write invented specifics; propose structure + `<TODO>` placeholders and let the user fill real values.
 
 ## Never
-- Never invent content that isn't in the source markdown (the deck and the side-panel source must agree).
-- Never edit the generated `deck.json` by hand — edit the source md and re-run.
+- Never invent content that isn't in the source markdown (the rendering and the carried-along source must agree).
+- Never edit generated output (the HTML, or the slide-path `deck.json`) by hand — edit the source md and re-run.
 - Never modify files outside the deck flow without asking.

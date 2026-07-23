@@ -133,7 +133,7 @@ flowchart LR
 | `/scv:promote` | `scv/raw/` → plan 폴더 (`scv/promote/<slug>/`) — PLAN + TESTS + Mermaid 도식 |
 | `/scv:work <slug>` | 구현 · 테스트 실행 · 통과 시 archive · e2e 비디오 첨부한 PR 생성 |
 | `/scv:codegen <slug>` | **TDD-first 변형** (v0.11.0+, *experimental*).<br/>TESTS 가 코드를 driver. case 단위 Red→Green (budget 3).<br/>PLAN.md `scope:` / `invariants:` 를 가드로 사용.<br/>archive/PR 은 `/scv:work` 에 위임. |
-| `/scv:deck [<md>]` | **마크다운 → 기획서급 덱** (DeckUI).<br/>결정론적 변환: 제목→슬라이드, GFM 표, ` ```mermaid ` 다이어그램, KPI 타일, As-Is/To-Be, 품질 린트 — 원문 마크다운은 우측 패널에 그대로.<br/>큰 그림(아키텍처)을 context-first 로 구성, 지어내지 않음. Node+pnpm 필요(이 명령만). |
+| `/scv:deck [<md>]` | **마크다운 → 기획서 HTML.** 기본: 빌드 없는 자체완결 **문서**(위→아래로 읽고 PDF 인쇄); **슬라이드 프레젠테이션**을 요청하면 DeckUI 덱으로.<br/>결정론적 변환: 제목→섹션, GFM 표, ` ```mermaid ` 다이어그램(CDN, 오프라인 시 코드 텍스트 자동 폴백), KPI 타일, As-Is/To-Be, 품질 린트 — 원문 마크다운이 함께 담김.<br/>큰 그림(아키텍처)을 context-first 로 구성, 지어내지 않음. Node+pnpm 필요(이 명령만; 문서 경로는 슬림 ~7MB 만 설치). |
 | `/scv:update` | **플러그인 self-update 안내** — 설치된 vs 최신 버전 표시, `/plugin marketplace update scv-claude-code` + `/reload-plugins` 안내. read-only. (v0.11.2+) |
 | `/scv:regression` | archive 된 모든 TESTS 를 회귀로 실행 |
 | `/scv:report` | 단계 결과를 Slack / Discord 에 보고 |
