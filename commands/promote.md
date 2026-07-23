@@ -755,6 +755,26 @@ If [1]: for **each screen this plan materially adds or changes** (named in PLAN.
 
 `variant`: `primary` \| `secondary` (default) \| `danger`. `tone`: `muted` (default, neutral) \| `info` (completed/informational) \| `good` (success/active) \| `warn` (caution) \| `danger` (risk/destructive).
 
+**Style priority — scv skin first, project tokens only when told:**
+
+- **2순위 default: the scv-native skin.** Say nothing, add nothing extra — every mockup renders in scv's own neutral dark wireframe (no `theme` field). This is correct for most plans; do not go hunting for the project's real colors unprompted.
+- **1순위 override: only when the user has told you this project has its own design tokens** — either just now in conversation, or durably via an already-filled `scv/DESIGN.md` §5 "Design tokens" (check it — if §5 is real content, not `<TODO>` placeholders, that IS the user having told you). When that's the case, add a `"theme"` object to **every** `​```screen` block for this plan:
+
+  ```jsonc
+  {
+    "theme": {
+      "bg": "#0a0c14", "fg": "#f3f5fb", "card": "#12141f", "border": "#262c40",
+      "muted": "#1a1e2d", "mutedFg": "#98a1b8",
+      "primary": "#5a6cff", "success": "#22c55e", "danger": "#f4556d",
+      "warn": "#f59e0b", "info": "#39bdf8"
+    },
+    "nav": { "...": "..." }, "body": [ "..." ]
+  }
+  ```
+
+  All keys optional — set only the ones the project's DESIGN.md actually documents; the rest keep the scv-native default. **Base hex colors only** — copy the exact values from DESIGN.md §5 (or wherever the user pointed you), never invent or approximate one. Do **not** compute paired values yourself (readable text-on-primary, translucent badge backgrounds, etc.) — `/scv:deck`'s renderer derives those automatically from the base color (this is deliberate: a past version had Claude/hand-picked white-on-accent text that failed WCAG contrast for some palettes; letting the renderer compute it from real luminance closes that class of bug). An invalid value (not a hex color) is silently dropped by the renderer and falls back to the scv-native default for that one property — it will not break the build, but double-check your hex codes against DESIGN.md anyway.
+- Glass/blur/translucency effects (if the project's real style uses them) are **not** supported by this override yet — only flat colors + corner radius. If the project's real look depends on glassmorphism, mention in your confirmation that the mockup approximates colors only, not the visual effect.
+
 **Faithfulness (non-negotiable, same rule as the diagrams):**
 - Every nav item, table column, field, and button label must trace back to PLAN.md / TESTS.md / DESIGN.md. Never invent a screen, a data column, or a button that isn't in the source docs.
 - A table row that would NOT show a button in that state in the real product (e.g., an action only available for one status) must omit that cell's button too — mockups show real conditional UI, not a maximal one.
@@ -784,6 +804,7 @@ Checklist (apply once per generated file):
 8. **Mermaid fence**: the diagram is inside a ` ```mermaid ` ... ` ``` ` fence (not ` ```markdown ` or unfenced).
 9. **Screen mockups valid JSON** (if §3 present): each `​```screen` fence parses as JSON (a malformed one renders as a visible error callout, not silently). Fix any syntax mistakes.
 10. **Screen mockups faithful**: every nav item / column / field / button label in §3 traces back to PLAN.md / TESTS.md / DESIGN.md. Remove anything invented.
+11. **Screen mockup `theme` only when told**: if any `​```screen` block has a `theme` field, confirm the user actually said this project has design tokens (or `scv/DESIGN.md` §5 is genuinely filled in) — remove `theme` if you added it speculatively. If `theme` IS warranted, every value must be a base hex color copied verbatim from the real source (DESIGN.md §5 / user's own message) — never a value you approximated or a computed derivative (on-color, tint) you picked by hand.
 
 If a fix changed something user-visible (added a missing component / removed an invented one), mention it in the confirmation:
 
