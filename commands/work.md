@@ -251,10 +251,10 @@ After a successful archive, remind the user:
 **Refresh the 기획서 deck** — implementation may have edited PLAN.md / TESTS.md, so regenerate the archived plan's human-readable deck from the final docs:
 
 ```
-!${CLAUDE_PLUGIN_ROOT}/scripts/deck.sh "scv/archive/<slug>"
+!${CLAUDE_PLUGIN_ROOT}/scripts/deck.sh "scv/archive/<slug>" --lang <PLAN_LANG>
 ```
 
-This rewrites `scv/archive/<slug>/<slug>.deck.html` (combining PLAN + FEATURE_ARCHITECTURE + TESTS into one scrollable document) so it's committed with the archive. In a nested module, use the module's path (`<SCV_DIR>/archive/<slug>`). If Node/pnpm are missing, relay the error and continue — the archive itself is unaffected.
+Read `<PLAN_LANG>` from the archived PLAN.md's `lang:` frontmatter (the same field Step 9d reads — set by `/scv:promote` Step 0; English fallback if absent) so the deck's UI chrome matches the language the plan's own content is already written in. This rewrites `scv/archive/<slug>/<slug>.deck.html` (combining PLAN + FEATURE_ARCHITECTURE + TESTS into one scrollable document) so it's committed with the archive. In a nested module, use the module's path (`<SCV_DIR>/archive/<slug>`). If Node/pnpm are missing, relay the error and continue — the archive itself is unaffected.
 
 #### Step 9b.1 — Conversation archive (v0.9.0+, optional)
 

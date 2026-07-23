@@ -68,3 +68,22 @@ flowchart LR
 ```json
 { "offline": true, "fallback": "mermaid-source-text" }
 ```
+
+## 화면 목업
+
+```screen
+{
+  "title": "/campaigns",
+  "nav": { "items": ["대시보드", "캠페인 관리"], "active": "캠페인 관리" },
+  "body": [
+    { "type": "header", "title": "전화번호부 관리" },
+    { "type": "table", "columns": ["캠페인명", "상태"], "rows": [["월말 갱신 리마인드", { "badge": "대기", "tone": "muted" }]] }
+  ]
+}
+```
+
+## 깨진 화면 목업
+
+```screen
+{ this is not valid json,,, }
+```
