@@ -13,6 +13,7 @@ import { unified } from "unified";
 import remarkParse from "remark-parse";
 import remarkGfm from "remark-gfm";
 import remarkFrontmatter from "remark-frontmatter";
+import { makeT } from "./i18n.mjs";
 
 // mdast node → plain text (MVP: inline formatting flattened, faithful to words).
 const txt = (n) =>
@@ -65,7 +66,7 @@ function listItemsTree(listNode) {
 
 const CALLOUT = { NOTE: "info", TIP: "good", IMPORTANT: "info", WARNING: "warn", CAUTION: "danger" };
 
-function blockOf(node) {
+function blockOf(node, t) {
   switch (node.type) {
     case "paragraph":
       return { type: "para", text: txt(node) };
@@ -74,9 +75,28 @@ function blockOf(node) {
       // ordered carried so the renderer emits <ol> with correct per-level numbering.
       return { type: "bullets", ordered: !!node.ordered, items: listLines(node, 0), tree: listItemsTree(node) };
     case "code":
-      return node.lang === "mermaid"
-        ? { type: "mermaid", code: node.value }
-        : { type: "code", lang: node.lang || "", text: node.value };
+      if (node.lang === "mermaid") return { type: "mermaid", code: node.value };
+      if (node.lang === "screen") {
+        // Claude authors a screen mockup as a JSON object inside a ```screen fence
+        // (see commands/promote.md for the schema) — parsed here, deterministically,
+        // never fixed up. A malformed block never crashes the whole deck: it becomes a
+        // visible error callout, and the raw fence is always inspectable in the side
+        // panel (the rendering and the source travel together by design).
+        try {
+          // The literal type must win over anything the fence body itself contains —
+          // spread FIRST, then pin type, so a stray "type" key inside the JSON can't
+          // repurpose this block as something else (bypassing the faithfulness rules).
+          return { ...JSON.parse(node.value), type: "screen" };
+        } catch (e) {
+          return {
+            type: "callout",
+            tone: "danger",
+            title: t("screenParseErrorTitle"),
+            text: t("screenParseErrorText", e.message),
+          };
+        }
+      }
+      return { type: "code", lang: node.lang || "", text: node.value };
     case "table": {
       const rows = node.children.map((tr) => tr.children.map((td) => txt(td).trim()));
       const [headers, ...body] = rows;
@@ -156,8 +176,12 @@ export function stripLeadingMeta(md) {
 }
 
 // Parse a markdown planning doc into typed deck data. `slug`/`sourceLabel` are
-// already resolved by the caller (CLI). Returns { title, slug, source, slides, lint }.
-export function mdToDeck(raw, slug, sourceLabel) {
+// already resolved by the caller (CLI). `lang` selects the UI-chrome/lint-message
+// language (English default — see i18n.mjs; the SOURCE content itself is never
+// translated, only strings this transform generates). Returns
+// { title, slug, source, slides, lint }.
+export function mdToDeck(raw, slug, sourceLabel, lang) {
+  const t = makeT(lang);
   const tree = unified()
     .use(remarkParse)
     .use(remarkGfm)
@@ -194,8 +218,8 @@ export function mdToDeck(raw, slug, sourceLabel) {
       };
     } else {
       if (!cur)
-        cur = { id: "cover", nav: "표지", kicker: "DeckUI", title: docTitle, anchor: docTitle, depth: 0, blocks: [] };
-      const b = blockOf(node);
+        cur = { id: "cover", nav: t("cover"), kicker: "DeckUI", title: docTitle, anchor: docTitle, depth: 0, blocks: [] };
+      const b = blockOf(node, t);
       if (b) cur.blocks.push(b);
     }
   }
@@ -230,13 +254,13 @@ export function mdToDeck(raw, slug, sourceLabel) {
   const has = (...keys) => headingTexts.some((h) => keys.some((k) => h.includes(k)));
   const lint = [];
   if (!has("non-goal", "비목표", "out of scope", "범위 밖", "하지 않"))
-    lint.push({ level: "warn", message: "비목표(Non-goals / Out-of-scope) 섹션이 없습니다 — 범위 경계가 모호해질 수 있습니다." });
+    lint.push({ level: "warn", message: t("lintNonGoals") });
   if (!has("metric", "지표", "성공 지표", "kpi"))
-    lint.push({ level: "warn", message: "성공지표(Metrics) 섹션이 없습니다 — baseline→target 지표를 권장합니다." });
+    lint.push({ level: "warn", message: t("lintMetrics") });
   if (!has("acceptance", "인수", "given/when", "완료 조건"))
-    lint.push({ level: "warn", message: "인수기준(Acceptance criteria) 섹션이 없습니다." });
+    lint.push({ level: "warn", message: t("lintAcceptance") });
   if (!has("edge", "예외", "error", "오류"))
-    lint.push({ level: "warn", message: "예외처리(Edge cases) 섹션이 없습니다." });
+    lint.push({ level: "warn", message: t("lintEdgeCases") });
 
   return { title: docTitle, slug, source: { label: sourceLabel || `${slug}.md`, text: raw }, slides, lint };
 }
