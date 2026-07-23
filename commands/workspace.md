@@ -43,7 +43,7 @@ Fire `AskUserQuestion` "이 레포를 워크스페이스에서 어떻게 둘까�
    - (선택) workspace 이름.
 2. Run:
    ```!
-   "${CLAUDE_PLUGIN_ROOT}/scripts/workspace-helper.sh" join --root <URL> --id <id> --role <role> --workspace <ws>
+   "${CLAUDE_PLUGIN_ROOT}/scripts/workspace-helper.sh" join --root "<URL>" --id "<id>" --role "<role>" --workspace "<ws>"
    ```
 3. Confirm: 이제 CHILD. `git pull` 후 `/scv:status`에 들어온 handoff가 보입니다.
 
