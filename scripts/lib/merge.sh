@@ -15,13 +15,20 @@ replace_marker_block() {
   # subsequent line matching end_pattern. Preserves the marker lines themselves.
   # Returns 0 on success, 1 if start marker not found.
   local file="$1" start_pat="$2" end_pat="$3" content="$4"
-  local tmp; tmp=$(mktemp)
-  awk -v start="$start_pat" -v end="$end_pat" -v c="$content" '
+  local tmp content_file
+  tmp=$(mktemp)
+  content_file=$(mktemp)
+  printf '%s\n' "$content" > "$content_file"
+  if awk -v start="$start_pat" -v end="$end_pat" \
+    -v content_file="$content_file" '
     BEGIN { in_block = 0; found = 0 }
     {
       if (!in_block && index($0, start) > 0) {
         print $0
-        print c
+        while ((getline content_line < content_file) > 0) {
+          print content_line
+        }
+        close(content_file)
         in_block = 1
         found = 1
         next
@@ -34,13 +41,12 @@ replace_marker_block() {
       if (!in_block) print $0
     }
     END { exit (found ? 0 : 1) }
-  ' "$file" > "$tmp"
-  local rc=$?
-  if [[ $rc -eq 0 ]]; then
+  ' "$file" > "$tmp"; then
     mv "$tmp" "$file"
+    rm -f "$content_file"
     return 0
   else
-    rm -f "$tmp"
+    rm -f "$tmp" "$content_file"
     return 1
   fi
 }

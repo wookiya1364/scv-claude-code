@@ -1,0 +1,145 @@
+name: Propose SCV Core update
+
+on:
+  schedule:
+    - cron: '23 3 * * *'
+  repository_dispatch:
+    types: [scv-core-released]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'SCV Core version (for example 0.20.1); blank means latest'
+        required: false
+        type: string
+
+concurrency:
+  group: scv-core-sync
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  propose:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.SCV_CORE_SYNC_TOKEN || github.token }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: develop
+          fetch-depth: 0
+          token: ${{ secrets.SCV_CORE_SYNC_TOKEN || github.token }}
+
+      - name: Resolve target release
+        id: version
+        env:
+          REQUESTED_VERSION: ${{ inputs.version || github.event.client_payload.version }}
+        run: |
+          if [[ -n "$REQUESTED_VERSION" ]]; then
+            version=${REQUESTED_VERSION#v}
+          else
+            tag=$(gh api repos/wookiya1364/scv-core/releases/latest --jq .tag_name)
+            version=${tag#v}
+          fi
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Stop if already pinned
+        id: pin
+        env:
+          TARGET_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          current_core=$(python3 -c 'import json; print(json.load(open("core.lock"))["core_version"])')
+          current_plugin=$(python3 -c 'import json; print(json.load(open(".claude-plugin/plugin.json"))["version"])')
+          current_marketplace=$(python3 -c 'import json; print(next(item["version"] for item in json.load(open(".claude-plugin/marketplace.json"))["plugins"] if item["name"] == "scv"))')
+          current_wrapper=$(tr -d '[:space:]' < VERSION)
+          artifact_sha=$(python3 -c 'import json; print(json.load(open("core.lock"))["artifact_sha256"] or "")')
+          if [[ "$current_core" == "$TARGET_VERSION" &&
+                "$current_plugin" == "$TARGET_VERSION" &&
+                "$current_marketplace" == "$TARGET_VERSION" &&
+                "$current_wrapper" == "$TARGET_VERSION" &&
+                "$artifact_sha" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "changed=no" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=yes" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Sync immutable release
+        if: steps.pin.outputs.changed == 'yes'
+        env:
+          TARGET_VERSION: ${{ steps.version.outputs.version }}
+        run: ./scripts/sync-core.sh --version "$TARGET_VERSION"
+
+      - name: Validate before proposing
+        if: steps.pin.outputs.changed == 'yes'
+        run: |
+          bash tests/test-core-contract.sh
+          bash tests/test-apply-model-policy.sh
+          bash tests/run-dry.sh
+
+      - name: Commit and push update branch
+        if: steps.pin.outputs.changed == 'yes'
+        id: branch
+        env:
+          TARGET_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          branch="chore/core-v${TARGET_VERSION}"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            pr_url=$(gh pr list \
+              --base develop \
+              --head "$branch" \
+              --state open \
+              --json url \
+              --jq '.[0].url // ""')
+            if [[ -n "$pr_url" ]]; then
+              echo "existing=yes" >> "$GITHUB_OUTPUT"
+              echo "Existing core update PR: $pr_url"
+            else
+              echo "existing=no" >> "$GITHUB_OUTPUT"
+            fi
+            echo "branch=$branch" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git switch -c "$branch"
+          git config user.name "scv-core-sync[bot]"
+          git config user.email "scv-core-sync[bot]@users.noreply.github.com"
+          git add \
+            vendor/scv-core core.lock VERSION TEMPLATE_VERSION host-profile.env \
+            .claude-plugin/plugin.json .claude-plugin/marketplace.json \
+            scripts template DeckUI assets protocols commands tests \
+            ralph-template-scv.md
+          git diff --cached --check
+          git commit -m "chore(core): sync scv-core v${TARGET_VERSION}"
+          if ! git push --set-upstream origin "$branch"; then
+            echo "::error::Branch push failed. Configure SCV_CORE_SYNC_TOKEN with repository Contents write access, or grant contents:write to the workflow token." >&2
+            exit 1
+          fi
+          echo "existing=no" >> "$GITHUB_OUTPUT"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+
+      - name: Open develop PR
+        if: steps.pin.outputs.changed == 'yes' && steps.branch.outputs.existing == 'no'
+        env:
+          TARGET_VERSION: ${{ steps.version.outputs.version }}
+          BRANCH_NAME: ${{ steps.branch.outputs.branch }}
+        run: |
+          if ! output=$(gh pr create \
+              --base develop \
+              --head "$BRANCH_NAME" \
+              --title "chore(core): sync scv-core v${TARGET_VERSION}" \
+              --body "Pins and materializes scv-core v${TARGET_VERSION}.
+
+          Validation completed before this PR was created:
+          - core artifact checksum and lock
+          - Core API and Claude adapter contract
+          - Claude model-policy tests
+          - shared dry-run regression
+
+          This PR was opened by the scheduled/manual core sync workflow." 2>&1); then
+            printf '%s\n' "$output" >&2
+            echo "::error::PR creation failed. Enable GitHub Actions PR creation in repository settings or configure SCV_CORE_SYNC_TOKEN with Contents and Pull requests write access." >&2
+            exit 1
+          fi
+          printf '%s\n' "$output"

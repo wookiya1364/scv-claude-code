@@ -51,7 +51,9 @@ ck "no scv anywhere → default scv"       "scv"           "$(cd "$BASE/empty"; 
 ck "init: target FE → RAW_DIR"           "FE/scv/raw"        "$(cd "$BASE/mono"; source "$LIB"; scv_init_paths FE; echo "$RAW_DIR")"
 ck "init: target FE → STATE_FILE"        "FE/scv/readpath.json" "$(cd "$BASE/mono"; source "$LIB"; scv_init_paths FE; echo "$STATE_FILE")"
 ck "init: no-arg standalone byte-ident"  "scv/raw"           "$(cd "$BASE/single"; source "$LIB"; scv_init_paths; echo "$RAW_DIR")"
-ck "init: env RAW_DIR override wins"      "/custom"           "$(cd "$BASE/single"; source "$LIB"; RAW_DIR=/custom scv_init_paths; echo "$RAW_DIR")"
+# Use a normal shell assignment so the assertion does not depend on whether a
+# Bash version restores temporary `NAME=value function` assignments on return.
+ck "init: env RAW_DIR override wins"      "/custom"           "$(cd "$BASE/single"; source "$LIB"; RAW_DIR=/custom; scv_init_paths; echo "$RAW_DIR")"
 
 # ---- multi-scv model: macro (root) vs micro (FE), addressed by context/arg ----
 mkdir -p "$BASE/full/scv/raw" "$BASE/full/FE/scv/raw" "$BASE/full/BE/scv/raw"
@@ -80,10 +82,10 @@ ck "status FE: no wrong root scv/"        ""  "$(ls "$BASE/it2/scv" 2>/dev/null 
 ck "target '.' → scv (normalized)"  "scv"     "$(cd "$BASE/single"; source "$LIB"; scv_target_path .)"
 ck "init '.' → scv/raw (no ./)"     "scv/raw" "$(cd "$BASE/single"; source "$LIB"; scv_init_paths .; echo "$RAW_DIR")"
 
-# ---- review fix: promote-helper reads the RESOLVED module's CLAUDE.md ----
+# ---- review fix: promote-helper reads the RESOLVED module's SCV.md ----
 mkdir -p "$BASE/ph/scv/raw" "$BASE/ph/FE/scv/raw"
-printf '<!-- STANDARD:VERSION -->1.0.0-ROOT<!-- /STANDARD:VERSION -->\n' > "$BASE/ph/scv/CLAUDE.md"
-printf '<!-- STANDARD:VERSION -->9.9.9-FE<!-- /STANDARD:VERSION -->\n'   > "$BASE/ph/FE/scv/CLAUDE.md"
+printf '<!-- STANDARD:VERSION -->1.0.0-ROOT<!-- /STANDARD:VERSION -->\n' > "$BASE/ph/scv/SCV.md"
+printf '<!-- STANDARD:VERSION -->9.9.9-FE<!-- /STANDARD:VERSION -->\n'   > "$BASE/ph/FE/scv/SCV.md"
 ver_fe=$(cd "$BASE/ph"; bash "$SCRIPTS/promote-helper.sh" FE --dry-run 2>/dev/null | sed -n 's/^STANDARD_VERSION: //p')
 ck "promote FE → FE module version"        "9.9.9-FE"   "$ver_fe"
 ver_root=$(cd "$BASE/ph"; bash "$SCRIPTS/promote-helper.sh" --dry-run 2>/dev/null | sed -n 's/^STANDARD_VERSION: //p')

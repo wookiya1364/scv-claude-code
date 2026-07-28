@@ -28,7 +28,7 @@
 #  12. dark-default theme with a header toggle (pre-paint init from localStorage, no
 #      flash-of-light) + a draggable side-panel resize handle (same bounds as the
 #      original SourcePanel: 320px floor, main content keeps ≥420px).
-#  13. ```screen fenced JSON → wireframe mockup (Claude-authored, per commands/promote.md
+#  13. ```screen fenced JSON → wireframe mockup (Claude Code-authored, per commands/promote.md
 #      Step 6.4): valid JSON renders the dark scv-native wf-* skin; malformed JSON never
 #      crashes the build — it becomes a visible error callout instead.
 #  14. v0.18.0 pre-release fixes (adversarial review): array-type-confusion crash guards,
@@ -371,7 +371,7 @@ else
 fi
 
 # 16. screen-mockup "theme" override — scv-native skin is the default (1순위=project
-#     tokens only when told, 2순위=scv skin otherwise); Claude supplies base hex only,
+#     tokens only when told, 2순위=scv skin otherwise); Claude Code supplies base hex only,
 #     render.mjs derives readable on-primary text + translucent badge tints itself
 #     (never repeat the WCAG hardcoded-white bug for a project-supplied color either).
 printf '# T\n\n## S\n\n```screen\n{"theme":{"primary":"#5a6cff","success":"#22c55e"},"body":[{"type":"button","label":"x","variant":"primary"},{"type":"badge","label":"y","tone":"good"}]}\n```\n' > "$TMP/theme-ok.md"

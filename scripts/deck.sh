@@ -24,10 +24,10 @@ fi
 # Usage:  deck.sh <input.md> [slug] [--slides] [--out <path>] [--mermaid cdn|none]
 #                  [--lang english|korean|japanese] [--no-source]
 #   --lang: the deck UI chrome's language (English default — same SCV_LANG convention
-#   as scripts/render-template.sh). Caller (commands/deck.md) resolves LANG_RESOLVED
+#   as scripts/render-template.sh). Caller (references/protocols/deck.md) resolves LANG_RESOLVED
 #   the same way every other command does and passes it here; omit to fall back to
 #   the project's .env SCV_LANG, or English if that's unset too.
-# Emits (for commands/deck.md to parse):
+# Emits (for references/protocols/deck.md to parse):
 #   DECK_SLUG: <slug>
 #   LINT: <n> warning(s)   (+ one "  ⚠ ..." line each)
 #   DECK_HTML: <absolute path to built single-file HTML>

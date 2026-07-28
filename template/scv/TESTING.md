@@ -12,7 +12,7 @@ merge_policy: merge-on-markers
 
 # TESTING — Quality verification convention
 
-> Claude follows `INTAKE.md` Step 5 plus the `How to elicit` section below to fill this through user dialogue.
+> the host agent follows `INTAKE.md` Step 5 plus the `How to elicit` section below to fill this through user dialogue.
 > Some sections (artifact-path rules) are template-fixed defaults.
 
 ## How to elicit (order of questions)
@@ -37,7 +37,7 @@ merge_policy: merge-on-markers
 
 ## Artifact path rules (template-fixed)
 
-> This section is the **contract** that `/scv:report`'s `collect-artifacts.sh` depends on. If you change it, also change the script.
+> This section is the **contract** that `action:report`'s `collect-artifacts.sh` depends on. If you change it, also change the script.
 
 | Type | Path pattern | Notes |
 |---|---|---|
@@ -48,7 +48,7 @@ merge_policy: merge-on-markers
 | Log | `test-results/logs/*.log` | tail 20KB on failure |
 | JSON result | `test-results/results.json` | summary extraction |
 
-**If no artifact exists**: `/scv:report` summary explicitly notes `[no artifact: <reason>]`.
+**If no artifact exists**: `action:report` summary explicitly notes `[no artifact: <reason>]`.
 
 ## Recommended Playwright config (for UI projects)
 
@@ -95,14 +95,14 @@ SCV separates two axes of test execution.
 
 | Axis | Command | Timing | Scope |
 |---|---|---|---|
-| Per-plan verification | `/scv:work <slug>` | Right after implementation | A single `scv/promote/<slug>/TESTS.md` |
-| Accumulated regression | `/scv:regression` | Before archive · nightly · pre-release | `scv/archive/**/TESTS.md` (+ promote with `--include-promote`) |
+| Per-plan verification | `action:work <slug>` | Right after implementation | A single `scv/promote/<slug>/TESTS.md` |
+| Accumulated regression | `action:regression` | Before archive · nightly · pre-release | `scv/archive/**/TESTS.md` (+ promote with `--include-promote`) |
 
 #### 3.1 Local workflow
 
-- During plan implementation: `/scv:work` runs only that TESTS (fast).
-- Just before archive: `/scv:work` Step 9a fires AskUserQuestion "run archived regression too?" → on Yes, `/scv:regression` runs as pre-flight; slugs declared in `supersedes` are auto-skipped.
-- Weekly or pre-release: user runs `/scv:regression` manually (or `/scv:regression --tag core` to narrow scope).
+- During plan implementation: `action:work` runs only that TESTS (fast).
+- Just before archive: `action:work` Step 9a fires user confirmation "run archived regression too?" → on Yes, `action:regression` runs as pre-flight; slugs declared in `supersedes` are auto-skipped.
+- Weekly or pre-release: user runs `action:regression` manually (or `action:regression --tag core` to narrow scope).
 
 #### 3.2 CI integration example
 
@@ -133,9 +133,9 @@ jobs:
         env:
           # GitHub Actions auto-sets CI=true → --ci mode kicks in automatically
           # Just point SCV at the plugin path
-          CLAUDE_PLUGIN_ROOT: ${{ github.workspace }}/.scv-plugin
+          SCV_CORE_ROOT: ${{ github.workspace }}/plugins/scv
         run: |
-          bash "$CLAUDE_PLUGIN_ROOT/scripts/regression.sh"
+          bash "$SCV_CORE_ROOT/scripts/regression.sh"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -149,10 +149,10 @@ To make this a PR merge gate, add the workflow's `regression` job to GitHub bran
 
 #### 3.3 Auto PR video attachment (v0.3+)
 
-`/scv:work` Step 9d auto-embeds **test execution videos** into the PR body when creating a PR — so reviewers can confirm "does this actually work" via video without reading code.
+`action:work` Step 9d auto-embeds **test execution videos** into the PR body when creating a PR — so reviewers can confirm "does this actually work" via video without reading code.
 
 **What's automated**:
-- For Playwright projects, SCV auto-detects `playwright.config.{ts,js,mjs,cjs}` and recommends adding `video: 'on'` automatically (Step 5b's AskUserQuestion). One Yes makes it permanent.
+- For Playwright projects, SCV auto-detects `playwright.config.{ts,js,mjs,cjs}` and recommends adding `video: 'on'` automatically (Step 5b's user confirmation). One Yes makes it permanent.
 - During tests, .webm is auto-generated under `test-results/` (Playwright's standard behavior).
 - At Step 9d's PR creation, those videos are pushed to the **`scv-attachments` orphan branch** (zero impact on the working branch's git history). If `ffmpeg` is on the system, .webm is co-converted to .gif (default 480px / 10fps / 60s cap) and pushed alongside.
 - The PR body becomes a hybrid markdown: **inline GIF (auto-plays silently) + clickable .webm link (new tab native player with audio)**. Since GitHub strips `<video>` tags from PR body, GIF gives inline preview while .webm covers audio + full quality.
@@ -176,8 +176,8 @@ Non-Playwright projects (Cypress / backend-only tests) proceed without video —
 3 paths when a new feature **intentionally** changes existing behavior (full detail in `scv/PROMOTE.md §8b`):
 
 1. **Pre-declaration** — In the new PLAN.md, `supersedes: [<old-slug>]` or `supersedes_scenarios: ["<slug>:T<n>"]`.
-2. **Auto-propagation** — When such a declaration exists, `/scv:work` Step 9c asks (default Yes) whether to mark the old slug as obsolete at archive time, and on user approval modifies only the old PLAN.md frontmatter.
-3. **Runtime triage** — On `/scv:regression` failure, fire a per-slug 3-way AskUserQuestion: regression (fix code) / obsolete (mark now) / flaky (retry).
+2. **Auto-propagation** — When such a declaration exists, `action:work` Step 9c asks (default Yes) whether to mark the old slug as obsolete at archive time, and on user approval modifies only the old PLAN.md frontmatter.
+3. **Runtime triage** — On `action:regression` failure, fire a per-slug 3-way user confirmation: regression (fix code) / obsolete (mark now) / flaky (retry).
 
 A slug marked `status: obsolete` is auto-excluded from subsequent regression runs (only included via `--include-obsolete`), and archived TESTS.md **is never modified** (immutable archive principle).
 

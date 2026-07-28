@@ -12,7 +12,7 @@ merge_policy: preserve
 
 # DOMAIN — Business domain
 
-> This document **starts empty**. Claude follows `INTAKE.md` Step 1 plus the `How to elicit` section below to fill it through dialogue with the user. Don't speculate without the user's explicit answer.
+> This document **starts empty**. the host agent follows `INTAKE.md` Step 1 plus the `How to elicit` section below to fill it through dialogue with the user. Don't speculate without the user's explicit answer.
 
 ## How to elicit (order of questions)
 
@@ -20,12 +20,12 @@ merge_policy: preserve
 2. **Ubiquitous language**: "What are the core nouns and verbs your team always uses? If English/native are mixed, do you want to unify into one?"
 3. **Entities**: "Does each term **exist as state** inside the system? What's its identifier?" (no upper bound, confirm one at a time)
 4. **Invariants**: "What rules must each entity always satisfy?" (only those whose violation we'd treat as a bug)
-5. **Use cases**: "List the 3–7 most important user actions in this system as **observable sequences**." (UC codes assigned by Claude)
+5. **Use cases**: "List the 3–7 most important user actions in this system as **observable sequences**." (UC codes assigned by the host agent)
 6. **Business rules**: "Are there any reject / block / detour branches in the use cases?" (BR codes assigned)
 7. **External policy / regulation**: "Any regulatory / legal / compliance constraints?"
 8. **Bounded contexts**: "What are the boundaries with other domains (payments / logs / analytics, etc.)?" (omit if not applicable)
 
-After each answer, Claude must confirm with **"Shall I record it like this?"** before moving to the next question.
+After each answer, the host agent must confirm with **"Shall I record it like this?"** before moving to the next question.
 
 ## Completion criteria
 

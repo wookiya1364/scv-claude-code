@@ -477,7 +477,7 @@ case "${1:-}" in
   *)
     if scv_target_path "$1" >/dev/null 2>&1; then
       scv_init_paths "$1"
-      WS_CLAUDE="$SCV_DIR/CLAUDE.md"
+      WS_INDEX="$(scv_state_index_path "$SCV_DIR")"
       WS_MANIFEST="$SCV_DIR/WORKSPACE.yaml"
       shift
     fi

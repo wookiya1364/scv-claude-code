@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "name": "scv-core",
+  "version_file": "../VERSION",
+  "core_api_file": "../CORE_API",
+  "template_version_file": "../TEMPLATE_VERSION",
+  "action_catalog": "actions.json",
+  "host_profile_contract": "contracts/host-profile.md",
+  "payload": {
+    "protocols": "protocols",
+    "scripts": "scripts",
+    "template": "template",
+    "integrations": "integrations",
+    "deck_ui": "DeckUI",
+    "assets": "assets",
+    "docs": "docs",
+    "tests": "tests"
+  }
+}

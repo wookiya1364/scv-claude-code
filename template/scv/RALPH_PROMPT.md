@@ -65,13 +65,13 @@ e2e_command: <TODO>
 ## Reporting
 
 - Pick collab tool via `.env` `NOTIFIER_PROVIDER`
-- Reporting **must go through the `/scv:report <phase> <status>` slash command** only
+- Reporting **must go through the `action:report <phase> <status>` skill** only
 - Channel mapping per `./REPORTING.md`
 
 ## Done criteria
 
 1. Every Phase passes `./TESTING.md`'s success criteria
-2. Right after each Phase, `/scv:report "<phase>" passed` returns `OK <thread_ref>`
+2. Right after each Phase, `action:report "<phase>" passed` returns `OK <thread_ref>`
 3. (If applicable) AGENTS.md distribution-test / golden-set pass rate above threshold
 
 ## Additional references
