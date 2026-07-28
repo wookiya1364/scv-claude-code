@@ -77,7 +77,7 @@ function blockOf(node, t) {
     case "code":
       if (node.lang === "mermaid") return { type: "mermaid", code: node.value };
       if (node.lang === "screen") {
-        // Claude authors a screen mockup as a JSON object inside a ```screen fence
+        // Claude Code authors a screen mockup as a JSON object inside a ```screen fence
         // (see commands/promote.md for the schema) — parsed here, deterministically,
         // never fixed up. A malformed block never crashes the whole deck: it becomes a
         // visible error callout, and the raw fence is always inspectable in the side

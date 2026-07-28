@@ -10,7 +10,7 @@ fi
 
 # Surface project metadata + scv/raw inventory + existing promote/archive
 # + raw diff + graphify skill availability for /scv:promote.
-# This script is read-only; it only prints context for Claude to work with.
+# This script is read-only; it only prints context for Claude Code to work with.
 set -uo pipefail
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -19,6 +19,8 @@ READPATH="$SCRIPT_DIR/readpath.sh"
 source "$SCRIPT_DIR/lib/env.sh"
 # shellcheck source=lib/scvroot.sh
 source "$SCRIPT_DIR/lib/scvroot.sh"
+# shellcheck source=lib/host-profile.sh
+source "$SCRIPT_DIR/lib/host-profile.sh"
 env_load 2>/dev/null || true
 
 MODE="promote"       # promote | dry-run | graph-only
@@ -58,9 +60,11 @@ fi
 [[ -z "$AUTHOR" ]] && AUTHOR="unknown"
 echo "AUTHOR: $AUTHOR"
 
-# Extract STANDARD:VERSION value from scv/CLAUDE.md if present
+# Extract STANDARD:VERSION from the shared index or a wrapper-declared legacy
+# fallback. The shared index always wins when both exist.
 # (marker name kept as STANDARD:* for backward compatibility; internal-only)
-if [[ -f "$SCV_DIR/CLAUDE.md" ]]; then
+SCV_INDEX_PATH="$(scv_state_index_path "$SCV_DIR")"
+if [[ -f "$SCV_INDEX_PATH" ]]; then
   ver=$(awk '
     {
       s = index($0, "<!-- STANDARD:VERSION -->")
@@ -72,20 +76,13 @@ if [[ -f "$SCV_DIR/CLAUDE.md" ]]; then
           exit
         }
       }
-    }' "$SCV_DIR/CLAUDE.md")
+    }' "$SCV_INDEX_PATH")
   echo "STANDARD_VERSION: ${ver:-unknown}"
 fi
 
 # Graphify skill availability (best-effort check — user/global skill dir)
 GRAPHIFY_SKILL="missing"
-for candidate in \
-  "$HOME/.claude/skills/graphify/SKILL.md" \
-  "$HOME/.claude/plugins/cache/"*/skills/graphify/SKILL.md; do
-  if [[ -f "$candidate" ]]; then
-    GRAPHIFY_SKILL="available"
-    break
-  fi
-done
+scv_graph_skill_available && GRAPHIFY_SKILL="available"
 echo "GRAPHIFY_SKILL: $GRAPHIFY_SKILL"
 
 # Graph status: compare .graphify/docs/graphify-out/ mtime vs readpath.json mtime
@@ -111,7 +108,7 @@ if [[ "$GRAPHIFY_SKILL" == "available" ]]; then
 fi
 echo "GRAPH_STATUS: $GRAPH_STATUS"
 
-# Graph-only mode: stop here after emitting metadata. Claude then decides
+# Graph-only mode: stop here after emitting metadata. Claude Code then decides
 # whether to invoke the graphify skill based on GRAPH_STATUS + GRAPHIFY_SKILL.
 if [[ "$MODE" == "graph-only" ]]; then
   exit 0
@@ -151,9 +148,9 @@ fi
 # Split-suggestion heuristic
 # Triggers when raw scope looks "big enough" to warrant a multi-way split:
 #   raw_files > 7  OR  topic_clusters >= 3
-# The actual split count is content-driven — Claude judges each topic cluster
-# and proposes a number (could be 2, 3, 8, whatever fits) via AskUserQuestion.
-# This is a hint only (see commands/promote.md Step 3).
+# The actual split count is content-driven — Claude Code judges each topic cluster
+# and proposes a number (could be 2, 3, 8, whatever fits) in the user question.
+# This is a hint only (see references/protocols/promote.md Step 3).
 SUGGEST_SPLIT="no"
 SPLIT_REASON=""
 if [[ $RAW_FILE_COUNT -gt 7 ]]; then

@@ -107,16 +107,45 @@ tsv_to_json() {
 state_to_tsv() {
   local f="${1:-$STATE_FILE}"
   [[ ! -f "$f" ]] && return 0
-  # Match lines like:   "<path>": { "size": N, "mtime": "..." }
-  grep -E '^ *"[^"]+": *\{ *"size":' "$f" 2>/dev/null | while IFS= read -r line; do
-    local path size mtime rest
-    # Extract path: leading whitespace + "path":
-    path=${line#*\"}
-    path=${path%%\"*}
-    size=$(printf '%s' "$line" | sed -n 's/.*"size": *\([0-9]*\).*/\1/p')
-    mtime=$(printf '%s' "$line" | sed -n 's/.*"mtime": *"\([^"]*\)".*/\1/p')
-    printf '%s\t%s\t%s\n' "$path" "$size" "$mtime"
-  done | LC_ALL=C sort
+  # Parse both the compact writer format and legacy pretty-printed JSON where
+  # size/mtime occupy separate lines. This deliberately handles the narrow,
+  # versioned readpath schema without requiring jq or network dependencies.
+  awk '
+    function quoted_key(line, out) {
+      out = line
+      sub(/^[[:space:]]*"/, "", out)
+      sub(/".*$/, "", out)
+      return out
+    }
+    function maybe_emit() {
+      if (path != "" && size != "" && mtime != "") {
+        printf "%s\t%s\t%s\n", path, size, mtime
+        path = ""; size = ""; mtime = ""
+      }
+    }
+    /^[[:space:]]*"[^"]+"[[:space:]]*:[[:space:]]*\{/ {
+      key = quoted_key($0)
+      if (key != "files") {
+        maybe_emit()
+        path = key
+        size = ""; mtime = ""
+      }
+    }
+    path != "" && /"size"[[:space:]]*:[[:space:]]*[0-9]+/ {
+      value = $0
+      sub(/^.*"size"[[:space:]]*:[[:space:]]*/, "", value)
+      sub(/[^0-9].*$/, "", value)
+      size = value
+    }
+    path != "" && /"mtime"[[:space:]]*:[[:space:]]*"[^"]*"/ {
+      value = $0
+      sub(/^.*"mtime"[[:space:]]*:[[:space:]]*"/, "", value)
+      sub(/".*$/, "", value)
+      mtime = value
+    }
+    { maybe_emit() }
+    END { maybe_emit() }
+  ' "$f" | LC_ALL=C sort
 }
 
 # Compute diff: current TSV file ($1) vs previous TSV file ($2)

@@ -24,8 +24,8 @@ fi
 #   2  one or more failed (--ci mode)
 #   3  structural error (e.g., supersedes cycle, unreadable files)
 #
-# This script is a pure executor. All user interaction (AskUserQuestion triage
-# for failures) is driven by commands/regression.md — NOT here.
+# This script is a pure executor. All user interaction for failure triage is
+# driven by references/protocols/regression.md — NOT here.
 
 set -uo pipefail
 
@@ -263,6 +263,35 @@ read_test_command() {
   ' "$tests"
 }
 
+# Run a command with GNU-timeout-compatible exit code 124 without requiring
+# GNU coreutils on macOS. Python is already an optional SCV runtime dependency;
+# if no timeout-capable runner exists, execute directly instead of making every
+# regression fail with command-not-found.
+run_with_timeout() {
+  local seconds="$1"
+  shift
+  if command -v timeout >/dev/null 2>&1; then
+    command timeout "$seconds" "$@"
+  elif command -v gtimeout >/dev/null 2>&1; then
+    command gtimeout "$seconds" "$@"
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 -c '
+import subprocess
+import sys
+
+seconds = float(sys.argv[1])
+try:
+    result = subprocess.run(sys.argv[2:], timeout=seconds)
+except subprocess.TimeoutExpired:
+    raise SystemExit(124)
+raise SystemExit(result.returncode if result.returncode >= 0 else 128 - result.returncode)
+' "$seconds" "$@"
+  else
+    echo "WARN: no timeout runner found; executing without a timeout" >&2
+    "$@"
+  fi
+}
+
 # ---- output helpers ----
 
 emit_header() {
@@ -422,9 +451,10 @@ main() {
     local rc=0
     local before_ts; before_ts=$(date +%s)
     if [[ -n "$skipped_T_for_slug" ]]; then
-      SCV_SKIPPED_SCENARIOS="$skipped_T_for_slug" timeout "$TIMEOUT" bash -c "$cmd" >"$out_file" 2>&1 || rc=$?
+      SCV_SKIPPED_SCENARIOS="$skipped_T_for_slug" \
+        run_with_timeout "$TIMEOUT" bash -c "$cmd" >"$out_file" 2>&1 || rc=$?
     else
-      timeout "$TIMEOUT" bash -c "$cmd" >"$out_file" 2>&1 || rc=$?
+      run_with_timeout "$TIMEOUT" bash -c "$cmd" >"$out_file" 2>&1 || rc=$?
     fi
     local after_ts; after_ts=$(date +%s)
     local dur=$((after_ts - before_ts))

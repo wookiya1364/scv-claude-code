@@ -57,15 +57,16 @@ git -C "$REPO" commit -qm "init monorepo" >/dev/null 2>&1
 # helper: resolve scv_root_path from <cwd> for module <scvdir> and print the
 # absolute directory it points at (robust to relative vs absolute return).
 resolve_root_from() { # <cwd> <scv_dir_relative_to_cwd>
-  ( cd "$1" && SCV_DIR="$2" WS_CLAUDE="$2/CLAUDE.md" WS_MANIFEST="$2/WORKSPACE.yaml" \
+  ( cd "$1" && SCV_DIR="$2" WS_INDEX="$2/SCV.md" WS_MANIFEST="$2/WORKSPACE.yaml" \
       bash -c 'source "'"$LIB"'"; p="$(scv_root_path)" || exit 1; cd "$p" && pwd' )
 }
 mode_from() { # <cwd> <scv_dir>
-  ( cd "$1" && SCV_DIR="$2" WS_CLAUDE="$2/CLAUDE.md" WS_MANIFEST="$2/WORKSPACE.yaml" \
+  ( cd "$1" && SCV_DIR="$2" WS_INDEX="$2/SCV.md" WS_MANIFEST="$2/WORKSPACE.yaml" \
       bash -c 'source "'"$LIB"'"; scv_resolve_mode' )
 }
 
 REPO_ABS="$( cd "$REPO" && pwd )"
+REPO_PHYS="$( cd "$REPO" && pwd -P )"
 
 # 1. macro/micro detection by CWD (already expected to work)
 eq "cd REPO → ROOT (macro umbrella)"  "ROOT"  "$(mode_from "$REPO" "scv")"
@@ -77,12 +78,11 @@ eq "cd fe: relative root .. → REPO" "$REPO_ABS" "$(resolve_root_from "$REPO/fe
 
 # 3. relative root resolves to REPO via the MODULE-ARG form (cwd = repo root,
 #    SCV_DIR = fe/scv). This is the gap: `..` must anchor to the module dir, not CWD.
-eq "module-arg: fe/scv root .. → REPO (not CWD parent)" "$REPO_ABS" "$(resolve_root_from "$REPO" "fe/scv")"
+eq "module-arg: fe/scv root .. → REPO (not CWD parent)" "$REPO_PHYS" "$(resolve_root_from "$REPO" "fe/scv")"
 
 # 3b. module reached via a symlink whose LOGICAL parent differs from the real
 #     module's parent: the relative root must dereference the symlink (physical)
 #     so arg-form resolves to the REAL umbrella, not the symlink's logical parent.
-REPO_PHYS="$( cd "$REPO" && pwd -P )"
 mkdir -p "$REPO/other"
 ln -s "$REPO/fe" "$REPO/other/felink"
 eq "symlinked module (arg-form) → real umbrella (physical, not symlink logical parent)" \

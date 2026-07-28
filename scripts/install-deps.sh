@@ -41,6 +41,10 @@ fi
 
 set -u
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/host-profile.sh
+source "$SCRIPT_DIR/lib/host-profile.sh"
+
 MODE="${1:---check}"
 case "$MODE" in
   --check|--install|--print) ;;
@@ -382,8 +386,7 @@ mode_check_or_install() {
 
   echo ""
   echo "graphify (Claude Code skill, optional):"
-  if [[ -f "$HOME/.claude/skills/graphify/SKILL.md" ]] || \
-     compgen -G "$HOME/.claude/plugins/cache/*/skills/graphify/SKILL.md" >/dev/null 2>&1; then
+if scv_graph_skill_available; then
     echo "  [✓] graphify   skill installed (token-efficient graph queries)"
   else
     echo "  [△] graphify   not installed — token-efficient graph queries unavailable"
@@ -439,7 +442,7 @@ mode_print() {
 
   echo "graphify (Claude Code skill, all OSes):"
   echo "  See https://github.com/safishamsi/graphify"
-  echo "  Manual placement: copy SKILL.md to \$HOME/.claude/skills/graphify/SKILL.md"
+  echo "  Manual placement: use the graph-skill path documented by your wrapper."
 }
 
 # ---------- Main ------------------------------------------------------------

@@ -12,7 +12,7 @@ merge_policy: merge-on-markers
 
 # REPORTING — Collab tool reporting convention
 
-> This document is closer to **configuration**. Claude confirms the user's collab tool and channels in `INTAKE.md` Step 6, then records them in the `PROJECT:LOCAL` block.
+> This document is closer to **configuration**. the host agent confirms the user's collab tool and channels in `INTAKE.md` Step 6, then records them in the `PROJECT:LOCAL` block.
 
 ## How to elicit (order of questions)
 
@@ -31,12 +31,12 @@ merge_policy: merge-on-markers
 - [ ] Bot token issued and bot invited to channels
 - [ ] At least `phase-complete` and `e2e-failure` channel IDs captured
 - [ ] Tokens and channel IDs filled in `.env`
-- [ ] `/scv:report` dry-run succeeded once
+- [ ] `action:report` dry-run succeeded once
 - [ ] User confirmation
 
 ## Reporting principles (template-fixed)
 
-- Ralph Loop must NOT call HTTP directly. Always go through the `/scv:report <phase> <status>` slash command.
+- Ralph Loop must NOT call HTTP directly. Always go through the `action:report <phase> <status>` skill.
 - Every report attaches **at least 1 visual artifact** (if none, summary must explicitly note `[no artifact: reason]`).
 - Success / failure / progress reports are bundled into the **same thread**.
 

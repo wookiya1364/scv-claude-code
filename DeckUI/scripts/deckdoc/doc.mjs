@@ -60,7 +60,7 @@ function buildSlugDoc(dir, t) {
 
 // ---- args ----
 // Language resolution mirrors scripts/render-template.sh's SCV_LANG convention
-// (settings.json `language` → .env `SCV_LANG` resolve upstream, at the Claude/deck.sh
+// (settings.json `language` → .env `SCV_LANG` resolve upstream, at the Claude Code/deck.sh
 // layer; this CLI only reads the already-resolved env var, English default). --lang
 // lets a caller override explicitly without touching the environment.
 let INPUT = "";

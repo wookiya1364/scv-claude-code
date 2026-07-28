@@ -108,7 +108,7 @@ function renderBlock(b, mermaid, t) {
 // brand colors, no external design system, no build. This is what makes a PLAN's
 // screen description actually LOOK like a screen instead of only reading as prose.
 const BADGE_TONE = { muted: "wf-badge-muted", info: "wf-badge-info", good: "wf-badge-good", warn: "wf-badge-warn", danger: "wf-badge-danger" };
-// Claude authors the screen JSON (commands/promote.md Step 6.4), but a slip is still
+// Claude Code authors the screen JSON (commands/promote.md Step 6.4), but a slip is still
 // possible — never let a wrong-but-truthy type (string/object instead of array) throw
 // and kill the whole doc.mjs process. `arr()` degrades to an empty list instead.
 const arr = (x) => (Array.isArray(x) ? x : []);
@@ -121,9 +121,9 @@ const MAX_WF_DEPTH = 40; // guards runaway/adversarial card-in-card nesting from
 // ---- project-token override (screen mockup "theme" field) ----
 // 1순위(프로젝트 실제 토큰) / 2순위(scv 자체 스킨) 판별: scv 자체 스킨이 기본이고, 사용자가
 // "우리 프로젝트엔 디자인 토큰이 있다"고 말한 경우에만(commands/promote.md Step 6.4가
-// scv/DESIGN.md §5 를 읽어 판단) Claude 가 screen JSON 에 `theme` 필드로 실제 hex 값만
+// scv/DESIGN.md §5 를 읽어 판단) Claude Code 가 screen JSON 에 `theme` 필드로 실제 hex 값만
 // 넘긴다. 그 외 파생값(투명 배지 배경, 명암비 안전한 on-primary 텍스트)은 여기서 항상
-// 계산한다 — Claude 가 매번 대비를 직접 판단하게 두면 v0.18.0 에서 실제로 터진 WCAG
+// 계산한다 — Claude Code 가 매번 대비를 직접 판단하게 두면 v0.18.0 에서 실제로 터진 WCAG
 // 버그가 재발한다. 검증 실패한 값은 조용히 무시하고 scv 기본값을 유지한다(크래시 없음).
 const hex6 = (h) => {
   const m = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.exec(String(h || "").trim());
