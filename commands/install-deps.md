@@ -13,19 +13,18 @@ Detect SCV's external CLI dependencies on the current machine and help the user 
 
 ## Language preference
 
-Resolve the user's preferred language with this priority, then use it for ALL user-facing output (AskUserQuestion text, summaries):
+Resolve the user's preferred language with this priority, then use it for ALL user-facing output (question text, summaries):
 
-1. `~/.claude/settings.json` (or project `.claude/settings.json` / `.claude/settings.local.json`) — `language` key (Claude Code official).
-2. Project `.env` — `SCV_LANG` (set by `/scv:help`'s first-time setup).
-3. Auto-detect from the user's most recent message language.
-4. Default to English.
+1. Project `.env` — `SCV_LANG` (set by `/scv:help`'s first-time setup).
+2. Auto-detect from the user's most recent message language.
+3. Default to English.
 
-Technical identifiers (tool names like `gh`, `glab`, `ffmpeg`, command names, file paths, env var names) stay as-is. If both `settings.json language` and `.env SCV_LANG` are unset, suggest `/scv:help` once to lock the preference (don't block — fall back to auto-detect / English for now).
+Technical identifiers (tool names like `gh`, `glab`, `ffmpeg`, command names, file paths, env var names) stay as-is. If `.env` `SCV_LANG` is unset, suggest `/scv:help` once to lock the preference (don't block — fall back to auto-detect / English for now).
 
 ## Step 0 — Run --check
 
-```!
-"${CLAUDE_PLUGIN_ROOT}/scripts/install-deps.sh" --check
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/install-deps.sh" --check
 ```
 
 Parse the output:
@@ -42,7 +41,7 @@ If the `Result:` line says **`All deps installed`** AND graphify is present:
 - Tell the user "All SCV dependencies are installed." in their preferred language.
 - Stop.
 
-Otherwise, fire **one** AskUserQuestion to decide next action:
+Otherwise, ask the user one concise question to decide next action:
 
 ```
 Question: "<n> dependencies are missing. What would you like to do?"
@@ -56,20 +55,20 @@ Options:
      - Windows: winget will open its own confirmation dialog per package.
      - graphify (Claude Code skill) is NOT installed by this command — it has a
        different distribution channel. See https://github.com/safishamsi/graphify
-       and place SKILL.md at ~/.claude/skills/graphify/."
+       and place SKILL.md in the skill directory configured by your wrapper."
 
 [2] "Just print the install commands (I'll run them myself)"
     description:
     "No installation is performed. The output of --check already shows the
      exact commands for the detected OS / package manager — copy and run them
      in your terminal as you see fit. Use this if you prefer reviewing each
-     step or you don't want sudo to be invoked from a slash command."
+     step or you don't want sudo to be invoked from a skill invocation."
 
 [3] "Cancel — do nothing for now"
     description:
     "Exit without changes. SCV will keep running in graceful-degrade mode for
      missing optional tools (ffmpeg / python3). For missing required tools
-     (git) or platform tools (gh / glab) the related slash commands may fail
+     (git) or platform tools (gh / glab) the related skill invocations may fail
      until installed."
 ```
 
@@ -93,6 +92,6 @@ Answer handling:
 
 ## Never
 
-- Auto-run `--install` without going through the AskUserQuestion. The user must explicitly choose `[1] Install now`.
-- Modify the user's `~/.claude/skills/` directory or attempt to download graphify automatically.
+- Auto-run `--install` without an explicit confirmation. The user must choose `[1] Install now`.
+- Modify the user's wrapper skill directory or attempt to download graphify automatically.
 - Suggest `sudo` commands for Windows (winget runs as user; admin elevation is per-package via the system dialog).

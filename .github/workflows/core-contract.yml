@@ -1,0 +1,51 @@
+name: SCV Core contract
+
+on:
+  pull_request:
+    branches: [main, stage, develop]
+    paths:
+      - 'adapter/**'
+      - 'vendor/scv-core/**'
+      - 'core.lock'
+      - 'scripts/**'
+      - 'template/**'
+      - 'DeckUI/**'
+      - 'assets/**'
+      - 'protocols/**'
+      - 'commands/**'
+      - 'tests/**'
+      - 'VERSION'
+      - 'TEMPLATE_VERSION'
+      - 'host-profile.env'
+      - '.claude-plugin/**'
+      - '.github/workflows/core-contract.yml'
+      - '.github/workflows/core-sync.yml'
+  push:
+    branches: [main, stage, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Verify pinned core and Claude adapter
+        run: bash tests/test-core-contract.sh
+
+      - name: Shell syntax
+        run: |
+          find scripts tests adapter -type f -name '*.sh' -print0 |
+            xargs -0 -n1 bash -n
+
+      - name: Focused wrapper tests
+        run: |
+          bash tests/test-apply-model-policy.sh
+          bash tests/test-help-workspace.sh
+          bash tests/test-workspace.sh
+
+      - name: Shared regression
+        run: bash tests/run-dry.sh

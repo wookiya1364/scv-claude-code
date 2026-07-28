@@ -1,6 +1,8 @@
-# scv/CLAUDE.md — SCV workflow index
+# scv/SCV.md — SCV workflow index
 
-> **This file is the index and rules for the SCV workflow.** The project root's `CLAUDE.md` is **never touched by SCV** and remains user-owned. Everything SCV needs is under `scv/`.
+> **This file is the index and rules for the SCV workflow.** Project-root
+> instruction files are **never touched by SCV** and remain user-owned.
+> Everything SCV needs is under `scv/`.
 
 ## Two hydrate modes
 
@@ -10,8 +12,8 @@ SCV supports two modes at hydrate time. **The default (adoption) mode is enough 
 
 - `bash hydrate.sh init .` (no flag)
 - Standard docs (`DOMAIN`, `ARCHITECTURE`, `DESIGN`, `AGENTS`, `TESTING`, `REPORTING`, `RALPH_PROMPT`) are all seeded with `status: N/A`.
-- **No INTAKE forced.** `/scv:promote` and `/scv:work` are usable immediately.
-- **N/A is a steady state, not a backlog.** Existing large projects can run SCV indefinitely with all 7 docs at `status: N/A` — just do feature work and bug fixes through `/scv:promote` / `/scv:work` / `/scv:regression`. Standard docs are an *opt-in tool* for when a specific subsystem genuinely needs documenting (e.g., new team members onboarding, post-incident learning, periodic audit).
+- **No INTAKE forced.** `action:promote` and `action:work` are usable immediately.
+- **N/A is a steady state, not a backlog.** Existing large projects can run SCV indefinitely with all 7 docs at `status: N/A` — just do feature work and bug fixes through `action:promote` / `action:work` / `action:regression`. Standard docs are an *opt-in tool* for when a specific subsystem genuinely needs documenting (e.g., new team members onboarding, post-incident learning, periodic audit).
 - When needed, document only specific subsystems by walking them `draft → active`. Lift one doc at a time when there's a real driver — never preemptively.
 - Hook to external docs (Confluence etc.) via `refs:` in PLAN.md frontmatter — no need to rewrite their content into SCV's standard docs.
 
@@ -19,7 +21,7 @@ SCV supports two modes at hydrate time. **The default (adoption) mode is enough 
 
 - `bash hydrate.sh init . --new`
 - Standard docs are seeded with `status: draft`.
-- `/scv:help` walks you through `scv/INTAKE.md`'s dialogue protocol to fill every standard doc one by one.
+- `action:help` walks you through `scv/INTAKE.md`'s dialogue protocol to fill every standard doc one by one.
 - Use this only when truly starting from zero.
 
 ## Top-level rules (immutable)
@@ -29,13 +31,16 @@ SCV supports two modes at hydrate time. **The default (adoption) mode is enough 
 2. **No speculation**: never fill a section without an explicit user answer.
 3. **One at a time**: complete one section → user confirms → next.
 
-## Relationship with the root CLAUDE.md
+## Relationship with project-root instructions
 
-- The project root's `CLAUDE.md` (if any) is the user's **project-wide rules**. SCV **never modifies it**.
-- SCV's routines (slash commands, sync, hydrate) reference **only this `scv/CLAUDE.md` and other docs under `scv/`**.
-- To make Claude aware of SCV in casual conversations too, optionally add this one line to your root `CLAUDE.md`:
+- Any project-root instruction file is the user's **project-wide rules**.
+  SCV **never modifies it**.
+- SCV's skills, sync, and hydrate routines reference **only this
+  `scv/SCV.md` and other docs under `scv/`**.
+- To make the host agent aware of SCV in casual conversations too, optionally
+  add this line to the instruction file supported by your wrapper:
   ```
-  > This project uses SCV — see `scv/CLAUDE.md` for workflow details.
+  > This project uses SCV — see `scv/SCV.md` for workflow details.
   ```
 
 ## Standard documents
@@ -90,15 +95,15 @@ All SCV documents live under the `scv/` directory.
 
 ```
 project-root/
-├── CLAUDE.md                     # User-owned (SCV doesn't touch) — optional
+├── <project instructions>        # User-owned (SCV doesn't touch) — optional
 ├── scv/                          # All SCV workflow docs and state live here
-│   ├── CLAUDE.md                 # this file (SCV index)
+│   ├── SCV.md                 # this file (SCV index)
 │   ├── INTAKE.md                 # dialogue protocol
 │   ├── PROMOTE.md                # promotion convention
 │   ├── DOMAIN.md ARCHITECTURE.md DESIGN.md AGENTS.md
 │   ├── TESTING.md REPORTING.md
 │   ├── RALPH_PROMPT.md
-│   ├── readpath.json             # raw change-tracking snapshot (auto-updated by /scv:promote)
+│   ├── readpath.json             # raw change-tracking snapshot (auto-updated by action:promote)
 │   ├── promote/                  # Promoted topic / plan documents
 │   │   └── <YYYYMMDD>-<author>-<slug>/
 │   │       ├── PLAN.md
@@ -114,14 +119,14 @@ project-root/
 └── (project-specific code: src/, packages/, apps/, etc.)
 ```
 
-**The big picture**: drop material into `scv/raw/` → `/scv:promote` refines it into `scv/promote/<slug>/` → `/scv:work <slug>` implements + tests → on pass, moves to `scv/archive/`.
+**The big picture**: drop material into `scv/raw/` → `action:promote` refines it into `scv/promote/<slug>/` → `action:work <slug>` implements + tests → on pass, moves to `scv/archive/`.
 
 ## Work procedure
 
 1. **INTAKE complete?** — Check that every required doc has `status: active`. If any is `draft`, start with the corresponding INTAKE step.
 2. Understand the requirement → read related standard docs → if needed, read plan docs under `scv/promote/`.
-3. Implement → test → fix loop (`/scv:work <slug>` or Ralph Loop).
-4. On Phase completion, call `/scv:report "<phase>" <status>` → send to collab tool.
+3. Implement → test → fix loop (`action:work <slug>` or Ralph Loop).
+4. On Phase completion, call `action:report "<phase>" <status>` → send to collab tool.
 
 ## Promoted documents
 
@@ -130,17 +135,17 @@ project-root/
 ## Project-specific — SCV-scope rules
 
 <!-- PROJECT:LOCAL START -->
-<!-- This block is never overwritten by /scv:sync. -->
+<!-- This block is never overwritten by action:sync. -->
 <!-- Put project-specific rules tailored to the SCV workflow here -->
 <!-- (e.g., promote slug prefix policy, mandatory TESTS.md sections, Phase naming, etc.). -->
-<!-- Project-wide rules belong in the root CLAUDE.md — not this file. -->
+<!-- Project-wide rules belong in the root instruction file — not here. -->
 <!-- PROJECT:LOCAL END -->
 
 ## SCV workspace (multi-repo nesting)
 
 <!-- SCV:WORKSPACE START -->
 <!-- EMPTY = single-repo mode (default). SCV behaves exactly as standalone. -->
-<!-- A child repo joins a workspace via:  /scv:sync --join <root-scv-git-url>  (fills the fields below). -->
+<!-- A child repo joins a workspace via:  action:sync --join <root-scv-git-url>  (fills the fields below). -->
 <!-- Detaching = clearing `root:` (or removing this block) restores single-repo behavior with zero migration. -->
 ```yaml
 repo_id:

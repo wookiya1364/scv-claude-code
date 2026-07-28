@@ -208,6 +208,14 @@ It still hands archive/PR off to `/scv:work`, so the archive structure stays uni
 
 ## Architecture & Integrations
 
+Since v0.20.0, shared workflow behavior comes from a checksummed,
+version-pinned [`scv-core`](https://github.com/wookiya1364/scv-core) release.
+This repository is the Claude Code adapter: it owns slash commands, tool/model
+metadata, installation, and update UX. It never downloads core at command
+runtime; an automated PR updates the vendored pin and must pass the full suite
+before the normal `develop → stage → main` promotion. See
+[`docs/design/shared-core-wrapper.md`](docs/design/shared-core-wrapper.md).
+
 PLAN.md is the single source of truth. External tools (Jira / Linear / Confluence / Google Doc) are linked via `refs:` — never copied. Outputs (PR / MR / Slack / Discord) are auto-generated from the same source.
 
 <p align="center">
