@@ -93,21 +93,25 @@ if (( CORE_SYNC_SUCCEEDED )); then
     exit 2
   fi
   legacy_baseline=
-  for file in "${active_legacy[@]}"; do
-    if [[ -z "$legacy_baseline" ]]; then
-      legacy_baseline=$file
-    elif ! cmp -s "$legacy_baseline" "$file"; then
-      conflicts+=("$legacy_baseline <> $file")
-    fi
-  done
+  if (( ${#active_legacy[@]} > 0 )); then
+    for file in "${active_legacy[@]}"; do
+      if [[ -z "$legacy_baseline" ]]; then
+        legacy_baseline=$file
+      elif ! cmp -s "$legacy_baseline" "$file"; then
+        conflicts+=("$legacy_baseline <> $file")
+      fi
+    done
+  fi
 else
-  for file in "${active_legacy[@]}"; do
-    if [[ -z "$baseline" ]]; then
-      baseline=$file
-    elif ! cmp -s "$baseline" "$file"; then
-      conflicts+=("$baseline <> $file")
-    fi
-  done
+  if (( ${#active_legacy[@]} > 0 )); then
+    for file in "${active_legacy[@]}"; do
+      if [[ -z "$baseline" ]]; then
+        baseline=$file
+      elif ! cmp -s "$baseline" "$file"; then
+        conflicts+=("$baseline <> $file")
+      fi
+    done
+  fi
 fi
 
 if (( ${#conflicts[@]} > 0 )); then
