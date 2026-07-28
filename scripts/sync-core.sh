@@ -3,8 +3,8 @@
 # Installed SCV commands never call this script automatically.
 set -Eeuo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd -P)"
 PROFILE="$REPO_ROOT/adapter/claude-code.env"
 PLUGIN_MANIFEST="$REPO_ROOT/.claude-plugin/plugin.json"
 MARKETPLACE_MANIFEST="$REPO_ROOT/.claude-plugin/marketplace.json"
@@ -99,6 +99,7 @@ done
 export GIT_OPTIONAL_LOCKS=0
 
 TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/scv-claude-core-sync.XXXXXX")
+TMP_DIR="$(cd "$TMP_DIR" && pwd -P)"
 CANDIDATE="$TMP_DIR/scv-core"
 SYNC_LOCK="$REPO_ROOT/.scv-core-sync.lock"
 LOCK_OWNED=0
@@ -927,7 +928,7 @@ PY
 }
 
 if [[ -n "$SOURCE_DIR" ]]; then
-  SOURCE_DIR="$(cd "$SOURCE_DIR" 2>/dev/null && pwd)" || {
+  SOURCE_DIR="$(cd "$SOURCE_DIR" 2>/dev/null && pwd -P)" || {
     echo "ERROR: local core source not found: $SOURCE_DIR" >&2
     exit 1
   }
@@ -939,7 +940,7 @@ if [[ -n "$SOURCE_DIR" ]]; then
   LOCAL_SOURCE_ROOT="$TMP_DIR/local-source"
   source_git_root=$(git -C "$SOURCE_DIR" rev-parse --show-toplevel 2>/dev/null || true)
   if [[ -n "$source_git_root" &&
-        "$(cd "$source_git_root" && pwd)" == "$SOURCE_DIR" ]]; then
+        "$(cd "$source_git_root" && pwd -P)" == "$SOURCE_DIR" ]]; then
     EXPORT_TOOL="$SOURCE_DIR/tools/export-core.sh"
     [[ -x "$EXPORT_TOOL" ]] || {
       echo "ERROR: local Core checkout lacks tools/export-core.sh" >&2
@@ -1324,7 +1325,7 @@ collect_deckui_inventory() {
     echo "ERROR: Core sync requires the wrapper repository Git index" >&2
     return 1
   }
-  [[ "$(cd "$git_root" && pwd)" == "$REPO_ROOT" ]] || {
+  [[ "$(cd "$git_root" && pwd -P)" == "$REPO_ROOT" ]] || {
     echo "ERROR: Core sync must run at the wrapper Git worktree root" >&2
     return 1
   }
