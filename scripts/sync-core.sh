@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Explicit maintainer tool for pinning a local or released SCV Core payload.
 # Installed SCV commands never call this script automatically.
-set -euo pipefail
+set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -80,12 +80,703 @@ mode_count=0
 [[ -f "$PLUGIN_MANIFEST" ]] || { echo "ERROR: missing Claude plugin manifest: $PLUGIN_MANIFEST" >&2; exit 1; }
 [[ -f "$MARKETPLACE_MANIFEST" ]] || { echo "ERROR: missing Claude marketplace manifest: $MARKETPLACE_MANIFEST" >&2; exit 1; }
 
+for git_override in \
+  GIT_DIR \
+  GIT_WORK_TREE \
+  GIT_INDEX_FILE \
+  GIT_COMMON_DIR \
+  GIT_OBJECT_DIRECTORY \
+  GIT_ALTERNATE_OBJECT_DIRECTORIES \
+  GIT_NAMESPACE; do
+  if [[ -n "${!git_override:-}" ]]; then
+    echo "ERROR: unsupported Git repository override: $git_override" >&2
+    exit 1
+  fi
+done
+# Every Git subprocess in this maintainer tool is observational. Prevent
+# read-only diff/index queries from opportunistically rewriting index stat
+# metadata before the updater acquires its short-lived canonical index lock.
+export GIT_OPTIONAL_LOCKS=0
+
 TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/scv-claude-core-sync.XXXXXX")
-cleanup() {
-  rm -rf "$TMP_DIR"
-}
-trap cleanup EXIT
 CANDIDATE="$TMP_DIR/scv-core"
+SYNC_LOCK="$REPO_ROOT/.scv-core-sync.lock"
+LOCK_OWNED=0
+LOCK_TOKEN=
+GIT_INDEX_LOCK=
+GIT_INDEX_LOCK_OWNED=0
+GIT_INDEX_LOCK_TOKEN=
+TX_INDEX_FINGERPRINT=
+TX_ROOT=
+TX_STAGE=
+TX_BACKUP=
+TX_ACTIVE=0
+TX_COMMITTED=0
+TX_ROLLING_BACK=0
+TX_PATHS=()
+TX_ORIGINAL_STATES=()
+TX_STAGE_INSTALLED=()
+TX_INSTALLED_DIGESTS=()
+TX_DECK_INVENTORY=()
+TX_DECK_INVENTORY_FILE=
+TX_PRESERVED_PATHS=()
+TX_EXPECTED_STATES=()
+TX_EXPECTED_DIGESTS=()
+TRANSACTION_PATHS=(
+  vendor
+  core.lock
+  scripts
+  commands
+  tests
+  template
+  DeckUI
+  assets
+  protocols
+  ralph-template-scv.md
+  TEMPLATE_VERSION
+  host-profile.env
+)
+
+path_exists() {
+  [[ -e "$1" || -L "$1" ]]
+}
+
+process_start_id() {
+  python3 - "$1" <<'PY'
+import sys
+from pathlib import Path
+
+path = Path("/proc") / sys.argv[1] / "stat"
+try:
+    # Everything after the final ')' starts at proc field 3. Field 22 is index
+    # 19 in that suffix and disambiguates a reused PID.
+    print(path.read_text(encoding="utf-8").rsplit(")", 1)[1].split()[19])
+except (IndexError, OSError):
+    print("unknown")
+PY
+}
+
+release_sync_lock() {
+  local recorded_token=
+  (( LOCK_OWNED )) || return 0
+  if [[ -f "$SYNC_LOCK/owner" && ! -L "$SYNC_LOCK/owner" ]]; then
+    recorded_token=$(sed -n 's/^token=//p' "$SYNC_LOCK/owner")
+  fi
+  if [[ -n "$recorded_token" && "$recorded_token" == "$LOCK_TOKEN" &&
+        -d "$SYNC_LOCK" && ! -L "$SYNC_LOCK" ]]; then
+    rm -f -- "$SYNC_LOCK/owner"
+    if ! rmdir -- "$SYNC_LOCK"; then
+      echo "WARNING: sync lock contains unexpected files: $SYNC_LOCK" >&2
+      return 1
+    fi
+  elif path_exists "$SYNC_LOCK"; then
+    echo "WARNING: sync lock ownership changed; refusing to remove $SYNC_LOCK" >&2
+    return 1
+  fi
+  LOCK_OWNED=0
+}
+
+release_git_index_lock() {
+  local recorded_token=
+  (( GIT_INDEX_LOCK_OWNED )) || return 0
+  if [[ -f "$GIT_INDEX_LOCK" && ! -L "$GIT_INDEX_LOCK" ]]; then
+    recorded_token=$(tr -d '\r\n' < "$GIT_INDEX_LOCK")
+  fi
+  if [[ -n "$recorded_token" &&
+        "$recorded_token" == "$GIT_INDEX_LOCK_TOKEN" ]]; then
+    rm -f -- "$GIT_INDEX_LOCK"
+  elif path_exists "$GIT_INDEX_LOCK"; then
+    echo "WARNING: Git index lock ownership changed; refusing to remove $GIT_INDEX_LOCK" >&2
+    return 1
+  fi
+  GIT_INDEX_LOCK_OWNED=0
+}
+
+acquire_git_index_lock() {
+  local raw_lock
+  raw_lock=$(git -C "$REPO_ROOT" rev-parse --git-path index.lock)
+  case "$raw_lock" in
+    /*) GIT_INDEX_LOCK=$raw_lock ;;
+    *) GIT_INDEX_LOCK="$REPO_ROOT/$raw_lock" ;;
+  esac
+  GIT_INDEX_LOCK_TOKEN=$(python3 -c 'import secrets; print(secrets.token_hex(24))')
+  if (
+    set -o noclobber
+    printf '%s\n' "$GIT_INDEX_LOCK_TOKEN" > "$GIT_INDEX_LOCK"
+  ) 2>/dev/null; then
+    GIT_INDEX_LOCK_OWNED=1
+  else
+    echo "ERROR: Git index is locked by another process: $GIT_INDEX_LOCK" >&2
+    return 1
+  fi
+}
+
+scoped_index_fingerprint() {
+  python3 - "$REPO_ROOT" "${TRANSACTION_PATHS[@]}" <<'PY'
+import hashlib
+import subprocess
+import sys
+
+repo, *scopes = sys.argv[1:]
+digest = hashlib.sha256()
+for arguments in (
+    ("ls-files", "--stage", "-z", "--", *scopes),
+    ("ls-files", "-v", "-z", "--", *scopes),
+):
+    digest.update(
+        subprocess.check_output(
+            ["git", "-C", repo, *arguments],
+            stderr=subprocess.DEVNULL,
+        )
+    )
+    digest.update(b"\0SCV-INDEX-SECTION\0")
+print(digest.hexdigest())
+PY
+}
+
+validate_index_preimage() {
+  local current
+  current=$(scoped_index_fingerprint)
+  [[ "$current" == "$TX_INDEX_FINGERPRINT" ]] || {
+    echo "ERROR: scoped Git index changed during Core sync" >&2
+    return 1
+  }
+}
+
+acquire_sync_lock() {
+  local attempt owner pid recorded_start current_start quarantine
+  LOCK_TOKEN=$(python3 -c 'import secrets; print(secrets.token_hex(24))')
+  for attempt in 1 2 3 4; do
+    if mkdir -- "$SYNC_LOCK" 2>/dev/null; then
+      LOCK_OWNED=1
+      {
+        printf 'pid=%s\n' "$$"
+        printf 'process_start=%s\n' "$(process_start_id "$$")"
+        printf 'token=%s\n' "$LOCK_TOKEN"
+      } > "$SYNC_LOCK/owner"
+      return 0
+    fi
+
+    if [[ ! -d "$SYNC_LOCK" || -L "$SYNC_LOCK" ||
+          ! -f "$SYNC_LOCK/owner" || -L "$SYNC_LOCK/owner" ]]; then
+      echo "ERROR: unsafe or malformed Core sync lock: $SYNC_LOCK" >&2
+      return 1
+    fi
+    owner="$SYNC_LOCK/owner"
+    pid=$(sed -n 's/^pid=//p' "$owner")
+    recorded_start=$(sed -n 's/^process_start=//p' "$owner")
+    [[ "$pid" =~ ^[1-9][0-9]*$ && -n "$recorded_start" ]] || {
+      echo "ERROR: unsafe or malformed Core sync lock: $SYNC_LOCK" >&2
+      return 1
+    }
+
+    if kill -0 "$pid" 2>/dev/null; then
+      current_start=$(process_start_id "$pid")
+      if [[ "$recorded_start" == unknown || "$current_start" == unknown ||
+            "$recorded_start" == "$current_start" ]]; then
+        echo "ERROR: another Core sync is already running (pid $pid)" >&2
+        return 1
+      fi
+    fi
+
+    quarantine=$(mktemp -d "$REPO_ROOT/.scv-core-sync-quarantine.XXXXXX")
+    if mv -- "$SYNC_LOCK" "$quarantine/stale-lock" 2>/dev/null; then
+      rm -rf -- "$quarantine"
+    else
+      rmdir -- "$quarantine" 2>/dev/null || true
+    fi
+  done
+  echo "ERROR: could not acquire Core sync lock after reclaiming stale owners" >&2
+  return 1
+}
+
+quarantine_owned_live() {
+  local index=$1 relative=$2 live=$3 installed installed_digest
+  local discard inventory= current_digest
+  installed=${TX_STAGE_INSTALLED[$index]:-no}
+  installed_digest=${TX_INSTALLED_DIGESTS[$index]:-}
+  if [[ "$installed" != yes || -z "$installed_digest" ]]; then
+    echo "ERROR: rollback found an unowned live path: $relative" >&2
+    return 1
+  fi
+  discard="$TX_ROOT/rollback-discard/$relative"
+  mkdir -p "$(dirname "$discard")"
+  atomic_rename_noreplace "$live" "$discard" || return 1
+  [[ "$relative" != DeckUI ]] || inventory=$TX_DECK_INVENTORY_FILE
+  current_digest=$(path_fingerprint "$discard" "$inventory")
+  if [[ "$current_digest" != "$installed_digest" ]]; then
+    echo "ERROR: rollback quarantined a concurrently modified live path: $relative" >&2
+    return 1
+  fi
+}
+
+rollback_transaction() {
+  local index relative live backup original_state preserved_live preserved_backup
+  local installed installed_digest current_digest inventory failures=0
+  local deck_preserve_failures=0
+  (( TX_ACTIVE )) || return 0
+  (( TX_COMMITTED == 0 )) || return 0
+  (( TX_ROLLING_BACK == 0 )) || return 0
+  TX_ROLLING_BACK=1
+  trap '' HUP INT TERM
+
+  if [[ -n "${SCV_CORE_SYNC_ROLLBACK_SIGNAL:-}" ]]; then
+    case "$SCV_CORE_SYNC_ROLLBACK_SIGNAL" in
+      HUP|INT|TERM) kill "-$SCV_CORE_SYNC_ROLLBACK_SIGNAL" "$$" ;;
+      *)
+        echo "ERROR: invalid rollback signal test hook" >&2
+        failures=$((failures + 1))
+        ;;
+    esac
+  fi
+
+  # Untracked/ignored DeckUI paths move from the exact old tree into the new
+  # tree only after its directory swap. Put them back before restoring it.
+  for (( index=${#TX_PRESERVED_PATHS[@]} - 1; index >= 0; index-- )); do
+    relative=${TX_PRESERVED_PATHS[$index]}
+    preserved_live="$REPO_ROOT/$relative"
+    preserved_backup="$TX_BACKUP/$relative"
+    if [[ "${SCV_CORE_SYNC_ROLLBACK_FAILPOINT:-}" == "preserved-collision:$relative" ]]; then
+      mkdir -p "$preserved_backup"
+      printf 'injected preserved-path collision\n' \
+        > "$preserved_backup/.scv-rollback-collision"
+    fi
+    if path_exists "$preserved_live"; then
+      if path_exists "$preserved_backup"; then
+        echo "ERROR: rollback destination already exists: $preserved_backup" >&2
+        failures=$((failures + 1))
+        deck_preserve_failures=$((deck_preserve_failures + 1))
+        continue
+      fi
+      if ! mkdir -p "$(dirname "$preserved_backup")" ||
+         ! atomic_rename_noreplace "$preserved_live" "$preserved_backup"; then
+        echo "ERROR: could not restore preserved path to backup: $relative" >&2
+        failures=$((failures + 1))
+        deck_preserve_failures=$((deck_preserve_failures + 1))
+      fi
+    else
+      echo "ERROR: preserved path disappeared during rollback: $relative" >&2
+      failures=$((failures + 1))
+      deck_preserve_failures=$((deck_preserve_failures + 1))
+    fi
+  done
+
+  for (( index=${#TX_PATHS[@]} - 1; index >= 0; index-- )); do
+    relative=${TX_PATHS[$index]}
+    original_state=${TX_ORIGINAL_STATES[$index]}
+    installed=${TX_STAGE_INSTALLED[$index]:-no}
+    installed_digest=${TX_INSTALLED_DIGESTS[$index]:-}
+    live="$REPO_ROOT/$relative"
+    backup="$TX_BACKUP/$relative"
+    if [[ "$relative" == DeckUI && "$deck_preserve_failures" -gt 0 ]]; then
+      echo "ERROR: rollback preserves live and backup DeckUI after runtime restore failure" >&2
+      continue
+    fi
+    if [[ "$original_state" == present ]]; then
+      if path_exists "$backup"; then
+        if [[ "${SCV_CORE_SYNC_ROLLBACK_FAILPOINT:-}" == "restore:$relative" ]]; then
+          echo "ERROR: injected rollback restore failure for $relative" >&2
+          failures=$((failures + 1))
+          continue
+        fi
+        if path_exists "$live"; then
+          if ! quarantine_owned_live "$index" "$relative" "$live"; then
+            echo "ERROR: rollback could not quarantine staged live path: $relative" >&2
+            failures=$((failures + 1))
+            continue
+          fi
+        fi
+        if ! mkdir -p "$(dirname "$live")" ||
+           ! atomic_rename_noreplace "$backup" "$live"; then
+          echo "ERROR: rollback could not restore original path: $relative" >&2
+          failures=$((failures + 1))
+        fi
+      else
+        echo "ERROR: rollback backup is missing for original path: $relative" >&2
+        failures=$((failures + 1))
+      fi
+    elif path_exists "$live"; then
+      if ! quarantine_owned_live "$index" "$relative" "$live"; then
+        echo "ERROR: rollback could not quarantine path while restoring absence: $relative" >&2
+        failures=$((failures + 1))
+      fi
+    fi
+  done
+
+  if (( failures > 0 )); then
+    echo "ERROR: rollback incomplete; recovery backup preserved at $TX_ROOT" >&2
+    return 1
+  fi
+  TX_ACTIVE=0
+  return 0
+}
+
+finish_on_exit() {
+  local status=$? rollback_status=0 preserve_transaction=0
+  trap - EXIT ERR
+  trap '' HUP INT TERM
+  set +e
+  rollback_transaction || rollback_status=$?
+  if (( rollback_status != 0 )); then
+    preserve_transaction=1
+    (( status != 0 )) || status=$rollback_status
+  fi
+  if (( preserve_transaction == 0 )) &&
+     [[ -n "$TX_ROOT" && -d "$TX_ROOT" ]]; then
+    rm -rf -- "$TX_ROOT"
+  fi
+  if [[ -n "$TMP_DIR" && -d "$TMP_DIR" ]]; then
+    rm -rf -- "$TMP_DIR"
+  fi
+  release_git_index_lock || {
+    (( status != 0 )) || status=1
+  }
+  release_sync_lock || {
+    (( status != 0 )) || status=1
+  }
+  exit "$status"
+}
+
+exit_on_error() {
+  local status=$1
+  exit "$status"
+}
+
+exit_on_signal() {
+  exit "$1"
+}
+
+validate_live_worktree() {
+  python3 - "$REPO_ROOT" <<'PY'
+import os
+import stat
+import subprocess
+import sys
+from pathlib import Path
+
+repo = Path(sys.argv[1])
+scopes = (
+    "vendor",
+    "core.lock",
+    "scripts",
+    "commands",
+    "tests",
+    "template",
+    "DeckUI",
+    "assets",
+    "protocols",
+    "ralph-template-scv.md",
+    "TEMPLATE_VERSION",
+    "host-profile.env",
+)
+protected_local_scopes = tuple(scope for scope in scopes if scope != "DeckUI")
+adapter_owned = {
+    "scripts/apply-model-policy.sh",
+    "scripts/hydrate.sh",
+    "scripts/project-core.sh",
+    "scripts/sync-core.sh",
+    "scripts/sync.sh",
+    "scripts/update.sh",
+    "scripts/verify-core.sh",
+    "tests/test-apply-model-policy.sh",
+    "tests/test-core-contract.sh",
+    "tests/test-sync-core-atomicity.sh",
+    "tests/test-state-adapter.sh",
+    "commands/set-models.md",
+    "commands/update.md",
+}
+
+def git(*arguments: str) -> bytes:
+    return subprocess.check_output(
+        ["git", "-C", str(repo), *arguments], stderr=subprocess.DEVNULL
+    )
+
+try:
+    top = Path(git("rev-parse", "--show-toplevel").decode().strip()).resolve()
+except subprocess.CalledProcessError:
+    raise SystemExit("ERROR: Core sync requires the wrapper repository Git index")
+if top != repo:
+    raise SystemExit("ERROR: Core sync must run at the wrapper Git worktree root")
+
+def names(*arguments: str):
+    return {
+        os.fsdecode(value).rstrip("/")
+        for value in git(*arguments).split(b"\0")
+        if value
+    }
+
+def in_scope(path: str) -> bool:
+    return any(path == scope or path.startswith(scope + "/") for scope in scopes)
+
+def is_preserved_wrapper_path(path: str) -> bool:
+    return path in adapter_owned or (
+        path.startswith("vendor/") and not path.startswith("vendor/scv-core/")
+    )
+
+def frontmatter_body(data: bytes):
+    lines = data.splitlines(keepends=True)
+    if not lines or lines[0].strip() != b"---":
+        return None
+    for index in range(1, len(lines)):
+        if lines[index].strip() == b"---":
+            return b"".join(lines[index + 1 :])
+    return None
+
+def command_frontmatter_only(path: str) -> bool:
+    if not (
+        path.startswith("commands/")
+        and path.endswith(".md")
+        and path not in adapter_owned
+    ):
+        return False
+    live = repo / path
+    try:
+        if not stat.S_ISREG(live.lstat().st_mode):
+            return False
+        current_body = frontmatter_body(live.read_bytes())
+        committed_body = frontmatter_body(git("show", f"HEAD:{path}"))
+        indexed_body = frontmatter_body(git("show", f":{path}"))
+    except (OSError, subprocess.CalledProcessError):
+        return False
+    return (
+        current_body is not None
+        and current_body == committed_body
+        and current_body == indexed_body
+    )
+
+dirty = names(
+    "diff", "--name-only", "-z", "--diff-filter=ACDMRTUXB", "--", *scopes
+) | names(
+    "diff", "--cached", "--name-only", "-z", "--diff-filter=ACDMRTUXB",
+    "--", *scopes
+)
+untracked = names(
+    "ls-files", "--others", "--exclude-standard", "-z",
+    "--", *protected_local_scopes
+)
+ignored = names(
+    "ls-files", "--others", "--ignored", "--exclude-standard", "-z",
+    "--", *protected_local_scopes
+)
+flagged = set()
+for record in git("ls-files", "-v", "-z", "--", *scopes).split(b"\0"):
+    if not record:
+        continue
+    if len(record) < 3 or record[1:2] != b" ":
+        raise SystemExit("ERROR: could not parse scoped Git index flags")
+    tag = chr(record[0])
+    path = os.fsdecode(record[2:])
+    if tag.islower() or tag == "S":
+        flagged.add(path)
+
+mode_mismatches = set()
+content_or_type_mismatches = set()
+unmerged = set()
+index_modes = {}
+index_entries = {}
+for record in git("ls-files", "--stage", "-z", "--", *scopes).split(b"\0"):
+    if not record:
+        continue
+    try:
+        metadata, encoded_path = record.split(b"\t", 1)
+        index_mode, object_id, stage = metadata.split()
+    except ValueError:
+        raise SystemExit("ERROR: could not parse scoped Git index mode")
+    path = os.fsdecode(encoded_path)
+    if stage != b"0":
+        unmerged.add(path)
+        continue
+    index_modes[path] = index_mode
+    index_entries[path] = (index_mode, object_id)
+    mode_is_core_owned = (
+        path not in adapter_owned
+        and not path.startswith("commands/")
+        and not (
+            path.startswith("vendor/")
+            and not path.startswith("vendor/scv-core/")
+        )
+    )
+    if not mode_is_core_owned or index_mode not in {b"100644", b"100755"}:
+        continue
+    live = repo / path
+    try:
+        live_mode = live.lstat().st_mode
+    except FileNotFoundError:
+        continue
+    if not stat.S_ISREG(live_mode):
+        continue
+    expected_executable = index_mode == b"100755"
+    actual_executable = bool(stat.S_IMODE(live_mode) & stat.S_IXUSR)
+    if expected_executable != actual_executable:
+        mode_mismatches.add(path)
+
+regular_paths = []
+symlink_paths = []
+for path, (index_mode, object_id) in index_entries.items():
+    if is_preserved_wrapper_path(path) or command_frontmatter_only(path):
+        continue
+    live = repo / path
+    try:
+        live_mode = live.lstat().st_mode
+        if index_mode in {b"100644", b"100755"}:
+            if not stat.S_ISREG(live_mode):
+                content_or_type_mismatches.add(path)
+                continue
+            regular_paths.append(path)
+        elif index_mode == b"120000":
+            if not stat.S_ISLNK(live_mode):
+                content_or_type_mismatches.add(path)
+                continue
+            symlink_paths.append(path)
+        else:
+            content_or_type_mismatches.add(path)
+            continue
+    except OSError:
+        content_or_type_mismatches.add(path)
+        continue
+
+live_hashes = {}
+batch_paths = [
+    path for path in regular_paths if "\n" not in path and not path.startswith('"')
+]
+if batch_paths:
+    process = subprocess.Popen(
+        ["git", "-C", str(repo), "hash-object", "--stdin-paths"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    output, error = process.communicate(
+        b"".join(os.fsencode(path) + b"\n" for path in batch_paths)
+    )
+    hashes = output.splitlines()
+    if process.returncode != 0 or len(hashes) != len(batch_paths):
+        raise SystemExit(
+            "ERROR: could not hash scoped worktree files with Git filters: "
+            + error.decode("utf-8", "replace").strip()
+        )
+    live_hashes.update(zip(batch_paths, hashes))
+
+for path in regular_paths:
+    if path in live_hashes:
+        continue
+    try:
+        live_hashes[path] = git(
+            "hash-object", f"--path={path}", "--", path
+        ).strip()
+    except subprocess.CalledProcessError:
+        content_or_type_mismatches.add(path)
+
+for path in regular_paths:
+    if live_hashes.get(path) != index_entries[path][1]:
+        content_or_type_mismatches.add(path)
+
+for path in symlink_paths:
+    try:
+        live_data = os.fsencode(os.readlink(repo / path))
+        indexed_data = git("show", f":{path}")
+    except (OSError, subprocess.CalledProcessError):
+        content_or_type_mismatches.add(path)
+        continue
+    if live_data != indexed_data:
+        content_or_type_mismatches.add(path)
+
+violations = []
+for path in sorted(adapter_owned):
+    live = repo / path
+    try:
+        live_mode = live.lstat().st_mode
+    except FileNotFoundError:
+        live_mode = 0
+    if (
+        not stat.S_ISREG(live_mode)
+        or index_modes.get(path) not in {b"100644", b"100755"}
+    ):
+        violations.append(("adapter-owned path type change", path))
+for path in sorted(unmerged):
+    violations.append(("unmerged Git index entry", path))
+for path in sorted(flagged):
+    violations.append(("unsafe Git index flag", path))
+for path in sorted(mode_mismatches):
+    violations.append(("tracked executable-mode change", path))
+for path in sorted(content_or_type_mismatches):
+    violations.append(("tracked change", path))
+for path in sorted(dirty):
+    if not in_scope(path):
+        continue
+    if is_preserved_wrapper_path(path) or command_frontmatter_only(path):
+        continue
+    if path in content_or_type_mismatches:
+        continue
+    violations.append(("tracked change", path))
+
+for path in sorted(untracked | ignored):
+    if not in_scope(path) or path == "DeckUI" or path.startswith("DeckUI/"):
+        continue
+    if path in adapter_owned:
+        continue
+    violations.append(("local-only path", path))
+
+if violations:
+    for kind, path in violations[:20]:
+        print(
+            f"ERROR: Core sync would overwrite {kind}: {path}",
+            file=sys.stderr,
+        )
+    if len(violations) > 20:
+        print(
+            f"ERROR: and {len(violations) - 20} more protected worktree paths",
+            file=sys.stderr,
+        )
+    raise SystemExit(
+        "ERROR: commit, move, or remove protected local changes before Core sync"
+    )
+PY
+}
+
+trap finish_on_exit EXIT
+trap 'exit_on_error $?' ERR
+trap 'exit_on_signal 129' HUP
+trap 'exit_on_signal 130' INT
+trap 'exit_on_signal 143' TERM
+
+acquire_sync_lock
+
+orphan_transaction=
+for recovery_candidate in \
+  "$REPO_ROOT"/.scv-core-transaction.* \
+  "$REPO_ROOT"/.scv-core-sync-quarantine.*; do
+  if path_exists "$recovery_candidate"; then
+    orphan_transaction=$recovery_candidate
+    break
+  fi
+done
+[[ -z "$orphan_transaction" ]] || {
+  echo "ERROR: unfinished Core transaction requires manual recovery: $orphan_transaction" >&2
+  exit 1
+}
+
+if [[ -n "${SCV_CORE_SYNC_LOCK_HOLD_FILE:-}" ]]; then
+  printf 'ready\n' > "$SCV_CORE_SYNC_LOCK_HOLD_FILE.ready"
+  while [[ -e "$SCV_CORE_SYNC_LOCK_HOLD_FILE" ]]; do
+    sleep 0.05
+  done
+fi
+
+VENDOR_PARENT="$REPO_ROOT/vendor"
+VENDOR_TARGET="$VENDOR_PARENT/scv-core"
+if path_exists "$VENDOR_PARENT"; then
+  [[ -d "$VENDOR_PARENT" && ! -L "$VENDOR_PARENT" ]] || {
+    echo "ERROR: vendor must be a real repository directory, not a link or file" >&2
+    exit 1
+  }
+  [[ "$(cd "$VENDOR_PARENT" && pwd -P)" == "$VENDOR_PARENT" ]] || {
+    echo "ERROR: vendor resolves outside its repository path" >&2
+    exit 1
+  }
+fi
+
+validate_live_worktree
 
 sha256_file() {
   if command -v sha256sum >/dev/null 2>&1; then
@@ -109,38 +800,129 @@ download() {
     --output "$output" "$url"
 }
 
-set_wrapper_version() {
-  local version_file=$1
-  python3 - "$version_file" "$PLUGIN_MANIFEST" "$MARKETPLACE_MANIFEST" <<'PY'
+resolve_release_commit() {
+  local tag=$1 metadata commit
+  if command -v gh >/dev/null 2>&1; then
+    commit=$(gh api "repos/$SOURCE_REPO/commits/$tag" --jq .sha)
+  else
+    metadata="$TMP_DIR/tag-commit.json"
+    download "https://api.github.com/repos/$SOURCE_REPO/commits/$tag" "$metadata"
+    commit=$(python3 -c \
+      'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["sha"])' \
+      "$metadata")
+  fi
+  [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || {
+    echo "ERROR: release tag did not resolve to a full commit id: $tag" >&2
+    return 1
+  }
+  printf '%s\n' "$commit"
+}
+
+validate_release_provenance() {
+  local release_root=$1 expected_version=$2 expected_repository=$3 expected_commit=$4
+  python3 - \
+    "$release_root" "$expected_version" "$expected_repository" "$expected_commit" <<'PY'
 import json
-import pathlib
 import re
 import sys
+from pathlib import Path
 
-version = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8").strip()
-if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:[.-][0-9A-Za-z.-]+)?", version):
-    raise SystemExit(f"ERROR: invalid materialized core version: {version}")
+root = Path(sys.argv[1])
+expected_version = sys.argv[2]
+expected_repository = sys.argv[3].rstrip("/").removesuffix(".git")
+expected_commit = sys.argv[4]
 
-plugin_path = pathlib.Path(sys.argv[2])
-marketplace_path = pathlib.Path(sys.argv[3])
+def normalize_repository(value: str) -> str:
+    value = value.strip().rstrip("/")
+    if value.endswith(".git"):
+        value = value[:-4]
+    if value.startswith("git@github.com:"):
+        value = "https://github.com/" + value.removeprefix("git@github.com:")
+    return value
 
-plugin = json.loads(plugin_path.read_text(encoding="utf-8"))
-plugin["version"] = version
+version = (root / "VERSION").read_text(encoding="utf-8").strip()
+source_commit = (root / "SOURCE_COMMIT").read_text(encoding="utf-8").strip()
+source_info = (root / "SOURCE_INFO").read_text(encoding="utf-8").splitlines()
+repositories = [
+    line.split(":", 1)[1].strip()
+    for line in source_info
+    if line.startswith("source_repository:")
+]
+if len(repositories) != 1:
+    raise SystemExit("ERROR: release SOURCE_INFO must contain exactly one source_repository")
+source_repository = normalize_repository(repositories[0])
+manifest = json.loads((root / "core-manifest.json").read_text(encoding="utf-8"))
 
-marketplace = json.loads(marketplace_path.read_text(encoding="utf-8"))
-entries = [item for item in marketplace.get("plugins", []) if item.get("name") == "scv"]
-if len(entries) != 1:
-    raise SystemExit("ERROR: marketplace must contain exactly one scv entry")
-entries[0]["version"] = version
+if version != expected_version:
+    raise SystemExit(
+        f"ERROR: requested Core v{expected_version} but release payload VERSION is {version}"
+    )
+if str(manifest.get("version")) != expected_version:
+    raise SystemExit("ERROR: release manifest version does not match the requested Core version")
+if source_repository != expected_repository:
+    raise SystemExit(
+        "ERROR: release SOURCE_INFO repository does not match the requested repository"
+    )
+if normalize_repository(str(manifest.get("source_repository", ""))) != expected_repository:
+    raise SystemExit(
+        "ERROR: release manifest repository does not match the requested repository"
+    )
+if not re.fullmatch(r"[0-9a-f]{40}", source_commit):
+    raise SystemExit("ERROR: release SOURCE_COMMIT is not a full lowercase commit id")
+if source_commit != expected_commit:
+    raise SystemExit("ERROR: release SOURCE_COMMIT does not match the requested tag commit")
+if str(manifest.get("source_commit")) != expected_commit:
+    raise SystemExit("ERROR: release manifest commit does not match the requested tag commit")
+if manifest.get("profile_id") != "canonical":
+    raise SystemExit("ERROR: release source manifest is not the canonical Core profile")
+PY
+}
 
-plugin_path.write_text(
-    json.dumps(plugin, ensure_ascii=False, indent=2) + "\n",
-    encoding="utf-8",
-)
-marketplace_path.write_text(
-    json.dumps(marketplace, ensure_ascii=False, indent=2) + "\n",
-    encoding="utf-8",
-)
+validate_candidate_provenance() {
+  local candidate=$1 source_root=${2:-} expected_version=${3:-}
+  local expected_repository=${4:-} expected_commit=${5:-} artifact_sha=${6:-}
+  python3 - \
+    "$candidate" "$source_root" "$expected_version" \
+    "$expected_repository" "$expected_commit" "$artifact_sha" <<'PY'
+import hashlib
+import json
+import sys
+from pathlib import Path
+
+candidate = Path(sys.argv[1])
+source_root = Path(sys.argv[2]) if sys.argv[2] else None
+expected_version, expected_repository, expected_commit, artifact_sha = sys.argv[3:]
+lock = json.loads((candidate / "core.lock.json").read_text(encoding="utf-8"))
+
+def digest(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+if lock.get("manifest_sha256") != digest(candidate / "core-manifest.json"):
+    raise SystemExit("ERROR: candidate lock manifest_sha256 does not match core-manifest.json")
+if lock.get("payload_sha256") != digest(candidate / "SHA256SUMS"):
+    raise SystemExit("ERROR: candidate lock payload_sha256 does not match SHA256SUMS")
+
+if source_root is not None:
+    if lock.get("source_manifest_sha256") != digest(source_root / "core-manifest.json"):
+        raise SystemExit(
+            "ERROR: candidate lock source_manifest_sha256 does not match the source manifest"
+        )
+    if lock.get("source_payload_sha256") != digest(source_root / "SHA256SUMS"):
+        raise SystemExit(
+            "ERROR: candidate lock source_payload_sha256 does not match the source payload"
+        )
+
+if expected_version:
+    if (candidate / "VERSION").read_text(encoding="utf-8").strip() != expected_version:
+        raise SystemExit("ERROR: materialized Core VERSION differs from the requested release")
+    if str(lock.get("core_version")) != expected_version:
+        raise SystemExit("ERROR: candidate lock version differs from the requested release")
+    if str(lock.get("source_repository", "")).rstrip("/").removesuffix(".git") != expected_repository:
+        raise SystemExit("ERROR: candidate lock repository differs from the requested release")
+    if lock.get("source_commit") != expected_commit:
+        raise SystemExit("ERROR: candidate lock commit differs from the requested tag")
+    if lock.get("artifact_sha256") != artifact_sha:
+        raise SystemExit("ERROR: candidate lock artifact digest differs from the verified release")
 PY
 }
 
@@ -154,7 +936,25 @@ if [[ -n "$SOURCE_DIR" ]]; then
     echo "ERROR: local core vendor tool is missing or not executable: $VENDOR_TOOL" >&2
     exit 1
   }
-  "$VENDOR_TOOL" --source "$SOURCE_DIR" --target "$CANDIDATE" --profile "$PROFILE"
+  LOCAL_SOURCE_ROOT="$TMP_DIR/local-source"
+  source_git_root=$(git -C "$SOURCE_DIR" rev-parse --show-toplevel 2>/dev/null || true)
+  if [[ -n "$source_git_root" &&
+        "$(cd "$source_git_root" && pwd)" == "$SOURCE_DIR" ]]; then
+    EXPORT_TOOL="$SOURCE_DIR/tools/export-core.sh"
+    [[ -x "$EXPORT_TOOL" ]] || {
+      echo "ERROR: local Core checkout lacks tools/export-core.sh" >&2
+      exit 1
+    }
+    "$EXPORT_TOOL" --output "$LOCAL_SOURCE_ROOT" >/dev/null
+  else
+    cp -R -p "$SOURCE_DIR" "$LOCAL_SOURCE_ROOT"
+    "$LOCAL_SOURCE_ROOT/tools/verify-core.sh" --root "$LOCAL_SOURCE_ROOT"
+  fi
+  VENDOR_TOOL="$LOCAL_SOURCE_ROOT/tools/vendor-core.sh"
+  "$VENDOR_TOOL" \
+    --source "$LOCAL_SOURCE_ROOT" \
+    --target "$CANDIDATE" \
+    --profile "$PROFILE"
 else
   if (( LATEST )); then
     command -v gh >/dev/null 2>&1 || {
@@ -169,8 +969,11 @@ else
     exit 1
   }
 
+  release_tag="v${VERSION}"
+  release_commit=$(resolve_release_commit "$release_tag")
+  release_repository="https://github.com/${SOURCE_REPO}"
   asset="scv-core-v${VERSION}.tar.gz"
-  base="https://github.com/${SOURCE_REPO}/releases/download/v${VERSION}"
+  base="${release_repository}/releases/download/${release_tag}"
   download "$base/$asset" "$TMP_DIR/$asset"
   download "$base/$asset.sha256" "$TMP_DIR/$asset.sha256"
 
@@ -228,6 +1031,8 @@ if expected_root not in seen:
 PY
   tar -xzf "$TMP_DIR/$asset" -C "$TMP_DIR"
   RELEASE_ROOT="$TMP_DIR/$top"
+  validate_release_provenance \
+    "$RELEASE_ROOT" "$VERSION" "$release_repository" "$release_commit"
   VENDOR_TOOL="$RELEASE_ROOT/tools/vendor-core.sh"
   [[ -x "$VENDOR_TOOL" ]] || {
     echo "ERROR: release artifact lacks tools/vendor-core.sh" >&2
@@ -249,15 +1054,27 @@ fi
   --vendor "$CANDIDATE" \
   --lock "$CANDIDATE/core.lock.json" \
   --no-projection
+if [[ -n "$SOURCE_DIR" ]]; then
+  validate_candidate_provenance "$CANDIDATE" "$LOCAL_SOURCE_ROOT"
+else
+  validate_candidate_provenance \
+    "$CANDIDATE" "$RELEASE_ROOT" "$VERSION" \
+    "$release_repository" "$release_commit" "$actual_lower"
+fi
 
 # Exercise the complete projection in an isolated wrapper-shaped directory
 # before changing either the live pin or compatibility paths.
 PROJECTION_STAGE="$TMP_DIR/wrapper-projection"
+PROJECT_TOKEN=$(python3 -c 'import secrets; print(secrets.token_hex(24))')
+printf '%s\n' "$PROJECT_TOKEN" > "$TMP_DIR/.scv-project-core-token"
+chmod 600 "$TMP_DIR/.scv-project-core-token"
 mkdir -p "$PROJECTION_STAGE"
 cp -R -p "$REPO_ROOT/scripts" "$PROJECTION_STAGE/scripts"
 cp -R -p "$REPO_ROOT/commands" "$PROJECTION_STAGE/commands"
 cp -R -p "$REPO_ROOT/tests" "$PROJECTION_STAGE/tests"
-"$SCRIPT_DIR/project-core.sh" \
+SCV_PROJECT_CORE_STAGE_ROOT="$TMP_DIR" \
+SCV_PROJECT_CORE_WRITE_TOKEN="$PROJECT_TOKEN" \
+  "$SCRIPT_DIR/project-core.sh" \
   --vendor "$CANDIDATE" \
   --destination "$PROJECTION_STAGE"
 "$SCRIPT_DIR/project-core.sh" \
@@ -274,61 +1091,606 @@ if (( DRY_RUN )); then
   exit 0
 fi
 
-VENDOR_PARENT="$REPO_ROOT/vendor"
-VENDOR_TARGET="$VENDOR_PARENT/scv-core"
-NEXT_TARGET="$VENDOR_PARENT/.scv-core.next.$$"
-BACKUP_TARGET="$VENDOR_PARENT/.scv-core.backup.$$"
-LOCK_BACKUP="$TMP_DIR/core.lock.previous"
-PLUGIN_BACKUP="$TMP_DIR/plugin.json.previous"
-MARKETPLACE_BACKUP="$TMP_DIR/marketplace.json.previous"
-HAD_VENDOR=0
-mkdir -p "$VENDOR_PARENT"
-mv "$CANDIDATE" "$NEXT_TARGET"
-if [[ -e "$VENDOR_TARGET" ]]; then
-  HAD_VENDOR=1
-  mv "$VENDOR_TARGET" "$BACKUP_TARGET"
-fi
-[[ ! -f "$REPO_ROOT/core.lock" ]] || cp -p "$REPO_ROOT/core.lock" "$LOCK_BACKUP"
-cp -p "$PLUGIN_MANIFEST" "$PLUGIN_BACKUP"
-cp -p "$MARKETPLACE_MANIFEST" "$MARKETPLACE_BACKUP"
-
-rollback() {
-  local status=$?
-  if [[ -e "$NEXT_TARGET" ]]; then
-    rm -rf "$NEXT_TARGET"
-  fi
-  if [[ -e "$BACKUP_TARGET" ]]; then
-    [[ ! -e "$VENDOR_TARGET" ]] || rm -rf "$VENDOR_TARGET"
-    mv "$BACKUP_TARGET" "$VENDOR_TARGET"
-  elif (( HAD_VENDOR == 0 )) && [[ -e "$VENDOR_TARGET" ]]; then
-    rm -rf "$VENDOR_TARGET"
-  fi
-  if [[ -f "$LOCK_BACKUP" ]]; then
-    cp -p "$LOCK_BACKUP" "$REPO_ROOT/core.lock"
-  else
-    rm -f "$REPO_ROOT/core.lock"
-  fi
-  cp -p "$PLUGIN_BACKUP" "$PLUGIN_MANIFEST"
-  cp -p "$MARKETPLACE_BACKUP" "$MARKETPLACE_MANIFEST"
-  if [[ -d "$VENDOR_TARGET/core" ]]; then
-    "$SCRIPT_DIR/project-core.sh" \
-      --vendor "$VENDOR_TARGET" \
-      --destination "$REPO_ROOT" >/dev/null 2>&1 || true
-  fi
-  echo "ERROR: core sync rolled back after a failed projection or verification" >&2
-  exit "$status"
+sync_failpoint() {
+  local point=$1 requested=${SCV_CORE_SYNC_FAILPOINT:-}
+  case "$requested" in
+    "$point")
+      echo "ERROR: injected core sync failure at $point" >&2
+      return 97
+      ;;
+    "signal-hup:$point")
+      kill -HUP "$$"
+      ;;
+    "signal-int:$point")
+      kill -INT "$$"
+      ;;
+    "signal-term:$point")
+      kill -TERM "$$"
+      ;;
+  esac
 }
-trap rollback ERR
 
-mv "$NEXT_TARGET" "$VENDOR_TARGET"
-cp -p "$VENDOR_TARGET/core.lock.json" "$REPO_ROOT/.core.lock.next.$$"
-mv "$REPO_ROOT/.core.lock.next.$$" "$REPO_ROOT/core.lock"
-set_wrapper_version "$VENDOR_TARGET/VERSION"
-"$SCRIPT_DIR/project-core.sh" --vendor "$VENDOR_TARGET" --destination "$REPO_ROOT"
+atomic_rename_noreplace() {
+  local source=$1 destination=$2
+  python3 - "$source" "$destination" <<'PY'
+import ctypes
+import errno
+import os
+import sys
+
+source = os.fsencode(sys.argv[1])
+destination = os.fsencode(sys.argv[2])
+libc = ctypes.CDLL(None, use_errno=True)
+
+if sys.platform.startswith("linux"):
+    try:
+        rename = libc.renameat2
+    except AttributeError:
+        raise SystemExit("ERROR: libc lacks atomic renameat2 support")
+    rename.argtypes = [
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_uint,
+    ]
+    rename.restype = ctypes.c_int
+    result = rename(-100, source, -100, destination, 1)
+elif sys.platform == "darwin":
+    try:
+        rename = libc.renamex_np
+    except AttributeError:
+        raise SystemExit("ERROR: libc lacks atomic renamex_np support")
+    rename.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint]
+    rename.restype = ctypes.c_int
+    result = rename(source, destination, 0x00000004)
+elif os.name == "nt":
+    try:
+        os.rename(os.fsdecode(source), os.fsdecode(destination))
+    except OSError as error:
+        print(
+            f"ERROR: atomic install rename failed: {error}",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+    raise SystemExit(0)
+else:
+    raise SystemExit(
+        f"ERROR: atomic no-replace rename is unsupported on {sys.platform}"
+    )
+
+if result != 0:
+    error_number = ctypes.get_errno()
+    if error_number == errno.EEXIST:
+        detail = "destination appeared concurrently"
+    else:
+        detail = os.strerror(error_number)
+    print(f"ERROR: atomic install rename failed: {detail}", file=sys.stderr)
+    raise SystemExit(1)
+PY
+}
+
+path_fingerprint() {
+  local target=$1 inventory=${2:-}
+  python3 - "$target" "$inventory" <<'PY'
+import hashlib
+import os
+import stat
+import sys
+from pathlib import Path
+
+target = Path(sys.argv[1])
+inventory = Path(sys.argv[2]) if sys.argv[2] else None
+excluded = set()
+if inventory is not None:
+    for encoded in inventory.read_bytes().split(b"\0"):
+        if not encoded:
+            continue
+        relative = os.fsdecode(encoded).rstrip("/")
+        if relative.startswith("DeckUI/"):
+            excluded.add(relative.removeprefix("DeckUI/"))
+
+def is_excluded(relative: str) -> bool:
+    parts = relative.split("/")
+    return any(
+        "/".join(parts[:index]) in excluded
+        for index in range(1, len(parts) + 1)
+    )
+
+if not target.exists() and not target.is_symlink():
+    print("absent")
+    raise SystemExit(0)
+
+digest = hashlib.sha256()
+stack = [(target, ".")]
+while stack:
+    item, relative = stack.pop()
+    if relative != "." and is_excluded(relative):
+        continue
+    metadata = item.lstat()
+    mode = metadata.st_mode
+    digest.update(
+        relative.encode("utf-8", "surrogateescape")
+        + b"\0"
+        + str(stat.S_IMODE(mode)).encode()
+        + b"\0"
+    )
+    if stat.S_ISDIR(mode):
+        digest.update(b"D\0")
+        with os.scandir(item) as handle:
+            children = sorted(handle, key=lambda entry: entry.name, reverse=True)
+        for child in children:
+            child_relative = (
+                child.name if relative == "." else f"{relative}/{child.name}"
+            )
+            stack.append((Path(child.path), child_relative))
+    elif stat.S_ISLNK(mode):
+        digest.update(
+            b"L\0"
+            + os.readlink(item).encode("utf-8", "surrogateescape")
+            + b"\0"
+        )
+    elif stat.S_ISREG(mode):
+        digest.update(b"F\0")
+        with item.open("rb") as handle:
+            while True:
+                chunk = handle.read(1024 * 1024)
+                if not chunk:
+                    break
+                digest.update(chunk)
+        digest.update(b"\0")
+    else:
+        digest.update(b"O\0")
+print(digest.hexdigest())
+PY
+}
+
+capture_transaction_preimage() {
+  local relative live state digest inventory
+  TX_EXPECTED_STATES=()
+  TX_EXPECTED_DIGESTS=()
+  for relative in "${TRANSACTION_PATHS[@]}"; do
+    live="$REPO_ROOT/$relative"
+    state=absent
+    path_exists "$live" && state=present
+    inventory=
+    [[ "$relative" != DeckUI ]] || inventory=$TX_DECK_INVENTORY_FILE
+    digest=$(path_fingerprint "$live" "$inventory")
+    TX_EXPECTED_STATES+=("$state")
+    TX_EXPECTED_DIGESTS+=("$digest")
+  done
+}
+
+validate_transaction_preimage() {
+  local index relative live state digest inventory failures=0
+  for (( index=0; index < ${#TRANSACTION_PATHS[@]}; index++ )); do
+    relative=${TRANSACTION_PATHS[$index]}
+    live="$REPO_ROOT/$relative"
+    state=absent
+    path_exists "$live" && state=present
+    inventory=
+    [[ "$relative" != DeckUI ]] || inventory=$TX_DECK_INVENTORY_FILE
+    digest=$(path_fingerprint "$live" "$inventory")
+    if [[ "$state" != "${TX_EXPECTED_STATES[$index]}" ||
+          "$digest" != "${TX_EXPECTED_DIGESTS[$index]}" ]]; then
+      echo "ERROR: live path changed after projection snapshot: $relative" >&2
+      failures=$((failures + 1))
+    fi
+  done
+  (( failures == 0 ))
+}
+
+validate_original_preimage() {
+  local index=$1 relative=$2 actual=$3 state=$4 inventory= digest
+  [[ "$relative" != DeckUI ]] || inventory=$TX_DECK_INVENTORY_FILE
+  digest=$(path_fingerprint "$actual" "$inventory")
+  if [[ "$state" != "${TX_EXPECTED_STATES[$index]}" ||
+        "$digest" != "${TX_EXPECTED_DIGESTS[$index]}" ]]; then
+    echo "ERROR: original path drifted before atomic backup: $relative" >&2
+    return 1
+  fi
+}
+
+validate_backup_preimages() {
+  local index relative backup state digest inventory preserved failures=0
+  for (( index=0; index < ${#TX_PATHS[@]}; index++ )); do
+    relative=${TX_PATHS[$index]}
+    backup="$TX_BACKUP/$relative"
+    state=absent
+    path_exists "$backup" && state=present
+    inventory=
+    [[ "$relative" != DeckUI ]] || inventory=$TX_DECK_INVENTORY_FILE
+    if [[ "$relative" == DeckUI ]]; then
+      for preserved in "${TX_DECK_INVENTORY[@]}"; do
+        if path_exists "$backup/${preserved#DeckUI/}"; then
+          echo "ERROR: DeckUI runtime path reappeared in original backup: $preserved" >&2
+          failures=$((failures + 1))
+        fi
+      done
+    fi
+    digest=$(path_fingerprint "$backup" "$inventory")
+    if [[ "$state" != "${TX_EXPECTED_STATES[$index]}" ||
+          "$digest" != "${TX_EXPECTED_DIGESTS[$index]}" ]]; then
+      echo "ERROR: original backup changed during Core sync: $relative" >&2
+      failures=$((failures + 1))
+    fi
+  done
+  (( failures == 0 ))
+}
+
+collect_deckui_inventory() {
+  local suffix=${1:-} git_root raw normalized inventory_path
+  git_root=$(git -C "$REPO_ROOT" rev-parse --show-toplevel 2>/dev/null) || {
+    echo "ERROR: Core sync requires the wrapper repository Git index" >&2
+    return 1
+  }
+  [[ "$(cd "$git_root" && pwd)" == "$REPO_ROOT" ]] || {
+    echo "ERROR: Core sync must run at the wrapper Git worktree root" >&2
+    return 1
+  }
+  raw="$TX_ROOT/deckui-inventory${suffix}.raw"
+  normalized="$TX_ROOT/deckui-inventory${suffix}"
+  {
+    git -C "$REPO_ROOT" ls-files \
+      --others --ignored --exclude-standard --directory -z -- DeckUI
+    git -C "$REPO_ROOT" ls-files \
+      --others --exclude-standard --directory -z -- DeckUI
+  } > "$raw"
+  python3 - "$REPO_ROOT" "$raw" "$normalized" <<'PY'
+import os
+import sys
+from pathlib import Path
+
+repo = Path(sys.argv[1])
+raw = Path(sys.argv[2]).read_bytes().split(b"\0")
+output = Path(sys.argv[3])
+candidates = set()
+for encoded in raw:
+    if not encoded:
+        continue
+    value = os.fsdecode(encoded).rstrip("/")
+    path = Path(value)
+    if (
+        path.is_absolute()
+        or len(path.parts) < 2
+        or path.parts[0] != "DeckUI"
+        or any(part in {"", ".", ".."} for part in path.parts)
+    ):
+        raise SystemExit(f"ERROR: unsafe DeckUI runtime inventory path: {value!r}")
+    if not (repo / path).exists() and not (repo / path).is_symlink():
+        raise SystemExit(f"ERROR: DeckUI runtime inventory path disappeared: {value!r}")
+    candidates.add(path.as_posix())
+
+selected = []
+selected_set = set()
+for value in sorted(candidates, key=lambda item: (item.count("/"), item)):
+    parts = value.split("/")
+    if any("/".join(parts[:index]) in selected_set for index in range(2, len(parts))):
+        continue
+    selected.append(value)
+    selected_set.add(value)
+output.write_bytes(
+    b"".join(os.fsencode(value) + b"\0" for value in selected)
+)
+PY
+  if [[ -n "$suffix" ]]; then
+    if ! cmp -s "$TX_DECK_INVENTORY_FILE" "$normalized"; then
+      echo "ERROR: DeckUI runtime inventory changed after projection snapshot" >&2
+      return 1
+    fi
+    return 0
+  fi
+  TX_DECK_INVENTORY=()
+  TX_DECK_INVENTORY_FILE=$normalized
+  while IFS= read -r -d '' inventory_path; do
+    TX_DECK_INVENTORY+=("$inventory_path")
+  done < "$normalized"
+}
+
+TX_ROOT=$(mktemp -d "$REPO_ROOT/.scv-core-transaction.XXXXXX")
+TX_STAGE="$TX_ROOT/stage"
+TX_BACKUP="$TX_ROOT/backup"
+TX_STAGE_CANDIDATE="$TX_ROOT/candidate"
+TX_STAGE_VENDOR_PARENT="$TX_STAGE/vendor"
+TX_STAGE_VENDOR="$TX_STAGE/vendor/scv-core"
+TX_STAGE_WRAPPER="$TX_STAGE/wrapper"
+mkdir -p "$TX_STAGE_WRAPPER" "$TX_BACKUP"
+
+python3 - "$REPO_ROOT" "$VENDOR_PARENT" "$TX_ROOT" <<'PY'
+import os
+import sys
+from pathlib import Path
+
+repo = Path(sys.argv[1])
+vendor_parent = Path(sys.argv[2])
+transaction = Path(sys.argv[3])
+expected_device = os.stat(repo).st_dev
+if vendor_parent.exists() and os.stat(vendor_parent).st_dev != expected_device:
+    raise SystemExit(
+        "ERROR: repository and vendor target are on different filesystems"
+    )
+if os.stat(transaction).st_dev != expected_device:
+    raise SystemExit(
+        "ERROR: core transaction stage is not on the repository filesystem"
+    )
+PY
+
+# Copy the fully verified candidate into the repository filesystem before any
+# live path is renamed. A cross-device TMPDIR is safe: interruption here can
+# only leave the hidden transaction directory, which the EXIT/signal handler
+# removes.
+cp -R -p "$CANDIDATE" "$TX_STAGE_CANDIDATE"
+cp -p "$TX_STAGE_CANDIDATE/core.lock.json" "$TX_STAGE/core.lock"
+"$TX_STAGE_CANDIDATE/tools/verify-core.sh" --root "$TX_STAGE_CANDIDATE"
+"$SCRIPT_DIR/verify-core.sh" \
+  --vendor "$TX_STAGE_CANDIDATE" \
+  --lock "$TX_STAGE/core.lock" \
+  --no-projection
+
+# Couple the live preimage to the transaction projection. The second worktree
+# validation closes the download/verification window. Snapshot-before-copy
+# plus a pre-swap and post-backup digest check protects even adapter-owned
+# files, whose local contents are intentionally allowed and projected.
+acquire_git_index_lock
+validate_live_worktree
+TX_INDEX_FINGERPRINT=$(scoped_index_fingerprint)
+collect_deckui_inventory
+capture_transaction_preimage
+python3 - "$VENDOR_PARENT" "$TX_STAGE_VENDOR_PARENT" <<'PY'
+import os
+import shutil
+import stat
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1])
+destination = Path(sys.argv[2])
+destination.mkdir(parents=True)
+if source.exists():
+    shutil.copystat(source, destination, follow_symlinks=False)
+    with os.scandir(source) as handle:
+        children = list(handle)
+    for child in children:
+        if child.name == "scv-core":
+            continue
+        source_child = Path(child.path)
+        destination_child = destination / child.name
+        mode = child.stat(follow_symlinks=False).st_mode
+        if stat.S_ISDIR(mode):
+            shutil.copytree(
+                source_child,
+                destination_child,
+                symlinks=True,
+                copy_function=shutil.copy2,
+            )
+        elif stat.S_ISLNK(mode):
+            os.symlink(os.readlink(source_child), destination_child)
+        elif stat.S_ISREG(mode):
+            shutil.copy2(source_child, destination_child, follow_symlinks=False)
+        else:
+            raise SystemExit(
+                f"ERROR: unsupported file type under vendor: {source_child}"
+            )
+PY
+mv "$TX_STAGE_CANDIDATE" "$TX_STAGE_VENDOR"
+for adapter_tree in scripts commands tests; do
+  cp -R -p "$REPO_ROOT/$adapter_tree" "$TX_STAGE_WRAPPER/$adapter_tree"
+done
+TX_PROJECT_TOKEN=$(python3 -c 'import secrets; print(secrets.token_hex(24))')
+printf '%s\n' "$TX_PROJECT_TOKEN" > "$TX_STAGE/.scv-project-core-token"
+chmod 600 "$TX_STAGE/.scv-project-core-token"
+SCV_PROJECT_CORE_STAGE_ROOT="$TX_STAGE" \
+SCV_PROJECT_CORE_WRITE_TOKEN="$TX_PROJECT_TOKEN" \
+  "$SCRIPT_DIR/project-core.sh" \
+  --vendor "$TX_STAGE_VENDOR" \
+  --destination "$TX_STAGE_WRAPPER"
+"$SCRIPT_DIR/project-core.sh" \
+  --vendor "$TX_STAGE_VENDOR" \
+  --destination "$TX_STAGE_WRAPPER" \
+  --check
+for preserved_path in "${TX_DECK_INVENTORY[@]}"; do
+  if path_exists "$TX_STAGE_WRAPPER/$preserved_path"; then
+    echo "ERROR: staged Core conflicts with local runtime path: $preserved_path" >&2
+    exit 1
+  fi
+done
+
+case "${SCV_CORE_SYNC_TEST_DRIFT:-}" in
+  "")
+    ;;
+  non-deck)
+    printf 'late local helper sentinel\n' \
+      > "$REPO_ROOT/scripts/late-local-helper.sh"
+    ;;
+  adapter)
+    printf '\n# late adapter sentinel\n' >> "$REPO_ROOT/scripts/sync.sh"
+    ;;
+  deck)
+    printf 'late DeckUI runtime sentinel\n' \
+      > "$REPO_ROOT/DeckUI/.scv-late-runtime"
+    ;;
+  vendor-symlink)
+    [[ -n "${SCV_CORE_SYNC_TEST_VENDOR_TARGET:-}" &&
+       -n "${SCV_CORE_SYNC_TEST_VENDOR_SAVED:-}" ]] || {
+      echo "ERROR: vendor drift test hook requires target and saved paths" >&2
+      exit 2
+    }
+    mv "$VENDOR_PARENT" "$SCV_CORE_SYNC_TEST_VENDOR_SAVED"
+    ln -s "$SCV_CORE_SYNC_TEST_VENDOR_TARGET" "$VENDOR_PARENT"
+    ;;
+  index)
+    [[ -f "${SCV_CORE_SYNC_TEST_INDEX_REPLACEMENT:-}" ]] || {
+      echo "ERROR: index drift test hook requires a replacement index" >&2
+      exit 2
+    }
+    cp -p "$SCV_CORE_SYNC_TEST_INDEX_REPLACEMENT" "$REPO_ROOT/.git/index"
+    ;;
+  *)
+    echo "ERROR: unknown Core sync drift test hook" >&2
+    exit 2
+    ;;
+esac
+
+validate_live_worktree
+validate_index_preimage
+collect_deckui_inventory .recheck
+validate_transaction_preimage
+
+DECK_RUNTIME_MIGRATOR="$TX_STAGE_VENDOR/core/scripts/deck-runtime.sh"
+if [[ -x "$DECK_RUNTIME_MIGRATOR" && -d "$REPO_ROOT/DeckUI" ]]; then
+  if [[ -n "${SCV_DECK_CACHE_DIR:-}" ]]; then
+    DECK_CACHE_BASE=$SCV_DECK_CACHE_DIR
+  elif [[ -n "${XDG_CACHE_HOME:-}" ]]; then
+    DECK_CACHE_BASE="$XDG_CACHE_HOME/scv/deckui"
+  elif [[ -n "${HOME:-}" ]]; then
+    DECK_CACHE_BASE="$HOME/.cache/scv/deckui"
+  else
+    echo "ERROR: set SCV_DECK_CACHE_DIR, XDG_CACHE_HOME, or HOME" >&2
+    exit 1
+  fi
+  python3 - \
+    "$DECK_CACHE_BASE" \
+    "$REPO_ROOT" \
+    "$TX_ROOT" \
+    "$TMP_DIR" \
+    "$REPO_ROOT/DeckUI" <<'PY'
+import sys
+from pathlib import Path
+
+raw_cache = Path(sys.argv[1]).expanduser()
+try:
+    cache = raw_cache.resolve(strict=False)
+    protected = [Path(value).resolve(strict=False) for value in sys.argv[2:]]
+except (OSError, RuntimeError) as error:
+    raise SystemExit(f"ERROR: cannot resolve SCV Deck cache boundary: {error}")
+
+if not raw_cache.is_absolute():
+    raise SystemExit("ERROR: SCV Deck cache base must be an absolute path")
+
+def is_relative_to(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+        return True
+    except ValueError:
+        return False
+
+for boundary in protected:
+    if is_relative_to(cache, boundary) or is_relative_to(boundary, cache):
+        raise SystemExit(
+            "ERROR: SCV Deck cache base overlaps updater-protected path: "
+            f"{cache} <-> {boundary}"
+        )
+PY
+  deck_runtime_path=$(
+    "$DECK_RUNTIME_MIGRATOR" migrate --from "$REPO_ROOT/DeckUI"
+  )
+  echo "DECK_RUNTIME_MIGRATED: $deck_runtime_path"
+fi
+
+transaction_source() {
+  case "$1" in
+    vendor) printf '%s\n' "$TX_STAGE_VENDOR_PARENT" ;;
+    core.lock) printf '%s\n' "$TX_STAGE/core.lock" ;;
+    *) printf '%s\n' "$TX_STAGE_WRAPPER/$1" ;;
+  esac
+}
+
+swap_transaction_path() {
+  local relative=$1 source live backup original_state=absent preserved inventory
+  local expected_index actual_original source_digest installed_digest
+  source=$(transaction_source "$relative")
+  live="$REPO_ROOT/$relative"
+  backup="$TX_BACKUP/$relative"
+  path_exists "$source" || {
+    echo "ERROR: transaction stage lacks $relative" >&2
+    return 1
+  }
+  inventory=
+  [[ "$relative" != DeckUI ]] || inventory=$TX_DECK_INVENTORY_FILE
+  source_digest=$(path_fingerprint "$source" "$inventory")
+  if path_exists "$live"; then
+    original_state=present
+  fi
+  expected_index=${#TX_PATHS[@]}
+  TX_PATHS+=("$relative")
+  TX_ORIGINAL_STATES+=("$original_state")
+  TX_STAGE_INSTALLED+=(no)
+  TX_INSTALLED_DIGESTS+=("$source_digest")
+
+  if [[ "$original_state" == present ]]; then
+    mkdir -p "$(dirname "$backup")"
+    atomic_rename_noreplace "$live" "$backup"
+    actual_original=$backup
+  else
+    actual_original=$live
+  fi
+  validate_original_preimage \
+    "$expected_index" "$relative" "$actual_original" "$original_state"
+  sync_failpoint "after-backup:$relative"
+
+  if [[ "${SCV_CORE_SYNC_TEST_AFTER_BACKUP:-}" == "recreate:$relative" ]]; then
+    mkdir -p "$(dirname "$live")"
+    if [[ -d "$source" ]]; then
+      mkdir -p "$live"
+      printf 'concurrent live sentinel\n' > "$live/.scv-concurrent-live"
+    else
+      printf 'concurrent live sentinel\n' > "$live"
+    fi
+  fi
+  if path_exists "$live"; then
+    echo "ERROR: live path was recreated after atomic backup: $relative" >&2
+    return 1
+  fi
+
+  mkdir -p "$(dirname "$live")"
+  atomic_rename_noreplace "$source" "$live"
+  TX_STAGE_INSTALLED[$expected_index]=yes
+
+  if [[ "$relative" == DeckUI && "$original_state" == present ]]; then
+    for preserved in "${TX_DECK_INVENTORY[@]}"; do
+      if path_exists "$backup/${preserved#DeckUI/}"; then
+        path_exists "$live/${preserved#DeckUI/}" && {
+          echo "ERROR: staged DeckUI unexpectedly contains $preserved" >&2
+          return 1
+        }
+        mkdir -p "$(dirname "$live/${preserved#DeckUI/}")"
+        TX_PRESERVED_PATHS+=("$preserved")
+        atomic_rename_noreplace \
+          "$backup/${preserved#DeckUI/}" \
+          "$live/${preserved#DeckUI/}"
+      fi
+    done
+  fi
+  installed_digest=$(path_fingerprint "$live" "$inventory")
+  if [[ "$installed_digest" != "$source_digest" ]]; then
+    echo "ERROR: installed path changed during atomic swap: $relative" >&2
+    return 1
+  fi
+  sync_failpoint "after-swap:$relative"
+}
+
+TX_ACTIVE=1
+sync_failpoint before-live-install
+
+for transaction_path in "${TRANSACTION_PATHS[@]}"; do
+  swap_transaction_path "$transaction_path"
+done
+
+sync_failpoint before-final-verify
 "$SCRIPT_DIR/verify-core.sh"
+sync_failpoint after-final-verify
+if [[ "${SCV_CORE_SYNC_TEST_BEFORE_COMMIT:-}" == recreate-deck-runtime ]]; then
+  mkdir -p "$TX_BACKUP/DeckUI/node_modules"
+  printf 'late backup runtime sentinel\n' \
+    > "$TX_BACKUP/DeckUI/node_modules/.scv-late-backup-runtime"
+fi
+validate_index_preimage
+validate_backup_preimages
 
-trap - ERR
-[[ ! -e "$BACKUP_TARGET" ]] || rm -rf "$BACKUP_TARGET"
+TX_COMMITTED=1
+TX_ACTIVE=0
+rm -rf -- "$TX_ROOT"
+TX_ROOT=
 
 echo "CORE_SYNCED: yes"
 echo "CORE_VERSION: $(tr -d '[:space:]' < "$VENDOR_TARGET/VERSION")"

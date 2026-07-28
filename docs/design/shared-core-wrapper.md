@@ -23,10 +23,13 @@ The wrapper vendors an immutable payload rather than resolving `main` or
 downloading code when a command runs. `core.lock` records both the original
 source payload digest and the Claude-materialized payload digest.
 
-The wrapper release is lockstep with the pinned core release. A successful
-sync updates root `VERSION`, `.claude-plugin/plugin.json`, and the `scv`
-marketplace entry together. `TEMPLATE_VERSION` remains independent because it
-tracks the schema stamped into hydrated project state.
+Wrapper and Core versions advance independently. Root `VERSION`,
+`.claude-plugin/plugin.json`, and the `scv` marketplace entry are one
+adapter-release unit and must agree with each other; Core sync never rewrites
+them. The vendored `VERSION` and `core.lock` identify the independent Core pin.
+`TEMPLATE_VERSION` follows Core because it tracks the schema stamped into
+hydrated project state. The wrapper is `0.20.2` while the current Core pin is
+`0.20.3`, demonstrating that the two release streams are not lockstep.
 
 The digest fields are intentionally distinct:
 
@@ -65,6 +68,38 @@ backwards compatibility with existing `${CLAUDE_PLUGIN_ROOT}` command paths.
 regression. They are regenerated from `vendor/scv-core/core/` and checked by
 `scripts/verify-core.sh`; edits belong in `scv-core`, not in the projection.
 
+## Transaction and local-data boundary
+
+`scripts/sync-core.sh` takes a repository-local owner lock, rejects unfinished
+transactions, validates the worktree, and verifies all provenance before its
+first live rename. Release sync binds the requested tag to payload `VERSION`,
+repository, exact source commit, artifact SHA-256, and both canonical and
+materialized manifest/payload digests.
+
+The candidate and backup are staged on the repository filesystem so every
+install step is a rename. An EXIT/error/signal handler restores paths in
+reverse order. If any restore fails, the transaction directory is retained
+and its recovery path is printed instead of deleting the only backup.
+
+Before replacing the legacy in-tree DeckUI, the candidate Core
+`deck-runtime.sh migrate` command copies known mutable runtime entries into
+the external, source-payload-namespaced cache. Migration is additive and reads
+the old DeckUI without modifying it; a later wrapper rollback therefore never
+depends on undoing cache writes.
+
+Core-owned dirty files and local-only files under wholesale replacement paths
+fail closed. DeckUI is the explicit exception: every ignored or untracked
+runtime path is inventoried from Git and moved across the swap, provided it
+does not collide with the new Core payload. The projection writer itself can
+write only to an authorized transaction-stage descendant; direct writes to
+the live wrapper are rejected, as are symlinks anywhere in that stage tree.
+Core-owned live files are compared directly with stage-0 index blobs using
+Git's clean-filter semantics, so stat-cache/racy-clean shortcuts cannot hide
+content changes. Repository-relocating Git environment variables and Deck
+cache paths overlapping the repository, temporary download, transaction, or
+legacy migration tree fail closed. The transaction suite runs on Linux and
+macOS.
+
 ## Maintainer commands
 
 ```bash
@@ -75,7 +110,7 @@ regression. They are regenerated from `vendor/scv-core/core/` and checked by
 ./scripts/sync-core.sh --source ../scv-core
 
 # Pin an immutable public release
-./scripts/sync-core.sh --version 0.20.0
+./scripts/sync-core.sh --version 0.20.3
 
 # Verify lock, checksums, API compatibility, profile, and projection
 ./scripts/verify-core.sh

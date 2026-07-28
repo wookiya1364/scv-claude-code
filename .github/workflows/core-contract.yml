@@ -29,7 +29,12 @@ permissions:
 
 jobs:
   contract:
-    runs-on: ubuntu-latest
+    name: Contract (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v5
 
@@ -44,6 +49,7 @@ jobs:
       - name: Focused wrapper tests
         run: |
           bash tests/test-apply-model-policy.sh
+          bash tests/test-sync-core-atomicity.sh
           bash tests/test-help-workspace.sh
           bash tests/test-workspace.sh
 
