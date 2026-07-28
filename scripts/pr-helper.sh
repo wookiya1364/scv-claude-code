@@ -28,7 +28,7 @@ fi
 #  10. gh pr edit — replace placeholder with actual video URLs
 #  11. Print PR URL on stdout
 #
-# Internal API: this script is called by /scv:work Step 9d (commands/work.md).
+# Internal API: this script is called by /scv:work Step 9d (references/protocols/work.md).
 # Users do NOT invoke it directly.
 
 set -uo pipefail

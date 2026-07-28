@@ -13,7 +13,7 @@ merge_policy: overwrite
 # INTAKE — Project interview protocol
 
 > **This document is process. The content does not change between projects.**
-> Each project follows this order, talking with Claude, to fill the other standard documents (DOMAIN, ARCHITECTURE, DESIGN, …) from zero base.
+> Each project follows this order, talking with the host agent, to fill the other standard documents (DOMAIN, ARCHITECTURE, DESIGN, …) from zero base.
 
 ## 0. Immutable principles
 
@@ -21,7 +21,7 @@ merge_policy: overwrite
 2. **One at a time** — Complete one section → user confirms → next section. No batch fills.
 3. **If ambiguous, keep asking** — Follow up until you get a yes/no or concrete value.
 4. **Stop on cross-reference conflict** — If newly agreed content conflicts with an existing doc, decide which side to revise first.
-5. **Every draft lift goes through user confirmation** — Claude must NOT auto-flip `status: draft` → `active`.
+5. **Every draft lift goes through user confirmation** — the host agent must NOT auto-flip `status: draft` → `active`.
 6. **Implementation gate** — If any standard doc has `status: draft`, do NOT start feature work in that doc's scope. Run this INTAKE for the relevant doc first.
 7. **Respect existing progress (resume rule)** — Even if asked to "start" INTAKE, **first check every standard doc's `status`**. Treat `active` or `N/A` docs as already done (or documentation not adopted — adoption mode) and **skip those steps**. **Resume only from `draft` docs.** Step 0 (project overview) is also skipped if DOMAIN and ARCHITECTURE are `active` or `N/A`. **Never restart from step 0 unless the user explicitly says "start over from scratch".**
 
@@ -40,9 +40,9 @@ merge_policy: overwrite
 
 > **What `N/A` means**: in adoption mode, every standard doc is seeded `N/A` right after hydrate. The INTAKE resume check interprets `N/A` as "documentation not adopted for this project" and **skips that step**. When the user decides to document a specific subsystem and lifts it `N/A → draft` themselves, INTAKE will then guide filling that doc.
 
-At each step, Claude **follows the target doc's `How to elicit` section literally**. This INTAKE only defines the top-level order.
+At each step, the host agent **follows the target doc's `How to elicit` section literally**. This INTAKE only defines the top-level order.
 
-### What Claude does first (resume check)
+### What the host agent does first (resume check)
 
 1. Read the frontmatter `status` of `scv/{DOMAIN,ARCHITECTURE,DESIGN,AGENTS,TESTING,REPORTING}.md`.
 2. Classify Steps 0–6 by the "completion check" above → split into `done_steps` / `pending_steps`.
@@ -74,13 +74,13 @@ If you have **existing material** (meeting notes, external specs, design sketche
 
 1. Read `scv/raw/README.md` for usage (anything goes).
 2. Drop in the material → git commit.
-3. At the start of Step 0, Claude reads through the raw material first, then begins asking questions.
+3. At the start of Step 0, the host agent reads through the raw material first, then begins asking questions.
 
-**Why**: lets Claude scan the team's accumulated context up front, so instead of blindly accepting your answers it can ask **grounded questions** like "you said X in this earlier meeting note — does that still hold?".
+**Why**: lets the host agent scan the team's accumulated context up front, so instead of blindly accepting your answers it can ask **grounded questions** like "you said X in this earlier meeting note — does that still hold?".
 
 ## 2. Step 0 — Project overview (do this first)
 
-Claude asks in order:
+the host agent asks in order:
 
 1. "What does this project do, **in one sentence**?"
 2. "Who are the primary users and in what environments do they use it? (up to 3 personas)"
@@ -128,7 +128,7 @@ For this INTAKE to be "complete":
 - [ ] Every doc's `## Completion criteria` checklist fully satisfied
 - [ ] User explicitly says "**implementation may begin**"
 
-Only then is Ralph Loop (`/ralph-loop` — **external command. NOT provided by the SCV plugin**: copy `ralph-template-scv.md` to `~/.claude/ralph-template.md` to enable it) allowed to run.
+Only then is Ralph Loop (`loop-runner` — **external command. NOT provided by the SCV plugin**: copy `loop-runner.md` to `<host-config>/loop-template.md` to enable it) allowed to run.
 
 ## 6. Re-entry
 

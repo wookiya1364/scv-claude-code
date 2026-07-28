@@ -13,16 +13,16 @@ this runs the right thing under the hood — no need to remember
 
 ## Language preference
 
-Resolve the user's preferred language (settings.json `language` → `.env` `SCV_LANG`
-→ detect from last message → English) for all prose. Keep technical identifiers
-(`repo_id`, `root`, slash commands, paths) as-is.
+Resolve the user's preferred language from `.env` `SCV_LANG`, then the latest
+user message, then English. Keep technical identifiers (`repo_id`, `root`,
+skill invocations, paths) as-is.
 
 ## Protocol
 
 ### Step 1 — detect current state
 
-```!
-"${CLAUDE_PLUGIN_ROOT}/scripts/workspace-helper.sh" info
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/workspace-helper.sh" info
 ```
 
 Parse `MODE:` → one of `NOT_HYDRATED | SINGLE | ROOT | CHILD`.
@@ -31,7 +31,7 @@ Parse `MODE:` → one of `NOT_HYDRATED | SINGLE | ROOT | CHILD`.
 ### Step 2 — branch by MODE
 
 #### MODE = SINGLE → offer to set up
-Fire `AskUserQuestion` "이 레포를 워크스페이스에서 어떻게 둘까요?":
+Ask the user for confirmation "이 레포를 워크스페이스에서 어떻게 둘까요?":
 - **합류 (자식)** — 이 레포가 FE/BE/AI 중 하나로 기존 우산에 들어감
 - **우산 만들기 (루트)** — 이 레포가 모두를 아우르는 최상위
 - **그냥 단일로 둔다** — 변경 없음
@@ -57,7 +57,7 @@ Fire `AskUserQuestion` "이 레포를 워크스페이스에서 어떻게 둘까�
 **그냥 단일 선택 시:** do nothing.
 
 #### MODE = CHILD → show + offer detach
-Show repo_id / role / root / reachable (from `info`). Then `AskUserQuestion`:
+Show repo_id / role / root / reachable (from `info`). Then ask:
 - **그대로 둔다**
 - **분리(detach) — 단일로 되돌림** → run:
   ```!

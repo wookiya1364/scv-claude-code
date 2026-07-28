@@ -12,7 +12,7 @@
 #   SINGLE — no populated SCV:WORKSPACE block and no scv/WORKSPACE.yaml.
 #            Every pre-existing repo resolves here. Behaves exactly as today.
 #   ROOT   — this repo owns scv/WORKSPACE.yaml (the umbrella registry).
-#   CHILD  — scv/CLAUDE.md's SCV:WORKSPACE block declares a non-empty root:.
+#   CHILD  — scv/SCV.md's SCV:WORKSPACE block declares a non-empty root:.
 #
 # Sourced by commands that opt into workspace awareness. Sourcing it has no
 # side effects; nothing here runs until a function is called.
@@ -20,16 +20,18 @@
 _WS_LIB_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # shellcheck source=merge.sh
 source "$_WS_LIB_DIR/merge.sh"
+# shellcheck source=host-profile.sh
+source "$_WS_LIB_DIR/host-profile.sh"
 
 # Config (env-overridable, matching SCV's soft-default convention).
 SCV_DIR="${SCV_DIR:-scv}"
-WS_CLAUDE="${WS_CLAUDE:-$SCV_DIR/CLAUDE.md}"
+WS_INDEX="${WS_INDEX:-$(scv_state_index_path "$SCV_DIR")}"
 WS_MANIFEST="${WS_MANIFEST:-$SCV_DIR/WORKSPACE.yaml}"
 
 _ws_block() {
-  # Print the SCV:WORKSPACE block body (between markers) of the local scv/CLAUDE.md.
-  [[ -f "$WS_CLAUDE" ]] || return 0
-  extract_marker_block "$WS_CLAUDE" "SCV:WORKSPACE START" "SCV:WORKSPACE END"
+  # Print the SCV:WORKSPACE block body (between markers) of the local scv/SCV.md.
+  [[ -f "$WS_INDEX" ]] || return 0
+  extract_marker_block "$WS_INDEX" "SCV:WORKSPACE START" "SCV:WORKSPACE END"
 }
 
 _ws_field() {

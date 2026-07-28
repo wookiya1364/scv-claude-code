@@ -18,7 +18,7 @@ fi
 #                                 Auto-writes ARCHIVED_AT.md.
 #   work.sh <slug> --archive --reason="..."
 #
-# Output header (same style as promote-helper.sh) — Claude parses these keys:
+# Output header (same style as promote-helper.sh) — Claude Code parses these keys:
 #   MODE / TODAY / AUTHOR / GRAPHIFY_SKILL / GRAPH_STATUS
 #   TARGET_SLUG / TARGET_DIR / PLAN_FILE / TESTS_FILE
 #
@@ -36,6 +36,8 @@ source "$SCRIPT_DIR/lib/yaml.sh"
 source "$SCRIPT_DIR/lib/env.sh"
 # shellcheck source=lib/scvroot.sh
 source "$SCRIPT_DIR/lib/scvroot.sh"
+# shellcheck source=lib/host-profile.sh
+source "$SCRIPT_DIR/lib/host-profile.sh"
 env_load 2>/dev/null || true
 
 MODE="prepare"
@@ -83,14 +85,7 @@ echo "AUTHOR: $AUTHOR"
 
 # Graphify skill check (shared logic with promote-helper.sh)
 GRAPHIFY_SKILL="missing"
-for candidate in \
-  "$HOME/.claude/skills/graphify/SKILL.md" \
-  "$HOME/.claude/plugins/cache/"*/skills/graphify/SKILL.md; do
-  if [[ -f "$candidate" ]]; then
-    GRAPHIFY_SKILL="available"
-    break
-  fi
-done
+scv_graph_skill_available && GRAPHIFY_SKILL="available"
 echo "GRAPHIFY_SKILL: $GRAPHIFY_SKILL"
 
 GRAPH_STATUS="n/a"

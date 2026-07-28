@@ -14,7 +14,7 @@ optional_when: "no probabilistic AI components (LLM/STT/TTS/classifier)"
 # AGENTS — AI agent spec (optional document)
 
 > **Fill this only if the project has probabilistic components (LLM / STT / TTS / classifier, etc.).** Otherwise mark `status: N/A` and skip.
-> Claude follows `INTAKE.md` Step 4 plus the `How to elicit` section below.
+> the host agent follows `INTAKE.md` Step 4 plus the `How to elicit` section below.
 
 ## How to elicit (order of questions)
 

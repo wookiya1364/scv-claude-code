@@ -36,6 +36,8 @@ source "$SCRIPT_DIR/lib/attachments.sh"
 source "$SCRIPT_DIR/lib/workspace.sh"
 # shellcheck source=lib/scvroot.sh
 source "$SCRIPT_DIR/lib/scvroot.sh"
+# shellcheck source=lib/host-profile.sh
+source "$SCRIPT_DIR/lib/host-profile.sh"
 env_load 2>/dev/null || true
 
 ACK=0
@@ -62,9 +64,9 @@ done
 # Resolve scv/ for this context (optional module target, e.g. `status FE`).
 scv_init_paths "$SCV_TARGET"
 # Keep the workspace section (below) consistent with the resolved scv root:
-# workspace.sh froze WS_CLAUDE/WS_MANIFEST from SCV_DIR at source time (before
+# workspace.sh froze WS_INDEX/WS_MANIFEST from SCV_DIR at source time (before
 # scv_init_paths re-resolved it), so re-derive them here.
-WS_CLAUDE="$SCV_DIR/CLAUDE.md"
+WS_INDEX="$(scv_state_index_path "$SCV_DIR")"
 WS_MANIFEST="$SCV_DIR/WORKSPACE.yaml"
 
 PROJECT_PWD="$(pwd)"
@@ -189,14 +191,7 @@ echo ""
 echo "[docs graph (graphify skill)]"
 # Skill presence
 GRAPHIFY_SKILL="missing"
-for candidate in \
-  "$HOME/.claude/skills/graphify/SKILL.md" \
-  "$HOME/.claude/plugins/cache/"*/skills/graphify/SKILL.md; do
-  if [[ -f "$candidate" ]]; then
-    GRAPHIFY_SKILL="available"
-    break
-  fi
-done
+scv_graph_skill_available && GRAPHIFY_SKILL="available"
 # Graph status
 if [[ "$GRAPHIFY_SKILL" == "missing" ]]; then
   echo "  skill not installed — /scv:promote will run without graph optimization"

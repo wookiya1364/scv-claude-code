@@ -7,6 +7,12 @@
 set -uo pipefail
 
 STANDARD_ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
+REPO_ROOT="$(cd "$STANDARD_ROOT/../.." && pwd)"
+CORE_PAYLOAD_ROOT="$STANDARD_ROOT"
+if [[ -d "$STANDARD_ROOT/vendor/scv-core/core" ]]; then
+  CORE_PAYLOAD_ROOT="$STANDARD_ROOT/vendor/scv-core/core"
+fi
+PROTOCOL_ROOT="$STANDARD_ROOT/protocols"
 # Exported so heredoc-spawned subshells can locate sibling scripts/libs without
 # hardcoding an absolute path.
 export STANDARD_ROOT
@@ -15,16 +21,16 @@ SYNC="$STANDARD_ROOT/scripts/sync.sh"
 CHECK_FRONT="$STANDARD_ROOT/scripts/check-frontmatter.sh"
 REPORT="$STANDARD_ROOT/scripts/report.sh"
 HELP_SH="$STANDARD_ROOT/scripts/help.sh"
-HELP_CMD="$STANDARD_ROOT/commands/help.md"
+HELP_CMD="$PROTOCOL_ROOT/help.md"
 READPATH_SH="$STANDARD_ROOT/scripts/readpath.sh"
 STATUS_SH="$STANDARD_ROOT/scripts/status.sh"
-STATUS_CMD="$STANDARD_ROOT/commands/status.md"
+STATUS_CMD="$PROTOCOL_ROOT/status.md"
 PROMOTE_HELPER="$STANDARD_ROOT/scripts/promote-helper.sh"
-PROMOTE_CMD="$STANDARD_ROOT/commands/promote.md"
+PROMOTE_CMD="$PROTOCOL_ROOT/promote.md"
 WORK_SH="$STANDARD_ROOT/scripts/work.sh"
-WORK_CMD="$STANDARD_ROOT/commands/work.md"
+WORK_CMD="$PROTOCOL_ROOT/work.md"
 REGRESSION_SH="$STANDARD_ROOT/scripts/regression.sh"
-REGRESSION_CMD="$STANDARD_ROOT/commands/regression.md"
+REGRESSION_CMD="$PROTOCOL_ROOT/regression.md"
 PR_HELPER="$STANDARD_ROOT/scripts/pr-helper.sh"
 STATUS_SH="$STANDARD_ROOT/scripts/status.sh"
 ATTACHMENTS_LIB="$STANDARD_ROOT/scripts/lib/attachments.sh"
@@ -73,8 +79,19 @@ echo "=== [1] Hydration ==="
 for f in .env.example.scv .gitignore; do
   assert_file "$APP/$f"
 done
-[[ ! -f "$APP/CLAUDE.md" ]] && pass "root CLAUDE.md NOT created (pure separation)" || fail "root CLAUDE.md was created — should be user-owned"
+for root_instruction in PROJECT_INSTRUCTIONS.md SCV.md; do
+  [[ ! -f "$APP/$root_instruction" ]] \
+    && pass "root $root_instruction NOT created (pure separation)" \
+    || fail "root $root_instruction was created — should be user-owned"
+done
 [[ ! -f "$APP/.env.example" ]] && pass "root .env.example NOT created (was never in template)" || fail "root .env.example leaked — should be .env.example.scv only"
+UNEXPECTED_ROOT="$(
+  find "$APP" -mindepth 1 -maxdepth 1 \
+    ! -name scv ! -name .env.example.scv ! -name .gitignore -print
+)"
+[[ -z "$UNEXPECTED_ROOT" ]] \
+  && pass "hydrate root contains only scv/, .env.example.scv, and .gitignore" \
+  || fail "hydrate leaked unexpected root entries: $UNEXPECTED_ROOT"
 
 # Non-destructive over existing user .env.example
 EXIST_APP="$TMP/existing-app"
@@ -94,19 +111,19 @@ grep -qF "NOTIFIER_PROVIDER" "$EXIST_APP/.env.example.scv" \
 # SCV env file must NOT reference the legacy /standard-report command name
 grep -qF "/standard-report" "$EXIST_APP/.env.example.scv" \
   && fail ".env.example.scv still references legacy /standard-report" \
-  || pass ".env.example.scv no longer references /standard-report (uses /scv:report)"
+  || pass ".env.example.scv no longer references legacy /standard-report"
 
-# scv/ hierarchy (now includes CLAUDE.md)
-for f in CLAUDE.md INTAKE.md PROMOTE.md RALPH_PROMPT.md ARCHITECTURE.md DESIGN.md DOMAIN.md AGENTS.md TESTING.md REPORTING.md; do
+# scv/ hierarchy (now includes SCV.md)
+for f in SCV.md INTAKE.md PROMOTE.md RALPH_PROMPT.md ARCHITECTURE.md DESIGN.md DOMAIN.md AGENTS.md TESTING.md REPORTING.md; do
   assert_file "$APP/scv/$f"
 done
 assert_file "$APP/scv/raw/README.md"
 [[ -d "$APP/scv/archive" ]] && pass "scv/archive directory hydrated" || fail "scv/archive directory missing"
 [[ -d "$APP/scv/promote" ]] && pass "scv/promote directory hydrated" || fail "scv/promote directory missing"
 
-VERSION_NOW=$(tr -d '[:space:]' < "$STANDARD_ROOT/VERSION")
-assert_contains "$APP/scv/CLAUDE.md" "<!-- STANDARD:VERSION -->${VERSION_NOW}<!-- /STANDARD:VERSION -->"
-assert_contains "$APP/scv/CLAUDE.md" "<!-- STANDARD:SYNCED_AT -->$(date +%Y-%m-%d)<!-- /STANDARD:SYNCED_AT -->"
+VERSION_NOW=$(tr -d '[:space:]' < "$STANDARD_ROOT/TEMPLATE_VERSION")
+assert_contains "$APP/scv/SCV.md" "<!-- STANDARD:VERSION -->${VERSION_NOW}<!-- /STANDARD:VERSION -->"
+assert_contains "$APP/scv/SCV.md" "<!-- STANDARD:SYNCED_AT -->$(date +%Y-%m-%d)<!-- /STANDARD:SYNCED_AT -->"
 [[ ! -f "$APP/.gitignore.fragment" ]] && pass ".gitignore.fragment merged into .gitignore" || fail ".gitignore.fragment leaked"
 
 echo
@@ -158,7 +175,7 @@ intake_st=$(grep -E "^status:" "$NEW_APP/scv/INTAKE.md" | head -1 | awk '{print 
 "$CHECK_FRONT" --project-dir "$NEW_APP" >/dev/null 2>&1 && pass "check-frontmatter passes greenfield mode (draft)" || fail "check-frontmatter rejects greenfield mode"
 
 echo
-echo "=== [1d] /scv:help hydrate recommendation shows BOTH modes ==="
+echo '=== [1d] /scv:help hydrate recommendation shows BOTH modes ==='
 EMPTY_DIR2=$(mktemp -d)
 (
   cd "$EMPTY_DIR2"
@@ -246,8 +263,8 @@ echo "=== [7] Error handling ==="
 )
 
 echo
-echo "=== [9a] /scv:help self-onboarding ==="
-HELP_CMD="$STANDARD_ROOT/commands/help.md"
+echo '=== [9a] /scv:help self-onboarding ==='
+HELP_CMD="$PROTOCOL_ROOT/help.md"
 HELP_SH="$STANDARD_ROOT/scripts/help.sh"
 assert_file "$HELP_CMD"
 assert_file "$HELP_SH"
@@ -268,17 +285,17 @@ rm -rf "$EMPTY_DIR"
   OUT=$(bash "$HELP_SH" 2>&1)
   assert_out_contains "hydrate complete" "$OUT" "help: detects hydrated dir"
   assert_out_contains "N/A" "$OUT" "help: lists N/A documents (adoption default)"
-  assert_out_contains "/scv:status" "$OUT" "help: includes status"
-  assert_out_contains "/scv:promote" "$OUT" "help: includes promote"
-  assert_out_contains "/scv:work" "$OUT" "help: includes work"
-  assert_out_contains "/scv:report" "$OUT" "help: includes report"
-  assert_out_contains "/scv:sync" "$OUT" "help: includes sync"
+  assert_out_contains '/scv:status' "$OUT" "help: includes status"
+  assert_out_contains '/scv:promote' "$OUT" "help: includes promote"
+  assert_out_contains '/scv:work' "$OUT" "help: includes work"
+  assert_out_contains '/scv:report' "$OUT" "help: includes report"
+  assert_out_contains '/scv:sync' "$OUT" "help: includes sync"
 )
 
 echo
-echo "=== [9b] /scv:promote helper ==="
+echo '=== [9b] /scv:promote helper ==='
 PROMOTE_HELPER="$STANDARD_ROOT/scripts/promote-helper.sh"
-PROMOTE_CMD="$STANDARD_ROOT/commands/promote.md"
+PROMOTE_CMD="$PROTOCOL_ROOT/promote.md"
 assert_file "$PROMOTE_CMD"
 assert_file "$PROMOTE_HELPER"
 [[ -x "$PROMOTE_HELPER" ]] && pass "helper is executable" || fail "helper not executable"
@@ -375,9 +392,9 @@ echo "sub content"  > "$RP_APP/scv/raw/subdir/inside.md"
 )
 
 echo
-echo "=== [11b] /scv:status command ==="
+echo '=== [11b] /scv:status workflow ==='
 STATUS_SH="$STANDARD_ROOT/scripts/status.sh"
-STATUS_CMD="$STANDARD_ROOT/commands/status.md"
+STATUS_CMD="$PROTOCOL_ROOT/status.md"
 assert_file "$STATUS_SH"
 assert_file "$STATUS_CMD"
 [[ -x "$STATUS_SH" ]] && pass "status script executable" || fail "status script not executable"
@@ -390,7 +407,7 @@ assert_file "$STATUS_CMD"
   assert_out_contains "added   :" "$OUT"                    "status: added bucket"
   assert_out_contains "modified:" "$OUT"                    "status: modified bucket"
   assert_out_contains "removed :" "$OUT"                    "status: removed bucket"
-  assert_out_contains "/scv:promote" "$OUT"                 "status: suggests /scv:promote"
+  assert_out_contains '/scv:promote' "$OUT"                 'status: suggests /scv:promote'
 
   # --ack updates baseline
   bash "$STATUS_SH" --ack >/dev/null 2>&1
@@ -408,9 +425,9 @@ assert_file "$STATUS_CMD"
 )
 
 echo
-echo "=== [11g] /scv:work command + helper ==="
+echo '=== [11g] /scv:work workflow + helper ==='
 WORK_SH="$STANDARD_ROOT/scripts/work.sh"
-WORK_CMD="$STANDARD_ROOT/commands/work.md"
+WORK_CMD="$PROTOCOL_ROOT/work.md"
 assert_file "$WORK_SH"
 assert_file "$WORK_CMD"
 [[ -x "$WORK_SH" ]] && pass "work.sh executable" || fail "work.sh not executable"
@@ -419,26 +436,26 @@ assert_file "$WORK_CMD"
 assert_contains "$WORK_CMD" "PLAN.md"
 assert_contains "$WORK_CMD" "TESTS.md"
 assert_contains "$WORK_CMD" "Related Documents"
-assert_contains "$WORK_CMD" "AskUserQuestion"
+assert_contains "$WORK_CMD" "All tests passed. Archive"
 assert_contains "$WORK_CMD" "--archive"
 assert_contains "$WORK_CMD" "in_progress"
 assert_contains "$WORK_CMD" "document-split"
 
 echo
-echo "=== [11g'] /scv:codegen command (TDD-first variant of /scv:work) ==="
-CODEGEN_CMD="$STANDARD_ROOT/commands/codegen.md"
+echo '=== [11g'\''] /scv:codegen workflow (TDD-first variant of /scv:work) ==='
+CODEGEN_CMD="$PROTOCOL_ROOT/codegen.md"
 assert_file "$CODEGEN_CMD"
 
 # command protocol content checks
 assert_contains "$CODEGEN_CMD" "TDD-first"
 assert_contains "$CODEGEN_CMD" "Red pre-flight"
 assert_contains "$CODEGEN_CMD" "Green iteration"
-assert_contains "$CODEGEN_CMD" "AskUserQuestion"
+assert_contains "$CODEGEN_CMD" "Proceed — codegen only for failing cases"
 assert_contains "$CODEGEN_CMD" "iteration budget"
 assert_contains "$CODEGEN_CMD" "3 attempts"
 assert_contains "$CODEGEN_CMD" "Never modify the body of TESTS.md"
 assert_contains "$CODEGEN_CMD" "Step 6.1"
-assert_contains "$CODEGEN_CMD" "/scv:work"
+assert_contains "$CODEGEN_CMD" '/scv:work'
 assert_contains "$CODEGEN_CMD" "Scope guard"
 assert_contains "$CODEGEN_CMD" "Invariants self-check"
 PROMOTE_TPL="$STANDARD_ROOT/template/scv/PROMOTE.md"
@@ -465,32 +482,24 @@ assert_contains "$PROMOTE_CMD" "minimum requirement"
 assert_contains "$HELP_CMD" "features/acceptance that come out of this conversation are the minimum requirement"
 
 echo
-echo "=== [11g'''] /scv:update — plugin update guide (v0.11.2+) ==="
-UPDATE_SH="$STANDARD_ROOT/scripts/update.sh"
-UPDATE_CMD="$STANDARD_ROOT/commands/update.md"
-assert_file "$UPDATE_SH"
+echo "=== [11g'''] adapter-owned action boundary ==="
+UPDATE_CMD="$PROTOCOL_ROOT/update.md"
+MODELS_CMD="$PROTOCOL_ROOT/set-models.md"
 assert_file "$UPDATE_CMD"
-[[ -x "$UPDATE_SH" ]] && pass "update.sh executable" || fail "update.sh not executable"
-
-# Helper output contract
-OUT=$(bash "$UPDATE_SH" 2>&1)
-assert_out_contains "INSTALLED_VERSION:"  "$OUT" "update.sh: emits INSTALLED_VERSION"
-assert_out_contains "MARKETPLACE_NAME:"   "$OUT" "update.sh: emits MARKETPLACE_NAME"
-assert_out_contains "PLUGIN_NAME:"        "$OUT" "update.sh: emits PLUGIN_NAME"
-assert_out_contains "LATEST_VERSION:"     "$OUT" "update.sh: emits LATEST_VERSION (value or unavailable reason)"
-assert_out_contains "UP_TO_DATE:"         "$OUT" "update.sh: emits UP_TO_DATE verdict"
-assert_out_contains "scv-claude-code"     "$OUT" "update.sh: extracts marketplace name 'scv-claude-code'"
-
-# command protocol content
-assert_contains "$UPDATE_CMD" "plugin marketplace update"
-assert_contains "$UPDATE_CMD" "reload-plugins"
-assert_contains "$UPDATE_CMD" "UP_TO_DATE"
-assert_contains "$UPDATE_CMD" "Read-only"
+assert_file "$MODELS_CMD"
+[[ ! -e "$CORE_PAYLOAD_ROOT/scripts/update.sh" ]] \
+  && pass "update action has no core entrypoint" \
+  || fail "update action leaked an adapter entrypoint into core"
+[[ ! -e "$CORE_PAYLOAD_ROOT/scripts/apply-model-policy.sh" ]] \
+  && pass "model action has no core entrypoint" \
+  || fail "model action leaked an adapter entrypoint into core"
+assert_contains "$UPDATE_CMD" "owned by the wrapper adapter"
+assert_contains "$MODELS_CMD" "owned by the wrapper adapter"
 
 echo
 echo "=== [11g''''] /scv:sync Step 2 — drift detection (v0.11.3+) ==="
 DRIFT_SH="$STANDARD_ROOT/scripts/drift-detect.sh"
-SYNC_CMD="$STANDARD_ROOT/commands/sync.md"
+SYNC_CMD="$PROTOCOL_ROOT/sync.md"
 assert_file "$DRIFT_SH"
 [[ -x "$DRIFT_SH" ]] && pass "drift-detect.sh executable" || fail "drift-detect.sh not executable"
 
@@ -662,7 +671,7 @@ TESTS
 
   # v0.11.0+ — scv/archive/INDEX.yaml auto-managed
   [[ -f scv/archive/INDEX.yaml ]] && pass "work --archive: INDEX.yaml generated" || fail "work --archive: INDEX.yaml missing"
-  assert_contains scv/archive/INDEX.yaml "auto-managed by /scv:work --archive"
+  assert_contains scv/archive/INDEX.yaml 'auto-managed by /scv:work --archive'
   assert_contains scv/archive/INDEX.yaml "generated_at:"
   assert_contains scv/archive/INDEX.yaml "  - slug: 20260420-wookiya1364-sample-feature"
   assert_contains scv/archive/INDEX.yaml "    title: \"Sample Feature\""
@@ -756,19 +765,19 @@ T
 )
 
 echo
-echo "=== [11e] /scv:promote command protocol ==="
-PROMOTE_CMD_FILE="$STANDARD_ROOT/commands/promote.md"
-assert_contains "$PROMOTE_CMD_FILE" "Skill(graphify)"
+echo '=== [11e] /scv:promote workflow protocol ==='
+PROMOTE_CMD_FILE="$PROTOCOL_ROOT/promote.md"
+assert_contains "$PROMOTE_CMD_FILE" 'Invoke the `graphify` skill'
 assert_contains "$PROMOTE_CMD_FILE" "readpath.sh"
 assert_contains "$PROMOTE_CMD_FILE" "GRAPH_STATUS"
 assert_contains "$PROMOTE_CMD_FILE" "--graph-only"
 assert_contains "$PROMOTE_CMD_FILE" "--dry-run"
-assert_contains "$PROMOTE_CMD_FILE" "AskUserQuestion"
+assert_contains "$PROMOTE_CMD_FILE" "user approves"
 assert_contains "$PROMOTE_CMD_FILE" "<YYYYMMDD>-<AUTHOR>-<slug>"
 assert_contains "$PROMOTE_CMD_FILE" "status: planned"
 
 echo
-echo "=== [11f] /scv:status docs graph section ==="
+echo '=== [11f] /scv:status docs graph section ==='
 (
   cd "$RP_APP"
   OUT=$(bash "$STATUS_SH" 2>&1)
@@ -808,7 +817,7 @@ assert_contains "$APP/scv/PROMOTE.md" "Related Documents"
 assert_contains "$APP/scv/PROMOTE.md" "Archive"
 
 echo
-echo "=== [11h] /scv:help stage-aware recommendations ==="
+echo '=== [11h] /scv:help stage-aware recommendations ==='
 # Build a fresh hydrated sandbox with all docs active to exercise the
 # recommendation priority: draft > raw-changes > active-plans > all-clean.
 HA=$(mktemp -d)
@@ -836,7 +845,7 @@ done
   echo "note" > scv/raw/note.md
   OUT=$(bash "$HELP_SH" 2>&1)
   assert_out_contains "Detected changes in scv/raw/" "$OUT"     "help/state-raw: detects raw changes"
-  assert_out_contains "/scv:promote" "$OUT"                      "help/state-raw: suggests /scv:promote"
+  assert_out_contains '/scv:promote' "$OUT"                      'help/state-raw: suggests /scv:promote'
 
   # [3] ack baseline + add active plan → recommends /scv:work <slug>
   bash "$READPATH_SH" update >/dev/null
@@ -845,8 +854,8 @@ done
     > scv/promote/20260420-wookiya1364-feature-x/PLAN.md
   OUT=$(bash "$HELP_SH" 2>&1)
   assert_out_contains "active promote plan" "$OUT"               "help/state-plan: detects active plans"
-  assert_out_contains "/scv:work 20260420-wookiya1364-feature-x" "$OUT" \
-                                                                  "help/state-plan: suggests /scv:work <slug>"
+  assert_out_contains '/scv:work 20260420-wookiya1364-feature-x' "$OUT" \
+                                                                  'help/state-plan: suggests /scv:work <slug>'
   assert_out_contains "scv/promote has 1 active plan" "$OUT"     "help: diagnosis includes plan count"
 
   # [4] archive entry shows in diagnosis
@@ -1209,9 +1218,9 @@ EOF
 rm -rf "$REG_APP"
 
 echo
-echo "=== [11s] commands/regression.md protocol content ==="
+echo "=== [11s] regression protocol content ==="
 assert_file "$REGRESSION_CMD"
-assert_contains "$REGRESSION_CMD" "AskUserQuestion"
+assert_contains "$REGRESSION_CMD" "per-slug 3-way triage"
 assert_contains "$REGRESSION_CMD" "supersedes"
 assert_contains "$REGRESSION_CMD" "obsolete"
 assert_contains "$REGRESSION_CMD" "--ci"
@@ -1224,7 +1233,7 @@ assert_contains "$REGRESSION_CMD" "regression — true regression"
 assert_contains "$REGRESSION_CMD" "flaky — environmental issue"
 
 echo
-echo "=== [11t] commands/work.md Step 9c supersede propagation content ==="
+echo "=== [11t] work protocol Step 9c supersede propagation content ==="
 assert_contains "$WORK_CMD" "Step 9a"
 assert_contains "$WORK_CMD" "Step 9b"
 assert_contains "$WORK_CMD" "Step 9c"
@@ -1658,6 +1667,8 @@ echo "=== [11hh] lib/attachments.sh — size guards ==="
 SIZE_OUT=$(bash <<'INNER_EOF'
 source $STANDARD_ROOT/scripts/lib/attachments.sh
 TMP=$(mktemp -d); cd "$TMP"; git init -q -b main
+git config user.email t@t
+git config user.name t
 git remote add origin https://github.com/test/test.git
 
 # fake remote bare so push works
@@ -1692,6 +1703,8 @@ LOCAL="$WORK/repo"
 git init -q --bare "$ORIGIN"
 git init -q -b main "$LOCAL"
 cd "$LOCAL"
+git config user.email t@t
+git config user.name t
 git remote add origin "$ORIGIN"
 echo init > README.md
 git add README.md
@@ -1750,7 +1763,7 @@ printf '%s' "$CLEAN_OUT" | grep -qF "still-open/v2.webm" && pass "attachments cl
 printf '%s' "$CLEAN_OUT" | grep -qF "merged-old/v1.webm" && fail "attachments cleanup: merged file still in tree" || pass "attachments cleanup: merged file removed from tree"
 
 echo
-echo "=== [11jj] commands/work.md — Step 9d retention AskUserQuestion content ==="
+echo "=== [11jj] work protocol — Step 9d retention question content ==="
 assert_contains "$WORK_CMD" "SCV_ATTACHMENTS_RETENTION_DAYS"
 assert_contains "$WORK_CMD" "3 days (default"
 assert_contains "$WORK_CMD" "7 days"
@@ -1758,13 +1771,13 @@ assert_contains "$WORK_CMD" "30 days"
 assert_contains "$WORK_CMD" "Never"
 
 echo
-echo "=== [11kk] commands/work.md — Step 5b Playwright auto-detect content ==="
+echo "=== [11kk] work protocol — Step 5b Playwright auto-detect content ==="
 assert_contains "$WORK_CMD" "Step 5b"
 assert_contains "$WORK_CMD" "playwright.config"
 assert_contains "$WORK_CMD" "video: 'on'"
 
 echo
-echo "=== [11ll] commands/work.md — Step 9d video flow content ==="
+echo "=== [11ll] work protocol — Step 9d video flow content ==="
 assert_contains "$WORK_CMD" "scv-attachments orphan branch"
 assert_contains "$WORK_CMD" "zero impact on the"
 assert_contains "$WORK_CMD" "inline playback"
@@ -1778,6 +1791,8 @@ LOCAL="$WORK/repo"
 git init -q --bare "$ORIGIN"
 git init -q -b main "$LOCAL"
 cd "$LOCAL"
+git config user.email t@t
+git config user.name t
 git remote add origin "$ORIGIN"
 echo init > README.md
 git add README.md
@@ -1862,6 +1877,8 @@ LOCAL="$WORK/repo"
 git init -q --bare "$ORIGIN"
 git init -q -b main "$LOCAL"
 cd "$LOCAL"
+git config user.email t@t
+git config user.name t
 git remote add origin "$ORIGIN"
 echo init > README.md
 git add README.md
@@ -1974,7 +1991,7 @@ printf '%s' "$STATUS_OUT" | awk '/---INVALIDATED-3---/{f=1;next} f' | grep -qE '
   || fail "attachments status: stale SHA cache used (poisoning)"
 
 echo
-echo "=== [11oo] commands/work.md — Step 5b Playwright 표준화 + non-Playwright 안내 ==="
+echo "=== [11oo] work protocol — Step 5b Playwright 표준화 + non-Playwright 안내 ==="
 assert_contains "$WORK_CMD" "standard E2E framework is Playwright"
 assert_contains "$WORK_CMD" "playwright.config.{ts,js,mjs,cjs}"
 assert_contains "$WORK_CMD" "non-Playwright notice"
@@ -1988,16 +2005,16 @@ grep -qF "Step 5c — Cypress 비디오 자동 설정" "$WORK_CMD" \
   || pass "work.md: Cypress 5c step 제거됨 (안내만 stance 일관)"
 
 echo
-echo "=== [11qq] commands/*.md — Language preference instruction (v0.4+) ==="
+echo "=== [11qq] protocols — Language preference instruction (v0.4+) ==="
 for cmd in help work promote regression status report sync; do
-  CMD_FILE="$STANDARD_ROOT/commands/${cmd}.md"
+  CMD_FILE="$PROTOCOL_ROOT/${cmd}.md"
   assert_contains "$CMD_FILE" "Language preference"
   assert_contains "$CMD_FILE" "SCV_LANG"
   assert_contains "$CMD_FILE" "Default to English"
 done
 
 # /scv:help 의 4지선다 first-time setup 흐름 검증
-HELP_CMD="$STANDARD_ROOT/commands/help.md"
+HELP_CMD="$PROTOCOL_ROOT/help.md"
 assert_contains "$HELP_CMD" "First-time language setup"
 assert_contains "$HELP_CMD" "한국어 (Korean)"
 assert_contains "$HELP_CMD" "日本語 (Japanese)"
@@ -2154,7 +2171,7 @@ assert_contains "$PROMOTE_DOC" "every feature in an epic is archived"
 assert_contains "$PROMOTE_DOC" "supersedes_scenarios"
 
 echo
-echo "=== [11bb] commands/work.md — Step 9d/9e content ==="
+echo "=== [11bb] work protocol — Step 9d/9e content ==="
 assert_contains "$WORK_CMD" "Step 9d"
 assert_contains "$WORK_CMD" "Step 9e"
 assert_contains "$WORK_CMD" "auto-create PR"
@@ -2162,18 +2179,6 @@ assert_contains "$WORK_CMD" "pr-helper.sh"
 assert_contains "$WORK_CMD" "All features of epic"
 assert_contains "$WORK_CMD" "refactor PLAN scaffold"
 assert_contains "$WORK_CMD" ".scv-pr-artifacts"
-
-echo
-echo "=== [11cc] commands/*.md — argument-hint minimization ==="
-# After v0.2.0 cleanup, no --flag should appear in any argument-hint frontmatter line.
-for f in "$STANDARD_ROOT/commands"/*.md; do
-  hint=$(awk '/^argument-hint:/ {sub(/^argument-hint:[[:space:]]*/, ""); print; exit}' "$f")
-  if printf '%s' "$hint" | grep -qE -- '--[a-z]'; then
-    fail "command $(basename "$f"): argument-hint still exposes flag: $hint"
-  else
-    pass "command $(basename "$f"): argument-hint flag-free"
-  fi
-done
 
 echo
 echo "=== [11tt] help.sh — Dependency check section (v0.5.1+) ==="
@@ -2205,7 +2210,7 @@ cd /; rm -rf "\$TMP"
 INNER_EOF
 )
 assert_out_contains "Install hint" "$HELP_DEP_MISSING_OUT"        "help.sh: install hint emitted when deps missing"
-assert_out_contains "/scv:install-deps"  "$HELP_DEP_MISSING_OUT"  "help.sh: install hint references /scv:install-deps slash command"
+assert_out_contains '/scv:install-deps'  "$HELP_DEP_MISSING_OUT"  'help.sh: install hint references /scv:install-deps'
 assert_out_contains "brew install"       "$HELP_DEP_MISSING_OUT"  "help.sh: install hint mentions brew"
 assert_out_contains "apt install"        "$HELP_DEP_MISSING_OUT"  "help.sh: install hint mentions apt"
 
@@ -2328,17 +2333,17 @@ INNER_EOF
 
 echo
 echo "=== [11vv] regression.md — Archive scale guidance + --tag recommendation (v0.5.1+) ==="
-REGRESSION_CMD="$STANDARD_ROOT/commands/regression.md"
+REGRESSION_CMD="$PROTOCOL_ROOT/regression.md"
 assert_contains "$REGRESSION_CMD" "Archive scale guidance"
 assert_contains "$REGRESSION_CMD" "partition the suite with"
 assert_contains "$REGRESSION_CMD" "Recommended for large archives"
 assert_contains "$REGRESSION_CMD" "Do not auto-add tags"
 
 echo
-echo "=== [11xx] install-deps.sh + /scv:install-deps + graphify awareness (v0.6.0+) ==="
+echo '=== [11xx] install-deps.sh + /scv:install-deps + graphify awareness (v0.6.0+) ==='
 
 INSTALL_DEPS_SH="$STANDARD_ROOT/scripts/install-deps.sh"
-INSTALL_DEPS_CMD="$STANDARD_ROOT/commands/install-deps.md"
+INSTALL_DEPS_CMD="$PROTOCOL_ROOT/install-deps.md"
 
 assert_file "$INSTALL_DEPS_SH"
 assert_file "$INSTALL_DEPS_CMD"
@@ -2388,9 +2393,8 @@ bash "$INSTALL_DEPS_SH" --bogus 2>/dev/null
   && pass "install-deps.sh: unknown mode rejected (exit 2)" \
   || fail "install-deps.sh: unknown mode should exit 2"
 
-# Slash command frontmatter
-assert_contains "$INSTALL_DEPS_CMD" 'description: "Detect missing SCV system dependencies'
-assert_contains "$INSTALL_DEPS_CMD" "AskUserQuestion"
+# Claude Code workflow protocol
+assert_contains "$INSTALL_DEPS_CMD" "Detect SCV's external CLI dependencies"
 assert_contains "$INSTALL_DEPS_CMD" "install-deps.sh"
 assert_contains "$INSTALL_DEPS_CMD" "Language preference"
 assert_contains "$INSTALL_DEPS_CMD" "github.com/safishamsi/graphify"
@@ -2408,10 +2412,10 @@ INNER_EOF
 )
 assert_out_contains "graphify" "$HELP_GRAPHIFY_OUT" "help.sh: graphify row in deps check"
 assert_out_contains "Claude Code skill" "$HELP_GRAPHIFY_OUT" "help.sh: graphify is identified as a Claude Code skill"
-assert_out_contains "/scv:install-deps" "$HELP_GRAPHIFY_OUT" "help.sh: install hint references new slash command"
+assert_out_contains '/scv:install-deps' "$HELP_GRAPHIFY_OUT" 'help.sh: install hint references the Claude Code skill'
 
 # work.md mentions /scv:install-deps + graphify install link
-assert_contains "$WORK_CMD" "/scv:install-deps"
+assert_contains "$WORK_CMD" '/scv:install-deps'
 assert_contains "$WORK_CMD" "github.com/safishamsi/graphify"
 
 # promote.md graphify warning has resolved install link
@@ -2451,13 +2455,13 @@ assert_out_contains "Document status:" "$HELP_DRAFT_OUT"            "help.sh: dr
 assert_out_contains "draft   : DOMAIN" "$HELP_DRAFT_OUT"            "help.sh: draft DOMAIN 표시"
 assert_out_contains "needs filling" "$HELP_DRAFT_OUT"               "help.sh: needs filling hint"
 
-# --- scv/CLAUDE.md 의 adoption 강화 단락 ---
-SCV_CLAUDE="$STANDARD_ROOT/template/scv/CLAUDE.md"
-assert_contains "$SCV_CLAUDE" "N/A is a steady state, not a backlog"
-assert_contains "$SCV_CLAUDE" "Lift one doc at a time when there's a real driver"
+# --- scv/SCV.md 의 adoption 강화 단락 ---
+SCV_INDEX="$STANDARD_ROOT/template/scv/SCV.md"
+assert_contains "$SCV_INDEX" "N/A is a steady state, not a backlog"
+assert_contains "$SCV_INDEX" "Lift one doc at a time when there's a real driver"
 
 # --- commands/promote.md Y5+ Step 2.1 / 3.1 / 3.1.5 / 5 instruction ---
-PROMOTE_CMD="$STANDARD_ROOT/commands/promote.md"
+PROMOTE_CMD="$PROTOCOL_ROOT/promote.md"
 assert_contains "$PROMOTE_CMD" "Step 2.1 — Reference scan"
 assert_contains "$PROMOTE_CMD" "deliberate sources only"
 assert_contains "$PROMOTE_CMD" "Earlier user messages / prior"
@@ -2491,67 +2495,13 @@ assert_contains "$ENV_EXAMPLE" "LINEAR_BASE_URL=https://linear.app/company"
 assert_contains "$ENV_EXAMPLE" "CONFLUENCE_BASE_URL=https://confluence.example.com"
 assert_contains "$ENV_EXAMPLE" "External refs base URLs"
 
-# --- README 의 표준 문서 옵션 + refs 단락 (3 lang) ---
-README="$STANDARD_ROOT/README.md"
-# 영어
-assert_contains "$README" "Standard docs are optional"
-assert_contains "$README" "N/A is a steady state, not a backlog"
-assert_contains "$README" "External Refs (Jira / Linear / PR / Docs)"
-assert_contains "$README" "Tickets via \`refs:\` (link only)"
-# 한국어
-assert_contains "$README" "표준 문서는 옵션"
-assert_contains "$README" "### 외부 Refs (Jira / Linear / PR / 문서)"
-# 일본어
-assert_contains "$README" "標準ドキュメントは任意"
-assert_contains "$README" "### 外部 Refs (Jira / Linear / PR / ドキュメント)"
-
-echo
-echo "=== [11zz] README 재구조 — Why SCV? + 5분 walkthrough (v0.6.2+, v0.7.5 압축) ==="
-
-README="$STANDARD_ROOT/README.md"
-
-# 영어 — Why SCV? + 5-Minute Walkthrough (v0.10.0 표 셀 1 문장 압축)
-assert_contains "$README" "## Why SCV?"
-assert_contains "$README" "## 5-Minute Walkthrough"
-assert_contains "$README" "AI diffs — you end up running them yourself"
-assert_contains "$README" "drifts across ticket"
-assert_contains "$README" "graveyard no one searches"
-assert_contains "$README" "PLAN.md is the single source"
-assert_contains "$README" '"Add a refund button to the checkout page"'
-assert_contains "$README" "Drop materials into"
-assert_contains "$README" "Review → merge → archive"
-
-# 한국어 — 왜 SCV? + 5 분 워크스루 (v0.10.0 표 셀 1 문장 압축)
-assert_contains "$README" "## 왜 SCV?"
-assert_contains "$README" "## 5 분 워크스루"
-assert_contains "$README" "AI diff, 결국 직접 돌려보게"
-assert_contains "$README" "티켓 · PR · 주석 3 군데에서 어긋"
-assert_contains "$README" "검색 안 되는 묘지"
-assert_contains "$README" "PLAN.md 가 단일 source"
-assert_contains "$README" '"결제 페이지에 환불 버튼 추가"'
-assert_contains "$README" "리뷰 → 머지 → archive"
-
-# 일본어 — なぜ SCV? + 5 分ウォークスルー (v0.10.0 표 셀 1 문장 압축)
-assert_contains "$README" "## なぜ SCV?"
-assert_contains "$README" "## 5 分ウォークスルー"
-assert_contains "$README" "AI の diff、結局自分で動かして"
-assert_contains "$README" "3 か所でずれる"
-assert_contains "$README" "誰も検索しない墓場"
-assert_contains "$README" "PLAN.md が単一 source"
-assert_contains "$README" '"決済ページに払い戻しボタンを追加"'
-assert_contains "$README" "レビュー → マージ → archive"
-
-# Top nav anchors
-assert_contains "$README" "#why-scv"
-assert_contains "$README" "#5-minute-walkthrough"
-
 echo
 echo "=== [11aaa] FEATURE_ARCHITECTURE.md auto-generation (v0.7.0+) ==="
 
-PROMOTE_CMD="$STANDARD_ROOT/commands/promote.md"
+PROMOTE_CMD="$PROTOCOL_ROOT/promote.md"
 PROMOTE_DOC="$STANDARD_ROOT/template/scv/PROMOTE.md"
 
-# commands/promote.md — Step 6 새 도식 단계 + AskUserQuestion (3-way)
+# promote protocol — Step 6 새 도식 단계 + Claude Code-native questions
 assert_contains "$PROMOTE_CMD" "Step 6 — Architecture diagrams"
 assert_contains "$PROMOTE_CMD" "FEATURE_ARCHITECTURE.md"
 assert_contains "$PROMOTE_CMD" "Yes — generate two Mermaid diagrams"
@@ -2570,8 +2520,8 @@ assert_contains "$PROMOTE_CMD" "GRAPHIFY_SKILL"
 assert_contains "$PROMOTE_CMD" "GRAPH_STATUS"
 assert_contains "$PROMOTE_CMD" "Use \`scv/ARCHITECTURE.md\` content"
 assert_contains "$PROMOTE_CMD" ".graphify/docs/graphify-out/graph.json"
-assert_contains "$PROMOTE_CMD" "Fire 3-way \`AskUserQuestion\`"
-assert_contains "$PROMOTE_CMD" "Fire 2-way \`AskUserQuestion\`"
+assert_contains "$PROMOTE_CMD" "**3-way question**"
+assert_contains "$PROMOTE_CMD" "**2-way question**"
 
 # commands/promote.md — graphify run-or-skip question
 assert_contains "$PROMOTE_CMD" "Run graphify update (or full build) now"
@@ -2606,9 +2556,9 @@ assert_contains "$PROMOTE_CMD" '--lang "<LANG_RESOLVED>"'
 assert_contains "$PROMOTE_CMD" "already resolved in Step 0 — the deck's UI chrome"
 
 # commands/deck.md — Language preference section + --lang pass-through to deck.sh
-DECK_CMD="$STANDARD_ROOT/commands/deck.md"
+DECK_CMD="$PROTOCOL_ROOT/deck.md"
 assert_contains "$DECK_CMD" "## Language preference"
-assert_contains "$DECK_CMD" 'settings.json'
+assert_contains "$DECK_CMD" "Auto-detect from the user's most recent message language"
 assert_contains "$DECK_CMD" 'SCV_LANG'
 assert_contains "$DECK_CMD" '--lang <LANG_RESOLVED>'
 assert_contains "$DECK_CMD" "never the user's own PLAN.md/TESTS.md/screen-mockup content"
@@ -2620,15 +2570,15 @@ assert_contains "$WORK_CMD" "the same field Step 9d reads"
 
 # Placeholder shell-redirection collision fix (v0.19.2+): a bare `<name>` after a
 # space in an executable ```! fence is a live bash input-redirection operator, not
-# just documentation — if Claude ever executes the fence without substituting the
+# just documentation — if Claude Code ever executes the fence without substituting the
 # placeholder first, bash tries to open a file literally named after it instead of
 # erroring clearly. Reported for real: promote.md's `handoff.sh mark <handoff_id>
 # claimed` on an unrelated project produced "no such file or directory: handoff_id".
 # Fix: quote every such placeholder so an unsubstituted run degrades to a literal,
 # script-level argument instead of a cryptic shell error (substituted runs are
 # unaffected — quoting a single-word value changes nothing).
-HANDOFF_CMD="$STANDARD_ROOT/commands/handoff.md"
-WORKSPACE_CMD="$STANDARD_ROOT/commands/workspace.md"
+HANDOFF_CMD="$PROTOCOL_ROOT/handoff.md"
+WORKSPACE_CMD="$PROTOCOL_ROOT/workspace.md"
 assert_contains "$PROMOTE_CMD" 'adopt "<handoff_id>"'
 assert_contains "$PROMOTE_CMD" 'mark "<handoff_id>" claimed'
 assert_contains "$HANDOFF_CMD" '--to "<to_repo>" --slug "<slug>" --title "<title>" --decision "<needed|maybe|not-needed>" [--from-slug "<slug>"] [--ref-pr "<url>"]'
@@ -2653,8 +2603,8 @@ assert_contains "$PROMOTE_DOC" "FEATURE_ARCHITECTURE.md   # optional — two Mer
 echo
 echo "=== [11bbb] v0.7.1 — Mermaid + graphify mapping 정확도 보강 ==="
 
-PROMOTE_CMD="$STANDARD_ROOT/commands/promote.md"
-WORK_CMD="$STANDARD_ROOT/commands/work.md"
+PROMOTE_CMD="$PROTOCOL_ROOT/promote.md"
+WORK_CMD="$PROTOCOL_ROOT/work.md"
 PR_HELPER="$STANDARD_ROOT/scripts/pr-helper.sh"
 
 # Step 6.1 — Mermaid 정확도 prompt 보강
@@ -3004,8 +2954,8 @@ fi
 echo
 echo "=== [11ddd] v0.7.3 — Language alignment + frontmatter lang + pr-helper i18n ==="
 
-PROMOTE_CMD="$STANDARD_ROOT/commands/promote.md"
-WORK_CMD="$STANDARD_ROOT/commands/work.md"
+PROMOTE_CMD="$PROTOCOL_ROOT/promote.md"
+WORK_CMD="$PROTOCOL_ROOT/work.md"
 PR_HELPER="$STANDARD_ROOT/scripts/pr-helper.sh"
 PROMOTE_DOC="$STANDARD_ROOT/template/scv/PROMOTE.md"
 ENV_EX="$STANDARD_ROOT/template/.env.example.scv"
@@ -3013,13 +2963,14 @@ ENV_EX="$STANDARD_ROOT/template/.env.example.scv"
 # promote.md Step 0 — Language alignment
 assert_contains "$PROMOTE_CMD" "Step 0 — Language alignment"
 assert_contains "$PROMOTE_CMD" "SCV_PROMOTE_LANG"
-assert_contains "$PROMOTE_CMD" "Settings.json"
-assert_contains "$PROMOTE_CMD" "Cached value matches one of the two"
-assert_contains "$PROMOTE_CMD" "cached: SCV_PROMOTE_LANG=korean"
-assert_contains "$PROMOTE_CMD" "sed 's/^SCV_PROMOTE_LANG=.*/SCV_PROMOTE_LANG=english/' .env > .env.tmp && mv .env.tmp .env"
-assert_contains "$PROMOTE_CMD" "grep -v '^SCV_PROMOTE_LANG=' .env > .env.tmp && mv .env.tmp .env"
-assert_contains "$PROMOTE_CMD" "Saves SCV_PROMOTE_LANG=english to .env"
-assert_contains "$PROMOTE_CMD" "Free-form answers are NOT cached"
+assert_contains "$PROMOTE_CMD" 'Use `.env` `SCV_PROMOTE_LANG` when present'
+assert_contains "$PROMOTE_CMD" 'Otherwise use `.env` `SCV_LANG`'
+assert_contains "$PROMOTE_CMD" "detect the user's latest message language"
+assert_contains "$PROMOTE_CMD" 'Ask whether to persist it as `SCV_PROMOTE_LANG`'
+assert_contains "$PROMOTE_CMD" "do not"
+assert_contains "$PROMOTE_CMD" "write the cache without approval"
+assert_contains "$PROMOTE_CMD" "preserve every"
+assert_contains "$PROMOTE_CMD" "unrelated line"
 assert_contains "$PROMOTE_CMD" "LANG_RESOLVED"
 
 # promote.md Step 5 — PLAN.md frontmatter lang
@@ -3172,138 +3123,20 @@ fi
 rm -rf "$TMP_PRH"
 
 echo
-echo "=== [11eee] v0.7.4 — README 재구성 (hero / The Loop / Architecture / Philosophy + Mermaid + 3-lang 병기 제거) ==="
-
-README="$STANDARD_ROOT/README.md"
-README_KO="$STANDARD_ROOT/README.ko.md"
-README_JA="$STANDARD_ROOT/README.ja.md"
-
-# Hero 한 줄 추가 (영어)
-assert_contains "$README" "The tests run forever — even after you've forgotten about them."
-
-# 3-lang 병기 제거됨 (영어 1 줄로 단순화)
-assert_contains "$README" "**Team collaboration plugin for Claude Code.**"
-if grep -qF 'Claude Code 팀 협업 플러그인 · Claude Code のチーム協業プラグイン' "$README" "$README_KO" "$README_JA" 2>/dev/null; then
-  fail "[11eee] 3-language concatenation still present (should be removed in v0.7.4)"
-else
-  pass "[11eee] 3-language concatenation removed (single-language sections only)"
-fi
-
-# Top nav 새 anchor
-assert_contains "$README" "#the-loop"
-assert_contains "$README" "#architecture--integrations"
-assert_contains "$README" "#philosophy-standard--cowork--verify"
-
-# 영어 — The Loop 섹션
-assert_contains "$README" "## The Loop"
-assert_contains "$README" "accumulating regression suite"
-assert_contains "$README" "Why the loop matters"
-
-# 영어 — Architecture & Integrations
-assert_contains "$README" "## Architecture & Integrations"
-assert_contains "$README" "Single source of truth"
-assert_contains "$README" "External tools stay external"
-assert_contains "$README" "Vendor-agnostic backends"
-assert_contains "$README" "Multi-language by default"
-
-# 영어 — Philosophy
-assert_contains "$README" "## Philosophy: Standard · Cowork · Verify"
-assert_contains "$README" "Three failure modes of AI-assisted team development"
-assert_contains "$README" "**S — Standard.**"
-assert_contains "$README" "**C — Cowork.**"
-assert_contains "$README" "**V — Verify.**"
-assert_contains "$README" "The plugin's name is the plugin's contract"
-
-# 한국어 — 흐름 한눈에 / 아키텍처 / 철학
-assert_contains "$README" "## 흐름 한눈에"
-assert_contains "$README" "왜 이 흐름이 중요한가"
-assert_contains "$README" "## 아키텍처 & 외부 통합"
-assert_contains "$README" "## 철학: Standard · Cowork · Verify"
-assert_contains "$README" "**S — Standard (표준).**"
-assert_contains "$README" "**C — Cowork (협업).**"
-assert_contains "$README" "**V — Verify (검증).**"
-assert_contains "$README" "플러그인 이름은 플러그인의 계약"
-
-# 일본어 — ループ / アーキテクチャ / 哲学
-assert_contains "$README" "## ループ"
-assert_contains "$README" "なぜこのループが重要か"
-assert_contains "$README" "## アーキテクチャと外部統合"
-assert_contains "$README" "## 哲学: Standard · Cowork · Verify"
-assert_contains "$README" "**S — Standard (標準).**"
-assert_contains "$README" "**C — Cowork (協業).**"
-assert_contains "$README" "**V — Verify (検証).**"
-assert_contains "$README" "プラグインの名前はプラグインの契約"
-
-# Mermaid blocks — 6 새 다이어그램 (3 언어 × 2 섹션) — 정확히 6 추가
-# v0.11.5+ split into README.md / README.ko.md / README.ja.md — sum across the family.
-mermaid_count=$(cat "$README" "$README_KO" "$README_JA" 2>/dev/null | grep -c '^```mermaid')
-if [[ "$mermaid_count" -ge 6 ]]; then
-  pass "[11eee] README family has $mermaid_count mermaid blocks (≥6 expected: 3-lang × 2 sections)"
-else
-  fail "[11eee] README family has only $mermaid_count mermaid blocks (expected ≥6)"
-fi
-
-# Mermaid 노드 라벨이 그 언어로 (한국어 섹션 안엔 한국어 라벨)
-assert_contains "$README" "회의록, 스펙"
-assert_contains "$README" "구현<br>+ TESTS 실행"
-assert_contains "$README" "안전망"
-assert_contains "$README" "실행 가능한 게이트"
-
-# Mermaid 노드 라벨 (일본어 섹션)
-assert_contains "$README" "議事録、仕様書"
-assert_contains "$README" "実装<br>+ TESTS 実行"
-assert_contains "$README" "セーフティネット"
-assert_contains "$README" "実行可能なゲート"
-
-# End-to-End Flow ASCII 박스 제거됨 (3 언어 모두) — search across README family.
-if grep -qF 'meetings, sketches, PDFs, recordings — any format' "$README" "$README_KO" "$README_JA" 2>/dev/null; then
-  fail "[11eee] English End-to-End Flow ASCII box still present (should be replaced by The Loop)"
-else
-  pass "[11eee] English End-to-End Flow ASCII box removed"
-fi
-if grep -qF '회의록·스케치·PDF·녹화 — 형식 자유' "$README" "$README_KO" "$README_JA" 2>/dev/null; then
-  fail "[11eee] Korean ASCII flow still present"
-else
-  pass "[11eee] Korean ASCII flow removed"
-fi
-if grep -qF '会議録・スケッチ・PDF・録画 — 形式自由' "$README" "$README_KO" "$README_JA" 2>/dev/null; then
-  fail "[11eee] Japanese ASCII flow still present"
-else
-  pass "[11eee] Japanese ASCII flow removed"
-fi
-
-echo
-echo "=== [11hhh] v0.7.9 — Mermaid dark theme directive (검은 배경 + 흰 화살표) ==="
-
-# 모든 mermaid block 이 dark-theme directive 로 시작하는지 검증
-for FILE in "$STANDARD_ROOT/README.md" "$STANDARD_ROOT/README.ko.md" "$STANDARD_ROOT/README.ja.md" "$STANDARD_ROOT/commands/promote.md" "$STANDARD_ROOT/template/scv/PROMOTE.md"; do
-  MM_COUNT=$(grep -cE '^.{0,3}mermaid$' "$FILE")
-  THEME_COUNT=$(grep -c "^%%{init: {'theme':'base', 'themeVariables':" "$FILE")
-  if [[ "$MM_COUNT" == "$THEME_COUNT" ]]; then
-    pass "[11hhh] $FILE: $MM_COUNT mermaid blocks, all $THEME_COUNT have themeVariables directive"
-  else
-    fail "[11hhh] $FILE: $MM_COUNT mermaid blocks but only $THEME_COUNT have themeVariables directive"
-  fi
-done
-
-# 핵심 색상 변수 검증 (검은 배경 + 흰 화살표/글씨)
-assert_contains "$STANDARD_ROOT/README.md" "'primaryColor':'#1e1e1e'"
-assert_contains "$STANDARD_ROOT/README.md" "'primaryTextColor':'#fff'"
-assert_contains "$STANDARD_ROOT/README.md" "'lineColor':'#fff'"
-assert_contains "$STANDARD_ROOT/README.md" "'edgeLabelBackground':'#1e1e1e'"
+echo "=== [11hhh] FEATURE_ARCHITECTURE Mermaid dark-theme contract ==="
 
 # Step 6.1 mapping rule #6 — LLM guide (v0.7.9 갱신)
-assert_contains "$STANDARD_ROOT/commands/promote.md" "Always start the mermaid block with the standard dark-theme directive"
-assert_contains "$STANDARD_ROOT/commands/promote.md" "**white edge arrows**"
-assert_contains "$STANDARD_ROOT/commands/promote.md" "큰 배경은 검은색, 화살표는 흰색"
+assert_contains "$PROTOCOL_ROOT/promote.md" "Always start the mermaid block with the standard dark-theme directive"
+assert_contains "$PROTOCOL_ROOT/promote.md" "**white edge arrows**"
+assert_contains "$PROTOCOL_ROOT/promote.md" "큰 배경은 검은색, 화살표는 흰색"
 
 echo
-echo "=== [11iii] v0.9.0 — /scv:help conversation mode ==="
+echo '=== [11iii] v0.9.0 — /scv:help conversation mode ==='
 
-HELP_CMD="$STANDARD_ROOT/commands/help.md"
+HELP_CMD="$PROTOCOL_ROOT/help.md"
 HELP_SCRIPT="$STANDARD_ROOT/scripts/help.sh"
-PROMOTE_CMD_v9="$STANDARD_ROOT/commands/promote.md"
-WORK_CMD_v9="$STANDARD_ROOT/commands/work.md"
+PROMOTE_CMD_v9="$PROTOCOL_ROOT/promote.md"
+WORK_CMD_v9="$PROTOCOL_ROOT/work.md"
 PROMOTE_DOC_v9="$STANDARD_ROOT/template/scv/PROMOTE.md"
 
 # help.sh — argument parsing + .conversations dir + UNFINISHED emit
@@ -3343,14 +3176,8 @@ assert_contains "$WORK_CMD_v9" "scv/.conversations/ for now"
 assert_contains "$PROMOTE_DOC_v9" "1.4. Idea-first entry"
 assert_contains "$PROMOTE_DOC_v9" 'no concrete materials yet'
 
-# README — 3-language one-liner
-README="$STANDARD_ROOT/README.md"
-assert_contains "$README" "Have an idea but no materials yet"
-assert_contains "$README" "아이디어만 있고 자료는 아직 없다"
-assert_contains "$README" "アイデアだけあって資料はまだない"
-
 echo
-echo "=== [11iv] v0.10.0 — /scv:help archive search (Mode B') ==="
+echo '=== [11iv] v0.10.0 — /scv:help archive search (Mode B'\'') ==='
 
 # help.sh — emit ARCHIVE_INDEX only when CONV_ARG is non-empty
 assert_contains "$HELP_SCRIPT" 'ARCHIVE_DIR="scv/archive"'
@@ -3365,27 +3192,37 @@ assert_contains "$HELP_CMD" "Step B-classify"
 assert_contains "$HELP_CMD" "Future-leaning vs Retrospective vs Ambiguous"
 assert_contains "$HELP_CMD" "ARCHIVE_INDEX:"
 
-# README — Slash Commands row mentions both modes (3 languages)
-assert_contains "$README" 'how did we handle refunds last quarter?"` (v0.10.0+)'
-assert_contains "$README" '지난 분기 결제 archive 보여줘"` (v0.10.0+)'
-assert_contains "$README" '先四半期の決済関連 archive を見せて"` (v0.10.0+)'
-
-# plugin.json — version 0.19.2
-assert_contains "$STANDARD_ROOT/.claude-plugin/plugin.json" '"version": "0.19.2"'
-
-# v0.10.2 — heredoc-quoted $ARGUMENTS so raw user input survives shell evaluation
-assert_contains "$HELP_CMD" "__SCV_HELP_ARG_EOF__"
-assert_contains "$HELP_CMD" "single-quoted heredoc"
+# The canonical protocol has a neutral prompt-data token. Materialized profiles
+# must keep raw template text out of immediate-execution shell blocks.
+if [[ -f "$STANDARD_ROOT/host-profile.env" ]]; then
+  HELP_ARGUMENT_STYLE="$(
+    sed -n 's/^SCV_ARGUMENT_STYLE=//p' "$STANDARD_ROOT/host-profile.env" | head -1
+  )"
+  if [[ "$HELP_ARGUMENT_STYLE" == "template-string" ]]; then
+    TEMPLATE_ARGUMENT_TOKEN='$''ARGUMENTS'
+    assert_contains "$HELP_CMD" "$TEMPLATE_ARGUMENT_TOKEN"
+    assert_contains "$HELP_CMD" "untrusted prompt data, never shell source"
+    assert_contains "$HELP_CMD" "exactly one"
+    assert_contains "$HELP_CMD" '`SCV_ARGS` element'
+    if grep -R -n '^```!$' "$PROTOCOL_ROOT" >/dev/null 2>&1; then
+      fail "template-string projection retained a dynamic shell fence"
+    else
+      pass "template-string projection has no dynamic shell fences"
+    fi
+  else
+    assert_contains "$HELP_CMD" 'separately quoted `SCV_ARGS` elements'
+    assert_contains "$HELP_CMD" 'without `eval`'
+  fi
+else
+  CANONICAL_CONTEXT_TOKEN='{{SCV_''HOST_ARGUMENT_CONTEXT}}'
+  assert_contains "$HELP_CMD" "$CANONICAL_CONTEXT_TOKEN"
+fi
+assert_contains "$HELP_CMD" "--with-context"
 
 # v0.10.1 — auto-hydrate on first run (Step A0 in commands/help.md)
 assert_contains "$HELP_CMD" "Step A0 — Auto-hydrate on first run"
 assert_contains "$HELP_CMD" "This project isn't hydrated yet"
-assert_contains "$HELP_CMD" 'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/hydrate.sh'
-# README — Quick Start no longer asks the user to run hydrate manually
-assert_contains "$README" "first run it offers to hydrate"
-assert_contains "$README" "첫 실행 시 hydrate"
-assert_contains "$README" "初回実行時に hydrate"
-
+assert_contains "$HELP_CMD" 'scripts/hydrate.sh'
 echo
 echo "=== [10] sync --dry-run (version detection) ==="
 # Force a local divergence on a preserve-policy file so sync reports SKIP

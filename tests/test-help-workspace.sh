@@ -33,7 +33,7 @@ CHILD_OUT="$( cd "$WORK/be" && bash "$HELP" 2>/dev/null )"
 has  "CHILD: Workspace diagnosis line"        "$CHILD_OUT" "Workspace: CHILD"
 has  "CHILD: incoming count shown"            "$CHILD_OUT" "incoming handoffs addressed to this repo: 1"
 has  "CHILD: recommended action surfaces"     "$CHILD_OUT" "incoming handoff(s)"
-has  "CHILD: recommends /scv:promote"         "$CHILD_OUT" "/scv:promote"
+has  'CHILD: recommends /scv:promote'         "$CHILD_OUT" '/scv:promote'
 
 # ROOT
 ROOT_OUT="$( cd "$WORK/root" && bash "$HELP" 2>/dev/null )"

@@ -14,7 +14,7 @@ optional_when: "no user-facing UI"
 # DESIGN — UI/UX spec
 
 > **This document is only needed for projects with a user-facing UI (web/app).** CLI/backend-only projects mark `status: N/A` and skip it.
-> Claude follows `INTAKE.md` Step 3 plus the `How to elicit` section below to fill this through dialogue with the user.
+> the host agent follows `INTAKE.md` Step 3 plus the `How to elicit` section below to fill this through dialogue with the user.
 
 ## How to elicit (order of questions)
 

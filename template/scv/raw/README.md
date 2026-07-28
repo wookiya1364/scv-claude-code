@@ -9,7 +9,7 @@ tags: [raw, intake, guide]
 # scv/raw — 자유 투입 공간
 
 > 이 디렉토리는 **아무거나 던져 넣는 곳**입니다. 회의록·설계 스케치·이미지·PDF·녹화·초안·경쟁사 분석·외부 링크 스크랩 — 전부 환영합니다.
-> 형식·정리·분류 신경 쓰지 마세요. `/scv:promote` 가 알아서 정리 제안을 해 줍니다.
+> 형식·정리·분류 신경 쓰지 마세요. `action:promote` 가 알아서 정리 제안을 해 줍니다.
 
 ## 쓰는 법 (두 줄 요약)
 
@@ -28,7 +28,7 @@ tags: [raw, intake, guide]
 
 ## 선택: frontmatter 또는 파일명 규칙
 
-강제 아님. 있으면 승격 시 Claude 가 더 잘 분류합니다.
+강제 아님. 있으면 승격 시 the host agent 가 더 잘 분류합니다.
 
 **A. 파일명에 날짜·주제 힌트**
 ```
@@ -65,22 +65,22 @@ scv/raw/
 
 Raw 자료 중 팀이 "이건 공식화하자" 라고 합의한 것은 `scv/promote/<topic>/` 로 **정제본을 작성**합니다.
 
-### 방법 A (권장) — Claude 에게 맡기기
+### 방법 A (권장) — the host agent 에게 맡기기
 
 ```
-/scv:promote
+action:promote
 ```
 
-- Claude 가 `scv/raw/` 전체를 훑어 주제별 승격 후보를 제안
+- the host agent 가 `scv/raw/` 전체를 훑어 주제별 승격 후보를 제안
 - 각 후보마다 사용자 확인(**Approve / Edit / Skip / Defer**)
 - 승인한 것만 `scv/promote/<topic>/index.md` 로 생성 (`status: draft` 로)
 - `raw_sources` frontmatter 에 원본 경로 자동 기록
 - **Raw 원본은 절대 삭제·이동하지 않음**
 
 옵션:
-- `/scv:promote --source "scv/raw/2026-04-*"` — 특정 파일만 대상
-- `/scv:promote --topic feature-onboarding` — 주제 힌트
-- `/scv:promote --dry-run` — 제안만, 파일 생성 안 함
+- `action:promote --source "scv/raw/2026-04-*"` — 특정 파일만 대상
+- `action:promote --topic feature-onboarding` — 주제 힌트
+- `action:promote --dry-run` — 제안만, 파일 생성 안 함
 
 ### 방법 B — 수동 작성
 

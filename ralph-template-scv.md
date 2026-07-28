@@ -1,11 +1,11 @@
-# Ralph Loop 실행 템플릿 (SCV 연동판)
+# Ralph Loop 실행 템플릿 (SCV 외부 연동판)
 
 이 템플릿은 SCV 업무방식에 맞춘 Ralph Loop 실행 규칙입니다.
 프로젝트별 설정은 프로젝트 루트의 `scv/RALPH_PROMPT.md`(얇은 진입점)에 정의합니다.
 **모든 명세의 원천은 프로젝트 루트 `scv/` 디렉토리의 표준 문서**입니다.
 
-> 이 파일은 `~/.claude/ralph-template.md` 를 대체하도록 설계되었습니다.
-> `cp ralph-template-scv.md ~/.claude/ralph-template.md` 로 교체하세요.
+> 이 파일은 `<host-config>/loop-template.md` 를 대체하도록 설계되었습니다.
+> `cp loop-runner.md <host-config>/loop-template.md` 로 교체하세요.
 
 ---
 
@@ -27,7 +27,7 @@
 - 에러가 나면 원인을 분석하고 수정한 뒤 다시 테스트한다.
 - 테스트가 실패하면 실패 원인을 파악하고 코드를 수정한 뒤 재실행한다.
 - 한번에 성공하면 좋지만, 실패해도 될 때까지 반복한다.
-- 수정·검증마다 **`/scv:report` 슬래시 커맨드를 호출**하여 협업툴에 진행 상황을 보고한다 (스크린샷/비디오 포함).
+- 수정·검증마다 **`/scv:report` Claude Code 스킬을 호출**하여 협업툴에 진행 상황을 보고한다 (스크린샷/비디오 포함).
 - 이 규칙은 Phase 구분과 무관하게 **모든 작업에 적용**된다.
 
 ---
@@ -35,7 +35,7 @@
 ## 실행 흐름
 
 1. **진입점 읽기**: `scv/RALPH_PROMPT.md` 를 읽는다. 이 파일은 표준 문서 경로, focus_phase, 패키지 매니저, 빌드/테스트 명령을 명시한다.
-2. **표준 문서 전부 읽기 (필수 + 조건부)**: `scv/CLAUDE.md` 의 인덱스 순서대로 각 문서의 **현재 내용** 을 읽는다:
+2. **표준 문서 전부 읽기 (필수 + 조건부)**: `scv/SCV.md` 의 인덱스 순서대로 각 문서의 **현재 내용** 을 읽는다:
    - `scv/INTAKE.md` — 프로세스 확인 (수정 금지)
    - `scv/DOMAIN.md`, `scv/ARCHITECTURE.md` — 필수, 프로젝트별 내용
    - `scv/DESIGN.md` — UI 있는 프로젝트면 필수
@@ -44,7 +44,7 @@
    - `scv/promote/**` — 승격된 주제·계획 문서 (필요 시 해당 promote 만 로드)
 3. **Phase 목표 결정**: `scv/RALPH_PROMPT.md` 의 `focus_phase` 와 `scv/TESTING.md` 의 E2E 시나리오 카탈로그를 비교해 이번 이터레이션 목표를 정한다.
 4. **반복 실행**: 매 반복마다 파일 상태를 확인하고, 미완료 항목 1~3개씩 진행한다.
-5. **Phase 완료·실패 알림**: **반드시 `/scv:report` 슬래시 커맨드**로만 보낸다. 직접 API 호출 금지.
+5. **Phase 완료·실패 알림**: **반드시 `/scv:report` Claude Code 스킬**로만 보낸다. 직접 API 호출 금지.
 
 ---
 
@@ -79,7 +79,7 @@
 
 ## /scv:report 호출 규칙
 
-**Claude 는 Slack/Discord API 를 직접 호출하지 않는다.** 항상 슬래시 커맨드 경유:
+**Claude Code 는 Slack/Discord API 를 직접 호출하지 않는다.** 항상 `/scv:report` 스킬 경유:
 
 ```
 /scv:report "<phase-name>" <status> [--summary "TEXT"] [--attempt N] [--event EVENT]
@@ -150,5 +150,5 @@ DISCORD_CHANNEL_ID_E2E_FAILURE=...
 ## 실행 명령어
 
 ```
-/ralph-loop "~/.claude/ralph-template.md 를 읽고 실행 흐름을 따르라. 프로젝트 설정은 RALPH_PROMPT.md, 표준 명세는 scv/*.md, 보고는 /scv:report 슬래시 커맨드를 사용한다." --max-iterations 35 --completion-promise "DONE"
+loop-runner "<host-config>/loop-template.md 를 읽고 실행 흐름을 따르라. 프로젝트 설정은 RALPH_PROMPT.md, 표준 명세는 scv/*.md, 보고는 /scv:report Claude Code 스킬을 사용한다." --max-iterations 35 --completion-promise "DONE"
 ```

@@ -205,6 +205,15 @@ archive/PR は `/scv:work` に委譲するので archive 構造は同一。TESTS
 
 ## アーキテクチャと外部統合 <a id="architecture--integrations"></a>
 
+v0.20.0 から、共通ワークフローの動作はチェックサムで検証し、バージョンを
+固定した [`scv-core`](https://github.com/wookiya1364/scv-core) リリースから
+取得します。このリポジトリは Claude Code アダプターとして slash command、
+ツール/モデルのメタデータ、インストール・更新 UX のみを所有します。コマンド
+実行時に core をダウンロードすることはありません。自動 PR が vendored pin
+を更新し、全テスト通過後に既存の `develop → stage → main` フローで昇格します。
+詳細は [`docs/design/shared-core-wrapper.md`](docs/design/shared-core-wrapper.md)
+を参照してください。
+
 PLAN.md が単一の source of truth。外部ツール (Jira / Linear / Confluence / Google Doc) は `refs:` で*リンク*のみ — 複製しない。出力 (PR / MR / Slack / Discord) は同じ source から自動生成。
 
 ```mermaid
