@@ -13,7 +13,7 @@ repo** (e.g. FE shipped a button that needs a new BE endpoint). It records the
 **explicit decision** + the **why** and propagates them to the shared workspace
 **root** scv repo, so the other repo sees it on `git pull` (`/scv:status`).
 
-This is an explicit, human/Claude-judged declaration — SCV never infers cross-repo
+This is an explicit, human/Claude Code-judged declaration — SCV never infers cross-repo
 need from a code diff.
 
 ## Mode
@@ -25,9 +25,9 @@ check — the script resolves the mode itself.
 
 ## Language preference
 
-Resolve the user's preferred language (settings.json `language` → `.env` `SCV_LANG`
-→ detect from last message → English) and use it for all user-facing prose. Keep
-technical identifiers as-is (`repo_id`, `handoff_id`, slash commands, paths).
+Resolve the user's preferred language from `.env` `SCV_LANG`, then the latest
+user message, then English. Use it for all user-facing prose. Keep technical
+identifiers as-is (`repo_id`, `handoff_id`, skill invocations, paths).
 
 ## Protocol
 
@@ -36,7 +36,7 @@ technical identifiers as-is (`repo_id`, `handoff_id`, slash commands, paths).
    - a short `slug` (3–5 kebab words), a one-line `title`.
    - `decision` — `needed` (default), `maybe`, or `not-needed` (record a no-op decision too, so the trail is complete).
    - optionally `from_slug` (the originating promote/archive slug) and a PR url.
-   If `to_repo` or intent is ambiguous, ask ONE clarifying question (AskUserQuestion).
+   If `to_repo` or intent is ambiguous, ask one concise clarifying question.
 
 2. **Author two short artifacts** (this is the real value — make them good, because
    they ARE the handoff; no synchronous conversation will happen):
@@ -77,8 +77,8 @@ technical identifiers as-is (`repo_id`, `handoff_id`, slash commands, paths).
 When the umbrella and its modules live in one git repo, you can address a module
 without `cd`-ing into it by giving its dir as the **leading** argument:
 
-```!
-"${CLAUDE_PLUGIN_ROOT}/scripts/handoff.sh" "<module>" write --to "<to_repo>" --slug "<slug>" --title "<title>" …
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/handoff.sh" "<module>" write --to "<to_repo>" --slug "<slug>" --title "<title>" …
 ```
 
 e.g. `handoff.sh fe write …` operates on `fe/scv` exactly as if run from inside
