@@ -17,6 +17,11 @@ Permanent branches: **`main`** · **`stage`** · **`develop`**. They are protect
 1. Branch off `develop` (e.g. `feat/<slug>`), open a PR **→ `develop`**.
 2. Promote `develop` → `stage` → `main` via PR.
 
+Pinned SCV Core updates follow the same path. The scheduled, manual, or
+release-dispatched `core-sync` workflow opens `chore/core-v<version>`
+**→ `develop`** after verifying the release checksum and running the wrapper
+regression suite. It never pushes a core update directly to a permanent branch.
+
 Merged head branches are auto-deleted (repo setting `delete_branch_on_merge`).
 `/gclean` cleans up the corresponding **local** branches whose remote was deleted.
 
