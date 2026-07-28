@@ -12,7 +12,7 @@ Core 릴리스를 고정하고, 검증된 호스트 프로필을 반영한 뒤 �
 
 | 계약 | 버전 | 의미 |
 |---|---:|---|
-| SCV Core | `0.20.1` | 공통 동작과 릴리스 페이로드 |
+| SCV Core | `0.20.3` | 공통 동작과 릴리스 페이로드 |
 | Core API | `1` | 래퍼와 코어의 통합 계약 |
 | Template | `1.0.0` | hydrate되는 프로젝트 템플릿 스키마 |
 
@@ -41,6 +41,14 @@ scv-core 릴리스(변경 불가능한 tarball + SHA-256)
 `SCV.md`가 없을 때만 `CLAUDE.md` 또는 `CODEX.md`를 읽습니다. 서로 독립적인
 상태 파일이 다르면 변경 작업인 sync는 아무 파일도 건드리지 않고 중단합니다.
 
+설치된 래퍼의 DeckUI 원본은 변경하지 않습니다. 의존성, 생성된 deck, 빌드 결과는
+Core 페이로드 해시별 외부 캐시에 저장되므로 Claude Code와 Codex가 같은 런타임을
+재사용하면서 어느 플러그인에도 쓰지 않습니다. 기본 사용자 캐시는
+`SCV_DECK_CACHE_DIR`로 바꿀 수 있습니다.
+캐시 초기화와 기존 런타임 마이그레이션은 동시에 생긴 목적지를 덮어쓰지 않고,
+목적지 조상의 링크를 따라가지 않으며, 캐시와 기존 런타임 경로가 겹치면 쓰기
+전에 중단합니다.
+
 자세한 경계는 [아키텍처](docs/architecture.md)와
 [래퍼 통합](docs/wrapper-integration.md)을 참고하세요.
 
@@ -52,7 +60,7 @@ bash core/tests/run-dry.sh
 for test_file in core/tests/test-*.sh; do bash "$test_file"; done
 ```
 
-DeckUI 검증에는 Node.js와 pnpm이 추가로 필요합니다.
+DeckUI 원본 체크아웃 개발에는 Node.js와 pnpm이 추가로 필요합니다.
 
 ```bash
 pnpm -C core/DeckUI install --frozen-lockfile

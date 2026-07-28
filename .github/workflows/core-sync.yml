@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'SCV Core version (for example 0.20.1); blank means latest'
+        description: 'SCV Core version (for example 0.20.3); blank means latest'
         required: false
         type: string
 
@@ -52,14 +52,8 @@ jobs:
           TARGET_VERSION: ${{ steps.version.outputs.version }}
         run: |
           current_core=$(python3 -c 'import json; print(json.load(open("core.lock"))["core_version"])')
-          current_plugin=$(python3 -c 'import json; print(json.load(open(".claude-plugin/plugin.json"))["version"])')
-          current_marketplace=$(python3 -c 'import json; print(next(item["version"] for item in json.load(open(".claude-plugin/marketplace.json"))["plugins"] if item["name"] == "scv"))')
-          current_wrapper=$(tr -d '[:space:]' < VERSION)
           artifact_sha=$(python3 -c 'import json; print(json.load(open("core.lock"))["artifact_sha256"] or "")')
           if [[ "$current_core" == "$TARGET_VERSION" &&
-                "$current_plugin" == "$TARGET_VERSION" &&
-                "$current_marketplace" == "$TARGET_VERSION" &&
-                "$current_wrapper" == "$TARGET_VERSION" &&
                 "$artifact_sha" =~ ^[0-9a-f]{64}$ ]]; then
             echo "changed=no" >> "$GITHUB_OUTPUT"
           else
@@ -76,6 +70,7 @@ jobs:
         if: steps.pin.outputs.changed == 'yes'
         run: |
           bash tests/test-core-contract.sh
+          bash tests/test-sync-core-atomicity.sh
           bash tests/test-apply-model-policy.sh
           bash tests/run-dry.sh
 
@@ -106,8 +101,7 @@ jobs:
           git config user.name "scv-core-sync[bot]"
           git config user.email "scv-core-sync[bot]@users.noreply.github.com"
           git add \
-            vendor/scv-core core.lock VERSION TEMPLATE_VERSION host-profile.env \
-            .claude-plugin/plugin.json .claude-plugin/marketplace.json \
+            vendor/scv-core core.lock TEMPLATE_VERSION host-profile.env \
             scripts template DeckUI assets protocols commands tests \
             ralph-template-scv.md
           git diff --cached --check

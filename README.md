@@ -216,6 +216,11 @@ runtime; an automated PR updates the vendored pin and must pass the full suite
 before the normal `develop → stage → main` promotion. See
 [`docs/design/shared-core-wrapper.md`](docs/design/shared-core-wrapper.md).
 
+Wrapper and Core releases are intentionally independent. This Claude adapter
+is `0.20.2` and currently pins Core `0.20.3`. Core sync updates the checksummed
+pin and generated projection, but never rewrites the wrapper `VERSION`, plugin
+manifest, or marketplace version.
+
 PLAN.md is the single source of truth. External tools (Jira / Linear / Confluence / Google Doc) are linked via `refs:` — never copied. Outputs (PR / MR / Slack / Discord) are auto-generated from the same source.
 
 <p align="center">

@@ -2,6 +2,39 @@
 
 All notable changes to SCV Core are documented here.
 
+## [0.20.3] - 2026-07-28
+
+### Fixed
+
+- Made first-use and migration installs in the shared DeckUI cache use
+  platform-native atomic no-replace renames on Linux and macOS.
+- Rejected cache/legacy overlap before initialization and opened every
+  migration destination ancestor without following links.
+- Limited stale lock reclamation to a valid dead-owner record with no
+  unexpected lock data; malformed or surprising state is preserved and fails
+  closed.
+
+## [0.20.2] - 2026-07-28
+
+### Fixed
+
+- Moved mutable DeckUI dependencies, build output, and generated deck data out
+  of the immutable Core/plugin tree into a payload-keyed external cache.
+- Added an idempotent legacy DeckUI migration that preserves pnpm links,
+  generated decks, and build output without deleting or rewriting the source.
+- Prevented wrapper Core replacement from treating DeckUI runtime data as
+  distributable payload and removed excluded empty deck directories from
+  exports.
+- Expanded the cross-host state matrix to cover approved `CLAUDE.md` and
+  `CODEX.md` migrations, both supported readpath encodings, workspace markers,
+  and mutating conflict failure with byte-for-byte preservation.
+
+### Security
+
+- Added atomic cache initialization, per-payload locking, collision detection,
+  unsafe target rejection, and link/special-file checks for immutable DeckUI
+  inputs.
+
 ## [0.20.1] - 2026-07-28
 
 ### Fixed
