@@ -71,6 +71,7 @@ PY
 }
 
 WORK="$(mktemp -d)"
+WORK="$(cd "$WORK" && pwd -P)"
 trap 'rm -rf "$WORK"' EXIT
 export SCV_DECK_CACHE_DIR="$WORK/deck-cache"
 SOURCE_CORE="$WORK/source-core"
