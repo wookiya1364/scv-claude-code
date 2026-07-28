@@ -17,7 +17,7 @@ source "$SCRIPT_DIR/lib/workspace.sh"   # also sources lib/merge.sh
 die() { echo "✖ $*" >&2; exit 1; }
 
 cmd_info() {
-  if [[ ! -f "$WS_CLAUDE" ]]; then
+  if [[ ! -f "$WS_INDEX" ]]; then
     echo "MODE: NOT_HYDRATED"
     echo "HINT: run /scv:help first to hydrate this project"
     return 0
@@ -53,7 +53,7 @@ cmd_join() {
 }
 
 cmd_init_root() {
-  [[ -f "$WS_CLAUDE" ]] || die "not a hydrated SCV project (run /scv:help first)"
+  [[ -f "$WS_INDEX" ]] || die "not a hydrated SCV project (run /scv:help first)"
   if [[ -f "$WS_MANIFEST" ]]; then
     echo "ℹ already a ROOT — $WS_MANIFEST exists. Edit its members."
     return 0
@@ -69,9 +69,9 @@ cmd_init_root() {
 }
 
 cmd_detach() {
-  [[ -f "$WS_CLAUDE" ]] || die "no scv/CLAUDE.md here"
-  if has_marker_block "$WS_CLAUDE" "SCV:WORKSPACE START"; then
-    replace_marker_block "$WS_CLAUDE" "SCV:WORKSPACE START" "SCV:WORKSPACE END" '```yaml
+  [[ -f "$WS_INDEX" ]] || die "no scv/SCV.md here"
+  if has_marker_block "$WS_INDEX" "SCV:WORKSPACE START"; then
+    replace_marker_block "$WS_INDEX" "SCV:WORKSPACE START" "SCV:WORKSPACE END" '```yaml
 repo_id:
 role:
 root:

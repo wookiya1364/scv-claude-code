@@ -1,0 +1,39 @@
+# scv/WORKSPACE.yaml — umbrella (root) workspace registry.
+#
+# The mere PRESENCE of this file marks a repo as the workspace ROOT.
+# Child repos do NOT have this file; they point here via their own
+# scv/SCV.md SCV:WORKSPACE block (set by `action:sync --join <root-url>`).
+#
+# Copy to scv/WORKSPACE.yaml in the umbrella repo and fill in members.
+# Format is flat + a simple `members:` list. Member entries are informational
+# (SCV counts them for the umbrella overview; the fields are not parsed further),
+# so use whatever encoding documents your setup — a git url: (separate-repo) or a
+# path: (monorepo module dir).
+#
+# Two topologies, same machinery:
+#   • Separate repos  — umbrella is its own repo; children join by git URL
+#                       (`action:sync --join git@github.com:org/fe.git`).
+#   • Monorepo        — umbrella scv/ and the module scvs live in ONE git repo
+#                       (repo-root/scv + repo-root/fe/scv + repo-root/be/scv).
+#                       Each module joins the in-repo umbrella with a PORTABLE
+#                       relative root (run from the module dir):
+#                         cd fe && action:sync --project-dir . --join .. --id fe --role frontend
+#                       `..` is the module dir's parent = the repo root (the dir
+#                       that holds the umbrella scv/). No URL, no clone. Handoffs
+#                       commit straight into repo-root/scv/. Address a module
+#                       without cd-ing via the leading arg: `action:handoff fe ...`,
+#                       `action:status fe`.
+
+workspace_id: my-platform
+
+# One entry per repo in this system.
+members:
+  - id: fe
+    role: frontend
+    url: git@github.com:org/fe.git
+  - id: be
+    role: backend
+    url: git@github.com:org/be.git
+  - id: ai
+    role: ai-agent
+    url: git@github.com:org/ai.git

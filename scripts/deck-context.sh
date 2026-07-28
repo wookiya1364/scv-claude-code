@@ -10,14 +10,14 @@ fi
 
 # deck-context.sh — detect the "big picture" sources /scv:deck needs to render a
 # real 기획서 (whole → position → change → why). Read-only. Drives the B→A flow
-# in commands/deck.md: B = big picture ABSENT (help create it first),
+# in references/protocols/deck.md: B = big picture ABSENT (help create it first),
 # A = big picture PRESENT (pull it and compose).
 #
 # Usage: deck-context.sh [<slug>] [<module>]
 #   <slug>   — a promote/archive plan slug (to find its FEATURE_ARCHITECTURE.md)
 #   <module> — a monorepo module dir containing scv/ (nested; e.g. FE)
 #
-# Emits KEY: value lines for commands/deck.md to parse.
+# Emits KEY: value lines for references/protocols/deck.md to parse.
 set -uo pipefail
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"

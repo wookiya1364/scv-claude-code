@@ -1,0 +1,104 @@
+{
+  "schema_version": 1,
+  "core_api": 1,
+  "actions": [
+    {
+      "id": "help",
+      "owner": "core",
+      "execution_class": "deep",
+      "protocol": "protocols/help.md",
+      "entrypoint": "scripts/help.sh"
+    },
+    {
+      "id": "status",
+      "owner": "core",
+      "execution_class": "economy",
+      "protocol": "protocols/status.md",
+      "entrypoint": "scripts/status.sh"
+    },
+    {
+      "id": "promote",
+      "owner": "core",
+      "execution_class": "deep",
+      "protocol": "protocols/promote.md",
+      "entrypoint": "scripts/promote-helper.sh"
+    },
+    {
+      "id": "work",
+      "owner": "core",
+      "execution_class": "deep",
+      "protocol": "protocols/work.md",
+      "entrypoint": "scripts/work.sh"
+    },
+    {
+      "id": "codegen",
+      "owner": "core",
+      "execution_class": "deep",
+      "protocol": "protocols/codegen.md",
+      "entrypoint": "scripts/work.sh"
+    },
+    {
+      "id": "deck",
+      "owner": "core",
+      "execution_class": "deep",
+      "protocol": "protocols/deck.md",
+      "entrypoint": "scripts/deck.sh"
+    },
+    {
+      "id": "update",
+      "owner": "adapter",
+      "execution_class": "economy",
+      "protocol": "protocols/update.md",
+      "entrypoint": null
+    },
+    {
+      "id": "regression",
+      "owner": "core",
+      "execution_class": "deep",
+      "protocol": "protocols/regression.md",
+      "entrypoint": "scripts/regression.sh"
+    },
+    {
+      "id": "report",
+      "owner": "core",
+      "execution_class": "economy",
+      "protocol": "protocols/report.md",
+      "entrypoint": "scripts/report.sh"
+    },
+    {
+      "id": "sync",
+      "owner": "core",
+      "execution_class": "deep",
+      "protocol": "protocols/sync.md",
+      "entrypoint": "scripts/sync.sh"
+    },
+    {
+      "id": "install-deps",
+      "owner": "core",
+      "execution_class": "economy",
+      "protocol": "protocols/install-deps.md",
+      "entrypoint": "scripts/install-deps.sh"
+    },
+    {
+      "id": "workspace",
+      "owner": "core",
+      "execution_class": "economy",
+      "protocol": "protocols/workspace.md",
+      "entrypoint": "scripts/workspace-helper.sh"
+    },
+    {
+      "id": "handoff",
+      "owner": "core",
+      "execution_class": "deep",
+      "protocol": "protocols/handoff.md",
+      "entrypoint": "scripts/handoff.sh"
+    },
+    {
+      "id": "set-models",
+      "owner": "adapter",
+      "execution_class": "economy",
+      "protocol": "protocols/set-models.md",
+      "entrypoint": null
+    }
+  ]
+}

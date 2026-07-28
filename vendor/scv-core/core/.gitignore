@@ -1,0 +1,40 @@
+# OS / editor
+.DS_Store
+*.swp
+*.swo
+Thumbs.db
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Node
+node_modules/
+
+# graphify local caches
+.graphify_python
+.graphify_version
+
+# Environment files
+.env
+.env.local
+
+# SCV sync backups
+.scv-backup/
+
+# Scratch
+.scratch/
+tmp/
+
+# Local discussion notes
+DISCUSS.md
+
+# Deck and demo build output
+DeckUI/dist-deck/
+DeckUI/dist/
+demo/node_modules/
+demo/out/
+
+# /scv:help local conversation drafts
+/scv/.conversations/

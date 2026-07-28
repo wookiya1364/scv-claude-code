@@ -14,7 +14,7 @@ merge_policy: preserve
 
 > **DOMAIN.md must be `status: active` first**, so service boundaries can be expressed in domain language.
 >
-> Architecture **needs more than one perspective**. Beyond software, it can include network, security, compliance, and DR; and the perspectives required differ by project nature (large-enterprise legacy / financial / startup MVP). Claude first agrees on a **perspective checklist** with the user, then asks questions only for checked perspectives.
+> Architecture **needs more than one perspective**. Beyond software, it can include network, security, compliance, and DR; and the perspectives required differ by project nature (large-enterprise legacy / financial / startup MVP). the host agent first agrees on a **perspective checklist** with the user, then asks questions only for checked perspectives.
 
 ## 1. Perspective checklist (mark applicable)
 
@@ -40,7 +40,7 @@ Decide first which perspectives are relevant. **Required** perspectives are alwa
 
 ## 2. How to elicit (order of questions)
 
-Claude proceeds **only with checked perspectives**. After each perspective, confirm "shall I record it like this?" before moving on.
+the host agent proceeds **only with checked perspectives**. After each perspective, confirm "shall I record it like this?" before moving on.
 
 ### 2.1 Logical (required)
 

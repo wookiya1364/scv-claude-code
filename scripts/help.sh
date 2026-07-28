@@ -1,61 +1,56 @@
 #!/usr/bin/env bash
 # Self-onboarding output for the SCV plugin.
-# Prints: overview, command list, current project diagnosis, next action.
+# Prints: overview, skill list, current project diagnosis, next action.
 set -uo pipefail
 
 VERBOSE=0
+HAS_CONTEXT=0
 # v0.9.0+: collect non-flag args as the "conversation argument" (free-form text
 # the user typed after /scv:help). If empty, /scv:help runs in diagnosis mode.
-# If non-empty, /scv:help enters conversation mode (commands/help.md handles).
+# If non-empty, /scv:help enters conversation mode (the help protocol handles).
 CONV_ARG=""
 for a in "$@"; do
   case "$a" in
     --verbose|-v) VERBOSE=1 ;;
-    *) CONV_ARG="${CONV_ARG:+$CONV_ARG }$a" ;;
+    --with-context) HAS_CONTEXT=1 ;;
+    *) HAS_CONTEXT=1; CONV_ARG="${CONV_ARG:+$CONV_ARG }$a" ;;
   esac
 done
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-# Plugin root (contains scripts/, template/, commands/, ...). When run as a
-# slash command, $CLAUDE_PLUGIN_ROOT is set; fall back to ../ of SCRIPT_DIR.
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+# Resolve the installed plugin from this script. Claude Code does not guarantee a
+# plugin-root environment variable for skill execution.
+PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Multi-repo workspace awareness (no-op / silent for single repos).
 # shellcheck source=lib/workspace.sh
 source "$SCRIPT_DIR/lib/workspace.sh"
+# shellcheck source=lib/host-profile.sh
+source "$SCRIPT_DIR/lib/host-profile.sh"
 
-# Emit conversation arg + unfinished list to the LLM (commands/help.md reads).
-# Both lines are always emitted so the prompt can branch deterministically.
-echo "ARG_CONVERSATION: ${CONV_ARG}"
+# Emit only control-plane context for normal host use. Direct argv callers keep
+# the legacy echo for compatibility, but template-string adapters pass the
+# fixed --with-context flag and retain raw text solely in prompt data.
+if [[ $HAS_CONTEXT -eq 1 ]]; then
+  echo "ARG_CONTEXT: provided"
+else
+  echo "ARG_CONTEXT: none"
+fi
+if [[ -n "$CONV_ARG" ]]; then
+  echo "ARG_CONVERSATION: ${CONV_ARG}"
+elif [[ $HAS_CONTEXT -eq 1 ]]; then
+  echo "ARG_CONVERSATION: (provided by host prompt)"
+else
+  echo "ARG_CONVERSATION:"
+fi
 
 # Unfinished conversations = active files in scv/.conversations/ (NOT under archive/).
 # v0.9.0+: persisted by /scv:help conversation mode, gitignored.
 CONV_DIR="scv/.conversations"
 
-# v0.9.2+: when the user enters conversation mode for the first time, create
-# the directory and a one-page safety README (gitignored notice + sensitive-data
-# warning). Only fires when CONV_ARG is non-empty so we don't pollute projects
-# that never use conversation mode.
-if [[ -n "$CONV_ARG" && ! -d "$CONV_DIR" ]]; then
-  mkdir -p "$CONV_DIR"
-fi
-if [[ -d "$CONV_DIR" && ! -f "$CONV_DIR/README.md" ]]; then
-  cat > "$CONV_DIR/README.md" <<'CONV_README_EOF'
-# scv/.conversations/ — local-only working folder
-
-This folder is created by `/scv:help "..."` conversation mode (v0.9.0+).
-It holds your in-progress idea sketches before they become a `scv/promote/` plan.
-
-- **gitignored** — files here are not committed (`.gitignore` rule: `/scv/.conversations/`).
-- **may contain sensitive material** — anything you typed in the conversation
-  (API keys, internal URLs, customer details, screenshots' filenames, etc.) is
-  written here verbatim. Review before sharing this folder by hand.
-- **lifecycle** — `/scv:promote` asks whether to move the conversation file to
-  `archive/` after a plan is created. Decline to keep iterating; accept to
-  retire it once the work is captured in PLAN.md.
-CONV_README_EOF
-fi
-
+# The helper is strictly read-only, including argument-bearing diagnosis. The
+# host protocol creates a conversation file only after the user explicitly
+# chooses to start or resume one.
 if [[ -d "$CONV_DIR" ]]; then
   # Top-level *.md only, excluding the safety README that v0.9.2+ auto-creates.
   UNFINISHED=$(find "$CONV_DIR" -maxdepth 1 -type f -name '*.md' \
@@ -72,13 +67,13 @@ fi
 echo ""
 
 # v0.10.0+: archive index for retrospective queries.
-# Emitted only when conversation mode is active (CONV_ARG non-empty). The LLM
-# (commands/help.md) classifies the user argument as "future-leaning" (build
+# Emitted only when the host reports conversation context. The help protocol
+# classifies the prompt argument as "future-leaning" (build
 # something new — Mode B) vs "retrospective" (find / show past work — Mode B').
 # For retrospective intent it uses this index + targeted grep on PLAN.md to
 # answer; future-leaning ignores the index entirely.
 ARCHIVE_DIR="scv/archive"
-if [[ -n "$CONV_ARG" ]]; then
+if [[ $HAS_CONTEXT -eq 1 ]]; then
   if [[ -d "$ARCHIVE_DIR" ]]; then
     # Newest archives first, capped at 30 entries to keep prompt size bounded.
     echo "ARCHIVE_INDEX:"
@@ -155,10 +150,10 @@ Workflow (default = adoption / --new = greenfield)
   ④ /scv:promote    → raw → scv/promote/<YYYYMMDD>-<author>-<slug>/ (PLAN + TESTS)
   ⑤ /scv:work       → implement · test · move to archive on pass
   (opt) INTAKE.md   → for new projects (--new), fill standard docs via dialogue
-  (opt) /ralph-loop → external template (copy ralph-template-scv.md → ~/.claude/ralph-template.md)
+  (opt) Ralph loop  → external template (copy loop-runner.md → <host-config>/loop-template.md)
   (opt) /scv:regression → periodic / pre-release accumulated regression. Optional pre-flight before ⑤'s archive too.
 
-Commands
+Skills
   /scv:help       This screen (current state + next step)
   /scv:status     scv/raw/ change detection + active promote plans + graph status
   /scv:promote    scv/raw/ → scv/promote/<YYYYMMDD>-<author>-<slug>/ + graph refresh
@@ -169,7 +164,8 @@ Commands
   /scv:sync       Safe merge on template version bump
   /scv:workspace  Multi-repo setup: join an umbrella / create a root / detach (interactive, no flags)
   /scv:handoff    Multi-repo: declare another repo needs corresponding dev (→ root scv repo)
-  /scv:update     Plugin self-update guide (/plugin marketplace update + /reload-plugins) [v0.11.2+]
+  /scv:update     Claude Code marketplace update guide
+  /scv:set-models Explain Claude Code session-level model selection compatibility
 
 EOF
 
@@ -213,18 +209,35 @@ fi
 unset _scv_pre_probe_missing _cmd
 
 HYDRATED=0
+STATE_CONFLICT=0
+STATE_POINTER_BROKEN=0
 ENV_SET=0
 RAW_COUNT=0
 DRAFT_DOCS=()
 ACTIVE_DOCS=()
 NA_DOCS=()
 
-# Hydration check (SCV owns scv/ only — root CLAUDE.md is user-owned)
-if [[ -f "scv/CLAUDE.md" && -f "scv/INTAKE.md" ]]; then
+# Hydration check. A wrapper-declared legacy index is accepted for reads until
+# its adapter migrates the project to the shared SCV.md index.
+SCV_INDEX_PATH="$(scv_state_index_path scv)"
+SCV_INDEX_CONFLICTS="$(scv_state_index_conflicts scv)"
+SCV_BROKEN_POINTERS="$(scv_state_index_broken_pointers scv)"
+if [[ -n "$SCV_BROKEN_POINTERS" ]]; then
+  STATE_POINTER_BROKEN=1
+  STATE_CONFLICT=1
+  echo "STATE_INDEX_BROKEN_POINTER:"
+  printf '  %s\n' "$SCV_BROKEN_POINTERS"
+fi
+if [[ -n "$SCV_INDEX_CONFLICTS" ]]; then
+  STATE_CONFLICT=1
+  echo "STATE_INDEX_CONFLICT:"
+  printf '  %s\n' "$SCV_INDEX_CONFLICTS"
+fi
+if [[ -f "$SCV_INDEX_PATH" && -f "scv/INTAKE.md" ]]; then
   HYDRATED=1
-  echo "  [✓] hydrate complete (scv/CLAUDE.md + scv/INTAKE.md exist)"
+  echo "  [✓] hydrate complete ($SCV_INDEX_PATH + scv/INTAKE.md exist)"
 else
-  echo "  [✗] hydrate not done (scv/CLAUDE.md / scv/INTAKE.md missing)"
+  echo "  [✗] hydrate not done ($SCV_INDEX_PATH / scv/INTAKE.md missing)"
 fi
 
 # .env check
@@ -288,13 +301,9 @@ unset -f _scv_check_dep
 
 # graphify (Claude Code skill — different distribution channel than system CLIs)
 GRAPHIFY_PRESENT=0
-if [[ -f "$HOME/.claude/skills/graphify/SKILL.md" ]]; then
-  GRAPHIFY_PRESENT=1
-elif compgen -G "$HOME/.claude/plugins/cache/*/skills/graphify/SKILL.md" >/dev/null 2>&1; then
-  GRAPHIFY_PRESENT=1
-fi
+scv_graph_skill_available && GRAPHIFY_PRESENT=1
 if [[ $GRAPHIFY_PRESENT -eq 1 ]]; then
-  printf '    [✓] %-8s — %s\n' "graphify" "Claude Code skill — token-efficient graph queries (/scv:promote, /scv:work)"
+  printf '    [✓] %-8s — %s\n' "graphify" 'Claude Code skill — token-efficient graph queries (/scv:promote, /scv:work)'
 else
   printf '    [△] %-8s — %s (optional, graceful degrade)\n' "graphify" "Claude Code skill — token-efficient graph queries"
   echo "        Install: https://github.com/safishamsi/graphify"
@@ -411,7 +420,19 @@ echo " Recommended next action"
 echo "──────────────────────────────────────────────────────────────────────"
 
 # --- Recommend next step based on state --------------------------------------
-if [[ $HYDRATED -eq 0 ]]; then
+if [[ $STATE_POINTER_BROKEN -eq 1 ]]; then
+  cat <<'EOF'
+  State-index pointer is broken. Read-only diagnosis is available, but SCV
+  will not hydrate, sync, migrate, or recreate state automatically.
+  Restore scv/SCV.md or restore the legacy state file from its backup.
+EOF
+elif [[ $STATE_CONFLICT -eq 1 ]]; then
+  cat <<'EOF'
+  State-index conflict detected. Read-only diagnosis is available, but SCV
+  will not hydrate, sync, migrate, or choose one file automatically.
+  Reconcile the listed files explicitly before any mutating action.
+EOF
+elif [[ $HYDRATED -eq 0 ]]; then
   cat <<EOF
   This directory is not hydrated yet. Pick one of two modes.
 
@@ -447,15 +468,15 @@ elif [[ ${#DRAFT_DOCS[@]} -gt 0 ]]; then
     active : $active_list
     draft  : ${DRAFT_DOCS[*]}
 
-  Run INTAKE. Claude will first ask whether to resume or start over.
+  Run INTAKE. Claude Code will first ask whether to resume or start over.
 
-  - Phrase to give Claude (copyable):
+  - Phrase to give Claude Code (copyable):
 
     "Read scv/INTAKE.md and follow the §1 'resume check' procedure to
      verify current status first, then ask whether to [A] resume or
      [B] start over before doing anything. Don't jump straight to step 0."
 
-  - Drop any existing raw material into scv/raw/ so Claude can reference it.
+  - Drop any existing raw material into scv/raw/ so Claude Code can reference it.
 EOF
 elif [[ "$RAW_CHANGES_TOTAL" -gt 0 ]]; then
   cat <<EOF
@@ -481,7 +502,7 @@ elif [[ ${#ACTIVE_PLANS[@]} -gt 0 ]]; then
     PLAN_HINT="Use this command to start with the oldest plan, or /scv:status for the full list:
 
       /scv:work $FIRST_SLUG       # oldest plan first
-      /scv:status               # all plans + graph status"
+      /scv:status                 # all plans + graph status"
   fi
   cat <<EOF
   ${#ACTIVE_PLANS[@]} active promote plan(s) found.
@@ -497,7 +518,7 @@ else
   Start a new loop with one of:
 
   - Drop new material        : add files to scv/raw/, then /scv:help
-  - Ralph Loop autoloop      : /ralph-loop  (external command — needs ralph-template-scv.md)
+  - Ralph Loop autoloop      : external integration using loop-runner.md
   - Manual phase report      : /scv:report "Phase 1 — ..." passed --summary "..."
 EOF
 fi
@@ -523,15 +544,15 @@ echo "────────────────────────�
 echo " Learn more"
 echo "──────────────────────────────────────────────────────────────────────"
 cat <<EOF
-  Each command supports --help or -h:
+  Each skill supports --help or -h:
     /scv:report -h
     /scv:promote --help
 
   Plugin root:
     $PLUGIN_ROOT
 
-  Key documents (created under scv/ after hydrate — root CLAUDE.md is untouched by SCV):
-    scv/CLAUDE.md     — SCV workflow index + rules
+  Key documents (created under scv/ after hydrate — project-root instructions are untouched):
+    $SCV_INDEX_PATH     — resolved SCV workflow index + rules
     scv/INTAKE.md     — Dialogue protocol (project bootstrap order)
     scv/PROMOTE.md    — raw → promote → archive promotion convention
 

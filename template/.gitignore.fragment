@@ -19,5 +19,5 @@ test-results/report-queue/
 .graphify_python
 .graphify_version
 
-# v0.9.0+ — /scv:help conversation mode (local sketch files)
+# v0.9.0+ — action:help conversation mode (local sketch files)
 /scv/.conversations/

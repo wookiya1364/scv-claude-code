@@ -20,32 +20,32 @@ merge_policy: overwrite
 ## 1. One-page summary
 
 ```
-Drop into scv/raw/ → /scv:promote (Claude refines via dialogue)
+Drop into scv/raw/ → action:promote (the host agent refines via dialogue)
                   → scv/promote/<YYYYMMDD>-<author>-<slug>/
                       ├── PLAN.md    (required)
                       ├── TESTS.md   (required)
                       └── free additional files (optional)
-                  → /scv:work <slug> (implement + test)
+                  → action:work <slug> (implement + test)
                   → scv/archive/<YYYYMMDD>-<author>-<slug>/ (moved on completion)
 ```
 
 ---
 
-## 1.4. Idea-first entry — `/scv:help "..."` (v0.9.0+, no raw needed)
+## 1.4. Idea-first entry — `action:help "..."` (v0.9.0+, no raw needed)
 
 **You don't need files in `scv/raw/` to start.** If you have an idea but no concrete materials yet:
 
 ```
-/scv:help "I want to add a refund button to checkout"
+action:help "I want to add a refund button to checkout"
 ```
 
-This enters **conversation mode** — Claude refines your idea with you (asking goal / scope / acceptance questions), persists every turn to `scv/.conversations/<timestamp>-<slug>.md` (gitignored, local), and offers to draft `PLAN.md + TESTS.md` when there's enough information. You can:
+This enters **conversation mode** — the host agent refines your idea with you (asking goal / scope / acceptance questions), persists every turn to `scv/.conversations/<timestamp>-<slug>.md` (gitignored, local), and offers to draft `PLAN.md + TESTS.md` when there's enough information. You can:
 
-- **Quit anytime** — the conversation file is saved turn-by-turn. Run `/scv:help "<continue idea>"` later to resume.
+- **Quit anytime** — the conversation file is saved turn-by-turn. Run `action:help "<continue idea>"` later to resume.
 - **Promote without `scv/raw/`** — choice [1] in the conversation's "ready?" prompt creates the plan directly. Conversation stays in `.conversations/` (gitignored).
 - **Promote with team traceability** — choice [2] also copies the conversation to `scv/raw/<YYYYMMDD>-<author>-<slug>.md` (committable). Pick this when teammates value the raw-thinking history.
 
-If you already have files in `scv/raw/`, the classic flow (§1.5 below) still works — `/scv:help "..."` is the *additional* entry, not a replacement.
+If you already have files in `scv/raw/`, the classic flow (§1.5 below) still works — `action:help "..."` is the *additional* entry, not a replacement.
 
 ---
 
@@ -54,10 +54,10 @@ If you already have files in `scv/raw/`, the classic flow (§1.5 below) still wo
 If hydrated with `hydrate.sh init .` (default), you're in this mode. Standard docs (DOMAIN, ARCHITECTURE, etc.) seed at `status: N/A` and **INTAKE is not forced**. The promote loop still works:
 
 1. For the **subsystem unit** you'll work on, drop material (meeting notes, specs, external specs) into `scv/raw/`.
-2. `/scv:promote` → creates `scv/promote/<YYYYMMDD>-<author>-<slug>/`.
+2. `action:promote` → creates `scv/promote/<YYYYMMDD>-<author>-<slug>/`.
 3. State the **scope** of this plan in PLAN.md's `Summary` / `Goals` (e.g., "Payment v2 subsystem only. Logistics / promotions are out of scope").
 4. Existing Confluence specs or Jira tickets connect via `refs:` — **no need to rewrite the body**.
-5. `/scv:work <slug>` to implement → test → archive.
+5. `action:work <slug>` to implement → test → archive.
 
 If you decide to formally document a specific subsystem, lift just that section in `scv/DOMAIN.md` (etc.) by tightening the scope: `N/A → draft → active`. You don't need to fill everything at once.
 
@@ -107,7 +107,7 @@ Locking the threshold per team in `.env` removes the per-PR negotiation ("is thi
 Fast-path skips **PLAN/TESTS authoring**, NOT verification. These safety nets stay in place:
 
 1. **GitHub PR review** — Normal code review process. SCV doesn't bypass the PR itself.
-2. **`/scv:regression` archived TESTS** — Auto-runs nightly or at the next archive. If fast-path breaks an archived feature, it shows up here → triage flow (regression / obsolete / flaky).
+2. **`action:regression` archived TESTS** — Auto-runs nightly or at the next archive. If fast-path breaks an archived feature, it shows up here → triage flow (regression / obsolete / flaky).
 3. **Project's general CI test suite** — pytest / jest / etc. run as usual. If gated on PR merge, that gate still applies.
 4. **Git blame / `git log -p`** — Fast-path PRs land in git history, traceable 6 months later when asking "why was this line added?".
 
@@ -134,7 +134,7 @@ The default principle of this guide is **"when in doubt, formal promote loop"**.
 - `20260421-kmlee-payment-api-v2/`
 - `20260422-team-infra-migration/`
 
-**Why include author by default**: avoids slug collisions across team members. `/scv:promote` automatically prefixes date + author when proposing a slug.
+**Why include author by default**: avoids slug collisions across team members. `action:promote` automatically prefixes date + author when proposing a slug.
 
 ---
 
@@ -163,7 +163,7 @@ Every promotion folder must contain **PLAN.md and TESTS.md**. Add any others as 
 | 2 ~ 5 days | Above + one of `ARCH.md` or `REQUIREMENTS.md` |
 | Multi-week | Free further split as needed (ARCH, REQUIREMENTS, API, MIGRATION, assets/, etc.) |
 
-Start small → when PLAN.md's Approach Overview exceeds 50 lines, `/scv:work` will auto-suggest "split into ARCH.md?".
+Start small → when PLAN.md's Approach Overview exceeds 50 lines, `action:work` will auto-suggest "split into ARCH.md?".
 
 ---
 
@@ -196,12 +196,12 @@ supersedes:
   - 20260115-sspark-user-auth-v1      # Replaces all of v1 → v1's TESTS skipped permanently in regression
 supersedes_scenarios:
   - 20251201-kmlee-legacy-login:T3    # Only T3 of legacy-login is retired; other T's still run
-# Optional — file-path globs this plan is allowed to touch (used by /scv:codegen as a guard).
-# If omitted, the natural scope from PLAN.md Steps applies (current /scv:work behavior).
+# Optional — file-path globs this plan is allowed to touch (used by action:codegen as a guard).
+# If omitted, the natural scope from PLAN.md Steps applies (current action:work behavior).
 scope:
   - "src/auth/**"
   - "tests/auth/**"
-# Optional — existing behaviors this plan must NOT break (used by /scv:codegen as a self-check).
+# Optional — existing behaviors this plan must NOT break (used by action:codegen as a self-check).
 # Capture only the invariants that are easy to violate during a focused change (T5 logic-skip).
 invariants:
   - "기존 비밀번호 정책 (8자 이상, 특수문자 1개) 유지"
@@ -262,13 +262,13 @@ invariants:
 | `tags` | ✓ | Keyword array (search/filter) |
 | `raw_sources` | — | Array of related raw file paths (for traceability) |
 | `refs` | — | Array of external references (Jira / Linear / Confluence / PR, etc.). See spec below |
-| `supersedes` | — | Array of **past slugs** this plan retires (supersedes). `/scv:regression` permanently skips those archived TESTS. See §8b |
+| `supersedes` | — | Array of **past slugs** this plan retires (supersedes). `action:regression` permanently skips those archived TESTS. See §8b |
 | `supersedes_scenarios` | — | **Scenario-level** retirement. Array of `<slug>:T<n>` strings, e.g., `["20260115-sspark-auth-v1:T2"]` |
-| `epic` | — | When splitting a large user request into multiple features, group them under the same epic slug (count is content-driven — Claude proposes + user adjusts). `/scv:status` shows epic progress; `/scv:work`'s PR auto-creation uses the epic branch as base. See §8d |
-| `kind` | — | `feature` (default) / `refactor` (epic-closing integration cleanup) / `retirement` (pure removal — §8c). Used by Claude for epic flow / refactor guidance |
-| `lang` | — | (v0.7.3+) The resolved language for this promote's content + diagrams + commit/PR text. Set by `/scv:promote` Step 0 — auto-resolved from `settings.json language` and `.env SCV_LANG`, or via `AskUserQuestion` when those mismatch. Read by `/scv:work` Step 9d and `pr-helper.sh` for full localization (PR title, body labels like `## Summary` / `## 요약` / `## 概要`, footer `🗂 Archived` / `🗂 보관됨` / `🗂 アーカイブ済み`). Values: `english` / `korean` / `japanese` / free-form. Empty / unknown → English fallback. |
-| `scope` | — | (v0.11.0+) Optional file-path glob array this plan is allowed to touch. Used by `/scv:codegen` Step 7 as a guard — Edit/Write outside these globs emits a warning (does not block). If omitted, the natural scope from PLAN.md Steps applies (current `/scv:work` behavior, unchanged). Example: `["src/auth/**", "tests/auth/**"]`. |
-| `invariants` | — | (v0.11.0+) Optional string array of *existing behaviors this plan must NOT break*. Used by `/scv:codegen` Step 7 as a per-iteration self-check (LLM re-reads each item after every Green iteration; AskUserQuestion if unsure). Targets T5 logic-skip — the cheat pattern where a focused change silently omits an unrelated invariant. Capture only what's easy to violate; not a general regression list. Example: `["기존 결제 한도 체크 유지", "음수 환불 금지"]`. `/scv:work` does not enforce this field. |
+| `epic` | — | When splitting a large user request into multiple features, group them under the same epic slug (count is content-driven — the host agent proposes + user adjusts). `action:status` shows epic progress; `action:work`'s PR auto-creation uses the epic branch as base. See §8d |
+| `kind` | — | `feature` (default) / `refactor` (epic-closing integration cleanup) / `retirement` (pure removal — §8c). Used by the host agent for epic flow / refactor guidance |
+| `lang` | — | (v0.7.3+) The resolved language for this promote's content + diagrams + commit/PR text. Set by `action:promote` Step 0 — auto-resolved from `settings.json language` and `.env SCV_LANG`, or via user confirmation when those mismatch. Read by `action:work` Step 9d and `pr-helper.sh` for full localization (PR title, body labels like `## Summary` / `## 요약` / `## 概要`, footer `🗂 Archived` / `🗂 보관됨` / `🗂 アーカイブ済み`). Values: `english` / `korean` / `japanese` / free-form. Empty / unknown → English fallback. |
+| `scope` | — | (v0.11.0+) Optional file-path glob array this plan is allowed to touch. Used by `action:codegen` Step 7 as a guard — Edit/Write outside these globs emits a warning (does not block). If omitted, the natural scope from PLAN.md Steps applies (current `action:work` behavior, unchanged). Example: `["src/auth/**", "tests/auth/**"]`. |
+| `invariants` | — | (v0.11.0+) Optional string array of *existing behaviors this plan must NOT break*. Used by `action:codegen` Step 7 as a per-iteration self-check (LLM re-reads each item after every Green iteration; user confirmation if unsure). Targets T5 logic-skip — the cheat pattern where a focused change silently omits an unrelated invariant. Capture only what's easy to violate; not a general regression list. Example: `["기존 결제 한도 체크 유지", "음수 환불 금지"]`. `action:work` does not enforce this field. |
 
 ### `refs:` spec — vendor-neutral external references
 
@@ -303,7 +303,7 @@ LINEAR_BASE_URL=https://linear.app/company
 CONFLUENCE_BASE_URL=https://confluence.example.com
 ```
 
-`/scv:work` output groups by `type` for human readability:
+`action:work` output groups by `type` for human readability:
 
 ```
 [jira] 2 tickets
@@ -319,16 +319,16 @@ CONFLUENCE_BASE_URL=https://confluence.example.com
 
 ## 4.5. `scv/archive/INDEX.yaml` — frontmatter-only index (v0.11.0+, auto-managed)
 
-`/scv:work --archive` regenerates `scv/archive/INDEX.yaml` on every archive — a flat YAML index of every archived plan's frontmatter scalars (`slug`, `title`, `kind`, `status`, `epic`, `obsoleted_by`). PLAN.md bodies are not read for this file.
+`action:work --archive` regenerates `scv/archive/INDEX.yaml` on every archive — a flat YAML index of every archived plan's frontmatter scalars (`slug`, `title`, `kind`, `status`, `epic`, `obsoleted_by`). PLAN.md bodies are not read for this file.
 
 **Purpose**: fast routing without scanning every archived PLAN.md.
-- `/scv:regression` can consult INDEX for the supersede skip graph (`status: obsolete` entries) before opening any PLAN body.
-- `/scv:help` archive search (Mode B') can do a first-pass filter on `tags` / `kind` / `title` via INDEX, opening PLAN bodies only for matches.
+- `action:regression` can consult INDEX for the supersede skip graph (`status: obsolete` entries) before opening any PLAN body.
+- `action:help` archive search (Mode B') can do a first-pass filter on `tags` / `kind` / `title` via INDEX, opening PLAN bodies only for matches.
 
 **Rules**:
-- Auto-managed — never edit manually. `/scv:work --archive` overwrites it.
+- Auto-managed — never edit manually. `action:work --archive` overwrites it.
 - Committable — INDEX moves with the archive folders.
-- May lag by *one archive cycle* if a frontmatter field is edited outside `/scv:work` (e.g., obsolete propagation Step 9c). Re-running any `/scv:work --archive` (or a future `--regen-index` flag) refreshes it.
+- May lag by *one archive cycle* if a frontmatter field is edited outside `action:work` (e.g., obsolete propagation Step 9c). Re-running any `action:work --archive` (or a future `--regen-index` flag) refreshes it.
 
 Schema (example):
 
@@ -391,7 +391,7 @@ npm run test:auth
 
 When a plan ships or changes **user-facing behavior** (Playwright project), give it
 its **own** E2E spec and scope `## How to run` to that spec only — that spec is what
-`/scv:work` / `/scv:codegen` record into the PR video:
+`action:work` / `action:codegen` record into the PR video:
 
 ```bash
 pnpm exec playwright test e2e/<YYYYMMDD>-<AUTHOR>-<slug>.spec.ts   # this plan's spec ONLY (use your testDir)
@@ -400,21 +400,21 @@ pnpm exec playwright test e2e/<YYYYMMDD>-<AUTHOR>-<slug>.spec.ts   # this plan's
 - The PR video then shows **that feature**, not a shared smoke or the whole suite.
   Feature videos on green PRs require `video: 'on'` (the template default — see §3.3
   in `scv/TESTING.md`; `retain-on-failure` would leave a passing feature PR videoless).
-- `/scv:regression` re-runs each *archived* slug's `## How to run`, so the feature is
+- `action:regression` re-runs each *archived* slug's `## How to run`, so the feature is
   re-verified exactly as in its PR; the accumulated per-slug specs are the full suite.
 - Keep the block to the **spec only** — don't bundle project-wide `tsc -b` / lint: a
   multi-line block gates on the last command's exit only, and a global typecheck in
   every slug fails all slugs at once on one unrelated error.
 - Pure-logic plans keep a unit `## How to run` and no e2e spec (test pyramid).
   Non-Playwright (Cypress/…) projects: SCV auto-attach is Playwright-only.
-- `/scv:promote` offers to scaffold this for UI plans (spec stub + scoped `## How to
+- `action:promote` offers to scaffold this for UI plans (spec stub + scoped `## How to
   run`, with your approval; it writes into your test tree, e.g. `e2e/`). If you later
   remove a feature's spec, supersede/obsolete its slug so the archived command doesn't dangle.
 
 ### TESTS.md minimum requirements (for pass judgment)
 
 **The floor is the user's features.** Every feature / behavior the user described — in
-the `/scv:help` conversation or the `/scv:promote` dialog — must appear as a concrete,
+the `action:help` conversation or the `action:promote` dialog — must appear as a concrete,
 **detailed** `## Test scenarios` entry. That set is the **minimum requirement**, and it
 equals what the PR ships: never drop, merge away, or vaguen a user-stated feature to
 make authoring easier. You MAY *add* supplementary tests on top (e.g. unit tests for
@@ -427,15 +427,15 @@ assert these same user-facing features, so the PR video shows what the user aske
 - [ ] **Pass criterion** for each scenario is stated as an observable form
 - [ ] **Pass criteria** block contains the "overall done declaration condition"
 
-If any of those is ambiguous, `/scv:work` will ask the user before starting implementation.
+If any of those is ambiguous, `action:work` will ask the user before starting implementation.
 
 ### Auto video evidence attachment (v0.3+)
 
-If Playwright (`video: 'on'`) or an equivalent tool produces .webm/.mp4 under `test-results/`, `/scv:work` Step 9d's PR creation **auto-embeds** them inline into the PR body. Videos are pushed to a separate `scv-attachments` orphan branch (so the working branch's git history stays clean), and auto-deleted N days after PR merge. See `TESTING.md §3.3` for details.
+If Playwright (`video: 'on'`) or an equivalent tool produces .webm/.mp4 under `test-results/`, `action:work` Step 9d's PR creation **auto-embeds** them inline into the PR body. Videos are pushed to a separate `scv-attachments` orphan branch (so the working branch's git history stays clean), and auto-deleted N days after PR merge. See `TESTING.md §3.3` for details.
 
 ### Authoring guide for regression re-runs
 
-TESTS.md is used both for `/scv:work` initial verification AND, **after archive, by `/scv:regression` for accumulated regression**. Two authoring patterns:
+TESTS.md is used both for `action:work` initial verification AND, **after archive, by `action:regression` for accumulated regression**. Two authoring patterns:
 
 1. **Single command** (default) — One `## How to run` block runs all scenarios.
    ```bash
@@ -449,26 +449,26 @@ TESTS.md is used both for `/scv:work` initial verification AND, **after archive,
      npm run test:auth -- --grep "$T_FILTER"
    fi
    ```
-   With this pattern, a follow-up plan can `supersedes_scenarios: ["<slug>:T2"]` to skip just T2 while keeping the rest in regression. Without dispatch, `/scv:regression` can't support scenario-level skip and falls back (with a warning) to skipping the whole slug.
+   With this pattern, a follow-up plan can `supersedes_scenarios: ["<slug>:T2"]` to skip just T2 while keeping the rest in regression. Without dispatch, `action:regression` can't support scenario-level skip and falls back (with a warning) to skipping the whole slug.
 
 ---
 
 ## 5b. FEATURE_ARCHITECTURE.md (optional, prompted on every promote)
 
-After PLAN.md / TESTS.md, `/scv:promote` asks **per folder** whether to also write `FEATURE_ARCHITECTURE.md` — two Mermaid diagrams that describe the feature's design before implementation.
+After PLAN.md / TESTS.md, `action:promote` asks **per folder** whether to also write `FEATURE_ARCHITECTURE.md` — two Mermaid diagrams that describe the feature's design before implementation.
 
 **Why two diagrams (minimum):**
 
 | Diagram | Purpose |
 |---|---|
-| 1. Component data flow | How this feature's components combine, what data / parameters flow between them. Helps the implementer (you or a teammate or `/scv:work`) understand the design before touching code. |
+| 1. Component data flow | How this feature's components combine, what data / parameters flow between them. Helps the implementer (you or a teammate or `action:work`) understand the design before touching code. |
 | 2. Position in whole architecture | Where this feature sits in the system at a coarse grain. Helps stakeholders see the change scope at a glance and reduces "what is this connected to?" review questions. |
 
 The document may include more diagrams (sequence, state, deployment) when the feature genuinely needs them. Two is the floor, not the ceiling.
 
 **Why this is optional:**
 
-Trivial changes (typo fix, single-line null guard, patch dep bump) get no value from a diagram. The default `/scv:promote` flow asks every time so the user picks per folder. Pick "skip" once for trivial work, "yes" once for non-trivial work — there is no flag to remember.
+Trivial changes (typo fix, single-line null guard, patch dep bump) get no value from a diagram. The default `action:promote` flow asks every time so the user picks per folder. Pick "skip" once for trivial work, "yes" once for non-trivial work — there is no flag to remember.
 
 **Diagram 2's data source:**
 
@@ -481,7 +481,7 @@ scv/ARCHITECTURE.md status?
       └─ skill missing → ask user (skip? other?)
 ```
 
-`/scv:promote` decides this branching automatically. The user only sees the resulting `AskUserQuestion` when there is a real decision to make (graphify run-or-skip when ARCHITECTURE.md is `N/A`).
+`action:promote` decides this branching automatically. The user only sees the resulting user confirmation when there is a real decision to make (graphify run-or-skip when ARCHITECTURE.md is `N/A`).
 
 **File location and frontmatter:**
 
@@ -507,7 +507,7 @@ lang: <english | korean | japanese | other>   # (v0.7.3+) inherited from PLAN.md
 ```markdown
 # Architecture — <title>
 
-> Two-diagram view of this feature. Review and edit before `/scv:work`.
+> Two-diagram view of this feature. Review and edit before `action:work`.
 
 ## 1. Component data flow
 
@@ -534,8 +534,8 @@ flowchart TB
 - New components introduced by this feature are highlighted with the `new` class (yellow fill, orange stroke).
 - The "Source:" line in section 2 is mandatory when section 2 is present — it makes the diagram's accuracy basis auditable.
 - If diagram 2 is skipped (graphify missing AND ARCHITECTURE.md `N/A`), section 2 is replaced by a one-line note pointing at how to enable it (lift ARCHITECTURE.md or run `/graphify`).
-- LLM-generated Mermaid may have syntax errors or wrong labels. Treat the file like PLAN.md / TESTS.md — review and edit before `/scv:work`.
-- The file is **not enforced** by `/scv:work` or `/scv:regression`. Its value is human comprehension, not gating.
+- LLM-generated Mermaid may have syntax errors or wrong labels. Treat the file like PLAN.md / TESTS.md — review and edit before `action:work`.
+- The file is **not enforced** by `action:work` or `action:regression`. Its value is human comprehension, not gating.
 
 ---
 
@@ -543,10 +543,10 @@ flowchart TB
 
 - Both PLAN.md and TESTS.md must include a `## Related Documents` section, **even if empty**.
 - Links are **relative paths** (within the same folder): `[ARCH.md](./ARCH.md) — one-line description`.
-- `/scv:work` does NOT load files outside this section by default (token guard).
+- `action:work` does NOT load files outside this section by default (token guard).
 - The user's explicit instruction (e.g., "also read ARCH.md when implementing") triggers extra loading.
 
-### When to split (Claude's judgment criteria)
+### When to split (the host agent's judgment criteria)
 
 | Signal | Suggestion |
 |---|---|
@@ -556,23 +556,23 @@ flowchart TB
 | Migration steps > 5 | → `MIGRATION.md` |
 | Test scenarios > 15 | → split under `tests/` |
 
-If the user explicitly says **"split it"**, ignore the criteria and split. If **"don't split"**, Claude stops proposing splits.
+If the user explicitly says **"split it"**, ignore the criteria and split. If **"don't split"**, the host agent stops proposing splits.
 
 ---
 
-## 7. Responsibility split between `/scv:promote` and `/scv:work`
+## 7. Responsibility split between `action:promote` and `action:work`
 
 | Step | Command | Responsibility |
 |---|---|---|
-| 1. Refine raw | `/scv:promote` | Confirm slug/title via dialogue → create folder + PLAN + TESTS scaffold → update `scv/readpath.json` |
-| 2. Implement / verify | `/scv:work <slug>` | Read PLAN + TESTS, implement, run TESTS, report result, ask about archive |
-| 3. Archive | `/scv:work` or manual | On tests pass + user approval: move `promote/<slug>/` → `archive/<slug>/` + create `ARCHIVED_AT.md` |
+| 1. Refine raw | `action:promote` | Confirm slug/title via dialogue → create folder + PLAN + TESTS scaffold → update `scv/readpath.json` |
+| 2. Implement / verify | `action:work <slug>` | Read PLAN + TESTS, implement, run TESTS, report result, ask about archive |
+| 3. Archive | `action:work` or manual | On tests pass + user approval: move `promote/<slug>/` → `archive/<slug>/` + create `ARCHIVED_AT.md` |
 
 ---
 
 ## 8. Archive convention
 
-Completed plans must move to `scv/archive/` (**token efficiency** — `/scv:work` reads only active plans).
+Completed plans must move to `scv/archive/` (**token efficiency** — `action:work` reads only active plans).
 
 ```
 scv/archive/
@@ -601,7 +601,7 @@ This plan was archived on 2026-04-25.
 - All TESTS scenarios passed
 ```
 
-`reason` can be passed via `/scv:work <slug> --archive --reason="..."` argument; if omitted, defaults to `tests passed`. The body's reason block is also filled with the `--reason` value (default "All TESTS scenarios passed").
+`reason` can be passed via `action:work <slug> --archive --reason="..."` argument; if omitted, defaults to `tests passed`. The body's reason block is also filled with the `--reason` value (default "All TESTS scenarios passed").
 
 ### Archive move decision
 
@@ -609,7 +609,7 @@ This plan was archived on 2026-04-25.
 |---|---|
 | Tests passed + user explicit ("archive it") | Auto mv |
 | Tests passed + user pre-declared allow ("auto-archive when tests pass") | Auto mv + report |
-| Tests passed + no user direction | Claude asks "archive now?" and waits for answer |
+| Tests passed + no user direction | the host agent asks "archive now?" and waits for answer |
 | Tests failed | Archive forbidden, return to fix loop |
 
 ---
@@ -621,14 +621,14 @@ An archived plan's TESTS.md **must never be modified**. Instead, declare "this f
 | Path | Mechanism | When to use |
 |---|---|---|
 | **Pre-declaration** | New PLAN.md frontmatter has `supersedes: [<old-slug>, ...]` or `supersedes_scenarios: ["<slug>:T<n>", ...]` | When you know what you're replacing at authoring time |
-| **Auto-propagation** | When A is archived via `/scv:work`, Claude fires `AskUserQuestion` (default Yes) "mark B as obsolete?" — on approval, modifies B's PLAN.md frontmatter only | Default path triggered when supersedes is declared |
-| **Runtime triage** | On `/scv:regression` failure, fire 3-way `AskUserQuestion`: regression (fix code) / obsolete (mark now) / flaky (retry) | When supersede declaration was missed, or when env changes force deprecation |
+| **Auto-propagation** | When A is archived via `action:work`, the host agent fires user confirmation (default Yes) "mark B as obsolete?" — on approval, modifies B's PLAN.md frontmatter only | Default path triggered when supersedes is declared |
+| **Runtime triage** | On `action:regression` failure, fire 3-way user confirmation: regression (fix code) / obsolete (mark now) / flaky (retry) | When supersede declaration was missed, or when env changes force deprecation |
 
 ### What `obsolete` means — terminology
 
 - **Meaning**: "The feature this plan represents is no longer in operation. Permanently excluded from the regression suite." It was either replaced by another plan (A) (`obsoleted_by: <A-slug>`) or removed without a successor (`obsoleted_by: manual`).
 - **Difference from `done`**: `done` = "implementation finished, **live** feature"; `obsolete` = "once existed, but no longer does".
-- **Effect on `/scv:regression`**: Slugs with `status: obsolete` are excluded from execution by default (include with `--include-obsolete` for audit purposes).
+- **Effect on `action:regression`**: Slugs with `status: obsolete` are excluded from execution by default (include with `--include-obsolete` for audit purposes).
 - **Why files remain in archive**: historical record + audit trail. Even after marking obsolete, the folder, TESTS.md, and ARCHIVED_AT.md stay verbatim.
 
 ### Marking spec (common to all 3 paths)
@@ -644,7 +644,7 @@ obsoleted_by: 20260425-sspark-user-auth-v2   # Auto-prop: replacer slug. Runtime
 ---
 ```
 
-TESTS.md / ARCHIVED_AT.md / other files are **never modified** (immutable archive principle). `/scv:regression` reads these 3 fields at runtime to skip the slug.
+TESTS.md / ARCHIVED_AT.md / other files are **never modified** (immutable archive principle). `action:regression` reads these 3 fields at runtime to skip the slug.
 
 ---
 
@@ -688,15 +688,15 @@ curl -sf -o /dev/null -w "%{http_code}" "$API/api/v1/pay/charge" | grep -q 410
 - All /api/v1/pay/* calls return 410 Gone
 ```
 
-When `/scv:work` archives this retirement plan, Step 9c will guide marking `payment-v1` as obsolete. No new command needed.
+When `action:work` archives this retirement plan, Step 9c will guide marking `payment-v1` as obsolete. No new command needed.
 
 ---
 
 ## 8d. Epic branch strategy (when a large request is split into multiple features)
 
-Receiving a user's large request in a single promote folder produces **chaos and abrupt change**. SCV analyzes raw material in the `/scv:promote` step and proposes a split when "this is sized for multiple features" (auto-split forbidden — always confirm with user).
+Receiving a user's large request in a single promote folder produces **chaos and abrupt change**. SCV analyzes raw material in the `action:promote` step and proposes a split when "this is sized for multiple features" (auto-split forbidden — always confirm with user).
 
-**Split count is not fixed.** Claude proposes an appropriate count (e.g., 2, 4, 8) and candidate slugs based on the actual content / topic diversity of the raw, and the user does the final adjustment. The §8e example below is split into 7, but **that's just one example, not a recommended standard**.
+**Split count is not fixed.** the host agent proposes an appropriate count (e.g., 2, 4, 8) and candidate slugs based on the actual content / topic diversity of the raw, and the user does the final adjustment. The §8e example below is split into 7, but **that's just one example, not a recommended standard**.
 
 Split features are grouped under the same **`epic: <epic-slug>`** frontmatter.
 
@@ -705,10 +705,10 @@ Split features are grouped under the same **`epic: <epic-slug>`** frontmatter.
 ```
 Large request (raw input)
    │
-   ▼  /scv:promote proposes split → user approves
+   ▼  action:promote proposes split → user approves
 Multiple promote folders (count matches raw content), all sharing the same epic
    │
-   ▼  /scv:work <slug> for each
+   ▼  action:work <slug> for each
 feature 1 → archive → PR (base = epic/<epic-slug>)
 feature 2 → archive → PR (base = epic/<epic-slug>)
 ...
@@ -717,7 +717,7 @@ feature N → archive → PR (base = epic/<epic-slug>)
    ▼  (When all features in epic are archived, SCV auto-prompts)
 "All features of epic <slug> done. Create the integration refactor PLAN?"
    │
-   ▼  Refactor PLAN scaffold (kind: refactor) → /scv:work
+   ▼  Refactor PLAN scaffold (kind: refactor) → action:work
    │
    ▼  archive → PR (base = epic/<epic-slug>)
    │
@@ -731,7 +731,7 @@ feature N → archive → PR (base = epic/<epic-slug>)
 - The **last item of the epic is always a refactor PLAN** (`kind: refactor`). It's the cleanup / dedup / naming-unification phase after integrating all units. Only when this is archived is the epic considered complete.
 - The refactor PLAN's TESTS usually consists of "existing regression still green" + "any new integration scenarios (if any)".
 
-### `/scv:status` epic progress
+### `action:status` epic progress
 
 ```
 [epics]
@@ -741,7 +741,7 @@ feature N → archive → PR (base = epic/<epic-slug>)
 
 ### When the user manually epic-groups
 
-Even if `/scv:promote` didn't propose a split, the user can explicitly say "these promotes share an epic" — then add `epic: <slug>` to each PLAN.md frontmatter directly. From then on, SCV recognizes them as an epic.
+Even if `action:promote` didn't propose a split, the user can explicitly say "these promotes share an epic" — then add `epic: <slug>` to each PLAN.md frontmatter directly. From then on, SCV recognizes them as an epic.
 
 ---
 
@@ -776,7 +776,7 @@ these items surfaced.
 2. Naming consistency (`charge_id` vs `paymentId` unified)
 3. Extract a shared error-code enum
 4. Fix one race condition discovered during integration
-5. Integration regression run (`/scv:regression --include-promote`)
+5. Integration regression run (`action:regression --include-promote`)
 
 ## Related Documents
 
@@ -788,7 +788,7 @@ these items surfaced.
 ```markdown
 ## How to run
 \`\`\`bash
-bash $CLAUDE_PLUGIN_ROOT/scripts/regression.sh --tag payment
+bash "$SCV_CORE_ROOT/scripts/regression.sh" --tag payment
 npm run test:integration -- payment
 \`\`\`
 ```
@@ -806,7 +806,7 @@ planned → in_progress → testing → done → obsolete
            (revert on test failure)
 ```
 
-- `/scv:work` start → `planned` → `in_progress`.
+- `action:work` start → `planned` → `in_progress`.
 - Right before completing implementation → `testing`.
 - All TESTS pass + archive move → `done` (note: PLAN.md is now in archive).
 - `done → obsolete` transition: 3 paths in §8b (auto-propagation / pre-declaration + auto / runtime triage). NOT transitioned from `in_progress` / `testing` (incomplete plans don't have an archive).
