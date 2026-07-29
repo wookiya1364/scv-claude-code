@@ -70,8 +70,9 @@ jobs:
         if: steps.pin.outputs.changed == 'yes'
         run: |
           bash tests/test-core-contract.sh
-          bash tests/test-sync-core-atomicity.sh
+          bash .github/scripts/test-ci-fast-lanes.sh
           bash tests/test-apply-model-policy.sh
+          bash tests/test-state-adapter.sh
           bash tests/test-help-workspace.sh
           bash tests/test-workspace.sh
           bash tests/run-dry.sh
@@ -133,8 +134,12 @@ jobs:
           Validation completed before this PR was created:
           - core artifact checksum and lock
           - Core API and Claude adapter contract
+          - cross-host state adapter smoke tests
           - Claude model-policy tests
           - shared dry-run regression
+
+          The PR contract workflow runs the full Ubuntu atomicity suite only
+          when updater/atomic-swap files changed.
 
           This PR was opened by the scheduled/manual core sync workflow." 2>&1); then
             printf '%s\n' "$output" >&2
