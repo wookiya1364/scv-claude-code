@@ -7,6 +7,8 @@ HYDRATE="$REPO_ROOT/scripts/hydrate.sh"
 HELP="$REPO_ROOT/scripts/help.sh"
 SYNC="$REPO_ROOT/scripts/sync.sh"
 STATE_INDEX="$REPO_ROOT/adapter/scripts/state-index.sh"
+CORE_ROOT="$REPO_ROOT/vendor/scv-core/core"
+CORE_STATE_INDEX="$CORE_ROOT/scripts/state-index.sh"
 MERGE_LIB="$REPO_ROOT/scripts/lib/merge.sh"
 READPATH="$REPO_ROOT/scripts/readpath.sh"
 TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/scv-state-adapter.XXXXXX")
@@ -21,6 +23,21 @@ pass() {
   pass_count=$((pass_count + 1))
   echo "PASS: $*"
 }
+
+CODEX_PROFILE="$TMP_DIR/codex.env"
+cat > "$CODEX_PROFILE" <<'EOF'
+SCV_HOST_PROFILE_API=1
+SCV_HOST_ID=codex
+SCV_HOST_LABEL=OpenAI Codex
+SCV_ACTION_TEMPLATE=$scv:{action}
+SCV_ARGUMENT_STYLE=argv-array
+SCV_STATE_INDEX=SCV.md
+SCV_LEGACY_STATE_INDEXES=CLAUDE.md|CODEX.md
+SCV_ROOT_ENV=SCV_CORE_ROOT
+SCV_GRAPH_SKILL_PATHS=
+SCV_UPDATE_OWNER=adapter
+SCV_MODEL_POLICY_OWNER=adapter
+EOF
 
 # The model-facing adapter must pass parsed text to the helper as one quoted
 # argv element. Shell metacharacters, whitespace, and quotes stay inert.
@@ -126,13 +143,15 @@ sync_output=$("$SYNC" --project-dir "$PROJECT")
   fail "explicit sync did not create canonical SCV.md"
 grep -q 'KEEP-CROSS-HOST-LOCAL-RULE' "$PROJECT/scv/SCV.md" ||
   fail "PROJECT:LOCAL was not preserved in canonical SCV.md"
-grep -q '<!-- SCV:HOST-POINTER target=SCV.md -->' "$PROJECT/scv/CODEX.md" ||
+grep -qxF '<!-- SCV:HOST-POINTER target=SCV.md -->' \
+  "$PROJECT/scv/CODEX.md" ||
   fail "legacy CODEX.md was not converted to a verified pointer"
 [[ ! -e "$PROJECT/scv/CLAUDE.md" ]] ||
   fail "migration created the absent Claude pointer"
 [[ "$sync_output" == *"LEGACY_STATE_BACKUP:"* ]] ||
   fail "explicit sync did not report the legacy backup"
-find "$PROJECT/.scv-backup" -path '*/shared-core-migration/CODEX.md' -type f | grep -q . ||
+find "$PROJECT/.scv-backup" \
+  -path '*/shared-core-migration-*/CODEX.md' -type f | grep -q . ||
   fail "legacy CODEX.md backup is absent"
 grep -q '^status: N/A' "$PROJECT/scv/DOMAIN.md" ||
   fail "explicit migration changed adoption-mode N/A status"
@@ -150,25 +169,76 @@ mv \
 "$SYNC" --project-dir "$CLAUDE_LEGACY_PROJECT" >/dev/null
 [[ -f "$CLAUDE_LEGACY_PROJECT/scv/SCV.md" ]] ||
   fail "Claude legacy migration did not create canonical SCV.md"
-grep -qx '<!-- SCV:HOST-POINTER target=SCV.md -->' \
+grep -qxF '<!-- SCV:HOST-POINTER target=SCV.md -->' \
   "$CLAUDE_LEGACY_PROJECT/scv/CLAUDE.md" ||
   fail "existing Claude legacy index was not pointerized"
 [[ ! -e "$CLAUDE_LEGACY_PROJECT/scv/CODEX.md" ]] ||
   fail "Claude legacy migration created an absent Codex pointer"
 find "$CLAUDE_LEGACY_PROJECT/.scv-backup" \
-  -path '*/shared-core-migration/CLAUDE.md' -type f | grep -q . ||
+  -path '*/shared-core-migration-*/CLAUDE.md' -type f | grep -q . ||
   fail "legacy CLAUDE.md backup is absent"
-pass "migration pointerizes only the existing Claude legacy file"
+
+# The pointer produced through the Claude wrapper must be understood by a
+# Codex-profile consumer without relying on Claude-specific prose.
+cross_host_before=$(tree_digest "$CLAUDE_LEGACY_PROJECT")
+cross_host_output=$(
+  SCV_HOST_PROFILE="$CODEX_PROFILE" \
+    "$CORE_STATE_INDEX" --project-dir "$CLAUDE_LEGACY_PROJECT"
+)
+[[ "$cross_host_output" == *"STATE_INDEX: canonical"* &&
+   "$cross_host_output" == *"HYDRATED: yes"* ]] ||
+  fail "Codex-profile Core did not accept the Claude-generated pointer"
+[[ "$(tree_digest "$CLAUDE_LEGACY_PROJECT")" == "$cross_host_before" ]] ||
+  fail "Codex-profile inspection changed the Claude-migrated project"
+pass "Claude migration writes a Codex-compatible exact pointer marker"
+
+# A Codex-style header is intentionally different. Claude must classify the
+# file solely by the universal exact marker and keep canonical state active.
+CODEX_POINTER_PROJECT="$TMP_DIR/codex-pointer"
+"$HYDRATE" init "$CODEX_POINTER_PROJECT" >/dev/null
+cat > "$CODEX_POINTER_PROJECT/scv/CODEX.md" <<'EOF'
+# OpenAI Codex compatibility entry
+
+<!-- SCV:HOST-POINTER target=SCV.md -->
+
+Read the canonical SCV.md state.
+EOF
+codex_pointer_before=$(tree_digest "$CODEX_POINTER_PROJECT")
+state_output=$("$STATE_INDEX" --project-dir "$CODEX_POINTER_PROJECT")
+[[ "$state_output" == *"STATE_INDEX: canonical"* &&
+   "$state_output" == *"HYDRATED: yes"* &&
+   "$state_output" != *"STATE_INDEX_CONFLICT"* ]] ||
+  fail "Claude did not recognize canonical state plus a Codex-style pointer"
+help_output=$(cd "$CODEX_POINTER_PROJECT" && "$HELP")
+[[ "$help_output" == *"hydrate complete (scv/SCV.md"* ]] ||
+  fail "Claude help did not accept the Codex-style pointer"
+[[ "$(tree_digest "$CODEX_POINTER_PROJECT")" == "$codex_pointer_before" ]] ||
+  fail "Claude inspection changed canonical state plus a Codex-style pointer"
+pass "Claude recognizes a Codex-style pointer by its exact marker"
 
 # A pointer without its canonical target must fail before core sync can mistake
 # the pointer prose for legacy workflow state.
 BROKEN_POINTER="$TMP_DIR/broken-pointer"
 mkdir -p "$BROKEN_POINTER/scv"
+printf '# intake exists but cannot make a broken pointer hydrated\n' \
+  > "$BROKEN_POINTER/scv/INTAKE.md"
 cat > "$BROKEN_POINTER/scv/CLAUDE.md" <<'EOF'
-# SCV host compatibility pointer
+# A host-specific header is not the pointer contract
 
 <!-- SCV:HOST-POINTER target=SCV.md -->
 EOF
+broken_before=$(tree_digest "$BROKEN_POINTER")
+set +e
+broken_state_output=$("$STATE_INDEX" --project-dir "$BROKEN_POINTER" 2>&1)
+broken_state_rc=$?
+set -e
+[[ "$broken_state_rc" -eq 4 ]] ||
+  fail "broken pointer inspection did not return exit 4 (got $broken_state_rc)"
+[[ "$broken_state_output" == *"STATE_INDEX_BROKEN_POINTER"* &&
+   "$broken_state_output" == *"HYDRATED: no"* ]] ||
+  fail "broken pointer inspection did not remain explicitly unhydrated"
+[[ "$(tree_digest "$BROKEN_POINTER")" == "$broken_before" ]] ||
+  fail "broken pointer inspection mutated the project"
 set +e
 broken_output=$("$SYNC" --project-dir "$BROKEN_POINTER" 2>&1)
 broken_rc=$?
@@ -188,6 +258,24 @@ cp -p "$CONFLICT/scv/SCV.md" "$CONFLICT/scv/CODEX.md"
 printf '\nconflicting legacy state\n' >> "$CONFLICT/scv/CODEX.md"
 conflict_before=$(tree_digest "$CONFLICT")
 set +e
+conflict_state_output=$("$STATE_INDEX" --project-dir "$CONFLICT" 2>&1)
+conflict_state_rc=$?
+set -e
+[[ "$conflict_state_rc" -eq 4 ]] ||
+  fail "state resolver conflict did not return exit 4 (got $conflict_state_rc)"
+[[ "$conflict_state_output" == *"STATE_INDEX_CONFLICT"* &&
+   "$conflict_state_output" == *"HYDRATED: yes"* ]] ||
+  fail "readable conflicting state was misclassified as not hydrated"
+[[ "$(tree_digest "$CONFLICT")" == "$conflict_before" ]] ||
+  fail "state conflict inspection mutated project files"
+conflict_help=$(cd "$CONFLICT" && "$HELP")
+[[ "$conflict_help" == *"STATE_INDEX_CONFLICT:"* &&
+   "$conflict_help" == *"hydrate complete (scv/SCV.md"* &&
+   "$conflict_help" == *"will not hydrate, sync, migrate"* ]] ||
+  fail "actual Claude help did not keep readable conflict hydrated and fail closed"
+[[ "$(tree_digest "$CONFLICT")" == "$conflict_before" ]] ||
+  fail "Claude help mutated conflicting project files"
+set +e
 conflict_output=$("$SYNC" --project-dir "$CONFLICT" 2>&1)
 conflict_rc=$?
 set -e
@@ -206,9 +294,15 @@ FAILURE_PLUGIN="$TMP_DIR/failure-plugin"
 mkdir -p \
   "$FAILURE_PLUGIN/scripts" \
   "$FAILURE_PLUGIN/adapter/scripts" \
-  "$FAILURE_PLUGIN/vendor/scv-core/core/scripts"
+  "$FAILURE_PLUGIN/vendor/scv-core/core/scripts/lib"
 cp -p "$SYNC" "$FAILURE_PLUGIN/scripts/sync.sh"
 cp -p "$STATE_INDEX" "$FAILURE_PLUGIN/adapter/scripts/state-index.sh"
+cp -p "$CORE_STATE_INDEX" \
+  "$FAILURE_PLUGIN/vendor/scv-core/core/scripts/state-index.sh"
+cp -p "$CORE_ROOT/scripts/lib/host-profile.sh" \
+  "$FAILURE_PLUGIN/vendor/scv-core/core/scripts/lib/host-profile.sh"
+cp -p "$CORE_ROOT/host-profile.env" \
+  "$FAILURE_PLUGIN/vendor/scv-core/core/host-profile.env"
 cat > "$FAILURE_PLUGIN/vendor/scv-core/core/scripts/sync.sh" <<'EOF'
 #!/usr/bin/env bash
 echo "INJECTED_CORE_FAILURE"

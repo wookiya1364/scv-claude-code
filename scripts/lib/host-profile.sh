@@ -82,7 +82,7 @@ scv_state_index_path() {
 
 scv_state_index_is_pointer() {
   local file="$1"
-  grep -q '<!-- SCV:HOST-POINTER target=SCV.md -->' "$file" 2>/dev/null
+  grep -qxF '<!-- SCV:HOST-POINTER target=SCV.md -->' "$file" 2>/dev/null
 }
 
 scv_state_index_broken_pointers() {
