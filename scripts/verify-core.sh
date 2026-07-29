@@ -230,6 +230,32 @@ if check_projection:
     if str(marketplace_version) != wrapper_version:
         raise SystemExit("ERROR: marketplace scv version differs from the plugin manifest")
 
+    state_adapter = wrapper_root / "adapter" / "scripts" / "state-index.sh"
+    if not state_adapter.is_file():
+        raise SystemExit("ERROR: Claude state-index delegation shim is absent")
+    state_adapter_text = state_adapter.read_text(encoding="utf-8")
+    required_delegation = (
+        'CORE_STATE_INDEX="$WRAPPER_ROOT/vendor/scv-core/core/scripts/state-index.sh"',
+        'exec "$CORE_STATE_INDEX" "$@"',
+    )
+    for expected_line in required_delegation:
+        if expected_line not in state_adapter_text.splitlines():
+            raise SystemExit(
+                "ERROR: Claude state-index adapter does not delegate argv "
+                "unchanged to the vendored Core resolver"
+            )
+    for duplicate_resolver_token in (
+        "SCV:HOST-POINTER",
+        "STATE_INDEX_CONFLICT:",
+        "active_legacy",
+        "is_pointer()",
+    ):
+        if duplicate_resolver_token in state_adapter_text:
+            raise SystemExit(
+                "ERROR: Claude state-index adapter duplicates Core resolver "
+                f"semantics: {duplicate_resolver_token}"
+            )
+
 actions = catalog.get("actions")
 if isinstance(actions, dict):
     action_items = actions

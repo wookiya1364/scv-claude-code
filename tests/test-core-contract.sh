@@ -13,6 +13,16 @@ fail() {
 [[ -d vendor/scv-core/core ]] || fail "vendored core payload is absent"
 [[ -f adapter/claude-code.env ]] || fail "Claude host profile is absent"
 [[ -x adapter/scripts/state-index.sh ]] || fail "state-index adapter is absent"
+grep -qxF \
+  'CORE_STATE_INDEX="$WRAPPER_ROOT/vendor/scv-core/core/scripts/state-index.sh"' \
+  adapter/scripts/state-index.sh ||
+  fail "state-index adapter does not select the vendored Core resolver"
+grep -qxF 'exec "$CORE_STATE_INDEX" "$@"' adapter/scripts/state-index.sh ||
+  fail "state-index adapter does not preserve argv during delegation"
+if grep -qF '<!-- SCV:HOST-POINTER target=SCV.md -->' \
+  adapter/scripts/state-index.sh; then
+  fail "state-index adapter duplicates the Core pointer resolver"
+fi
 
 ./scripts/verify-core.sh
 

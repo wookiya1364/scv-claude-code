@@ -13,7 +13,7 @@ Required keys:
 | `SCV_ACTION_TEMPLATE` | Contains exactly one `{action}` placeholder. |
 | `SCV_ARGUMENT_STYLE` | `template-string` for a host-provided argument template, or `argv-array` for a safely quoted argument array. |
 | `SCV_STATE_INDEX` | Must be `SCV.md`, the shared project state index. |
-| `SCV_LEGACY_STATE_INDEXES` | Optional `|`-separated legacy basenames that readers may use only when `SCV.md` is absent. Migration and pointer files are adapter-owned. |
+| `SCV_LEGACY_STATE_INDEXES` | Optional `|`-separated legacy basenames that Core may read when `SCV.md` is absent and may finalize as pointers during an explicit migration. |
 | `SCV_ROOT_ENV` | Uppercase environment-variable identifier for the installed payload root. |
 | `SCV_GRAPH_SKILL_PATHS` | Optional `|`-separated file globs. Literal `$HOME` is expanded at runtime without evaluating shell code. |
 | `SCV_UPDATE_OWNER` | Must be `adapter`. |
@@ -58,8 +58,8 @@ wrapper-local projection. The state-index filename remains shared across
 wrappers. Canonical source releases remain
 host-neutral and checksummed.
 
-An adapter pointer must contain this exact marker so conflict detection can
-distinguish it from an independent state copy:
+A Core compatibility pointer contains this exact marker so every wrapper
+distinguishes it from an independent state copy:
 
 ```text
 <!-- SCV:HOST-POINTER target=SCV.md -->
@@ -67,3 +67,9 @@ distinguish it from an independent state copy:
 
 If multiple non-pointer state files exist and differ byte-for-byte, read-only
 actions report the conflict and mutating sync stops without changing files.
+Readable state plus `scv/INTAKE.md` remains hydrated during that conflict;
+conflict and hydration are separate axes.
+
+Wrappers must delegate state inspection and pointer finalization to
+`core/scripts/state-index.sh`. They must not implement a second marker,
+conflict, or hydration resolver.
