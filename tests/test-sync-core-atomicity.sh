@@ -89,6 +89,29 @@ print(digest.hexdigest())
 PY
 }
 
+cross_profile_locks_share_source() {
+  python3 - "$1" "$2" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+first = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+second = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+shared_fields = (
+    "core_version",
+    "core_api",
+    "template_version",
+    "source_repository",
+    "source_commit",
+    "source_manifest_sha256",
+    "source_payload_sha256",
+    "artifact_sha256",
+)
+assert all(first[field] == second[field] for field in shared_fields)
+assert first["payload_sha256"] != second["payload_sha256"]
+PY
+}
+
 WORK="$(mktemp -d)"
 WORK="$(cd "$WORK" && pwd -P)"
 trap 'rm -rf "$WORK"' EXIT
@@ -159,6 +182,48 @@ runtime_paths_preserved() {
      -f "$fixture/DeckUI/scripts/deckdoc/node_modules/.scv-atomicity-sentinel" &&
      -f "$fixture/DeckUI/src/deck/decks/atomic-runtime/deck.json" &&
      -f "$fixture/DeckUI/.scv-untracked-local" ]]
+}
+
+deck_runtime_snapshot() {
+  local root=$1 relative path
+  {
+    for relative in \
+      node_modules \
+      scripts/deckdoc/node_modules \
+      dist-deck \
+      src/deck/decks/atomic-runtime \
+      .scv-untracked-local; do
+      path="$root/$relative"
+      printf '%s\0' "$relative"
+      if [[ -L "$path" ]]; then
+        printf 'L\0%s\0' "$(readlink "$path")"
+      elif [[ -d "$path" ]]; then
+        python3 - "$path" <<'PY'
+import os
+import stat
+import sys
+
+entry = os.lstat(sys.argv[1])
+print(f"D:{stat.S_IMODE(entry.st_mode)}")
+PY
+        tree_snapshot "$path"
+      elif [[ -f "$path" ]]; then
+        python3 - "$path" <<'PY'
+import os
+import stat
+import sys
+
+entry = os.lstat(sys.argv[1])
+print(f"F:{stat.S_IMODE(entry.st_mode)}")
+PY
+        portable_sha256 "$path"
+      elif [[ ! -e "$path" ]]; then
+        printf 'absent\0'
+      else
+        printf 'other\0'
+      fi
+    done
+  } | portable_stream_sha256
 }
 
 transaction_debris() {
@@ -1560,6 +1625,111 @@ if bash "$fixture/scripts/sync-core.sh" \
   ok "materialized Core nested in wrapper Git is not misclassified as a checkout"
 else
   fail "nested materialized Core inherited wrapper Git provenance"
+fi
+
+echo
+echo "── authoritative Deck runtime cache reuse ──"
+fixture="$WORK/second-host-cache-reuse"
+output="$WORK/second-host-cache-reuse.out"
+error_output="$WORK/second-host-cache-reuse.err"
+copy_fixture "$fixture"
+second_host_cache="$WORK/second-host-cache"
+second_host_candidate="$WORK/second-host-candidate"
+second_host_authoritative="$WORK/second-host-authoritative"
+second_host_profile="$WORK/second-host-codex.env"
+cat >"$second_host_profile" <<'EOF'
+SCV_HOST_PROFILE_API=1
+SCV_HOST_ID=codex
+SCV_HOST_LABEL=Codex
+SCV_ACTION_TEMPLATE='$scv:{action}'
+SCV_ARGUMENT_STYLE=argv-array
+SCV_STATE_INDEX=SCV.md
+SCV_LEGACY_STATE_INDEXES=CLAUDE.md|CODEX.md
+SCV_ROOT_ENV=SCV_CORE_ROOT
+SCV_GRAPH_SKILL_PATHS='$HOME/.agents/skills/graphify/SKILL.md|$HOME/.codex/plugins/cache/*/*/skills/graphify/SKILL.md'
+SCV_UPDATE_OWNER=adapter
+SCV_MODEL_POLICY_OWNER=adapter
+EOF
+"$SOURCE_CORE/tools/vendor-core.sh" \
+  --source "$SOURCE_CORE" \
+  --target "$second_host_candidate" \
+  --profile "$second_host_profile" >/dev/null
+mkdir -p "$second_host_authoritative/node_modules/cross-wrapper"
+printf 'authoritative second-host runtime\n' \
+  > "$second_host_authoritative/node_modules/cross-wrapper/owner.txt"
+second_host_runtime=$(
+  SCV_DECK_CACHE_DIR="$second_host_cache" \
+    bash "$second_host_candidate/core/scripts/deck-runtime.sh" migrate \
+      --from "$second_host_authoritative"
+)
+mkdir -p "$fixture/DeckUI/node_modules/cross-wrapper"
+printf 'conflicting Claude legacy runtime\n' \
+  > "$fixture/DeckUI/node_modules/cross-wrapper/owner.txt"
+printf 'Claude-only missing runtime entry\n' \
+  > "$fixture/DeckUI/dist-deck/claude-only-runtime.txt"
+second_host_cache_before=$(tree_snapshot "$second_host_cache")
+second_host_legacy_before=$(deck_runtime_snapshot "$fixture/DeckUI")
+reuse_notice='NOTICE: existing Deck runtime cache differs; reusing it as authoritative and skipping this legacy migration'
+if SCV_DECK_CACHE_DIR="$second_host_cache" \
+    bash "$fixture/scripts/sync-core.sh" --source "$SOURCE_CORE" \
+      >"$output" 2>"$error_output" &&
+   [[ "$(cat "$output")" == *"CORE_SYNCED: yes"* &&
+      "$(cat "$output")" == *"DECK_RUNTIME_MIGRATED: $second_host_runtime"* ]] &&
+   cross_profile_locks_share_source \
+     "$fixture/core.lock" "$second_host_candidate/core.lock.json" &&
+   grep -q '^SCV_HOST_ID=codex$' \
+     "$second_host_candidate/core/host-profile.env" &&
+   grep -q '^SCV_HOST_ID=claude-code$' \
+     "$fixture/vendor/scv-core/core/host-profile.env" &&
+   bash "$fixture/scripts/verify-core.sh" >/dev/null 2>&1; then
+  ok "Claude reuses the Codex-seeded authoritative cache and completes the swap"
+else
+  fail "second-host authoritative cache reuse blocked or bypassed the wrapper swap"
+  tail -n 20 "$output" "$error_output"
+fi
+if [[ "$(grep -Fxc "$reuse_notice" "$error_output")" -eq 1 ]]; then
+  ok "authoritative cache reuse surfaces exactly one stable NOTICE"
+else
+  fail "authoritative cache reuse NOTICE was missing or duplicated"
+fi
+if [[ "$second_host_cache_before" == \
+      "$(tree_snapshot "$second_host_cache")" &&
+      "$(cat "$second_host_runtime/node_modules/cross-wrapper/owner.txt")" == \
+      "authoritative second-host runtime" ]]; then
+  ok "second-host authoritative cache remains byte/type/mode-exact"
+else
+  fail "Claude sync changed the authoritative second-host cache"
+fi
+if [[ "$second_host_legacy_before" == \
+      "$(deck_runtime_snapshot "$fixture/DeckUI")" &&
+      "$(cat "$fixture/DeckUI/node_modules/cross-wrapper/owner.txt")" == \
+      "conflicting Claude legacy runtime" ]]; then
+  ok "Claude legacy and runtime paths remain byte/type/mode-exact"
+else
+  fail "authoritative reuse changed a Claude legacy runtime path"
+fi
+if [[ ! -e "$second_host_runtime/dist-deck/claude-only-runtime.txt" ]]; then
+  ok "authoritative reuse does not mix a missing Claude-only runtime entry"
+else
+  fail "authoritative reuse partially mixed the Claude legacy runtime"
+fi
+runtime_cache_debris=$(
+  find "$second_host_cache" \
+    \( \
+      -name '.*.lock' -o \
+      -name '.*.lock.new-*' -o \
+      -name '.*.stage-*' -o \
+      -name '.*.install-*' \
+    \) -print -quit
+)
+if [[ -z "$runtime_cache_debris" &&
+      -z "$(transaction_debris "$fixture")" &&
+      -z "$(quarantine_debris "$fixture")" &&
+      ! -e "$fixture/.scv-core-sync.lock" &&
+      ! -e "$fixture/.git/index.lock" ]]; then
+  ok "authoritative cache reuse leaves no lock, stage, or transaction debris"
+else
+  fail "authoritative cache reuse left lock, stage, or transaction debris"
 fi
 
 fixture="$WORK/success"

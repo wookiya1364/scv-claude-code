@@ -1664,7 +1664,9 @@ for boundary in protected:
         )
 PY
   deck_runtime_path=$(
-    "$DECK_RUNTIME_MIGRATOR" migrate --from "$REPO_ROOT/DeckUI"
+    "$DECK_RUNTIME_MIGRATOR" migrate \
+      --from "$REPO_ROOT/DeckUI" \
+      --reuse-existing
   )
   echo "DECK_RUNTIME_MIGRATED: $deck_runtime_path"
 fi

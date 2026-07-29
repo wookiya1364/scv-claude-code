@@ -12,7 +12,7 @@ Current versions:
 
 | Contract | Version | Meaning |
 |---|---:|---|
-| SCV Core | `0.20.3` | Shared behavior and release payload |
+| SCV Core | `0.20.5` | Shared behavior and release payload |
 | Core API | `1` | Wrapper/core integration contract |
 | Template | `1.0.0` | Hydrated project-template schema |
 
@@ -49,6 +49,19 @@ either plugin. `SCV_DECK_CACHE_DIR` may override the default user cache.
 Cache initialization and legacy migration never replace a destination that
 appears concurrently, never follow destination-ancestor links, and reject
 cache/legacy overlap before writing.
+The cache base, payload namespace, runtime target, lock, staging, installation,
+and cleanup all remain anchored to verified open directory descriptors. A
+concurrent path or ancestor replacement therefore fails closed without
+redirecting writes or deletions.
+
+Legacy migration is strict by default: a pre-existing cached value that
+differs from its source is a collision. Persistent legacy sources may
+explicitly use `migrate --from PATH --reuse-existing`. After preflighting every
+eligible entry, one differing pre-existing destination makes the current cache
+authoritative and skips the whole legacy source—equal and missing entries are
+not copied. With no mismatch, migration remains additive; a late collision
+still fails closed. Ephemeral existing-vendor recovery must remain strict
+because that source may be removed after a wrapper swap.
 
 See [Architecture](docs/architecture.md) and
 [Wrapper integration](docs/wrapper-integration.md) for the complete boundary.

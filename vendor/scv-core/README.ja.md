@@ -12,7 +12,7 @@ DeckUI、アセット、共通回帰テストをこのリポジトリで管理�
 
 | 契約 | バージョン | 意味 |
 |---|---:|---|
-| SCV Core | `0.20.3` | 共通動作とリリースペイロード |
+| SCV Core | `0.20.5` | 共通動作とリリースペイロード |
 | Core API | `1` | ラッパーと Core の統合契約 |
 | Template | `1.0.0` | hydrate されるプロジェクトテンプレートのスキーマ |
 
@@ -48,6 +48,20 @@ Claude Code と Codex は同じランタイムを再利用しながら、どち�
 キャッシュ初期化と旧ランタイム移行は、並行して現れた宛先を置換せず、宛先の
 祖先リンクをたどらず、キャッシュと旧ランタイムが重なる場合は書き込み前に
 停止します。
+キャッシュ base、ペイロード namespace、ランタイム target、lock、staging、
+install、cleanup は、すべて検証済みのオープン済みディレクトリ descriptor に
+固定されます。処理中にパスや祖先が置換されても、外部パスへ書き込みや削除を
+転送せず、安全側で停止します。
+
+旧ランタイムの移行は既定で strict です。source と異なる cache 値が既に
+あれば collision として停止します。永続的に残る legacy source に限り、
+`migrate --from PATH --reuse-existing` を明示できます。全対象の preflight
+で既存 destination が一つでも source と異なる場合、現在の cache 全体を
+authoritative とし、legacy source 全体を skip します。同一または未作成の
+項目もコピーしません。相違がなければ従来どおり additive に移行し、
+preflight 後に発生した collision は引き続き fail-closed です。wrapper
+swap 後に削除され得る既存 vendor の recovery は、必ず strict mode の
+まま実行します。
 
 詳細は [Architecture](docs/architecture.md) と
 [Wrapper integration](docs/wrapper-integration.md) を参照してください。
