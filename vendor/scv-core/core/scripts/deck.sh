@@ -34,8 +34,11 @@ fi
 set -uo pipefail
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-DECKUI="$SCRIPT_DIR/../DeckUI"
-DECKDOC="$DECKUI/scripts/deckdoc"
+DECK_RUNTIME="$SCRIPT_DIR/deck-runtime.sh"
+[[ -x "$DECK_RUNTIME" ]] || {
+  echo "ERROR: Deck runtime helper not found at $DECK_RUNTIME" >&2
+  exit 1
+}
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 
@@ -61,6 +64,8 @@ done
 [[ -n "$MD" ]] || die "input path required (usage: deck.sh <input.md|slug-dir> [slug] [--slides])"
 [[ "$MD" != /* ]] && MD="$PWD/$MD"
 [[ -e "$MD" ]] || die "input not found: $MD"
+DECKUI="$(bash "$DECK_RUNTIME" ensure)" || exit $?
+DECKDOC="$DECKUI/scripts/deckdoc"
 [[ -d "$DECKUI" ]] || die "DeckUI kit not found at $DECKUI"
 
 # A slug FOLDER (scv/promote|archive/<slug>/) combines PLAN + FEATURE_ARCHITECTURE

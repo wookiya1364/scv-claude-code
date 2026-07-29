@@ -80,6 +80,7 @@ python3 - \
   "$REPO_ROOT/adapter/claude-code.env" \
   "$REPO_ROOT/host-profile.env" \
   "$CHECK_PROJECTION" <<'PY'
+import hashlib
 import json
 import pathlib
 import re
@@ -119,6 +120,29 @@ with lock_path.open(encoding="utf-8") as handle:
     lock = json.load(handle)
 with (root / "core" / "actions.json").open(encoding="utf-8") as handle:
     catalog = json.load(handle)
+with (root / "core-manifest.json").open(encoding="utf-8") as handle:
+    manifest = json.load(handle)
+
+def digest(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+def normalize_repository(value):
+    value = str(value).strip().rstrip("/")
+    if value.endswith(".git"):
+        value = value[:-4]
+    if value.startswith("git@github.com:"):
+        value = "https://github.com/" + value.removeprefix("git@github.com:")
+    return value
+
+source_info_lines = (root / "SOURCE_INFO").read_text(encoding="utf-8").splitlines()
+source_repositories = [
+    line.split(":", 1)[1].strip()
+    for line in source_info_lines
+    if line.startswith("source_repository:")
+]
+if len(source_repositories) != 1:
+    raise SystemExit("ERROR: SOURCE_INFO must contain exactly one source_repository")
+source_repository = normalize_repository(source_repositories[0])
 
 required = {
     "schema_version",
@@ -161,20 +185,41 @@ for digest_field in (
 artifact_sha256 = lock["artifact_sha256"]
 if artifact_sha256 is not None and not re.fullmatch(r"[0-9a-f]{64}", str(artifact_sha256)):
     raise SystemExit("ERROR: core.lock artifact_sha256 is neither null nor SHA-256")
+if normalize_repository(lock["source_repository"]) != source_repository:
+    raise SystemExit("ERROR: core.lock source_repository does not match SOURCE_INFO")
+if str(manifest.get("version")) != (root / "VERSION").read_text().strip():
+    raise SystemExit("ERROR: core manifest version does not match VERSION")
+if str(manifest.get("core_api")) != (root / "CORE_API").read_text().strip():
+    raise SystemExit("ERROR: core manifest core_api does not match CORE_API")
+if str(manifest.get("template_version")) != (root / "TEMPLATE_VERSION").read_text().strip():
+    raise SystemExit("ERROR: core manifest template_version does not match TEMPLATE_VERSION")
+if normalize_repository(manifest.get("source_repository", "")) != source_repository:
+    raise SystemExit("ERROR: core manifest repository does not match SOURCE_INFO")
+if str(manifest.get("source_commit")) != str(lock["source_commit"]):
+    raise SystemExit("ERROR: core manifest commit does not match core.lock")
+if str(manifest.get("profile_id")) != str(vendored_profile.get("SCV_HOST_ID")):
+    raise SystemExit("ERROR: core manifest profile_id does not match the host profile")
+if lock["manifest_sha256"] != digest(root / "core-manifest.json"):
+    raise SystemExit("ERROR: core.lock manifest_sha256 does not match core-manifest.json")
+if lock["payload_sha256"] != digest(root / "SHA256SUMS"):
+    raise SystemExit("ERROR: core.lock payload_sha256 does not match SHA256SUMS")
 
 if check_projection:
     wrapper_root = projected_profile_path.parent
     wrapper_version = (wrapper_root / "VERSION").read_text().strip()
     template_version = (wrapper_root / "TEMPLATE_VERSION").read_text().strip()
-    if wrapper_version != str(lock["core_version"]):
-        raise SystemExit("ERROR: wrapper VERSION does not match pinned core version")
+    if not re.fullmatch(
+        r"[0-9]+\.[0-9]+\.[0-9]+(?:[.-][0-9A-Za-z.-]+)?",
+        wrapper_version,
+    ):
+        raise SystemExit("ERROR: wrapper VERSION is not a supported release version")
     if template_version != str(lock["template_version"]):
         raise SystemExit("ERROR: wrapper TEMPLATE_VERSION does not match pinned template version")
 
     with (wrapper_root / ".claude-plugin" / "plugin.json").open(encoding="utf-8") as handle:
         plugin = json.load(handle)
-    if str(plugin.get("version")) != str(lock["core_version"]):
-        raise SystemExit("ERROR: Claude plugin version does not match pinned core version")
+    if str(plugin.get("version")) != wrapper_version:
+        raise SystemExit("ERROR: Claude plugin version does not match wrapper VERSION")
 
     with (wrapper_root / ".claude-plugin" / "marketplace.json").open(encoding="utf-8") as handle:
         marketplace = json.load(handle)
@@ -182,7 +227,7 @@ if check_projection:
     if len(entries) != 1:
         raise SystemExit("ERROR: marketplace must contain exactly one scv entry")
     marketplace_version = entries[0].get("version")
-    if str(marketplace_version) != str(lock["core_version"]):
+    if str(marketplace_version) != wrapper_version:
         raise SystemExit("ERROR: marketplace scv version differs from the plugin manifest")
 
 actions = catalog.get("actions")

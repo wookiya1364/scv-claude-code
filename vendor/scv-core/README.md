@@ -12,7 +12,7 @@ Current versions:
 
 | Contract | Version | Meaning |
 |---|---:|---|
-| SCV Core | `0.20.1` | Shared behavior and release payload |
+| SCV Core | `0.20.5` | Shared behavior and release payload |
 | Core API | `1` | Wrapper/core integration contract |
 | Template | `1.0.0` | Hydrated project-template schema |
 
@@ -42,6 +42,27 @@ wrappers, readers may fall back to `CLAUDE.md` or `CODEX.md` only when
 `SCV.md` is absent. A mutating sync fails closed if independent state indexes
 diverge.
 
+DeckUI source is immutable in installed wrappers. Dependencies, generated
+decks, and build output live in a cache keyed by the canonical Core payload
+hash, so Claude Code and Codex reuse the same runtime without writing into
+either plugin. `SCV_DECK_CACHE_DIR` may override the default user cache.
+Cache initialization and legacy migration never replace a destination that
+appears concurrently, never follow destination-ancestor links, and reject
+cache/legacy overlap before writing.
+The cache base, payload namespace, runtime target, lock, staging, installation,
+and cleanup all remain anchored to verified open directory descriptors. A
+concurrent path or ancestor replacement therefore fails closed without
+redirecting writes or deletions.
+
+Legacy migration is strict by default: a pre-existing cached value that
+differs from its source is a collision. Persistent legacy sources may
+explicitly use `migrate --from PATH --reuse-existing`. After preflighting every
+eligible entry, one differing pre-existing destination makes the current cache
+authoritative and skips the whole legacy source—equal and missing entries are
+not copied. With no mismatch, migration remains additive; a late collision
+still fails closed. Ephemeral existing-vendor recovery must remain strict
+because that source may be removed after a wrapper swap.
+
 See [Architecture](docs/architecture.md) and
 [Wrapper integration](docs/wrapper-integration.md) for the complete boundary.
 
@@ -53,7 +74,7 @@ bash core/tests/run-dry.sh
 for test_file in core/tests/test-*.sh; do bash "$test_file"; done
 ```
 
-DeckUI additionally requires Node.js and pnpm:
+DeckUI source-checkout development additionally requires Node.js and pnpm:
 
 ```bash
 pnpm -C core/DeckUI install --frozen-lockfile

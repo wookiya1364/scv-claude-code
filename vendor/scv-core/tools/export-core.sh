@@ -66,6 +66,12 @@ else
   cp -R -p "$REPO_ROOT/tools" "$TMP/tools"
 fi
 
+# Both export paths may retain source-owned parent directories after generated
+# deck.json files are excluded. Remove only directories that are truly empty.
+if [[ -d "$TMP/core/DeckUI/src/deck/decks" ]]; then
+  find "$TMP/core/DeckUI/src/deck/decks" -depth -mindepth 1 -type d -empty -delete
+fi
+
 # Source checkout metadata uses links to the canonical root files. Published
 # exports must contain only regular files/directories so every wrapper can apply
 # one strict archive policy without following links during extraction.
