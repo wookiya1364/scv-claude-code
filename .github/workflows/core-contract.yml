@@ -18,25 +18,34 @@ on:
       - 'TEMPLATE_VERSION'
       - 'host-profile.env'
       - '.claude-plugin/**'
+      - '.github/scripts/**'
       - '.github/workflows/core-contract.yml'
       - '.github/workflows/core-sync.yml'
   push:
-    branches: [main, stage, develop]
+    branches: [main]
   workflow_dispatch:
+
+concurrency:
+  group: core-contract-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
   contract:
+    if: github.event_name == 'pull_request'
     name: Contract (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Install modern Bash on macOS
         if: runner.os == 'macOS'
@@ -54,12 +63,70 @@ jobs:
           find scripts tests adapter -type f -name '*.sh' -print0 |
             xargs -0 -n1 bash -n
 
-      - name: Focused wrapper tests
+      - name: Cross-platform smoke
         run: |
+          bash .github/scripts/test-ci-fast-lanes.sh
           bash tests/test-apply-model-policy.sh
-          bash tests/test-sync-core-atomicity.sh
+          bash tests/test-state-adapter.sh
           bash tests/test-help-workspace.sh
           bash tests/test-workspace.sh
+          bash tests/run-dry.sh
 
-      - name: Shared regression
-        run: bash tests/run-dry.sh
+      - name: Detect atomic sync changes
+        if: runner.os == 'Linux'
+        id: atomicity
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          required=no
+          while IFS= read -r changed_file; do
+            case "$changed_file" in
+              scripts/sync-core.sh|scripts/project-core.sh|scripts/verify-core.sh|scripts/deck-runtime.sh|tools/*|tests/test-sync-core-atomicity.sh)
+                required=yes
+                ;;
+            esac
+          done < <(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          echo "required=$required" >> "$GITHUB_OUTPUT"
+          echo "Atomic sync regression required: $required"
+
+      - name: Atomic sync regression
+        if: >-
+          runner.os == 'Linux' &&
+          steps.atomicity.outputs.required == 'yes'
+        run: bash tests/test-sync-core-atomicity.sh
+
+  full_contract_macos:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    name: Full contract (macos-latest)
+    runs-on: macos-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install modern Bash
+        run: |
+          brew list bash >/dev/null 2>&1 || brew install bash
+          modern_bash="$(brew --prefix)/bin/bash"
+          "$modern_bash" -c 'test "${BASH_VERSINFO[0]}" -ge 4'
+          echo "$(brew --prefix)/bin" >> "$GITHUB_PATH"
+
+      - name: Verify pinned core and Claude adapter
+        run: bash tests/test-core-contract.sh
+
+      - name: Shell syntax
+        run: |
+          find scripts tests adapter -type f -name '*.sh' -print0 |
+            xargs -0 -n1 bash -n
+
+      - name: Cross-platform smoke
+        run: |
+          bash .github/scripts/test-ci-fast-lanes.sh
+          bash tests/test-apply-model-policy.sh
+          bash tests/test-state-adapter.sh
+          bash tests/test-help-workspace.sh
+          bash tests/test-workspace.sh
+          bash tests/run-dry.sh
+
+      - name: Atomic sync regression
+        run: bash tests/test-sync-core-atomicity.sh
