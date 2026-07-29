@@ -12,7 +12,7 @@ Core 릴리스를 고정하고, 검증된 호스트 프로필을 반영한 뒤 �
 
 | 계약 | 버전 | 의미 |
 |---|---:|---|
-| SCV Core | `0.20.5` | 공통 동작과 릴리스 페이로드 |
+| SCV Core | `0.20.6` | 공통 동작과 릴리스 페이로드 |
 | Core API | `1` | 래퍼와 코어의 통합 계약 |
 | Template | `1.0.0` | hydrate되는 프로젝트 템플릿 스키마 |
 
@@ -40,6 +40,8 @@ scv-core 릴리스(변경 불가능한 tarball + SHA-256)
 공통 상태 인덱스는 항상 `scv/SCV.md`입니다. 이전 래퍼에서 전환하는 동안에는
 `SCV.md`가 없을 때만 `CLAUDE.md` 또는 `CODEX.md`를 읽습니다. 서로 독립적인
 상태 파일이 다르면 변경 작업인 sync는 아무 파일도 건드리지 않고 중단합니다.
+두 래퍼는 Core가 소유하는 단일 resolver와 pointer finalizer를 사용하며,
+호환 pointer는 정확한 `SCV:HOST-POINTER target=SCV.md` marker로만 판별합니다.
 
 설치된 래퍼의 DeckUI 원본은 변경하지 않습니다. 의존성, 생성된 deck, 빌드 결과는
 Core 페이로드 해시별 외부 캐시에 저장되므로 Claude Code와 Codex가 같은 런타임을

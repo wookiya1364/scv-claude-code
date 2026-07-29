@@ -2,6 +2,27 @@
 
 All notable changes to SCV Core are documented here.
 
+## [0.20.6] - 2026-07-29
+
+### Fixed
+
+- Centralized canonical, legacy, conflict, and broken-pointer state resolution
+  in one host-neutral Core entrypoint so Claude Code and Codex cannot classify
+  the same project differently.
+- Standardized compatibility pointers on the exact
+  `SCV:HOST-POINTER target=SCV.md` marker and made both host directions share
+  the same inspect, preview, backup, and pointer-finalization behavior.
+- Kept projects with readable state and `scv/INTAKE.md` classified as hydrated
+  during a fail-closed conflict, preventing a conflict from being mistaken for
+  an unhydrated project.
+
+### Security
+
+- Made canonical seeding no-replace and revalidated every active legacy file
+  against its recoverable backup before publishing any pointer.
+- Preserved read-only and dry-run trees byte-for-byte across the full
+  canonical/legacy/pointer conflict matrix.
+
 ## [0.20.5] - 2026-07-29
 
 ### Changed
