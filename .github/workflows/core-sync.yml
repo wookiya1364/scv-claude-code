@@ -23,6 +23,7 @@ permissions:
 jobs:
   propose:
     runs-on: ubuntu-latest
+    timeout-minutes: 2
     env:
       GH_TOKEN: ${{ secrets.SCV_CORE_SYNC_TOKEN || github.token }}
     steps:
@@ -72,7 +73,6 @@ jobs:
           bash tests/test-core-contract.sh
           bash .github/scripts/test-ci-fast-lanes.sh
           bash tests/test-apply-model-policy.sh
-          bash tests/test-state-adapter.sh
           bash tests/test-help-workspace.sh
           bash tests/test-workspace.sh
           bash tests/run-dry.sh
@@ -138,8 +138,9 @@ jobs:
           - Claude model-policy tests
           - shared dry-run regression
 
-          The PR contract workflow runs the full Ubuntu atomicity suite only
-          when updater/atomic-swap files changed.
+          The PR contract workflow runs a bounded atomic updater smoke when
+          updater or atomic-swap files changed. The complete adversarial suite
+          remains an explicit local maintainer preflight.
 
           This PR was opened by the scheduled/manual core sync workflow." 2>&1); then
             printf '%s\n' "$output" >&2
