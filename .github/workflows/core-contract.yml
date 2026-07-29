@@ -29,9 +29,22 @@ permissions:
 
 jobs:
   contract:
-    runs-on: ubuntu-latest
+    name: Contract (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v5
+
+      - name: Install modern Bash on macOS
+        if: runner.os == 'macOS'
+        run: |
+          brew list bash >/dev/null 2>&1 || brew install bash
+          modern_bash="$(brew --prefix)/bin/bash"
+          "$modern_bash" -c 'test "${BASH_VERSINFO[0]}" -ge 4'
+          echo "$(brew --prefix)/bin" >> "$GITHUB_PATH"
 
       - name: Verify pinned core and Claude adapter
         run: bash tests/test-core-contract.sh
@@ -44,6 +57,7 @@ jobs:
       - name: Focused wrapper tests
         run: |
           bash tests/test-apply-model-policy.sh
+          bash tests/test-sync-core-atomicity.sh
           bash tests/test-help-workspace.sh
           bash tests/test-workspace.sh
 
