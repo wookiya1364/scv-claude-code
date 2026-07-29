@@ -10,9 +10,15 @@ import sys
 from pathlib import Path
 
 root = Path(sys.argv[1])
-contract = (root / ".github/workflows/core-contract.yml").read_text()
-core_sync = (root / ".github/workflows/core-sync.yml").read_text()
-model = (root / ".github/workflows/test-model-policy.yml").read_text()
+workflow_dir = root / ".github/workflows"
+workflows = {
+    path.name: path.read_text()
+    for path in sorted(workflow_dir.glob("*.yml"))
+}
+contract = workflows["core-contract.yml"]
+core_sync = workflows["core-sync.yml"]
+model = workflows["test-model-policy.yml"]
+branch_flow = workflows["branch-flow.yml"]
 
 
 def require(condition: bool, message: str) -> None:
@@ -22,8 +28,9 @@ def require(condition: bool, message: str) -> None:
 
 
 require(
-    re.search(r"(?m)^  push:\n    branches: \[main\]$", contract) is not None,
-    "Core contract push lane is main-only",
+    re.search(r"(?m)^  push:", contract) is None
+    and "workflow_dispatch:" not in contract,
+    "Core contract runs only on promotion PRs",
 )
 require(
     "group: core-contract-${{ github.event.pull_request.number || github.ref }}"
@@ -33,43 +40,63 @@ require(
 )
 require(
     "name: Contract (${{ matrix.os }})" in contract
-    and "os: [ubuntu-latest, macos-latest]" in contract,
+    and "os: [ubuntu-latest, macos-latest]" in contract
+    and "timeout-minutes: 2" in contract,
     "PR smoke retains Ubuntu and macOS portability checks",
 )
 require(
-    "- '.github/scripts/**'" in contract,
-    "CI policy script changes trigger the contract workflow",
+    "- '.github/scripts/**'" in contract
+    and "- '.github/workflows/**'" in contract,
+    "CI implementation and policy changes trigger the contract workflow",
 )
 require(
     "name: Cross-platform smoke" in contract
-    and "bash tests/test-state-adapter.sh" in contract
+    and "bash tests/test-core-contract.sh" in contract
     and "bash tests/run-dry.sh" in contract,
     "PR smoke covers cross-host state and shared regression",
 )
 require(
-    "name: Detect atomic sync changes" in contract
-    and "tests/test-sync-core-atomicity.sh)" in contract
+    "name: Detect updater changes" in contract
+    and ".github/scripts/test-sync-core-smoke.sh)" in contract
     and contract.count("github.base_ref == 'develop'") == 2,
-    "PR atomicity is path-gated and runs only at the develop entry gate",
+    "fast updater smoke is path-gated at the develop entry PR",
 )
 require(
-    contract.count("run: bash tests/test-sync-core-atomicity.sh") == 2,
-    "full atomicity exists only in conditional Ubuntu and main macOS lanes",
+    contract.count(
+        "run: bash .github/scripts/test-sync-core-smoke.sh"
+    )
+    == 1,
+    "automatic CI uses one representative atomic updater smoke",
 )
 require(
-    "name: Full contract (macos-latest)" in contract
-    and "timeout-minutes: 25" in contract,
-    "main has one bounded full macOS release gate",
+    all(
+        text.count("\n    runs-on:")
+        == text.count("\n    timeout-minutes: 2")
+        for text in workflows.values()
+    ),
+    "every GitHub Actions job has a hard two-minute execution limit",
 )
 require(
-    "bash tests/test-sync-core-atomicity.sh" not in core_sync
-    and "bash tests/test-state-adapter.sh" in core_sync,
-    "Core update proposal runs smoke and leaves heavy testing to PR CI",
+    "test-sync-core-atomicity.sh"
+    not in "\n".join(workflows.values()),
+    "the complete adversarial atomicity suite never runs in GitHub Actions",
+)
+require(
+    "bash tests/test-core-contract.sh" in core_sync
+    and "bash tests/run-dry.sh" in core_sync
+    and "bash tests/test-state-adapter.sh" not in core_sync,
+    "Core update proposal reuses the contract without duplicate state tests",
 )
 require(
     re.search(r"(?m)^  push:", model) is None
     and "group: model-policy-${{ github.event.pull_request.number || github.ref }}"
     in model,
     "model-policy checks do not repeat after merge",
+)
+require(
+    "group: branch-flow-${{ github.event.pull_request.number || github.ref }}"
+    in branch_flow
+    and "cancel-in-progress: true" in branch_flow,
+    "stale branch-flow checks are cancelled",
 )
 PY
