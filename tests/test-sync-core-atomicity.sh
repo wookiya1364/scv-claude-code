@@ -25,8 +25,16 @@ portable_sha256() {
   fi
 }
 
+portable_stream_sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum | awk '{print $1}'
+  else
+    shasum -a 256 | awk '{print $1}'
+  fi
+}
+
 tree_snapshot() {
-  python3 - "$1" <<'PY'
+  python3 - "$1" "${2:-include-index}" <<'PY'
 import hashlib
 import os
 import stat
@@ -34,9 +42,12 @@ import sys
 from pathlib import Path
 
 root = Path(sys.argv[1])
+exclude_index = sys.argv[2] == "exclude-index"
 digest = hashlib.sha256()
 for item in sorted(root.rglob("*")):
     relative = item.relative_to(root).as_posix()
+    if exclude_index and relative == ".git/index":
+        continue
     mode = item.lstat().st_mode
     digest.update(relative.encode() + b"\0" + str(stat.S_IMODE(mode)).encode() + b"\0")
     if stat.S_ISLNK(mode):
@@ -49,6 +60,14 @@ for item in sorted(root.rglob("*")):
         digest.update(b"O\0")
 print(digest.hexdigest())
 PY
+}
+
+repository_snapshot_without_index() {
+  tree_snapshot "$1" exclude-index
+}
+
+git_index_snapshot() {
+  git -C "$1" ls-files --stage -v -z | portable_stream_sha256
 }
 
 metadata_snapshot() {
@@ -160,6 +179,16 @@ quarantine_debris() {
       return
     fi
   done
+}
+
+wait_for_test_file() {
+  local path=$1
+  local attempt
+  for (( attempt=1; attempt <= 1200; attempt++ )); do
+    [[ -f "$path" ]] && return 0
+    sleep 0.05
+  done
+  return 1
 }
 
 CASE_NUMBER=0
@@ -415,6 +444,210 @@ else
 fi
 
 echo
+echo "── anchored rename race guards ──"
+fixture="$WORK/transaction-root-staging-race"
+output="$WORK/transaction-root-staging-race.out"
+copy_fixture "$fixture"
+tx_root_ready="$WORK/transaction-root-staging-race.ready"
+tx_root_continue="$WORK/transaction-root-staging-race.continue"
+tx_root_saved="$WORK/transaction-root-staging-race.saved"
+tx_root_external="$WORK/transaction-root-staging-race.external"
+mkdir "$tx_root_external"
+printf 'external transaction sentinel\n' > "$tx_root_external/sentinel"
+tx_root_external_before=$(tree_snapshot "$tx_root_external")
+SCV_CORE_SYNC_TEST_PAUSE_AT=before-transaction-staging \
+SCV_CORE_SYNC_TEST_READY_FILE="$tx_root_ready" \
+SCV_CORE_SYNC_TEST_CONTINUE_FILE="$tx_root_continue" \
+  bash "$fixture/scripts/sync-core.sh" --source "$SOURCE_CORE" \
+    >"$output" 2>&1 &
+tx_root_pid=$!
+if wait_for_test_file "$tx_root_ready"; then
+  tx_root_live=$(transaction_debris "$fixture")
+  mv "$tx_root_live" "$tx_root_saved"
+  ln -s "$tx_root_external" "$tx_root_live"
+  touch "$tx_root_continue"
+  wait "$tx_root_pid"
+  tx_root_rc=$?
+else
+  kill -TERM "$tx_root_pid" 2>/dev/null || true
+  wait "$tx_root_pid" 2>/dev/null || true
+  tx_root_rc=0
+  tx_root_live=
+fi
+tx_root_external_after=$(tree_snapshot "$tx_root_external")
+if [[ -n "$tx_root_live" && -L "$tx_root_live" ]]; then
+  unlink "$tx_root_live"
+  mv "$tx_root_saved" "$tx_root_live"
+fi
+if [[ "$tx_root_rc" -ne 0 &&
+      "$tx_root_external_before" == "$tx_root_external_after" &&
+      "$(cat "$output")" == *"cannot open protected root"* ]]; then
+  ok "transaction-root replacement cannot redirect staging writes"
+else
+  fail "transaction-root staging race reached external data or was accepted"
+fi
+
+fixture="$WORK/stage-wrapper-staging-race"
+output="$WORK/stage-wrapper-staging-race.out"
+copy_fixture "$fixture"
+stage_wrapper_ready="$WORK/stage-wrapper-staging-race.ready"
+stage_wrapper_continue="$WORK/stage-wrapper-staging-race.continue"
+stage_wrapper_saved="$WORK/stage-wrapper-staging-race.saved"
+stage_wrapper_external="$WORK/stage-wrapper-staging-race.external"
+mkdir "$stage_wrapper_external"
+printf 'external stage sentinel\n' > "$stage_wrapper_external/sentinel"
+stage_wrapper_external_before=$(tree_snapshot "$stage_wrapper_external")
+SCV_CORE_SYNC_TEST_PAUSE_AT="after-copy-destination:stage/wrapper" \
+SCV_CORE_SYNC_TEST_READY_FILE="$stage_wrapper_ready" \
+SCV_CORE_SYNC_TEST_CONTINUE_FILE="$stage_wrapper_continue" \
+  bash "$fixture/scripts/sync-core.sh" --source "$SOURCE_CORE" \
+    >"$output" 2>&1 &
+stage_wrapper_pid=$!
+if wait_for_test_file "$stage_wrapper_ready"; then
+  stage_wrapper_tx=$(transaction_debris "$fixture")
+  mv "$stage_wrapper_tx/stage/wrapper" "$stage_wrapper_saved"
+  ln -s "$stage_wrapper_external" "$stage_wrapper_tx/stage/wrapper"
+  touch "$stage_wrapper_continue"
+  wait "$stage_wrapper_pid"
+  stage_wrapper_rc=$?
+else
+  kill -TERM "$stage_wrapper_pid" 2>/dev/null || true
+  wait "$stage_wrapper_pid" 2>/dev/null || true
+  stage_wrapper_rc=0
+fi
+if [[ "$stage_wrapper_rc" -ne 0 &&
+      "$(tree_snapshot "$stage_wrapper_external")" == "$stage_wrapper_external_before" &&
+      "$(cat "$output")" == *"copy destination changed before content copy"* &&
+      -z "$(transaction_debris "$fixture")" ]]; then
+  ok "stage-wrapper replacement cannot redirect projection writes"
+else
+  fail "stage-wrapper staging race reached external data or was accepted"
+fi
+
+fixture="$WORK/repo-anchor-race"
+output="$WORK/repo-anchor-race.out"
+copy_fixture "$fixture"
+repo_anchor_ready="$WORK/repo-anchor-race.ready"
+repo_anchor_continue="$WORK/repo-anchor-race.continue"
+repo_anchor_saved="$WORK/repo-anchor-race.saved"
+repo_anchor_external="$WORK/repo-anchor-race.external"
+mkdir "$repo_anchor_external"
+printf 'external repository sentinel\n' > "$repo_anchor_external/sentinel"
+repo_anchor_external_before=$(tree_snapshot "$repo_anchor_external")
+SCV_CORE_SYNC_TEST_PAUSE_AT="before-rename:backup:vendor" \
+SCV_CORE_SYNC_TEST_READY_FILE="$repo_anchor_ready" \
+SCV_CORE_SYNC_TEST_CONTINUE_FILE="$repo_anchor_continue" \
+  bash "$fixture/scripts/sync-core.sh" --source "$SOURCE_CORE" \
+    >"$output" 2>&1 &
+repo_anchor_pid=$!
+if wait_for_test_file "$repo_anchor_ready"; then
+  mv "$fixture" "$repo_anchor_saved"
+  ln -s "$repo_anchor_external" "$fixture"
+  touch "$repo_anchor_continue"
+  wait "$repo_anchor_pid"
+  repo_anchor_rc=$?
+else
+  kill -TERM "$repo_anchor_pid" 2>/dev/null || true
+  wait "$repo_anchor_pid" 2>/dev/null || true
+  repo_anchor_rc=0
+fi
+repo_anchor_external_after=$(tree_snapshot "$repo_anchor_external")
+if [[ -L "$fixture" ]]; then
+  unlink "$fixture"
+fi
+if [[ -d "$repo_anchor_saved" ]]; then
+  mv "$repo_anchor_saved" "$fixture"
+fi
+if [[ "$repo_anchor_rc" -ne 0 &&
+      "$repo_anchor_external_before" == "$repo_anchor_external_after" &&
+      ! -e "$fixture/.git/index.lock" &&
+      ! -e "$fixture/.scv-core-sync.lock" &&
+      "$(cat "$output")" == *"protected root identity or type changed"* ]]; then
+  ok "repository path replacement cannot redirect an atomic rename"
+else
+  fail "repository path race reached external data or was accepted"
+fi
+
+fixture="$WORK/vendor-anchor-race"
+output="$WORK/vendor-anchor-race.out"
+copy_fixture "$fixture"
+vendor_anchor_ready="$WORK/vendor-anchor-race.ready"
+vendor_anchor_continue="$WORK/vendor-anchor-race.continue"
+vendor_anchor_saved="$WORK/vendor-anchor-race.saved"
+vendor_anchor_external="$WORK/vendor-anchor-race.external"
+mkdir "$vendor_anchor_external"
+printf 'external vendor sentinel\n' > "$vendor_anchor_external/sentinel"
+vendor_anchor_external_before=$(tree_snapshot "$vendor_anchor_external")
+SCV_CORE_SYNC_TEST_PAUSE_AT="before-rename:backup:vendor" \
+SCV_CORE_SYNC_TEST_READY_FILE="$vendor_anchor_ready" \
+SCV_CORE_SYNC_TEST_CONTINUE_FILE="$vendor_anchor_continue" \
+  bash "$fixture/scripts/sync-core.sh" --source "$SOURCE_CORE" \
+    >"$output" 2>&1 &
+vendor_anchor_pid=$!
+if wait_for_test_file "$vendor_anchor_ready"; then
+  mv "$fixture/vendor" "$vendor_anchor_saved"
+  ln -s "$vendor_anchor_external" "$fixture/vendor"
+  touch "$vendor_anchor_continue"
+  wait "$vendor_anchor_pid"
+  vendor_anchor_rc=$?
+else
+  kill -TERM "$vendor_anchor_pid" 2>/dev/null || true
+  wait "$vendor_anchor_pid" 2>/dev/null || true
+  vendor_anchor_rc=0
+fi
+vendor_anchor_external_after=$(tree_snapshot "$vendor_anchor_external")
+if [[ -L "$fixture/vendor" ]]; then
+  unlink "$fixture/vendor"
+fi
+if [[ -d "$vendor_anchor_saved" ]]; then
+  mv "$vendor_anchor_saved" "$fixture/vendor"
+fi
+if [[ "$vendor_anchor_rc" -ne 0 &&
+      "$vendor_anchor_external_before" == "$vendor_anchor_external_after" &&
+      "$(cat "$output")" == *"atomic rename source identity changed"* ]]; then
+  ok "vendor replacement cannot redirect an atomic backup"
+else
+  fail "vendor rename race reached external data or was accepted"
+fi
+
+fixture="$WORK/deck-ancestor-race"
+output="$WORK/deck-ancestor-race.out"
+copy_fixture "$fixture"
+deck_ancestor_ready="$WORK/deck-ancestor-race.ready"
+deck_ancestor_continue="$WORK/deck-ancestor-race.continue"
+deck_ancestor_saved="$WORK/deck-ancestor-race.saved"
+deck_ancestor_external="$WORK/deck-ancestor-race.external"
+mkdir "$deck_ancestor_external"
+printf 'external DeckUI sentinel\n' > "$deck_ancestor_external/sentinel"
+deck_ancestor_external_before=$(tree_snapshot "$deck_ancestor_external")
+SCV_CORE_SYNC_TEST_PAUSE_AT=\
+"before-rename:preserve:DeckUI/src/deck/decks/atomic-runtime" \
+SCV_CORE_SYNC_TEST_READY_FILE="$deck_ancestor_ready" \
+SCV_CORE_SYNC_TEST_CONTINUE_FILE="$deck_ancestor_continue" \
+  bash "$fixture/scripts/sync-core.sh" --source "$SOURCE_CORE" \
+    >"$output" 2>&1 &
+deck_ancestor_pid=$!
+if wait_for_test_file "$deck_ancestor_ready"; then
+  mv "$fixture/DeckUI/src" "$deck_ancestor_saved"
+  ln -s "$deck_ancestor_external" "$fixture/DeckUI/src"
+  touch "$deck_ancestor_continue"
+  wait "$deck_ancestor_pid"
+  deck_ancestor_rc=$?
+else
+  kill -TERM "$deck_ancestor_pid" 2>/dev/null || true
+  wait "$deck_ancestor_pid" 2>/dev/null || true
+  deck_ancestor_rc=0
+fi
+deck_ancestor_external_after=$(tree_snapshot "$deck_ancestor_external")
+if [[ "$deck_ancestor_rc" -ne 0 &&
+      "$deck_ancestor_external_before" == "$deck_ancestor_external_after" &&
+      "$(cat "$output")" == *"directory ancestor changed before atomic rename: src"* ]]; then
+  ok "DeckUI ancestor replacement cannot redirect runtime preservation"
+else
+  fail "DeckUI ancestor race reached external data or was accepted"
+fi
+
+echo
 echo "── live worktree collision guards ──"
 fixture="$WORK/deck-conflict"
 output="$WORK/deck-conflict.out"
@@ -582,14 +815,26 @@ output="$WORK/hidden-mode.out"
 copy_fixture "$fixture"
 git -C "$fixture" config core.fileMode false
 chmod 645 "$fixture/scripts/check-branch-flow.sh"
-before=$(tree_snapshot "$fixture")
+before=$(repository_snapshot_without_index "$fixture")
+index_before=$(git_index_snapshot "$fixture")
+target_before=$(portable_sha256 "$fixture/scripts/check-branch-flow.sh")
 bash "$fixture/scripts/sync-core.sh" --source "$SOURCE_CORE" --dry-run \
   >"$output" 2>&1
 rc=$?
-after=$(tree_snapshot "$fixture")
+after=$(repository_snapshot_without_index "$fixture")
+index_after=$(git_index_snapshot "$fixture")
+target_after=$(portable_sha256 "$fixture/scripts/check-branch-flow.sh")
+target_mode_after=$(python3 -c \
+  'import os,stat,sys; print(stat.S_IMODE(os.lstat(sys.argv[1]).st_mode))' \
+  "$fixture/scripts/check-branch-flow.sh")
 if [[ "$rc" -ne 0 &&
       "$(cat "$output")" == *"tracked executable-mode change"* &&
-      "$before" == "$after" ]]; then
+      "$before" == "$after" &&
+      "$index_before" == "$index_after" &&
+      "$target_before" == "$target_after" &&
+      "$target_mode_after" == 421 &&
+      ! -e "$fixture/.git/index.lock" &&
+      -z "$(transaction_debris "$fixture")" ]]; then
   ok "core.fileMode=false cannot hide a protected executable-bit edit"
 else
   fail "hidden executable-bit edit was accepted, changed, or misdiagnosed"
@@ -745,7 +990,7 @@ mkdir "$fixture/.scv-core-sync.lock"
 cat > "$fixture/.scv-core-sync.lock/owner" <<'EOF'
 pid=999999999
 process_start=1
-token=stale-owner
+token=0123456789abcdef0123456789abcdef0123456789abcdef
 EOF
 if bash "$fixture/scripts/sync-core.sh" --source "$SOURCE_CORE" --dry-run \
     >"$output" 2>&1 &&
@@ -754,6 +999,216 @@ if bash "$fixture/scripts/sync-core.sh" --source "$SOURCE_CORE" --dry-run \
   ok "dead-owner lock is safely quarantined and reclaimed"
 else
   fail "dead-owner lock could not be reclaimed cleanly"
+fi
+
+fixture="$WORK/stale-lock-contenders"
+copy_fixture "$fixture"
+mkdir "$fixture/.scv-core-sync.lock"
+cat > "$fixture/.scv-core-sync.lock/owner" <<'EOF'
+pid=999999999
+process_start=1
+token=abcdef0123456789abcdef0123456789abcdef0123456789
+EOF
+stale_contender_hold="$WORK/stale-lock-contenders.hold"
+stale_contender_hold_ready="$stale_contender_hold.ready"
+stale_contender_pause_ready="$WORK/stale-lock-contenders.pause.ready"
+stale_contender_continue="$WORK/stale-lock-contenders.continue"
+stale_contender_first_output="$WORK/stale-lock-contenders.first.out"
+stale_contender_second_output="$WORK/stale-lock-contenders.second.out"
+printf 'hold\n' > "$stale_contender_hold"
+SCV_CORE_SYNC_TEST_PAUSE_AT=before-stale-lock-quarantine \
+SCV_CORE_SYNC_TEST_READY_FILE="$stale_contender_pause_ready" \
+SCV_CORE_SYNC_TEST_CONTINUE_FILE="$stale_contender_continue" \
+SCV_CORE_SYNC_LOCK_HOLD_FILE="$stale_contender_hold" \
+  bash "$fixture/scripts/sync-core.sh" --source "$SOURCE_CORE" --dry-run \
+    >"$stale_contender_first_output" 2>&1 &
+stale_contender_first_pid=$!
+if wait_for_test_file "$stale_contender_pause_ready"; then
+  bash "$fixture/scripts/sync-core.sh" --source "$SOURCE_CORE" --dry-run \
+    >"$stale_contender_second_output" 2>&1 &
+  stale_contender_second_pid=$!
+  touch "$stale_contender_continue"
+  if wait_for_test_file "$stale_contender_hold_ready"; then
+    wait "$stale_contender_second_pid"
+    stale_contender_second_rc=$?
+    stale_contender_owner_pid=$(
+      sed -n 's/^pid=//p' "$fixture/.scv-core-sync.lock/owner"
+    )
+  else
+    kill -TERM "$stale_contender_second_pid" 2>/dev/null || true
+    wait "$stale_contender_second_pid" 2>/dev/null || true
+    stale_contender_second_rc=0
+    stale_contender_owner_pid=
+  fi
+else
+  stale_contender_second_rc=0
+  stale_contender_owner_pid=
+fi
+rm -f "$stale_contender_hold"
+wait "$stale_contender_first_pid"
+stale_contender_first_rc=$?
+if [[ "$stale_contender_first_rc" -eq 0 &&
+      "$stale_contender_second_rc" -ne 0 &&
+      "$stale_contender_owner_pid" == "$stale_contender_first_pid" &&
+      "$(cat "$stale_contender_second_output" 2>/dev/null)" == *"another Core sync is already running"* &&
+      ! -e "$fixture/.scv-core-sync.lock" ]]; then
+  ok "dual stale reclaimers cannot quarantine a newly active lock"
+else
+  fail "stale lock contenders broke canonical mutual exclusion"
+fi
+
+fixture="$WORK/lock-create-symlink-race"
+output="$WORK/lock-create-symlink-race.out"
+copy_fixture "$fixture"
+lock_create_ready="$WORK/lock-create-symlink-race.ready"
+lock_create_continue="$WORK/lock-create-symlink-race.continue"
+lock_create_saved="$WORK/lock-create-symlink-race.saved"
+lock_create_external="$WORK/lock-create-symlink-race.external"
+mkdir "$lock_create_external"
+printf 'external lock owner sentinel\n' > "$lock_create_external/owner"
+printf 'external lock data sentinel\n' > "$lock_create_external/sentinel"
+lock_create_external_before=$(tree_snapshot "$lock_create_external")
+SCV_CORE_SYNC_TEST_PAUSE_AT=after-lock-mkdir \
+SCV_CORE_SYNC_TEST_READY_FILE="$lock_create_ready" \
+SCV_CORE_SYNC_TEST_CONTINUE_FILE="$lock_create_continue" \
+  bash "$fixture/scripts/sync-core.sh" --source "$SOURCE_CORE" --dry-run \
+    >"$output" 2>&1 &
+lock_create_pid=$!
+if wait_for_test_file "$lock_create_ready"; then
+  mv "$fixture/.scv-core-sync.lock" "$lock_create_saved"
+  ln -s "$lock_create_external" "$fixture/.scv-core-sync.lock"
+  touch "$lock_create_continue"
+  wait "$lock_create_pid"
+  lock_create_rc=$?
+else
+  kill -TERM "$lock_create_pid" 2>/dev/null || true
+  wait "$lock_create_pid" 2>/dev/null || true
+  lock_create_rc=0
+fi
+if [[ "$lock_create_rc" -ne 0 &&
+      -L "$fixture/.scv-core-sync.lock" &&
+      "$(tree_snapshot "$lock_create_external")" == "$lock_create_external_before" &&
+      "$(cat "$output")" == *"unsafe or malformed Core sync lock"* ]]; then
+  ok "lock creation cannot be redirected through a late directory symlink"
+else
+  fail "lock creation symlink race touched external data or was accepted"
+fi
+
+fixture="$WORK/lock-release-symlink-race"
+output="$WORK/lock-release-symlink-race.out"
+copy_fixture "$fixture"
+lock_release_ready="$WORK/lock-release-symlink-race.ready"
+lock_release_continue="$WORK/lock-release-symlink-race.continue"
+lock_release_saved="$WORK/lock-release-symlink-race.saved"
+lock_release_external="$WORK/lock-release-symlink-race.external"
+mkdir "$lock_release_external"
+printf 'external lock data sentinel\n' > "$lock_release_external/sentinel"
+SCV_CORE_SYNC_TEST_PAUSE_AT=before-lock-release \
+SCV_CORE_SYNC_TEST_READY_FILE="$lock_release_ready" \
+SCV_CORE_SYNC_TEST_CONTINUE_FILE="$lock_release_continue" \
+  bash "$fixture/scripts/sync-core.sh" --source "$SOURCE_CORE" --dry-run \
+    >"$output" 2>&1 &
+lock_release_pid=$!
+if wait_for_test_file "$lock_release_ready"; then
+  mv "$fixture/.scv-core-sync.lock" "$lock_release_saved"
+  cp -p "$lock_release_saved/owner" "$lock_release_external/owner"
+  lock_release_external_before=$(tree_snapshot "$lock_release_external")
+  ln -s "$lock_release_external" "$fixture/.scv-core-sync.lock"
+  touch "$lock_release_continue"
+  wait "$lock_release_pid"
+  lock_release_rc=$?
+else
+  kill -TERM "$lock_release_pid" 2>/dev/null || true
+  wait "$lock_release_pid" 2>/dev/null || true
+  lock_release_rc=0
+  lock_release_external_before=$(tree_snapshot "$lock_release_external")
+fi
+if [[ "$lock_release_rc" -ne 0 &&
+      -f "$lock_release_saved/owner" &&
+      "$(tree_snapshot "$lock_release_external")" == "$lock_release_external_before" &&
+      "$(cat "$output")" == *"refusing unsafe removal"* ]]; then
+  ok "lock release cannot delete through a late directory symlink"
+else
+  fail "lock release symlink race touched external data or removed ownership"
+fi
+
+fixture="$WORK/git-index-acquire-ancestor-race"
+output="$WORK/git-index-acquire-ancestor-race.out"
+copy_fixture "$fixture"
+git_acquire_ready="$WORK/git-index-acquire-ancestor-race.ready"
+git_acquire_continue="$WORK/git-index-acquire-ancestor-race.continue"
+git_acquire_saved="$WORK/git-index-acquire-ancestor-race.saved"
+git_acquire_external="$WORK/git-index-acquire-ancestor-race.external"
+mkdir "$git_acquire_external"
+printf 'external Git directory sentinel\n' > "$git_acquire_external/sentinel"
+git_acquire_external_before=$(tree_snapshot "$git_acquire_external")
+SCV_CORE_SYNC_TEST_PAUSE_AT=before-git-index-lock-acquire \
+SCV_CORE_SYNC_TEST_READY_FILE="$git_acquire_ready" \
+SCV_CORE_SYNC_TEST_CONTINUE_FILE="$git_acquire_continue" \
+  bash "$fixture/scripts/sync-core.sh" --source "$SOURCE_CORE" \
+    >"$output" 2>&1 &
+git_acquire_pid=$!
+if wait_for_test_file "$git_acquire_ready"; then
+  mv "$fixture/.git" "$git_acquire_saved"
+  ln -s "$git_acquire_external" "$fixture/.git"
+  touch "$git_acquire_continue"
+  wait "$git_acquire_pid"
+  git_acquire_rc=$?
+else
+  kill -TERM "$git_acquire_pid" 2>/dev/null || true
+  wait "$git_acquire_pid" 2>/dev/null || true
+  git_acquire_rc=0
+fi
+git_acquire_external_after=$(tree_snapshot "$git_acquire_external")
+if [[ -L "$fixture/.git" ]]; then
+  unlink "$fixture/.git"
+  mv "$git_acquire_saved" "$fixture/.git"
+fi
+if [[ "$git_acquire_rc" -ne 0 &&
+      "$git_acquire_external_before" == "$git_acquire_external_after" &&
+      ! -e "$fixture/.git/index.lock" &&
+      ! -e "$fixture/.scv-core-sync.lock" ]]; then
+  ok "Git index lock acquisition stays bound to its opened parent"
+else
+  fail "Git index acquisition ancestor race reached external data or leaked locks"
+fi
+
+fixture="$WORK/git-index-release-symlink-race"
+output="$WORK/git-index-release-symlink-race.out"
+copy_fixture "$fixture"
+git_release_ready="$WORK/git-index-release-symlink-race.ready"
+git_release_continue="$WORK/git-index-release-symlink-race.continue"
+git_release_saved="$WORK/git-index-release-symlink-race.saved"
+git_release_external="$WORK/git-index-release-symlink-race.external"
+mkdir "$git_release_external"
+printf 'external Git lock sentinel\n' > "$git_release_external/sentinel"
+SCV_CORE_SYNC_TEST_PAUSE_AT=before-git-index-lock-release \
+SCV_CORE_SYNC_TEST_READY_FILE="$git_release_ready" \
+SCV_CORE_SYNC_TEST_CONTINUE_FILE="$git_release_continue" \
+  bash "$fixture/scripts/sync-core.sh" --source "$SOURCE_CORE" \
+    >"$output" 2>&1 &
+git_release_pid=$!
+if wait_for_test_file "$git_release_ready"; then
+  mv "$fixture/.git/index.lock" "$git_release_saved"
+  cp -p "$git_release_saved" "$git_release_external/index.lock"
+  git_release_external_before=$(tree_snapshot "$git_release_external")
+  ln -s "$git_release_external/index.lock" "$fixture/.git/index.lock"
+  touch "$git_release_continue"
+  wait "$git_release_pid"
+  git_release_rc=$?
+else
+  kill -TERM "$git_release_pid" 2>/dev/null || true
+  wait "$git_release_pid" 2>/dev/null || true
+  git_release_rc=0
+  git_release_external_before=$(tree_snapshot "$git_release_external")
+fi
+if [[ "$git_release_rc" -ne 0 &&
+      -f "$git_release_saved" &&
+      "$(tree_snapshot "$git_release_external")" == "$git_release_external_before" &&
+      "$(cat "$output")" == *"refusing unsafe removal"* ]]; then
+  ok "Git index lock release cannot unlink through a replacement symlink"
+else
+  fail "Git index release symlink race touched external data or ownership"
 fi
 
 fixture="$WORK/malformed-lock"
@@ -934,6 +1389,76 @@ elif [[ "$external_before" == "$(tree_snapshot "$external_lib")" &&
   ok "project-core rejects a nested script symlink without external writes"
 else
   fail "project-core nested-symlink rejection changed external data"
+fi
+
+race_stage="$WORK/project-core-late-race-stage"
+race_destination="$race_stage/wrapper"
+race_saved="$WORK/project-core-late-race-saved"
+race_external="$WORK/project-core-late-race-external"
+race_ready="$WORK/project-core-late-race.ready"
+race_continue="$WORK/project-core-late-race.continue"
+output="$WORK/project-core-late-race.out"
+mkdir -p "$race_destination" "$race_external"
+for directory in scripts commands tests; do
+  cp -R -p "$REPO_ROOT/$directory" "$race_destination/$directory"
+done
+printf '%s\n' "$token" > "$race_stage/.scv-project-core-token"
+printf 'external project sentinel\n' > "$race_external/sentinel"
+race_external_before=$(tree_snapshot "$race_external")
+SCV_PROJECT_CORE_STAGE_ROOT="$race_stage" \
+SCV_PROJECT_CORE_WRITE_TOKEN="$token" \
+SCV_CORE_SYNC_TEST_PAUSE_AT=\
+"before-copy-file:project:scripts/check-branch-flow.sh" \
+SCV_CORE_SYNC_TEST_READY_FILE="$race_ready" \
+SCV_CORE_SYNC_TEST_CONTINUE_FILE="$race_continue" \
+  bash "$REPO_ROOT/scripts/project-core.sh" \
+    --vendor "$SOURCE_CORE" \
+    --destination "$race_destination" >"$output" 2>&1 &
+race_pid=$!
+if wait_for_test_file "$race_ready"; then
+  mv "$race_destination/scripts" "$race_saved"
+  ln -s "$race_external" "$race_destination/scripts"
+  touch "$race_continue"
+  wait "$race_pid"
+  race_rc=$?
+else
+  kill -TERM "$race_pid" 2>/dev/null || true
+  wait "$race_pid" 2>/dev/null || true
+  race_rc=0
+fi
+if [[ "$race_rc" -ne 0 &&
+      "$(tree_snapshot "$race_external")" == "$race_external_before" &&
+      "$(cat "$output")" == *"directory ancestor changed"* ]]; then
+  ok "project-core late ancestor replacement cannot redirect writes"
+else
+  fail "project-core late ancestor race reached external data or was accepted"
+fi
+
+new_path_stage="$WORK/project-core-new-path-stage"
+new_path_destination="$new_path_stage/wrapper"
+new_path_vendor="$WORK/project-core-new-path-vendor"
+mkdir -p "$new_path_destination"
+for directory in scripts commands tests; do
+  cp -R -p "$REPO_ROOT/$directory" "$new_path_destination/$directory"
+done
+cp -R -p "$SOURCE_CORE" "$new_path_vendor"
+mkdir -p "$new_path_vendor/core/scripts/future-core-dir"
+printf '#!/usr/bin/env bash\nexit 0\n' \
+  > "$new_path_vendor/core/scripts/future-core-dir/new-helper.sh"
+chmod 755 \
+  "$new_path_vendor/core/scripts/future-core-dir/new-helper.sh"
+printf '%s\n' "$token" > "$new_path_stage/.scv-project-core-token"
+if SCV_PROJECT_CORE_STAGE_ROOT="$new_path_stage" \
+    SCV_PROJECT_CORE_WRITE_TOKEN="$token" \
+    bash "$REPO_ROOT/scripts/project-core.sh" \
+      --vendor "$new_path_vendor" \
+      --destination "$new_path_destination" >/dev/null 2>&1 &&
+   cmp -s \
+     "$new_path_vendor/core/scripts/future-core-dir/new-helper.sh" \
+     "$new_path_destination/scripts/future-core-dir/new-helper.sh"; then
+  ok "project-core creates a newly introduced nested Core path safely"
+else
+  fail "project-core rejected a new nested Core path as a missing removal parent"
 fi
 
 for directory in scripts commands tests; do
