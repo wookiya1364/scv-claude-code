@@ -33,6 +33,11 @@ DISCUSS.md
 # CHANGELOG.md — local-only (user keeps history privately)
 /CHANGELOG.md
 
+# Maintainer-only Core sync lock, transaction, and stale-lock quarantine
+/.scv-core-sync.lock/
+/.scv-core-transaction.*/
+/.scv-core-sync-quarantine.*/
+
 # Remotion demo (Phase 1+) — node_modules ignored
 /demo/node_modules
 /demo/out

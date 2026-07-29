@@ -10,9 +10,14 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+PATH_HELPER="$SCRIPT_DIR/sync-core-paths.py"
 VENDOR_ROOT="$REPO_ROOT/vendor/scv-core"
 DESTINATION="$REPO_ROOT"
 MODE=write
+STAGE_ROOT=${SCV_PROJECT_CORE_STAGE_ROOT:-}
+WRITE_TOKEN=${SCV_PROJECT_CORE_WRITE_TOKEN:-}
+DESTINATION_DEVICE=
+DESTINATION_INODE=
 
 usage() {
   cat <<'EOF'
@@ -54,6 +59,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+DESTINATION_INPUT=$DESTINATION
+STAGE_ROOT_INPUT=$STAGE_ROOT
 VENDOR_ROOT="$(cd "$VENDOR_ROOT" 2>/dev/null && pwd)" || {
   echo "ERROR: vendor root not found: $VENDOR_ROOT" >&2
   exit 1
@@ -63,6 +70,105 @@ DESTINATION="$(cd "$DESTINATION" 2>/dev/null && pwd)" || {
   exit 1
 }
 CORE_ROOT="$VENDOR_ROOT/core"
+
+if [[ "$MODE" == write ]]; then
+  [[ -n "$STAGE_ROOT" && -n "$WRITE_TOKEN" ]] || {
+    echo "ERROR: project-core write mode is internal; use sync-core.sh" >&2
+    exit 1
+  }
+  [[ ! -L "$STAGE_ROOT_INPUT" && ! -L "$DESTINATION_INPUT" ]] || {
+    echo "ERROR: project-core stage root and destination must not be symlinks" >&2
+    exit 1
+  }
+  STAGE_ROOT="$(cd "$STAGE_ROOT" 2>/dev/null && pwd)" || {
+    echo "ERROR: project-core stage root not found: $STAGE_ROOT" >&2
+    exit 1
+  }
+  TOKEN_FILE="$STAGE_ROOT/.scv-project-core-token"
+  [[ -f "$TOKEN_FILE" && ! -L "$TOKEN_FILE" ]] || {
+    echo "ERROR: project-core stage authorization is missing" >&2
+    exit 1
+  }
+  [[ "$(tr -d '\r\n' < "$TOKEN_FILE")" == "$WRITE_TOKEN" ]] || {
+    echo "ERROR: project-core stage authorization does not match" >&2
+    exit 1
+  }
+  python3 - "$REPO_ROOT" "$STAGE_ROOT" "$DESTINATION" <<'PY'
+import os
+import sys
+from pathlib import Path
+
+repo = Path(sys.argv[1]).resolve()
+stage = Path(sys.argv[2]).resolve()
+destination = Path(sys.argv[3]).resolve()
+
+def is_relative_to(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+        return True
+    except ValueError:
+        return False
+
+if stage == Path(stage.anchor):
+    raise SystemExit("ERROR: project-core stage root is too broad")
+if destination == stage or not is_relative_to(destination, stage):
+    raise SystemExit(
+        "ERROR: project-core destination must be a strict stage descendant"
+    )
+if stage == repo or is_relative_to(repo, stage):
+    raise SystemExit(
+        "ERROR: project-core stage root must not contain the wrapper repository"
+    )
+if destination == repo:
+    raise SystemExit(
+        "ERROR: project-core refuses to write the live wrapper repository"
+    )
+
+relative = destination.relative_to(stage)
+cursor = stage
+for part in relative.parts:
+    cursor = cursor / part
+    if cursor.is_symlink():
+        raise SystemExit(
+            f"ERROR: project-core destination contains a symlink: {cursor}"
+        )
+PY
+  python3 - "$DESTINATION" <<'PY'
+import os
+import stat
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+root_mode = root.lstat().st_mode
+if not stat.S_ISDIR(root_mode):
+    raise SystemExit(
+        f"ERROR: project-core destination is not a real directory: {root}"
+    )
+
+stack = [root]
+while stack:
+    directory = stack.pop()
+    with os.scandir(directory) as handle:
+        children = list(handle)
+    for child in children:
+        mode = child.stat(follow_symlinks=False).st_mode
+        if stat.S_ISLNK(mode):
+            raise SystemExit(
+                "ERROR: project-core destination tree contains a symlink: "
+                f"{child.path}"
+            )
+        if stat.S_ISDIR(mode):
+            stack.append(Path(child.path))
+PY
+  [[ -f "$PATH_HELPER" && ! -L "$PATH_HELPER" ]] || {
+    echo "ERROR: project-core safe path helper is missing" >&2
+    exit 1
+  }
+  DESTINATION_ID=$(python3 -B "$PATH_HELPER" identity --path "$DESTINATION")
+  DESTINATION_DEVICE=${DESTINATION_ID%%:*}
+  DESTINATION_INODE=${DESTINATION_ID#*:}
+fi
 
 for required in \
   "$CORE_ROOT/scripts" \
@@ -83,6 +189,7 @@ ADAPTER_SCRIPTS='
 apply-model-policy.sh
 hydrate.sh
 project-core.sh
+sync-core-paths.py
 sync-core.sh
 sync.sh
 update.sh
@@ -95,9 +202,100 @@ update
 ADAPTER_TESTS='
 test-apply-model-policy.sh
 test-core-contract.sh
+test-sync-core-atomicity.sh
 test-state-adapter.sh
 '
 FAILURES=0
+
+validate_destination_write_path() {
+  local target=$1
+  [[ "$MODE" == write ]] || return 0
+  python3 - "$DESTINATION" "$target" <<'PY'
+import os
+import stat
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+target = Path(os.path.abspath(sys.argv[2]))
+try:
+    relative = target.relative_to(root)
+except ValueError:
+    raise SystemExit(
+        f"ERROR: project-core write target escapes destination: {target}"
+    )
+
+cursor = root
+for index, part in enumerate(relative.parts):
+    cursor = cursor / part
+    try:
+        mode = cursor.lstat().st_mode
+    except FileNotFoundError:
+        break
+    if stat.S_ISLNK(mode):
+        raise SystemExit(
+            f"ERROR: project-core write path contains a symlink: {cursor}"
+        )
+    if index < len(relative.parts) - 1 and not stat.S_ISDIR(mode):
+        raise SystemExit(
+            f"ERROR: project-core write parent is not a directory: {cursor}"
+        )
+PY
+}
+
+safe_remove_destination() {
+  local target=$1 relative
+  [[ "$MODE" == write ]] || return 0
+  validate_destination_write_path "$target"
+  # A future Core release may introduce a new nested scripts/ or tests/ path.
+  # A path-based absence check is safe here: if an entry appears afterwards,
+  # the anchored O_EXCL copy fails closed instead of replacing it.
+  [[ -e "$target" || -L "$target" ]] || return 0
+  relative=${target#"$DESTINATION"/}
+  [[ "$relative" != "$target" ]] || {
+    echo "ERROR: project-core removal target escapes destination" >&2
+    return 1
+  }
+  python3 -B "$PATH_HELPER" remove-entry \
+    --anchor "$DESTINATION" \
+    --anchor-device "$DESTINATION_DEVICE" \
+    --anchor-inode "$DESTINATION_INODE" \
+    --relative "$relative"
+}
+
+safe_copy_file() {
+  local source=$1 target=$2 relative
+  validate_destination_write_path "$target"
+  relative=${target#"$DESTINATION"/}
+  [[ "$relative" != "$target" ]] || {
+    echo "ERROR: project-core copy target escapes destination" >&2
+    return 1
+  }
+  python3 -B "$PATH_HELPER" copy-file \
+    --source "$source" \
+    --destination-anchor "$DESTINATION" \
+    --destination-device "$DESTINATION_DEVICE" \
+    --destination-inode "$DESTINATION_INODE" \
+    --destination-relative "$relative" \
+    --label "project:$relative"
+}
+
+safe_copy_tree() {
+  local source=$1 target=$2 relative
+  validate_destination_write_path "$target"
+  relative=${target#"$DESTINATION"/}
+  [[ "$relative" != "$target" ]] || {
+    echo "ERROR: project-core tree target escapes destination" >&2
+    return 1
+  }
+  python3 -B "$PATH_HELPER" copy-tree \
+    --source "$source" \
+    --destination-anchor "$DESTINATION" \
+    --destination-device "$DESTINATION_DEVICE" \
+    --destination-inode "$DESTINATION_INODE" \
+    --destination-relative "$relative" \
+    --label "project:$relative"
+}
 
 is_adapter_script() {
   case "$ADAPTER_SCRIPTS" in
@@ -129,12 +327,12 @@ compare_or_copy_file() {
     fi
     return
   fi
-  mkdir -p "$(dirname "$target")"
-  cp -p "$source" "$target"
+  safe_remove_destination "$target"
+  safe_copy_file "$source" "$target"
 }
 
 compare_or_replace_tree() {
-  local source=$1 target=$2 label=$3 parent staged backup
+  local source=$1 target=$2 label=$3
   if [[ "$MODE" == check ]]; then
     if [[ ! -d "$target" ]] || ! diff -qr "$source" "$target" >/dev/null 2>&1; then
       echo "PROJECTION_MISMATCH: $label"
@@ -143,57 +341,90 @@ compare_or_replace_tree() {
     return
   fi
 
-  parent=$(dirname "$target")
-  mkdir -p "$parent"
-  staged=$(mktemp -d "$parent/.scv-projection.XXXXXX")
-  cp -R -p "$source/." "$staged/"
-  if [[ -e "$target" ]]; then
-    backup="$parent/.scv-projection-backup.$$.${RANDOM}"
-    mv "$target" "$backup"
-    if mv "$staged" "$target"; then
-      rm -rf "$backup"
-    else
-      mv "$backup" "$target"
-      rm -rf "$staged"
-      return 1
-    fi
-  else
-    mv "$staged" "$target"
-  fi
+  safe_remove_destination "$target"
+  safe_copy_tree "$source" "$target"
 }
 
 compare_or_replace_deckui() {
-  local source=$1 target=$2 parent preserve name
+  local source=$1 target=$2 inventory git_root
   if [[ "$MODE" == check ]]; then
-    if [[ ! -d "$target" ]] || \
-      ! diff -qr -x node_modules -x dist-deck "$source" "$target" >/dev/null 2>&1; then
+    inventory=$(mktemp)
+    git_root=$(git -C "$DESTINATION" rev-parse --show-toplevel 2>/dev/null || true)
+    if [[ "$git_root" == "$DESTINATION" ]]; then
+      {
+        git -C "$DESTINATION" ls-files \
+          --others --ignored --exclude-standard --directory -z -- DeckUI
+        git -C "$DESTINATION" ls-files \
+          --others --exclude-standard --directory -z -- DeckUI
+      } > "$inventory"
+    fi
+    if [[ ! -d "$target" ]] || ! python3 - "$source" "$target" "$inventory" <<'PY'
+import os
+import stat
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1])
+target = Path(sys.argv[2])
+raw = Path(sys.argv[3]).read_bytes().split(b"\0")
+candidate_exclusions = set()
+for value in raw:
+    if not value:
+        continue
+    relative = os.fsdecode(value).rstrip("/")
+    if relative.startswith("DeckUI/"):
+        deck_relative = relative.removeprefix("DeckUI/")
+        source_path = source / deck_relative
+        # A path supplied by Core remains part of the projection contract even
+        # when Git considers the directory untracked (Git cannot own an empty
+        # directory). Core ownership wins over the runtime exclusion.
+        if source_path.exists() or source_path.is_symlink():
+            continue
+        candidate_exclusions.add(deck_relative)
+
+excluded = set()
+for relative in sorted(
+    candidate_exclusions, key=lambda item: (item.count("/"), item)
+):
+    parts = relative.split("/")
+    if any("/".join(parts[:index]) in excluded for index in range(1, len(parts))):
+        continue
+    excluded.add(relative)
+
+def entries(root: Path, apply_exclusions: bool):
+    result = {}
+    stack = [(root, "")]
+    while stack:
+        directory, prefix = stack.pop()
+        with os.scandir(directory) as handle:
+            children = sorted(handle, key=lambda entry: entry.name, reverse=True)
+        for child in children:
+            relative = f"{prefix}/{child.name}".lstrip("/")
+            if apply_exclusions and relative in excluded:
+                continue
+            mode = child.stat(follow_symlinks=False).st_mode
+            item = Path(child.path)
+            if stat.S_ISDIR(mode):
+                result[relative] = ("directory",)
+                stack.append((item, relative))
+            elif stat.S_ISLNK(mode):
+                result[relative] = ("symlink", os.readlink(item))
+            elif stat.S_ISREG(mode):
+                result[relative] = ("file", item.read_bytes())
+            else:
+                result[relative] = ("special",)
+    return result
+
+raise SystemExit(0 if entries(source, False) == entries(target, True) else 1)
+PY
+    then
       echo "PROJECTION_MISMATCH: DeckUI"
       FAILURES=$((FAILURES + 1))
     fi
+    rm -f "$inventory"
     return
   fi
-
-  parent=$(dirname "$target")
-  preserve=$(mktemp -d "$parent/.scv-deck-runtime.XXXXXX")
-  for name in node_modules dist-deck; do
-    if [[ -e "$target/$name" ]]; then
-      mv "$target/$name" "$preserve/$name"
-    fi
-  done
-  if ! compare_or_replace_tree "$source" "$target" DeckUI; then
-    for name in node_modules dist-deck; do
-      [[ ! -e "$preserve/$name" ]] || mv "$preserve/$name" "$target/$name"
-    done
-    rmdir "$preserve" 2>/dev/null || true
-    return 1
-  fi
-  for name in node_modules dist-deck; do
-    if [[ -e "$preserve/$name" ]]; then
-      [[ ! -e "$target/$name" ]] || rm -rf "$target/$name"
-      mv "$preserve/$name" "$target/$name"
-    fi
-  done
-  rmdir "$preserve"
+  compare_or_replace_tree "$source" "$target" DeckUI
 }
 
 # Core shell entrypoints retain their long-standing root paths. Adapter scripts
@@ -218,7 +449,7 @@ while IFS= read -r -d '' projected; do
       echo "PROJECTION_EXTRA: scripts/$rel"
       FAILURES=$((FAILURES + 1))
     else
-      rm -f "$projected"
+      safe_remove_destination "$projected"
     fi
   fi
 done < <(find "$DESTINATION/scripts" -type f -print0)
@@ -251,7 +482,7 @@ while IFS= read -r -d '' projected; do
       echo "PROJECTION_EXTRA: tests/$rel"
       FAILURES=$((FAILURES + 1))
     else
-      rm -f "$projected"
+      safe_remove_destination "$projected"
     fi
   fi
 done < <(find "$DESTINATION/tests" -type f -print0)
@@ -264,12 +495,9 @@ compare_or_copy_file \
   "$DESTINATION/ralph-template-scv.md" \
   ralph-template-scv.md
 
-# Root VERSION follows the pinned core/wrapper release. TEMPLATE_VERSION remains
-# independently versioned and is what hydrate/sync stamp into project state.
-compare_or_copy_file \
-  "$VENDOR_ROOT/VERSION" \
-  "$DESTINATION/VERSION" \
-  VERSION
+# Wrapper releases and Core releases are independent. Root VERSION belongs to
+# the Claude adapter release; only TEMPLATE_VERSION is projected from Core and
+# stamped into hydrated project state.
 compare_or_copy_file \
   "$VENDOR_ROOT/TEMPLATE_VERSION" \
   "$DESTINATION/TEMPLATE_VERSION" \
@@ -281,22 +509,34 @@ compare_or_copy_file \
 
 # A command's YAML frontmatter is owned by the Claude adapter. Its protocol
 # body is generated from core. update and set-models are wholly adapter-owned.
-while IFS= read -r protocol; do
+for protocol in "$CORE_ROOT"/protocols/*.md; do
+  [[ -f "$protocol" ]] || continue
   action=$(basename "$protocol" .md)
   is_adapter_action "$action" && continue
   command="$DESTINATION/commands/$action.md"
+  validate_destination_write_path "$command"
   [[ -f "$command" ]] || {
     echo "ERROR: missing Claude command adapter: commands/$action.md" >&2
     exit 1
   }
 
-  expected=$(mktemp)
+  expected=$(mktemp "${TMPDIR:-/tmp}/scv-command.XXXXXX")
   awk '
     NR == 1 && $0 == "---" { print; in_frontmatter=1; next }
     in_frontmatter { print; if ($0 == "---") exit }
   ' "$command" > "$expected"
   printf '\n' >> "$expected"
   cat "$protocol" >> "$expected"
+  python3 - "$command" "$expected" <<'PY'
+import os
+import stat
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1])
+target = Path(sys.argv[2])
+os.chmod(target, stat.S_IMODE(source.lstat().st_mode))
+PY
 
   if [[ "$MODE" == check ]]; then
     if ! cmp -s "$expected" "$command"; then
@@ -304,11 +544,13 @@ while IFS= read -r protocol; do
       FAILURES=$((FAILURES + 1))
     fi
   else
-    mv "$expected" "$command"
+    safe_remove_destination "$command"
+    safe_copy_file "$expected" "$command"
+    rm -f "$expected"
     expected=
   fi
   [[ -z "${expected:-}" ]] || rm -f "$expected"
-done < <(find "$CORE_ROOT/protocols" -maxdepth 1 -type f -name '*.md' | sort)
+done
 
 if [[ "$MODE" == check ]]; then
   if (( FAILURES > 0 )); then
