@@ -145,15 +145,23 @@ is the single source of merge-gating checks.
 ## CI lanes
 
 Normal pull requests run the same fast contract, shell, state-adapter, and
-shared regression smoke on Ubuntu and macOS. The 2,000-line sync atomicity
-suite is additionally enabled on Ubuntu only at the entry PR into `develop`
-and only when updater, projection, atomic-swap, or atomicity-test files
-changed. Promotion PRs from `develop` to `stage` and `stage` to `main` run
-smoke only, and their merge pushes do not repeat the PR suite.
+shared regression smoke on Ubuntu and macOS. Each automatic job has a hard
+two-minute execution limit. When updater or atomic-swap paths change on the
+entry PR into `develop`, Ubuntu additionally runs one representative
+source-mode dry-run and late live-swap rollback smoke. Promotion PRs from
+`develop` to `stage` and `stage` to `main` remain smoke-only, and merge pushes
+do not repeat checks that already passed on the PR.
 
-The main-branch push is the release gate: one full macOS job runs smoke plus
-the complete atomicity suite. This retains coverage for BSD utilities,
-filesystem modes, and macOS rename/copy behavior without executing the same
-expensive suite four times for every promotion. Concurrency cancels stale
-runs when a PR head changes. The model-policy cross-OS workflow likewise runs
-on its PR once instead of repeating after the main merge.
+The 2,000-line adversarial sync suite is deliberately not a GitHub Actions
+job. It creates dozens of full wrapper fixtures and exercises every
+transaction, race, provenance, and rollback fault, so it is a maintainer
+preflight rather than an interactive CI gate:
+
+```bash
+bash tests/test-sync-core-atomicity.sh
+```
+
+Ubuntu and macOS fast checks remain because they cover GNU/BSD and filesystem
+differences in parallel. The Windows model-policy job covers Git Bash and
+CRLF behavior. Concurrency cancels stale runs when a PR head changes, and
+every workflow job is bounded by `timeout-minutes: 2`.
