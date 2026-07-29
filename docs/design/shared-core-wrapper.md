@@ -146,9 +146,10 @@ is the single source of merge-gating checks.
 
 Normal pull requests run the same fast contract, shell, state-adapter, and
 shared regression smoke on Ubuntu and macOS. The 2,000-line sync atomicity
-suite is additionally enabled on Ubuntu only when updater, projection,
-atomic-swap, or atomicity-test files changed. Merges to `develop` and `stage`
-do not repeat the PR suite.
+suite is additionally enabled on Ubuntu only at the entry PR into `develop`
+and only when updater, projection, atomic-swap, or atomicity-test files
+changed. Promotion PRs from `develop` to `stage` and `stage` to `main` run
+smoke only, and their merge pushes do not repeat the PR suite.
 
 The main-branch push is the release gate: one full macOS job runs smoke plus
 the complete atomicity suite. This retains coverage for BSD utilities,

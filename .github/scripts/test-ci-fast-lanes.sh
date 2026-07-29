@@ -48,8 +48,9 @@ require(
 )
 require(
     "name: Detect atomic sync changes" in contract
-    and "tests/test-sync-core-atomicity.sh)" in contract,
-    "PR atomicity is path-gated",
+    and "tests/test-sync-core-atomicity.sh)" in contract
+    and contract.count("github.base_ref == 'develop'") == 2,
+    "PR atomicity is path-gated and runs only at the develop entry gate",
 )
 require(
     contract.count("run: bash tests/test-sync-core-atomicity.sh") == 2,
