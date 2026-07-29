@@ -139,5 +139,20 @@ must allow GitHub Actions to create pull requests. A fine-grained
 write** access can be configured instead; it also allows the pushed branch and
 PR events to trigger normal downstream workflows. The workflow emits an
 actionable error when branch push or PR creation is denied. It runs the full
-Ubuntu contract preflight before proposing a change; normal downstream PR
-events add the Ubuntu/macOS matrix when a dedicated token is configured.
+cross-platform smoke preflight before proposing a change; the downstream PR
+is the single source of merge-gating checks.
+
+## CI lanes
+
+Normal pull requests run the same fast contract, shell, state-adapter, and
+shared regression smoke on Ubuntu and macOS. The 2,000-line sync atomicity
+suite is additionally enabled on Ubuntu only when updater, projection,
+atomic-swap, or atomicity-test files changed. Merges to `develop` and `stage`
+do not repeat the PR suite.
+
+The main-branch push is the release gate: one full macOS job runs smoke plus
+the complete atomicity suite. This retains coverage for BSD utilities,
+filesystem modes, and macOS rename/copy behavior without executing the same
+expensive suite four times for every promotion. Concurrency cancels stale
+runs when a PR head changes. The model-policy cross-OS workflow likewise runs
+on its PR once instead of repeating after the main merge.
