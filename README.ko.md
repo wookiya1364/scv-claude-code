@@ -216,6 +216,11 @@ v0.20.0부터 공통 워크플로 동작은 체크섬으로 검증하고 버전�
 [`docs/design/shared-core-wrapper.md`](docs/design/shared-core-wrapper.md)를
 참고하세요.
 
+Wrapper와 Core는 서로 독립적으로 릴리스합니다. 이 Claude 어댑터 release는
+`0.20.2`이고 현재 Core pin은 `vendor/scv-core/VERSION`과 `core.lock`에
+기록됩니다. Core sync는 그 체크섬 pin과 생성 projection만 갱신하며 wrapper
+`VERSION`, plugin manifest, marketplace version은 변경하지 않습니다.
+
 PLAN.md 가 단일 source of truth. 외부 도구 (Jira / Linear / Confluence / Google Doc) 는 `refs:` 로 *링크* 만 — 복사 안 함. 출력 (PR / MR / Slack / Discord) 은 같은 source 에서 자동 생성.
 
 ```mermaid

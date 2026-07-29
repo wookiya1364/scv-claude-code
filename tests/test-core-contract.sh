@@ -13,6 +13,16 @@ fail() {
 [[ -d vendor/scv-core/core ]] || fail "vendored core payload is absent"
 [[ -f adapter/claude-code.env ]] || fail "Claude host profile is absent"
 [[ -x adapter/scripts/state-index.sh ]] || fail "state-index adapter is absent"
+grep -qxF \
+  'CORE_STATE_INDEX="$WRAPPER_ROOT/vendor/scv-core/core/scripts/state-index.sh"' \
+  adapter/scripts/state-index.sh ||
+  fail "state-index adapter does not select the vendored Core resolver"
+grep -qxF 'exec "$CORE_STATE_INDEX" "$@"' adapter/scripts/state-index.sh ||
+  fail "state-index adapter does not preserve argv during delegation"
+if grep -qF '<!-- SCV:HOST-POINTER target=SCV.md -->' \
+  adapter/scripts/state-index.sh; then
+  fail "state-index adapter duplicates the Core pointer resolver"
+fi
 
 ./scripts/verify-core.sh
 
@@ -26,13 +36,11 @@ grep -qx 'SCV_LEGACY_STATE_INDEXES=CLAUDE.md|CODEX.md' adapter/claude-code.env |
   fail "cross-host legacy state fallback is missing"
 grep -qx 'SCV_ROOT_ENV=CLAUDE_PLUGIN_ROOT' adapter/claude-code.env ||
   fail "Claude plugin root contract is missing"
-core_version=$(python3 -c 'import json; print(json.load(open("core.lock"))["core_version"])')
-[[ "$(tr -d '[:space:]' < VERSION)" == "$core_version" ]] ||
-  fail "wrapper VERSION does not match the pinned core"
-[[ "$(python3 -c 'import json; print(json.load(open(".claude-plugin/plugin.json"))["version"])')" == "$core_version" ]] ||
-  fail "Claude plugin manifest version does not match the pinned core"
-[[ "$(python3 -c 'import json; print(next(item["version"] for item in json.load(open(".claude-plugin/marketplace.json"))["plugins"] if item["name"] == "scv"))')" == "$core_version" ]] ||
-  fail "Claude marketplace version does not match the pinned core"
+wrapper_version=$(tr -d '[:space:]' < VERSION)
+[[ "$(python3 -c 'import json; print(json.load(open(".claude-plugin/plugin.json"))["version"])')" == "$wrapper_version" ]] ||
+  fail "Claude plugin manifest version does not match wrapper VERSION"
+[[ "$(python3 -c 'import json; print(next(item["version"] for item in json.load(open(".claude-plugin/marketplace.json"))["plugins"] if item["name"] == "scv"))')" == "$wrapper_version" ]] ||
+  fail "Claude marketplace version does not match wrapper VERSION"
 [[ "$(python3 -c 'import json; print(json.load(open("core.lock"))["source_manifest_sha256"])')" =~ ^[0-9a-f]{64}$ ]] ||
   fail "source manifest digest is absent from core.lock"
 [[ ! -e template/scv/CLAUDE.md && ! -e template/scv/CODEX.md ]] ||
