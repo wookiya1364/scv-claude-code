@@ -1,17 +1,16 @@
 name: Cross-OS — model policy script
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'scripts/apply-model-policy.sh'
-      - 'commands/*.md'
-      - '.github/workflows/test-model-policy.yml'
   pull_request:
     paths:
       - 'scripts/apply-model-policy.sh'
       - 'commands/*.md'
+      - '.github/workflows/test-model-policy.yml'
   workflow_dispatch:
+
+concurrency:
+  group: model-policy-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
