@@ -12,7 +12,7 @@ Current versions:
 
 | Contract | Version | Meaning |
 |---|---:|---|
-| SCV Core | `0.20.5` | Shared behavior and release payload |
+| SCV Core | `0.20.6` | Shared behavior and release payload |
 | Core API | `1` | Wrapper/core integration contract |
 | Template | `1.0.0` | Hydrated project-template schema |
 
@@ -40,7 +40,9 @@ argument transport are supplied only through a validated host profile.
 The shared state index is always `scv/SCV.md`. During the transition from older
 wrappers, readers may fall back to `CLAUDE.md` or `CODEX.md` only when
 `SCV.md` is absent. A mutating sync fails closed if independent state indexes
-diverge.
+diverge. Core owns the single resolver and pointer finalizer used by both
+wrappers; compatibility pointers are recognized only by the exact
+`SCV:HOST-POINTER target=SCV.md` marker.
 
 DeckUI source is immutable in installed wrappers. Dependencies, generated
 decks, and build output live in a cache keyed by the canonical Core payload

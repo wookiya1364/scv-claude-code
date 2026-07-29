@@ -62,6 +62,14 @@ exists is backed up and replaced by a small pointer to `SCV.md`; absent host
 pointers are never created. Conflicting canonical and legacy state must stop
 instead of silently choosing one.
 
+State inspection and migration are resolved once in the pinned Core
+`core/scripts/state-index.sh`; wrapper adapters only preserve argv and delegate.
+Pointers are recognized solely by the exact line
+`<!-- SCV:HOST-POINTER target=SCV.md -->`, independent of host-specific header
+prose. A readable canonical or active legacy index together with `INTAKE.md`
+remains hydrated even when divergent active indexes cause an rc 4 conflict.
+A pointer without its canonical target remains broken and unhydrated.
+
 Root-level `scripts/`, `template/`, `DeckUI/`, and `assets/` remain for
 backwards compatibility with existing `${CLAUDE_PLUGIN_ROOT}` command paths.
 `protocols/` and the common portion of `tests/` are projected for shared
