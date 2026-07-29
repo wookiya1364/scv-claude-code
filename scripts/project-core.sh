@@ -10,11 +10,14 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+PATH_HELPER="$SCRIPT_DIR/sync-core-paths.py"
 VENDOR_ROOT="$REPO_ROOT/vendor/scv-core"
 DESTINATION="$REPO_ROOT"
 MODE=write
 STAGE_ROOT=${SCV_PROJECT_CORE_STAGE_ROOT:-}
 WRITE_TOKEN=${SCV_PROJECT_CORE_WRITE_TOKEN:-}
+DESTINATION_DEVICE=
+DESTINATION_INODE=
 
 usage() {
   cat <<'EOF'
@@ -158,6 +161,13 @@ while stack:
         if stat.S_ISDIR(mode):
             stack.append(Path(child.path))
 PY
+  [[ -f "$PATH_HELPER" && ! -L "$PATH_HELPER" ]] || {
+    echo "ERROR: project-core safe path helper is missing" >&2
+    exit 1
+  }
+  DESTINATION_ID=$(python3 -B "$PATH_HELPER" identity --path "$DESTINATION")
+  DESTINATION_DEVICE=${DESTINATION_ID%%:*}
+  DESTINATION_INODE=${DESTINATION_ID#*:}
 fi
 
 for required in \
@@ -179,6 +189,7 @@ ADAPTER_SCRIPTS='
 apply-model-policy.sh
 hydrate.sh
 project-core.sh
+sync-core-paths.py
 sync-core.sh
 sync.sh
 update.sh
@@ -232,40 +243,58 @@ for index, part in enumerate(relative.parts):
 PY
 }
 
-make_safe_destination_parent() {
-  local target=$1
+safe_remove_destination() {
+  local target=$1 relative
   [[ "$MODE" == write ]] || return 0
-  python3 - "$DESTINATION" "$target" <<'PY'
-import os
-import sys
-from pathlib import Path
-
-root = Path(sys.argv[1])
-target = Path(os.path.abspath(sys.argv[2]))
-try:
-    relative_parent = target.parent.relative_to(root)
-except ValueError:
-    raise SystemExit(
-        f"ERROR: project-core write target escapes destination: {target}"
-    )
-
-flags = os.O_RDONLY | os.O_DIRECTORY
-if hasattr(os, "O_NOFOLLOW"):
-    flags |= os.O_NOFOLLOW
-descriptor = os.open(root, flags)
-try:
-    for part in relative_parent.parts:
-        try:
-            os.mkdir(part, mode=0o755, dir_fd=descriptor)
-        except FileExistsError:
-            pass
-        next_descriptor = os.open(part, flags, dir_fd=descriptor)
-        os.close(descriptor)
-        descriptor = next_descriptor
-finally:
-    os.close(descriptor)
-PY
   validate_destination_write_path "$target"
+  # A future Core release may introduce a new nested scripts/ or tests/ path.
+  # A path-based absence check is safe here: if an entry appears afterwards,
+  # the anchored O_EXCL copy fails closed instead of replacing it.
+  [[ -e "$target" || -L "$target" ]] || return 0
+  relative=${target#"$DESTINATION"/}
+  [[ "$relative" != "$target" ]] || {
+    echo "ERROR: project-core removal target escapes destination" >&2
+    return 1
+  }
+  python3 -B "$PATH_HELPER" remove-entry \
+    --anchor "$DESTINATION" \
+    --anchor-device "$DESTINATION_DEVICE" \
+    --anchor-inode "$DESTINATION_INODE" \
+    --relative "$relative"
+}
+
+safe_copy_file() {
+  local source=$1 target=$2 relative
+  validate_destination_write_path "$target"
+  relative=${target#"$DESTINATION"/}
+  [[ "$relative" != "$target" ]] || {
+    echo "ERROR: project-core copy target escapes destination" >&2
+    return 1
+  }
+  python3 -B "$PATH_HELPER" copy-file \
+    --source "$source" \
+    --destination-anchor "$DESTINATION" \
+    --destination-device "$DESTINATION_DEVICE" \
+    --destination-inode "$DESTINATION_INODE" \
+    --destination-relative "$relative" \
+    --label "project:$relative"
+}
+
+safe_copy_tree() {
+  local source=$1 target=$2 relative
+  validate_destination_write_path "$target"
+  relative=${target#"$DESTINATION"/}
+  [[ "$relative" != "$target" ]] || {
+    echo "ERROR: project-core tree target escapes destination" >&2
+    return 1
+  }
+  python3 -B "$PATH_HELPER" copy-tree \
+    --source "$source" \
+    --destination-anchor "$DESTINATION" \
+    --destination-device "$DESTINATION_DEVICE" \
+    --destination-inode "$DESTINATION_INODE" \
+    --destination-relative "$relative" \
+    --label "project:$relative"
 }
 
 is_adapter_script() {
@@ -290,7 +319,7 @@ is_adapter_test() {
 }
 
 compare_or_copy_file() {
-  local source=$1 target=$2 label=$3 staged
+  local source=$1 target=$2 label=$3
   if [[ "$MODE" == check ]]; then
     if [[ ! -f "$target" ]] || ! cmp -s "$source" "$target"; then
       echo "PROJECTION_MISMATCH: $label"
@@ -298,19 +327,12 @@ compare_or_copy_file() {
     fi
     return
   fi
-  make_safe_destination_parent "$target"
-  staged=$(mktemp "$(dirname "$target")/.scv-projection-file.XXXXXX")
-  if cp -p "$source" "$staged"; then
-    validate_destination_write_path "$target"
-    mv -f "$staged" "$target"
-  else
-    rm -f "$staged"
-    return 1
-  fi
+  safe_remove_destination "$target"
+  safe_copy_file "$source" "$target"
 }
 
 compare_or_replace_tree() {
-  local source=$1 target=$2 label=$3 parent staged backup
+  local source=$1 target=$2 label=$3
   if [[ "$MODE" == check ]]; then
     if [[ ! -d "$target" ]] || ! diff -qr "$source" "$target" >/dev/null 2>&1; then
       echo "PROJECTION_MISMATCH: $label"
@@ -319,24 +341,8 @@ compare_or_replace_tree() {
     return
   fi
 
-  parent=$(dirname "$target")
-  make_safe_destination_parent "$target"
-  staged=$(mktemp -d "$parent/.scv-projection.XXXXXX")
-  cp -R -p "$source/." "$staged/"
-  validate_destination_write_path "$target"
-  if [[ -e "$target" ]]; then
-    backup="$parent/.scv-projection-backup.$$.${RANDOM}"
-    mv "$target" "$backup"
-    if mv "$staged" "$target"; then
-      rm -rf "$backup"
-    else
-      mv "$backup" "$target"
-      rm -rf "$staged"
-      return 1
-    fi
-  else
-    mv "$staged" "$target"
-  fi
+  safe_remove_destination "$target"
+  safe_copy_tree "$source" "$target"
 }
 
 compare_or_replace_deckui() {
@@ -443,8 +449,7 @@ while IFS= read -r -d '' projected; do
       echo "PROJECTION_EXTRA: scripts/$rel"
       FAILURES=$((FAILURES + 1))
     else
-      validate_destination_write_path "$projected"
-      rm -f "$projected"
+      safe_remove_destination "$projected"
     fi
   fi
 done < <(find "$DESTINATION/scripts" -type f -print0)
@@ -477,8 +482,7 @@ while IFS= read -r -d '' projected; do
       echo "PROJECTION_EXTRA: tests/$rel"
       FAILURES=$((FAILURES + 1))
     else
-      validate_destination_write_path "$projected"
-      rm -f "$projected"
+      safe_remove_destination "$projected"
     fi
   fi
 done < <(find "$DESTINATION/tests" -type f -print0)
@@ -516,7 +520,7 @@ for protocol in "$CORE_ROOT"/protocols/*.md; do
     exit 1
   }
 
-  expected=$(mktemp "$(dirname "$command")/.scv-command.XXXXXX")
+  expected=$(mktemp "${TMPDIR:-/tmp}/scv-command.XXXXXX")
   awk '
     NR == 1 && $0 == "---" { print; in_frontmatter=1; next }
     in_frontmatter { print; if ($0 == "---") exit }
@@ -540,8 +544,9 @@ PY
       FAILURES=$((FAILURES + 1))
     fi
   else
-    validate_destination_write_path "$command"
-    mv "$expected" "$command"
+    safe_remove_destination "$command"
+    safe_copy_file "$expected" "$command"
+    rm -f "$expected"
     expected=
   fi
   [[ -z "${expected:-}" ]] || rm -f "$expected"

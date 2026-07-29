@@ -8,6 +8,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd -P)"
 PROFILE="$REPO_ROOT/adapter/claude-code.env"
 PLUGIN_MANIFEST="$REPO_ROOT/.claude-plugin/plugin.json"
 MARKETPLACE_MANIFEST="$REPO_ROOT/.claude-plugin/marketplace.json"
+PATH_HELPER_SOURCE="$SCRIPT_DIR/sync-core-paths.py"
 SOURCE_REPO="wookiya1364/scv-core"
 SOURCE_DIR=
 VERSION=
@@ -79,6 +80,10 @@ mode_count=0
 [[ -f "$PROFILE" ]] || { echo "ERROR: missing adapter profile: $PROFILE" >&2; exit 1; }
 [[ -f "$PLUGIN_MANIFEST" ]] || { echo "ERROR: missing Claude plugin manifest: $PLUGIN_MANIFEST" >&2; exit 1; }
 [[ -f "$MARKETPLACE_MANIFEST" ]] || { echo "ERROR: missing Claude marketplace manifest: $MARKETPLACE_MANIFEST" >&2; exit 1; }
+[[ -f "$PATH_HELPER_SOURCE" && ! -L "$PATH_HELPER_SOURCE" ]] || {
+  echo "ERROR: missing safe path helper: $PATH_HELPER_SOURCE" >&2
+  exit 1
+}
 
 for git_override in \
   GIT_DIR \
@@ -100,15 +105,39 @@ export GIT_OPTIONAL_LOCKS=0
 
 TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/scv-claude-core-sync.XXXXXX")
 TMP_DIR="$(cd "$TMP_DIR" && pwd -P)"
+PATH_HELPER="$TMP_DIR/sync-core-paths.py"
+cp -p "$PATH_HELPER_SOURCE" "$PATH_HELPER"
+REPO_ID=$(python3 -B "$PATH_HELPER" identity --path "$REPO_ROOT")
+REPO_DEVICE=${REPO_ID%%:*}
+REPO_INODE=${REPO_ID#*:}
+exec {REPO_FD}<"$REPO_ROOT"
+[[ "$(python3 -B "$PATH_HELPER" identity-fd --fd "$REPO_FD")" == "$REPO_ID" ]] || {
+  echo "ERROR: repository changed while opening its identity descriptor" >&2
+  exit 1
+}
 CANDIDATE="$TMP_DIR/scv-core"
 SYNC_LOCK="$REPO_ROOT/.scv-core-sync.lock"
+SYNC_LOCK_NAME=.scv-core-sync.lock
 LOCK_OWNED=0
 LOCK_TOKEN=
+LOCK_PROCESS_START=
+LOCK_DEVICE=
+LOCK_INODE=
 GIT_INDEX_LOCK=
+GIT_INDEX_LOCK_NAME=
+GIT_INDEX_PARENT=
+GIT_INDEX_PARENT_DEVICE=
+GIT_INDEX_PARENT_INODE=
+GIT_INDEX_PARENT_FD=
 GIT_INDEX_LOCK_OWNED=0
 GIT_INDEX_LOCK_TOKEN=
+GIT_INDEX_LOCK_DEVICE=
+GIT_INDEX_LOCK_INODE=
 TX_INDEX_FINGERPRINT=
 TX_ROOT=
+TX_ROOT_RELATIVE=
+TX_DEVICE=
+TX_INODE=
 TX_STAGE=
 TX_BACKUP=
 TX_ACTIVE=0
@@ -158,58 +187,82 @@ PY
 }
 
 release_sync_lock() {
-  local recorded_token=
   (( LOCK_OWNED )) || return 0
-  if [[ -f "$SYNC_LOCK/owner" && ! -L "$SYNC_LOCK/owner" ]]; then
-    recorded_token=$(sed -n 's/^token=//p' "$SYNC_LOCK/owner")
-  fi
-  if [[ -n "$recorded_token" && "$recorded_token" == "$LOCK_TOKEN" &&
-        -d "$SYNC_LOCK" && ! -L "$SYNC_LOCK" ]]; then
-    rm -f -- "$SYNC_LOCK/owner"
-    if ! rmdir -- "$SYNC_LOCK"; then
-      echo "WARNING: sync lock contains unexpected files: $SYNC_LOCK" >&2
+  python3 -B "$PATH_HELPER" lock-release \
+    --parent-fd "$REPO_FD" \
+    --lock-name "$SYNC_LOCK_NAME" \
+    --pid "$$" \
+    --process-start "$LOCK_PROCESS_START" \
+    --token "$LOCK_TOKEN" \
+    --expected-parent-device "$REPO_DEVICE" \
+    --expected-parent-inode "$REPO_INODE" \
+    --expected-lock-device "$LOCK_DEVICE" \
+    --expected-lock-inode "$LOCK_INODE" || {
+      echo "WARNING: sync lock ownership changed; refusing unsafe removal" >&2
       return 1
-    fi
-  elif path_exists "$SYNC_LOCK"; then
-    echo "WARNING: sync lock ownership changed; refusing to remove $SYNC_LOCK" >&2
-    return 1
-  fi
+    }
   LOCK_OWNED=0
 }
 
 release_git_index_lock() {
-  local recorded_token=
   (( GIT_INDEX_LOCK_OWNED )) || return 0
-  if [[ -f "$GIT_INDEX_LOCK" && ! -L "$GIT_INDEX_LOCK" ]]; then
-    recorded_token=$(tr -d '\r\n' < "$GIT_INDEX_LOCK")
-  fi
-  if [[ -n "$recorded_token" &&
-        "$recorded_token" == "$GIT_INDEX_LOCK_TOKEN" ]]; then
-    rm -f -- "$GIT_INDEX_LOCK"
-  elif path_exists "$GIT_INDEX_LOCK"; then
-    echo "WARNING: Git index lock ownership changed; refusing to remove $GIT_INDEX_LOCK" >&2
-    return 1
-  fi
+  python3 -B "$PATH_HELPER" file-lock-release \
+    --parent-fd "$GIT_INDEX_PARENT_FD" \
+    --lock-name "$GIT_INDEX_LOCK_NAME" \
+    --token "$GIT_INDEX_LOCK_TOKEN" \
+    --expected-parent-device "$GIT_INDEX_PARENT_DEVICE" \
+    --expected-parent-inode "$GIT_INDEX_PARENT_INODE" \
+    --expected-lock-device "$GIT_INDEX_LOCK_DEVICE" \
+    --expected-lock-inode "$GIT_INDEX_LOCK_INODE" || {
+      echo "WARNING: Git index lock ownership changed; refusing unsafe removal" >&2
+      return 1
+    }
   GIT_INDEX_LOCK_OWNED=0
 }
 
-acquire_git_index_lock() {
-  local raw_lock
+prepare_git_index_lock_anchor() {
+  local raw_lock parent_id observed_id
   raw_lock=$(git -C "$REPO_ROOT" rev-parse --git-path index.lock)
   case "$raw_lock" in
     /*) GIT_INDEX_LOCK=$raw_lock ;;
     *) GIT_INDEX_LOCK="$REPO_ROOT/$raw_lock" ;;
   esac
-  GIT_INDEX_LOCK_TOKEN=$(python3 -c 'import secrets; print(secrets.token_hex(24))')
-  if (
-    set -o noclobber
-    printf '%s\n' "$GIT_INDEX_LOCK_TOKEN" > "$GIT_INDEX_LOCK"
-  ) 2>/dev/null; then
-    GIT_INDEX_LOCK_OWNED=1
-  else
-    echo "ERROR: Git index is locked by another process: $GIT_INDEX_LOCK" >&2
+  GIT_INDEX_LOCK_NAME=${GIT_INDEX_LOCK##*/}
+  GIT_INDEX_PARENT=${GIT_INDEX_LOCK%/*}
+  GIT_INDEX_PARENT="$(cd "$GIT_INDEX_PARENT" && pwd -P)"
+  GIT_INDEX_LOCK="$GIT_INDEX_PARENT/$GIT_INDEX_LOCK_NAME"
+  parent_id=$(python3 -B "$PATH_HELPER" identity --path "$GIT_INDEX_PARENT")
+  GIT_INDEX_PARENT_DEVICE=${parent_id%%:*}
+  GIT_INDEX_PARENT_INODE=${parent_id#*:}
+  exec {GIT_INDEX_PARENT_FD}<"$GIT_INDEX_PARENT"
+  observed_id=$(python3 -B "$PATH_HELPER" identity-fd \
+    --fd "$GIT_INDEX_PARENT_FD")
+  [[ "$observed_id" == "$parent_id" ]] || {
+    echo "ERROR: Git index parent changed while opening" >&2
     return 1
-  fi
+  }
+}
+
+acquire_git_index_lock() {
+  local lock_id
+  GIT_INDEX_LOCK_TOKEN=$(python3 -c 'import secrets; print(secrets.token_hex(24))')
+  lock_id=$(python3 -B "$PATH_HELPER" file-lock-acquire \
+    --parent-fd "$GIT_INDEX_PARENT_FD" \
+    --lock-name "$GIT_INDEX_LOCK_NAME" \
+    --token "$GIT_INDEX_LOCK_TOKEN" \
+    --expected-parent-device "$GIT_INDEX_PARENT_DEVICE" \
+    --expected-parent-inode "$GIT_INDEX_PARENT_INODE") || {
+      echo "ERROR: Git index is locked by another process: $GIT_INDEX_LOCK" >&2
+      return 1
+    }
+  GIT_INDEX_LOCK_DEVICE=${lock_id%%:*}
+  GIT_INDEX_LOCK_INODE=${lock_id#*:}
+  [[ "$GIT_INDEX_LOCK_DEVICE" =~ ^[0-9]+$ &&
+     "$GIT_INDEX_LOCK_INODE" =~ ^[0-9]+$ ]] || {
+    echo "ERROR: safe path helper returned an invalid Git lock identity" >&2
+    return 1
+  }
+  GIT_INDEX_LOCK_OWNED=1
 }
 
 scoped_index_fingerprint() {
@@ -245,50 +298,24 @@ validate_index_preimage() {
 }
 
 acquire_sync_lock() {
-  local attempt owner pid recorded_start current_start quarantine
+  local lock_id
   LOCK_TOKEN=$(python3 -c 'import secrets; print(secrets.token_hex(24))')
-  for attempt in 1 2 3 4; do
-    if mkdir -- "$SYNC_LOCK" 2>/dev/null; then
-      LOCK_OWNED=1
-      {
-        printf 'pid=%s\n' "$$"
-        printf 'process_start=%s\n' "$(process_start_id "$$")"
-        printf 'token=%s\n' "$LOCK_TOKEN"
-      } > "$SYNC_LOCK/owner"
-      return 0
-    fi
-
-    if [[ ! -d "$SYNC_LOCK" || -L "$SYNC_LOCK" ||
-          ! -f "$SYNC_LOCK/owner" || -L "$SYNC_LOCK/owner" ]]; then
-      echo "ERROR: unsafe or malformed Core sync lock: $SYNC_LOCK" >&2
-      return 1
-    fi
-    owner="$SYNC_LOCK/owner"
-    pid=$(sed -n 's/^pid=//p' "$owner")
-    recorded_start=$(sed -n 's/^process_start=//p' "$owner")
-    [[ "$pid" =~ ^[1-9][0-9]*$ && -n "$recorded_start" ]] || {
-      echo "ERROR: unsafe or malformed Core sync lock: $SYNC_LOCK" >&2
-      return 1
-    }
-
-    if kill -0 "$pid" 2>/dev/null; then
-      current_start=$(process_start_id "$pid")
-      if [[ "$recorded_start" == unknown || "$current_start" == unknown ||
-            "$recorded_start" == "$current_start" ]]; then
-        echo "ERROR: another Core sync is already running (pid $pid)" >&2
-        return 1
-      fi
-    fi
-
-    quarantine=$(mktemp -d "$REPO_ROOT/.scv-core-sync-quarantine.XXXXXX")
-    if mv -- "$SYNC_LOCK" "$quarantine/stale-lock" 2>/dev/null; then
-      rm -rf -- "$quarantine"
-    else
-      rmdir -- "$quarantine" 2>/dev/null || true
-    fi
-  done
-  echo "ERROR: could not acquire Core sync lock after reclaiming stale owners" >&2
-  return 1
+  LOCK_PROCESS_START=$(process_start_id "$$")
+  lock_id=$(python3 -B "$PATH_HELPER" lock-acquire \
+    --parent "$REPO_ROOT" \
+    --lock-name "$SYNC_LOCK_NAME" \
+    --pid "$$" \
+    --process-start "$LOCK_PROCESS_START" \
+    --token "$LOCK_TOKEN" \
+    --expected-parent-device "$REPO_DEVICE" \
+    --expected-parent-inode "$REPO_INODE") || return 1
+  LOCK_DEVICE=${lock_id%%:*}
+  LOCK_INODE=${lock_id#*:}
+  [[ "$LOCK_DEVICE" =~ ^[0-9]+$ && "$LOCK_INODE" =~ ^[0-9]+$ ]] || {
+    echo "ERROR: safe path helper returned an invalid lock identity" >&2
+    return 1
+  }
+  LOCK_OWNED=1
 }
 
 quarantine_owned_live() {
@@ -300,9 +327,11 @@ quarantine_owned_live() {
     echo "ERROR: rollback found an unowned live path: $relative" >&2
     return 1
   fi
-  discard="$TX_ROOT/rollback-discard/$relative"
-  mkdir -p "$(dirname "$discard")"
-  atomic_rename_noreplace "$live" "$discard" || return 1
+  discard="rollback-discard/$relative"
+  guarded_rename_noreplace \
+    repository "$relative" \
+    transaction "rollback-discard/$relative" \
+    "rollback-discard:$relative" || return 1
   [[ "$relative" != DeckUI ]] || inventory=$TX_DECK_INVENTORY_FILE
   current_digest=$(path_fingerprint "$discard" "$inventory")
   if [[ "$current_digest" != "$installed_digest" ]]; then
@@ -349,8 +378,10 @@ rollback_transaction() {
         deck_preserve_failures=$((deck_preserve_failures + 1))
         continue
       fi
-      if ! mkdir -p "$(dirname "$preserved_backup")" ||
-         ! atomic_rename_noreplace "$preserved_live" "$preserved_backup"; then
+      if ! guarded_rename_noreplace \
+        repository "$relative" \
+        transaction "backup/$relative" \
+        "rollback-preserved:$relative"; then
         echo "ERROR: could not restore preserved path to backup: $relative" >&2
         failures=$((failures + 1))
         deck_preserve_failures=$((deck_preserve_failures + 1))
@@ -387,8 +418,10 @@ rollback_transaction() {
             continue
           fi
         fi
-        if ! mkdir -p "$(dirname "$live")" ||
-           ! atomic_rename_noreplace "$backup" "$live"; then
+        if ! guarded_rename_noreplace \
+          transaction "backup/$relative" \
+          repository "$relative" \
+          "rollback-restore:$relative"; then
           echo "ERROR: rollback could not restore original path: $relative" >&2
           failures=$((failures + 1))
         fi
@@ -422,19 +455,24 @@ finish_on_exit() {
     preserve_transaction=1
     (( status != 0 )) || status=$rollback_status
   fi
-  if (( preserve_transaction == 0 )) &&
-     [[ -n "$TX_ROOT" && -d "$TX_ROOT" ]]; then
-    rm -rf -- "$TX_ROOT"
-  fi
-  if [[ -n "$TMP_DIR" && -d "$TMP_DIR" ]]; then
-    rm -rf -- "$TMP_DIR"
+  if (( preserve_transaction == 0 )) && [[ -n "$TX_ROOT" ]]; then
+    cleanup_transaction_tree || {
+      (( status != 0 )) || status=1
+    }
   fi
   release_git_index_lock || {
     (( status != 0 )) || status=1
   }
+  if [[ -n "$GIT_INDEX_PARENT_FD" ]]; then
+    exec {GIT_INDEX_PARENT_FD}<&-
+  fi
   release_sync_lock || {
     (( status != 0 )) || status=1
   }
+  exec {REPO_FD}<&-
+  if [[ -n "$TMP_DIR" && -d "$TMP_DIR" ]]; then
+    rm -rf -- "$TMP_DIR"
+  fi
   exit "$status"
 }
 
@@ -742,6 +780,7 @@ trap 'exit_on_signal 130' INT
 trap 'exit_on_signal 143' TERM
 
 acquire_sync_lock
+prepare_git_index_lock_anchor
 
 orphan_transaction=
 for recovery_candidate in \
@@ -1111,64 +1150,86 @@ sync_failpoint() {
   esac
 }
 
-atomic_rename_noreplace() {
-  local source=$1 destination=$2
-  python3 - "$source" "$destination" <<'PY'
-import ctypes
-import errno
-import os
-import sys
+sync_test_pause() {
+  local point=$1 attempt
+  [[ "${SCV_CORE_SYNC_TEST_PAUSE_AT:-}" == "$point" ]] || return 0
+  [[ -n "${SCV_CORE_SYNC_TEST_READY_FILE:-}" &&
+     -n "${SCV_CORE_SYNC_TEST_CONTINUE_FILE:-}" ]] || {
+    echo "ERROR: test pause requires ready and continue files" >&2
+    return 2
+  }
+  printf '%s\n' "$point" > "$SCV_CORE_SYNC_TEST_READY_FILE"
+  for (( attempt=1; attempt <= 1200; attempt++ )); do
+    [[ -e "$SCV_CORE_SYNC_TEST_CONTINUE_FILE" ]] && return 0
+    sleep 0.05
+  done
+  echo "ERROR: timed out at test pause: $point" >&2
+  return 1
+}
 
-source = os.fsencode(sys.argv[1])
-destination = os.fsencode(sys.argv[2])
-libc = ctypes.CDLL(None, use_errno=True)
+guarded_rename_noreplace() {
+  local source_scope=$1 source_relative=$2
+  local destination_scope=$3 destination_relative=$4 label=$5
+  local source_anchor source_device source_inode
+  local destination_anchor destination_device destination_inode
+  case "$source_scope" in
+    repository)
+      source_anchor=$REPO_ROOT
+      source_device=$REPO_DEVICE
+      source_inode=$REPO_INODE
+      ;;
+    transaction)
+      source_anchor=$TX_ROOT
+      source_device=$TX_DEVICE
+      source_inode=$TX_INODE
+      ;;
+    *)
+      echo "ERROR: unknown guarded rename source scope: $source_scope" >&2
+      return 2
+      ;;
+  esac
+  case "$destination_scope" in
+    repository)
+      destination_anchor=$REPO_ROOT
+      destination_device=$REPO_DEVICE
+      destination_inode=$REPO_INODE
+      ;;
+    transaction)
+      destination_anchor=$TX_ROOT
+      destination_device=$TX_DEVICE
+      destination_inode=$TX_INODE
+      ;;
+    *)
+      echo "ERROR: unknown guarded rename destination scope: $destination_scope" >&2
+      return 2
+      ;;
+  esac
+  python3 -B "$PATH_HELPER" rename-noreplace \
+    --source-anchor "$source_anchor" \
+    --source-device "$source_device" \
+    --source-inode "$source_inode" \
+    --source-relative "$source_relative" \
+    --destination-anchor "$destination_anchor" \
+    --destination-device "$destination_device" \
+    --destination-inode "$destination_inode" \
+    --destination-relative "$destination_relative" \
+    --label "$label" \
+    --create-destination-parents
+}
 
-if sys.platform.startswith("linux"):
-    try:
-        rename = libc.renameat2
-    except AttributeError:
-        raise SystemExit("ERROR: libc lacks atomic renameat2 support")
-    rename.argtypes = [
-        ctypes.c_int,
-        ctypes.c_char_p,
-        ctypes.c_int,
-        ctypes.c_char_p,
-        ctypes.c_uint,
-    ]
-    rename.restype = ctypes.c_int
-    result = rename(-100, source, -100, destination, 1)
-elif sys.platform == "darwin":
-    try:
-        rename = libc.renamex_np
-    except AttributeError:
-        raise SystemExit("ERROR: libc lacks atomic renamex_np support")
-    rename.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint]
-    rename.restype = ctypes.c_int
-    result = rename(source, destination, 0x00000004)
-elif os.name == "nt":
-    try:
-        os.rename(os.fsdecode(source), os.fsdecode(destination))
-    except OSError as error:
-        print(
-            f"ERROR: atomic install rename failed: {error}",
-            file=sys.stderr,
-        )
-        raise SystemExit(1)
-    raise SystemExit(0)
-else:
-    raise SystemExit(
-        f"ERROR: atomic no-replace rename is unsupported on {sys.platform}"
-    )
-
-if result != 0:
-    error_number = ctypes.get_errno()
-    if error_number == errno.EEXIST:
-        detail = "destination appeared concurrently"
-    else:
-        detail = os.strerror(error_number)
-    print(f"ERROR: atomic install rename failed: {detail}", file=sys.stderr)
-    raise SystemExit(1)
-PY
+cleanup_transaction_tree() {
+  [[ -n "$TX_ROOT" && -n "$TX_ROOT_RELATIVE" &&
+     -n "$TX_DEVICE" && -n "$TX_INODE" ]] || {
+    echo "ERROR: transaction cleanup identity is unavailable" >&2
+    return 1
+  }
+  python3 -B "$PATH_HELPER" remove-tree \
+    --anchor "$REPO_ROOT" \
+    --anchor-device "$REPO_DEVICE" \
+    --anchor-inode "$REPO_INODE" \
+    --relative "$TX_ROOT_RELATIVE" \
+    --expected-device "$TX_DEVICE" \
+    --expected-inode "$TX_INODE"
 }
 
 path_fingerprint() {
@@ -1329,8 +1390,8 @@ collect_deckui_inventory() {
     echo "ERROR: Core sync must run at the wrapper Git worktree root" >&2
     return 1
   }
-  raw="$TX_ROOT/deckui-inventory${suffix}.raw"
-  normalized="$TX_ROOT/deckui-inventory${suffix}"
+  raw="deckui-inventory${suffix}.raw"
+  normalized="deckui-inventory${suffix}"
   {
     git -C "$REPO_ROOT" ls-files \
       --others --ignored --exclude-standard --directory -z -- DeckUI
@@ -1388,56 +1449,8 @@ PY
   done < "$normalized"
 }
 
-TX_ROOT=$(mktemp -d "$REPO_ROOT/.scv-core-transaction.XXXXXX")
-TX_STAGE="$TX_ROOT/stage"
-TX_BACKUP="$TX_ROOT/backup"
-TX_STAGE_CANDIDATE="$TX_ROOT/candidate"
-TX_STAGE_VENDOR_PARENT="$TX_STAGE/vendor"
-TX_STAGE_VENDOR="$TX_STAGE/vendor/scv-core"
-TX_STAGE_WRAPPER="$TX_STAGE/wrapper"
-mkdir -p "$TX_STAGE_WRAPPER" "$TX_BACKUP"
-
-python3 - "$REPO_ROOT" "$VENDOR_PARENT" "$TX_ROOT" <<'PY'
-import os
-import sys
-from pathlib import Path
-
-repo = Path(sys.argv[1])
-vendor_parent = Path(sys.argv[2])
-transaction = Path(sys.argv[3])
-expected_device = os.stat(repo).st_dev
-if vendor_parent.exists() and os.stat(vendor_parent).st_dev != expected_device:
-    raise SystemExit(
-        "ERROR: repository and vendor target are on different filesystems"
-    )
-if os.stat(transaction).st_dev != expected_device:
-    raise SystemExit(
-        "ERROR: core transaction stage is not on the repository filesystem"
-    )
-PY
-
-# Copy the fully verified candidate into the repository filesystem before any
-# live path is renamed. A cross-device TMPDIR is safe: interruption here can
-# only leave the hidden transaction directory, which the EXIT/signal handler
-# removes.
-cp -R -p "$CANDIDATE" "$TX_STAGE_CANDIDATE"
-cp -p "$TX_STAGE_CANDIDATE/core.lock.json" "$TX_STAGE/core.lock"
-"$TX_STAGE_CANDIDATE/tools/verify-core.sh" --root "$TX_STAGE_CANDIDATE"
-"$SCRIPT_DIR/verify-core.sh" \
-  --vendor "$TX_STAGE_CANDIDATE" \
-  --lock "$TX_STAGE/core.lock" \
-  --no-projection
-
-# Couple the live preimage to the transaction projection. The second worktree
-# validation closes the download/verification window. Snapshot-before-copy
-# plus a pre-swap and post-backup digest check protects even adapter-owned
-# files, whose local contents are intentionally allowed and projected.
-acquire_git_index_lock
-validate_live_worktree
-TX_INDEX_FINGERPRINT=$(scoped_index_fingerprint)
-collect_deckui_inventory
-capture_transaction_preimage
-python3 - "$VENDOR_PARENT" "$TX_STAGE_VENDOR_PARENT" <<'PY'
+VENDOR_PROJECTION="$TMP_DIR/vendor-projection"
+python3 - "$VENDOR_PARENT" "$VENDOR_PROJECTION" "$CANDIDATE" <<'PY'
 import os
 import shutil
 import stat
@@ -1446,7 +1459,8 @@ from pathlib import Path
 
 source = Path(sys.argv[1])
 destination = Path(sys.argv[2])
-destination.mkdir(parents=True)
+candidate = Path(sys.argv[3])
+destination.mkdir()
 if source.exists():
     shutil.copystat(source, destination, follow_symlinks=False)
     with os.scandir(source) as handle:
@@ -1472,23 +1486,90 @@ if source.exists():
             raise SystemExit(
                 f"ERROR: unsupported file type under vendor: {source_child}"
             )
+shutil.copytree(
+    candidate,
+    destination / "scv-core",
+    symlinks=True,
+    copy_function=shutil.copy2,
+)
 PY
-mv "$TX_STAGE_CANDIDATE" "$TX_STAGE_VENDOR"
-for adapter_tree in scripts commands tests; do
-  cp -R -p "$REPO_ROOT/$adapter_tree" "$TX_STAGE_WRAPPER/$adapter_tree"
-done
-TX_PROJECT_TOKEN=$(python3 -c 'import secrets; print(secrets.token_hex(24))')
-printf '%s\n' "$TX_PROJECT_TOKEN" > "$TX_STAGE/.scv-project-core-token"
-chmod 600 "$TX_STAGE/.scv-project-core-token"
-SCV_PROJECT_CORE_STAGE_ROOT="$TX_STAGE" \
-SCV_PROJECT_CORE_WRITE_TOKEN="$TX_PROJECT_TOKEN" \
-  "$SCRIPT_DIR/project-core.sh" \
+
+TX_ID=$(python3 -B "$PATH_HELPER" make-temp-directory \
+  --anchor "$REPO_ROOT" \
+  --anchor-device "$REPO_DEVICE" \
+  --anchor-inode "$REPO_INODE" \
+  --prefix .scv-core-transaction.)
+TX_ROOT_RELATIVE=${TX_ID%%:*}
+TX_ID=${TX_ID#*:}
+TX_DEVICE=${TX_ID%%:*}
+TX_INODE=${TX_ID#*:}
+[[ "$TX_ROOT_RELATIVE" == .scv-core-transaction.* &&
+   "$TX_ROOT_RELATIVE" != */* &&
+   "$TX_DEVICE" =~ ^[0-9]+$ &&
+   "$TX_INODE" =~ ^[0-9]+$ ]] || {
+  echo "ERROR: safe path helper returned an invalid transaction identity" >&2
+  exit 1
+}
+TX_ROOT="$REPO_ROOT/$TX_ROOT_RELATIVE"
+cd "$TX_ROOT" || {
+  echo "ERROR: cannot enter Core transaction root" >&2
+  exit 1
+}
+TX_CWD_ID=$(python3 -B "$PATH_HELPER" identity --path .)
+[[ "$TX_CWD_ID" == "$TX_DEVICE:$TX_INODE" ]] || {
+  echo "ERROR: Core transaction root changed before staging" >&2
+  exit 1
+}
+sync_test_pause before-transaction-staging
+TX_STAGE=stage
+TX_BACKUP=backup
+TX_STAGE_VENDOR_PARENT="$TX_STAGE/vendor"
+TX_STAGE_VENDOR="$TX_STAGE/vendor/scv-core"
+TX_STAGE_WRAPPER="$TX_STAGE/wrapper"
+python3 -B "$PATH_HELPER" make-directories \
+  --anchor "$TX_ROOT" \
+  --anchor-device "$TX_DEVICE" \
+  --anchor-inode "$TX_INODE" \
+  --relative backup
+python3 -B "$PATH_HELPER" copy-tree \
+  --source "$VENDOR_PROJECTION" \
+  --destination-anchor "$TX_ROOT" \
+  --destination-device "$TX_DEVICE" \
+  --destination-inode "$TX_INODE" \
+  --destination-relative stage/vendor \
+  --label stage/vendor
+python3 -B "$PATH_HELPER" copy-tree \
+  --source "$PROJECTION_STAGE" \
+  --destination-anchor "$TX_ROOT" \
+  --destination-device "$TX_DEVICE" \
+  --destination-inode "$TX_INODE" \
+  --destination-relative stage/wrapper \
+  --label stage/wrapper
+python3 -B "$PATH_HELPER" copy-file \
+  --source "$CANDIDATE/core.lock.json" \
+  --destination-anchor "$TX_ROOT" \
+  --destination-device "$TX_DEVICE" \
+  --destination-inode "$TX_INODE" \
+  --destination-relative stage/core.lock
+"$TX_STAGE_VENDOR/tools/verify-core.sh" --root "$TX_STAGE_VENDOR"
+"$SCRIPT_DIR/verify-core.sh" \
   --vendor "$TX_STAGE_VENDOR" \
-  --destination "$TX_STAGE_WRAPPER"
+  --lock "$TX_STAGE/core.lock" \
+  --no-projection
 "$SCRIPT_DIR/project-core.sh" \
   --vendor "$TX_STAGE_VENDOR" \
   --destination "$TX_STAGE_WRAPPER" \
   --check
+
+# Couple the live preimage to the transaction projection. The second worktree
+# validation closes the download/verification window. Snapshot-before-copy
+# plus a pre-swap and post-backup digest check protects even adapter-owned
+# files, whose local contents are intentionally allowed and projected.
+acquire_git_index_lock
+validate_live_worktree
+TX_INDEX_FINGERPRINT=$(scoped_index_fingerprint)
+collect_deckui_inventory
+capture_transaction_preimage
 for preserved_path in "${TX_DECK_INVENTORY[@]}"; do
   if path_exists "$TX_STAGE_WRAPPER/$preserved_path"; then
     echo "ERROR: staged Core conflicts with local runtime path: $preserved_path" >&2
@@ -1588,18 +1669,20 @@ PY
   echo "DECK_RUNTIME_MIGRATED: $deck_runtime_path"
 fi
 
-transaction_source() {
+transaction_source_relative() {
   case "$1" in
-    vendor) printf '%s\n' "$TX_STAGE_VENDOR_PARENT" ;;
-    core.lock) printf '%s\n' "$TX_STAGE/core.lock" ;;
-    *) printf '%s\n' "$TX_STAGE_WRAPPER/$1" ;;
+    vendor) printf '%s\n' stage/vendor ;;
+    core.lock) printf '%s\n' stage/core.lock ;;
+    *) printf 'stage/wrapper/%s\n' "$1" ;;
   esac
 }
 
 swap_transaction_path() {
-  local relative=$1 source live backup original_state=absent preserved inventory
+  local relative=$1 source_relative source live backup
+  local original_state=absent preserved inventory
   local expected_index actual_original source_digest installed_digest
-  source=$(transaction_source "$relative")
+  source_relative=$(transaction_source_relative "$relative")
+  source=$source_relative
   live="$REPO_ROOT/$relative"
   backup="$TX_BACKUP/$relative"
   path_exists "$source" || {
@@ -1619,8 +1702,10 @@ swap_transaction_path() {
   TX_INSTALLED_DIGESTS+=("$source_digest")
 
   if [[ "$original_state" == present ]]; then
-    mkdir -p "$(dirname "$backup")"
-    atomic_rename_noreplace "$live" "$backup"
+    guarded_rename_noreplace \
+      repository "$relative" \
+      transaction "backup/$relative" \
+      "backup:$relative"
     actual_original=$backup
   else
     actual_original=$live
@@ -1643,8 +1728,10 @@ swap_transaction_path() {
     return 1
   fi
 
-  mkdir -p "$(dirname "$live")"
-  atomic_rename_noreplace "$source" "$live"
+  guarded_rename_noreplace \
+    transaction "$source_relative" \
+    repository "$relative" \
+    "install:$relative"
   TX_STAGE_INSTALLED[$expected_index]=yes
 
   if [[ "$relative" == DeckUI && "$original_state" == present ]]; then
@@ -1654,11 +1741,11 @@ swap_transaction_path() {
           echo "ERROR: staged DeckUI unexpectedly contains $preserved" >&2
           return 1
         }
-        mkdir -p "$(dirname "$live/${preserved#DeckUI/}")"
+        guarded_rename_noreplace \
+          transaction "backup/$preserved" \
+          repository "$preserved" \
+          "preserve:$preserved"
         TX_PRESERVED_PATHS+=("$preserved")
-        atomic_rename_noreplace \
-          "$backup/${preserved#DeckUI/}" \
-          "$live/${preserved#DeckUI/}"
       fi
     done
   fi
@@ -1690,8 +1777,11 @@ validate_backup_preimages
 
 TX_COMMITTED=1
 TX_ACTIVE=0
-rm -rf -- "$TX_ROOT"
+cleanup_transaction_tree
 TX_ROOT=
+TX_ROOT_RELATIVE=
+TX_DEVICE=
+TX_INODE=
 
 echo "CORE_SYNCED: yes"
 echo "CORE_VERSION: $(tr -d '[:space:]' < "$VENDOR_TARGET/VERSION")"
