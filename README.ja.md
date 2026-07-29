@@ -214,10 +214,11 @@ v0.20.0 から、共通ワークフローの動作はチェックサムで検証
 詳細は [`docs/design/shared-core-wrapper.md`](docs/design/shared-core-wrapper.md)
 を参照してください。
 
-Wrapper と Core は独立してリリースします。現在の Claude アダプターは
-`0.20.2` で、Core `0.20.3` を pin しています。Core sync が更新するのは
-チェックサム付き pin と生成 projection のみで、wrapper の `VERSION`、
-plugin manifest、marketplace version は変更しません。
+Wrapper と Core は独立してリリースします。この Claude アダプター release
+は `0.20.2` で、現在の Core pin は `vendor/scv-core/VERSION` と
+`core.lock` に記録されます。Core sync が更新するのは、そのチェックサム付き
+pin と生成 projection のみで、wrapper の `VERSION`、plugin manifest、
+marketplace version は変更しません。
 
 PLAN.md が単一の source of truth。外部ツール (Jira / Linear / Confluence / Google Doc) は `refs:` で*リンク*のみ — 複製しない。出力 (PR / MR / Slack / Discord) は同じ source から自動生成。
 

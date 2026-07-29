@@ -28,8 +28,8 @@ Wrapper and Core versions advance independently. Root `VERSION`,
 adapter-release unit and must agree with each other; Core sync never rewrites
 them. The vendored `VERSION` and `core.lock` identify the independent Core pin.
 `TEMPLATE_VERSION` follows Core because it tracks the schema stamped into
-hydrated project state. The wrapper is `0.20.2` while the current Core pin is
-`0.20.3`, demonstrating that the two release streams are not lockstep.
+hydrated project state. The wrapper and the Core pin recorded in `core.lock`
+can therefore advance on different release schedules.
 
 The digest fields are intentionally distinct:
 
@@ -83,9 +83,13 @@ and its recovery path is printed instead of deleting the only backup.
 
 Before replacing the legacy in-tree DeckUI, the candidate Core
 `deck-runtime.sh migrate` command copies known mutable runtime entries into
-the external, source-payload-namespaced cache. Migration is additive and reads
-the old DeckUI without modifying it; a later wrapper rollback therefore never
-depends on undoing cache writes.
+the external, source-payload-namespaced cache. Migration is additive while the
+destination has no conflicting entry. When another host already populated the
+same cache with different data, the persistent legacy migration treats that
+cache as authoritative and skips the entire legacy source, including equal
+and missing entries, so two hosts are never partially mixed. The old DeckUI
+is never modified; a later wrapper rollback therefore never depends on
+undoing cache writes.
 
 Core-owned dirty files and local-only files under wholesale replacement paths
 fail closed. DeckUI is the explicit exception: every ignored or untracked
@@ -110,7 +114,7 @@ macOS.
 ./scripts/sync-core.sh --source ../scv-core
 
 # Pin an immutable public release
-./scripts/sync-core.sh --version 0.20.3
+./scripts/sync-core.sh --version X.Y.Z
 
 # Verify lock, checksums, API compatibility, profile, and projection
 ./scripts/verify-core.sh
@@ -126,5 +130,6 @@ must allow GitHub Actions to create pull requests. A fine-grained
 `SCV_CORE_SYNC_TOKEN` with repository **Contents: write** and **Pull requests:
 write** access can be configured instead; it also allows the pushed branch and
 PR events to trigger normal downstream workflows. The workflow emits an
-actionable error when branch push or PR creation is denied, and it always runs
-the complete validation suite before proposing a change.
+actionable error when branch push or PR creation is denied. It runs the full
+Ubuntu contract preflight before proposing a change; normal downstream PR
+events add the Ubuntu/macOS matrix when a dedicated token is configured.

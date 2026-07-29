@@ -72,7 +72,12 @@ jobs:
           bash tests/test-core-contract.sh
           bash tests/test-sync-core-atomicity.sh
           bash tests/test-apply-model-policy.sh
+          bash tests/test-help-workspace.sh
+          bash tests/test-workspace.sh
           bash tests/run-dry.sh
+          find scripts tests adapter -type f -name '*.sh' -print0 |
+            xargs -0 -n1 bash -n
+          git diff --check
 
       - name: Commit and push update branch
         if: steps.pin.outputs.changed == 'yes'

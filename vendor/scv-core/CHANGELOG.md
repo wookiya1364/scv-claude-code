@@ -2,6 +2,40 @@
 
 All notable changes to SCV Core are documented here.
 
+## [0.20.5] - 2026-07-29
+
+### Changed
+
+- Kept legacy Deck runtime migration strict by default and added the explicit
+  `migrate --from LEGACY_DECKUI --reuse-existing` opt-in for persistent legacy
+  sources.
+- Made cache reuse authoritative and all-or-none: if preflight finds any
+  pre-existing destination that differs from its legacy source, the entire
+  legacy source is skipped, including equal and missing destinations. With no
+  mismatch, migration retains its existing additive behavior.
+- Required ephemeral existing-vendor recovery to remain strict so a wrapper
+  cannot discard runtime data when that vendor is removed after a successful
+  swap. Core API remains `1`.
+
+### Security
+
+- Preflight now evaluates every eligible runtime entry before any copy or
+  authoritative-reuse decision. A destination collision that appears after
+  preflight still fails closed instead of changing policy mid-transaction.
+
+## [0.20.4] - 2026-07-28
+
+### Security
+
+- Anchored the Deck runtime cache base, payload namespace, target, staging,
+  migration destinations, installation, and cleanup to verified directory
+  descriptors opened with no-follow semantics.
+- Made lock acquisition install a complete owner record through an atomic
+  no-replace rename, and bound stale quarantine and release to the original
+  lock inode and owner token.
+- Added deterministic late-symlink, ancestor-replacement, quarantine-collision,
+  and release-race regressions that assert external sentinels remain unchanged.
+
 ## [0.20.3] - 2026-07-28
 
 ### Fixed
