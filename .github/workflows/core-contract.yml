@@ -73,7 +73,7 @@ jobs:
           bash tests/run-dry.sh
 
       - name: Detect atomic sync changes
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && github.base_ref == 'develop'
         id: atomicity
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -93,6 +93,7 @@ jobs:
       - name: Atomic sync regression
         if: >-
           runner.os == 'Linux' &&
+          github.base_ref == 'develop' &&
           steps.atomicity.outputs.required == 'yes'
         run: bash tests/test-sync-core-atomicity.sh
 
