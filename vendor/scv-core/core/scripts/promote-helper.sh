@@ -124,6 +124,10 @@ if [[ -d "$RAW_DIR" ]]; then
   while IFS= read -r f; do
     [[ -f "$f" ]] || continue
     [[ "$f" == "$RAW_DIR/README.md" ]] && continue
+    [[ "${f##*/}" == ".gitkeep" ]] && continue
+    # Consumed docs live under stale/ — they are not promote sources by
+    # default and must not inflate the split heuristic. Listed separately below.
+    [[ "$f" == "$RAW_DIR/stale/"* ]] && continue
     found=1
     RAW_FILE_COUNT=$((RAW_FILE_COUNT + 1))
     # Track top-level subdirs of scv/raw/ as a cheap "topic cluster" signal.
@@ -171,6 +175,42 @@ echo "RAW_TOPIC_CLUSTERS: $RAW_TOPDIR_COUNT"
 echo "SUGGEST_SPLIT: $SUGGEST_SPLIT"
 if [[ -n "$SPLIT_REASON" ]]; then
   echo "SPLIT_REASON: $SPLIT_REASON"
+fi
+
+echo ""
+echo "=== scv/raw/stale (consumed docs) ==="
+RAW_STALE_COUNT=0
+if [[ -x "$READPATH" ]]; then
+  STALE_REFS=$(RAW_DIR="$RAW_DIR" STATE_FILE="$STATE_FILE" bash "$READPATH" refs 2>/dev/null || true)
+  if [[ -n "$STALE_REFS" ]]; then
+    while IFS=$'\t' read -r p slugs _cmt _at; do
+      [[ -z "$p" ]] && continue
+      RAW_STALE_COUNT=$((RAW_STALE_COUNT + 1))
+      echo "- $p  ← ${slugs:-?}"
+    done <<< "$STALE_REFS"
+  else
+    echo "(none)"
+  fi
+else
+  echo "(readpath.sh unavailable)"
+fi
+echo ""
+echo "RAW_STALE_COUNT: $RAW_STALE_COUNT"
+
+# Content staleness of consumed docs (heuristic; Claude Code verifies
+# semantically before reusing a flagged doc as a promote source).
+RAW_OUTDATED_COUNT=0
+if [[ -x "$READPATH" && $RAW_STALE_COUNT -gt 0 ]]; then
+  OUTDATED_OUT=$(RAW_DIR="$RAW_DIR" STATE_FILE="$STATE_FILE" bash "$READPATH" outdated 2>/dev/null || true)
+  OC_LINES=$(printf '%s\n' "$OUTDATED_OUT" | grep -E '^OUTDATED-CANDIDATE	' || true)
+  if [[ -n "$OC_LINES" ]]; then
+    RAW_OUTDATED_COUNT=$(printf '%s\n' "$OC_LINES" | grep -c .)
+  fi
+fi
+echo "RAW_OUTDATED_COUNT: $RAW_OUTDATED_COUNT"
+if [[ $RAW_OUTDATED_COUNT -gt 0 ]]; then
+  echo "=== outdated candidates (verify against current code before reuse) ==="
+  printf '%s\n' "$OC_LINES"
 fi
 
 echo ""

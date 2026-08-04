@@ -317,6 +317,13 @@ for tmpl in "$TEMPLATE_DIR/scv"/*.md; do
 done
 shopt -u nullglob
 
+# scv/raw/README.md — the raw lifecycle guide (unused vs stale/) must reach
+# existing projects too; without this, pre-0.21.0 installs keep a README that
+# contradicts the stale-move behavior their upgraded core now performs.
+if [[ -f "$TEMPLATE_DIR/scv/raw/README.md" ]]; then
+  process_template_file "$TEMPLATE_DIR/scv/raw/README.md" "scv/raw"
+fi
+
 # Stamp scv/SCV.md version markers (root instruction files stay untouched).
 # Marker names kept as STANDARD:* for backward compatibility.
 if [[ $DRY_RUN -eq 0 && -f "$PROJECT_DIR/scv/SCV.md" ]]; then
