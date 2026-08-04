@@ -12,7 +12,7 @@ Core 릴리스를 고정하고, 검증된 호스트 프로필을 반영한 뒤 �
 
 | 계약 | 버전 | 의미 |
 |---|---:|---|
-| SCV Core | `0.20.6` | 공통 동작과 릴리스 페이로드 |
+| SCV Core | `0.21.0` | 공통 동작과 릴리스 페이로드 |
 | Core API | `1` | 래퍼와 코어의 통합 계약 |
 | Template | `1.0.0` | hydrate되는 프로젝트 템플릿 스키마 |
 
@@ -67,6 +67,9 @@ wrapper swap 뒤 제거될 수 있는 기존 vendor 복구는 반드시 strict �
 
 자세한 경계는 [아키텍처](docs/architecture.md)와
 [래퍼 통합](docs/wrapper-integration.md)을 참고하세요.
+실제 변경을 어느 저장소에서 해야 하는지는
+[Core와 Wrapper 소유권 가이드](docs/core-wrapper-ownership.ko.md)에
+정리되어 있습니다.
 
 ## 검증과 테스트
 

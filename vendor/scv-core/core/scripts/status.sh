@@ -147,6 +147,58 @@ else
     echo "  → Or defer        : /scv:status --ack   (marks current state as baseline)"
   fi
 
+  # ---------- raw lifecycle: unused vs consumed (scv/raw/stale) ----------
+  # unused  = never consumed by any promote (lives outside scv/raw/stale/)
+  # consumed = moved to scv/raw/stale/ by promote Step 8, with ref_docs
+  #            provenance (which slugs used it) in scv/readpath.json
+
+  UNUSED_LIST=$(RAW_DIR="$RAW_DIR" STATE_FILE="$STATE_FILE" bash "$READPATH" unused 2>/dev/null || true)
+  UNUSED_N=$( [[ -z "$UNUSED_LIST" ]] && echo 0 || printf '%s\n' "$UNUSED_LIST" | grep -c . )
+  REFS_OUT=$(RAW_DIR="$RAW_DIR" STATE_FILE="$STATE_FILE" bash "$READPATH" refs 2>/dev/null || true)
+  REFS_N=$( [[ -z "$REFS_OUT" ]] && echo 0 || printf '%s\n' "$REFS_OUT" | grep -c . )
+
+  echo ""
+  echo "  unused (never promoted): $UNUSED_N"
+  if [[ $UNUSED_N -gt 0 ]]; then
+    shown=0; limit=10; [[ $VERBOSE -eq 1 ]] && limit=1000000
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      shown=$((shown+1))
+      if [[ $shown -gt $limit ]]; then
+        echo "    … (+$((UNUSED_N - limit)) more — rerun with --verbose to see all)"
+        break
+      fi
+      echo "    · $line"
+    done <<< "$UNUSED_LIST"
+  fi
+  echo "  consumed (scv/raw/stale): $REFS_N"
+  if [[ $REFS_N -gt 0 ]]; then
+    shown=0; limit=5; [[ $VERBOSE -eq 1 ]] && limit=1000000
+    while IFS=$'\t' read -r p slugs _cmt _at; do
+      [[ -z "$p" ]] && continue
+      shown=$((shown+1))
+      if [[ $shown -gt $limit ]]; then
+        echo "    … (+$((REFS_N - limit)) more — rerun with --verbose to see all)"
+        break
+      fi
+      echo "    · $p  ← ${slugs:-?}"
+    done <<< "$REFS_OUT"
+
+    # Content staleness — consumed docs mentioning files changed since their
+    # ref_commit. Heuristic; semantic verification happens in /scv:promote.
+    OUTDATED_OUT=$(RAW_DIR="$RAW_DIR" STATE_FILE="$STATE_FILE" bash "$READPATH" outdated 2>/dev/null || true)
+    OC_LINES=$(printf '%s\n' "$OUTDATED_OUT" | grep -E '^OUTDATED-CANDIDATE	' || true)
+    if [[ -n "$OC_LINES" ]]; then
+      OC_N=$(printf '%s\n' "$OC_LINES" | grep -c .)
+      echo "  outdated candidates: $OC_N  (mention files changed since consumption)"
+      while IFS=$'\t' read -r _ p hint; do
+        [[ -z "$p" ]] && continue
+        echo "    ! $p  ($hint)"
+      done <<< "$OC_LINES"
+      echo "    → verify against current code before reusing these docs"
+    fi
+  fi
+
   if [[ $ACK -eq 1 ]]; then
     echo ""
     echo "[--ack] updating $STATE_FILE ..."

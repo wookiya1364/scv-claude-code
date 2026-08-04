@@ -352,7 +352,7 @@ echo "sub content"  > "$RP_APP/scv/raw/subdir/inside.md"
   cd "$RP_APP"
   # scan emits valid-looking JSON
   OUT=$(bash "$READPATH_SH" scan 2>&1)
-  assert_out_contains '"version": 1' "$OUT"                                  "readpath scan: version field"
+  assert_out_contains '"version": 2' "$OUT"                                  "readpath scan: version field"
   assert_out_contains '"files":'     "$OUT"                                  "readpath scan: files field"
   assert_out_contains 'scv/raw/notes.md' "$OUT"                              "readpath scan: includes notes.md"
   assert_out_contains 'scv/raw/subdir/inside.md' "$OUT"                      "readpath scan: recurses into subdir"
@@ -880,11 +880,13 @@ echo
 echo "=== [11c] /scv:help banner for raw changes ==="
 (
   cd "$RP_APP"
-  # No changes right now → banner absent
+  # No pending changes → change-window banner absent. The lifecycle banner
+  # still prints: notes.md + subdir/inside.md were never consumed (unused).
   OUT=$(bash "$HELP_SH" 2>&1)
-  printf '%s' "$OUT" | grep -qF '[scv/raw]' \
-    && fail "help: banner should be absent when no changes" \
-    || pass "help: no banner when raw clean"
+  printf '%s' "$OUT" | grep -qF 'added ·' \
+    && fail "help: change banner should be absent when no changes" \
+    || pass "help: no change banner when raw clean"
+  assert_out_contains "never promoted" "$OUT"      "help: lifecycle banner lists unused docs"
 
   # Introduce a change → banner appears
   echo "brand new" > scv/raw/brand-new.md
@@ -2546,7 +2548,9 @@ assert_contains "$PROMOTE_CMD" "skip the rest of Step 6 for this folder"
 # commands/promote.md — Step 7 (기획서 deck) inserted → readpath Step 8, Report Step 9
 assert_contains "$PROMOTE_CMD" "Step 7 — Generate the 기획서 deck"
 assert_contains "$PROMOTE_CMD" 'scripts/deck.sh "scv/promote/<folder>"'
-assert_contains "$PROMOTE_CMD" "Step 8 — Update readpath baseline"
+assert_contains "$PROMOTE_CMD" "Step 8 — Consume raw sources + update baseline"
+assert_contains "$PROMOTE_CMD" "scripts/readpath.sh consume"
+assert_contains "$PROMOTE_CMD" "scv/raw/stale/"
 assert_contains "$PROMOTE_CMD" "Step 9 — Report to user"
 assert_contains "$PROMOTE_CMD" "FEATURE_ARCHITECTURE.md if generated"
 

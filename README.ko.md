@@ -217,7 +217,7 @@ v0.20.0부터 공통 워크플로 동작은 체크섬으로 검증하고 버전�
 참고하세요.
 
 Wrapper와 Core는 서로 독립적으로 릴리스합니다. 이 Claude 어댑터 release는
-`0.20.2`이고 현재 Core pin은 `vendor/scv-core/VERSION`과 `core.lock`에
+`0.21.0`이고 현재 Core pin은 `vendor/scv-core/VERSION`과 `core.lock`에
 기록됩니다. Core sync는 그 체크섬 pin과 생성 projection만 갱신하며 wrapper
 `VERSION`, plugin manifest, marketplace version은 변경하지 않습니다.
 
