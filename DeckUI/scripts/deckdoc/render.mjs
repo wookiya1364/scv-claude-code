@@ -648,7 +648,7 @@ export function renderHtml(data, opts = {}) {
   const mermaidScript =
     mermaid === "none" || !hasMermaid
       ? ""
-      : `<script type="module">
+      : `<script type="module" id="scv-mermaid-loader">
   try {
     const { default: mermaid } = await import("https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs");
     mermaid.initialize({ startOnLoad: false, theme: "default", securityLevel: "strict" });
@@ -659,7 +659,21 @@ export function renderHtml(data, opts = {}) {
     // call every time scvGoto shows a NEW page, so each diagram is first measured exactly
     // when its page is on-screen; revisiting an already-correct page is a harmless no-op.
     window.scvRunMermaid = function () { mermaid.run({ querySelector: ".slide-page.active pre.mermaid" }); };
-    await window.scvRunMermaid();
+    if (new URLSearchParams(location.search).has("scv-static")) {
+      // Static-build mode (?scv-static=1 — driven by static-mermaid.mjs, never by a
+      // reader): reveal every page so each diagram measures at its real size, render
+      // ALL of them, mark them, and signal completion. The build harness dumps the
+      // resulting DOM, strips this loader, and ships offline-ready inline SVGs.
+      const st = document.createElement("style");
+      st.id = "scv-static-reveal";
+      st.textContent = ".slide-page{display:block!important}";
+      document.head.appendChild(st);
+      await mermaid.run({ querySelector: "pre.mermaid" });
+      for (const el of document.querySelectorAll("pre.mermaid")) el.setAttribute("data-scv-static-mermaid", "true");
+      document.documentElement.setAttribute("data-scv-mermaid-static-done", "1");
+    } else {
+      await window.scvRunMermaid();
+    }
     // Printing bypasses the pager (every .slide-page is visible under @media print), so
     // catch any diagram never visited on screen right before the print dialog opens.
     window.addEventListener("beforeprint", function () { mermaid.run({ querySelector: "pre.mermaid" }); });
@@ -700,6 +714,12 @@ ${themeInit}
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${title}</title>
 <style>${CSS}</style>
+<style id="scv-mermaid-contrast">
+pre.mermaid{background:transparent!important}
+pre.mermaid .flowchart-link,pre.mermaid .edgePath .path{stroke:var(--fg)!important;stroke-width:2px!important}
+pre.mermaid .marker,pre.mermaid marker path{fill:var(--fg)!important;stroke:var(--fg)!important}
+pre.mermaid .edgeLabel,pre.mermaid .edgeLabel p,pre.mermaid .labelBkg{background-color:var(--bg)!important;color:var(--fg)!important}
+</style>
 </head>
 <body>
 <div class="shell">
