@@ -22,7 +22,7 @@ fi
 # the slide deck can never diverge; neither ever invents content.
 #
 # Usage:  deck.sh <input.md> [slug] [--slides] [--out <path>] [--mermaid cdn|none]
-#                  [--lang english|korean|japanese] [--no-source]
+#                  [--lang english|korean|japanese] [--no-source] [--no-static]
 #   --lang: the deck UI chrome's language (English default — same SCV_LANG convention
 #   as scripts/render-template.sh). Caller (references/protocols/deck.md) resolves LANG_RESOLVED
 #   the same way every other command does and passes it here; omit to fall back to
@@ -31,6 +31,10 @@ fi
 #   DECK_SLUG: <slug>
 #   LINT: <n> warning(s)   (+ one "  ⚠ ..." line each)
 #   DECK_HTML: <absolute path to built single-file HTML>
+#   STATIC_MERMAID: embedded diagrams=<n> → <path>   (doc mode; best-effort —
+#     bakes diagrams as inline SVG via local headless Chrome so the deck opens
+#     fully rendered offline. Skipped without touching the file when Chrome or
+#     the mermaid CDN is unavailable; disable with --no-static or SCV_DECK_STATIC=0)
 set -uo pipefail
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -43,7 +47,7 @@ DECK_RUNTIME="$SCRIPT_DIR/deck-runtime.sh"
 die() { echo "ERROR: $*" >&2; exit 1; }
 
 # ---- args ----
-MD=""; SLUG=""; OUT=""; MODE="doc"; MERMAID="cdn"; SOURCE_FLAG=""; LANG_ARG=""
+MD=""; SLUG=""; OUT=""; MODE="doc"; MERMAID="cdn"; SOURCE_FLAG=""; LANG_ARG=""; STATIC="${SCV_DECK_STATIC:-1}"
 while (( $# )); do
   case "$1" in
     --slides) MODE="slides" ;;
@@ -55,6 +59,7 @@ while (( $# )); do
     --lang) LANG_ARG="${2:-}"; shift ;;
     --lang=*) LANG_ARG="${1#--lang=}" ;;
     --no-source) SOURCE_FLAG="--no-source" ;;
+    --no-static) STATIC=0 ;;
     -h|--help) sed -n '11,36p' "$0"; exit 0 ;;
     -*) die "unknown flag: $1" ;;
     *) if [[ -z "$MD" ]]; then MD="$1"; elif [[ -z "$SLUG" ]]; then SLUG="$1"; fi ;;
@@ -105,11 +110,22 @@ LANG_FLAG=""
 # ---- DEFAULT: buildless document (no Vite/React) ----
 if [[ "$MODE" == "doc" ]]; then
   # doc.mjs prints DECK_SLUG / LINT / DECK_HTML itself. Omit --out for a slug
-  # folder so doc.mjs defaults the file into the folder.
+  # folder so doc.mjs defaults the file into the folder. Capture stdout (and
+  # replay it verbatim) so the built path is known for the static-embed step.
   if [[ -n "$OUT" ]]; then
-    node "$DECKDOC/doc.mjs" "$MD" "$SLUG" --out "$OUT" --mermaid "$MERMAID" $SOURCE_FLAG $LANG_FLAG || die "document build failed"
+    BUILD_OUT=$(node "$DECKDOC/doc.mjs" "$MD" "$SLUG" --out "$OUT" --mermaid "$MERMAID" $SOURCE_FLAG $LANG_FLAG) || die "document build failed"
   else
-    node "$DECKDOC/doc.mjs" "$MD" "$SLUG" --mermaid "$MERMAID" $SOURCE_FLAG $LANG_FLAG || die "document build failed"
+    BUILD_OUT=$(node "$DECKDOC/doc.mjs" "$MD" "$SLUG" --mermaid "$MERMAID" $SOURCE_FLAG $LANG_FLAG) || die "document build failed"
+  fi
+  printf '%s\n' "$BUILD_OUT"
+  BUILT=$(printf '%s\n' "$BUILD_OUT" | sed -n 's/^DECK_HTML: //p' | tail -1)
+
+  # Best-effort offline embed: bake every diagram as inline SVG via a local
+  # headless Chrome (static-mermaid.mjs). On any miss (no Chrome, offline CDN,
+  # diagram error) the CDN + text-fallback deck ships unchanged.
+  if [[ "$STATIC" != "0" && "$MERMAID" == "cdn" && -n "$BUILT" && -f "$BUILT" ]]; then
+    node "$DECKDOC/static-mermaid.mjs" "$BUILT" \
+      || echo "STATIC_MERMAID: skipped (kept CDN render + text fallback)" >&2
   fi
   exit 0
 fi

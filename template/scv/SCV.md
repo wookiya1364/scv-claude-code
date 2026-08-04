@@ -103,7 +103,7 @@ project-root/
 │   ├── DOMAIN.md ARCHITECTURE.md DESIGN.md AGENTS.md
 │   ├── TESTING.md REPORTING.md
 │   ├── RALPH_PROMPT.md
-│   ├── readpath.json             # raw change-tracking snapshot (auto-updated by action:promote)
+│   ├── readpath.json             # raw change-tracking + ref_docs provenance (auto-updated by action:promote)
 │   ├── promote/                  # Promoted topic / plan documents
 │   │   └── <YYYYMMDD>-<author>-<slug>/
 │   │       ├── PLAN.md
@@ -114,7 +114,8 @@ project-root/
 │   │       ├── PLAN.md TESTS.md ...
 │   │       └── ARCHIVED_AT.md    # completion record (auto-generated)
 │   └── raw/                      # Free-input space (notes, sketches, PDFs, recordings)
-│       └── README.md
+│       ├── README.md
+│       └── stale/                # Consumed docs — moved here by action:promote; ref_docs records which slugs used each
 ├── .env, .env.example, .gitignore
 └── (project-specific code: src/, packages/, apps/, etc.)
 ```
