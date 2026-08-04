@@ -184,6 +184,14 @@ if [[ -x "$READPATH_SH" ]] && [[ -d "scv/raw" ]]; then
     echo ""
     echo "[scv/raw] ${ADDED:-0} added · ${MODIFIED:-0} modified · ${REMOVED:-0} removed → /scv:status or /scv:promote"
   fi
+  # Lifecycle summary: docs still outside scv/raw/stale/ were never consumed
+  # by any promote — surface them even when the change-window diff is quiet.
+  LC_COUNTS=$(bash "$READPATH_SH" lifecycle-counts 2>/dev/null || true)
+  UNUSED=$(printf '%s' "$LC_COUNTS" | sed -n 's/.*unused=\([0-9]*\).*/\1/p')
+  UNUSED=${UNUSED:-0}
+  if [[ "$UNUSED" -gt 0 ]]; then
+    echo "[scv/raw] ${UNUSED} doc(s) never promoted (outside scv/raw/stale/) → /scv:status for the list"
+  fi
 fi
 
 # --- Dynamic diagnosis of current project ------------------------------------

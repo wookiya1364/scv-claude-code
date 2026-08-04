@@ -1,9 +1,11 @@
 ---
 name: raw-intake
-version: 1.0.0
+version: 1.1.0
 status: active
-last_updated: 2026-04-20
+last_updated: 2026-08-04
 tags: [raw, intake, guide]
+standard_version: 1.0.0
+merge_policy: overwrite
 ---
 
 # scv/raw — 자유 투입 공간
@@ -14,7 +16,18 @@ tags: [raw, intake, guide]
 ## 쓰는 법 (두 줄 요약)
 
 1. **던진다**: 파일을 `scv/raw/` 아무 위치에 저장한다. 파일명만 의미 있게.
-2. **그대로 둔다**: 지우지 마세요. Raw 는 역사(history)입니다.
+2. **그대로 둔다**: 지우지 마세요. Raw 는 역사(history)입니다. 승격(`action:promote`)에 사용된 파일은 SCV 가 `scv/raw/stale/` 로 옮겨 보관합니다 (내용 불변).
+
+## 라이프사이클: unused → stale
+
+| 위치 | 의미 |
+|---|---|
+| `scv/raw/` 바로 아래 (stale 밖) | **unused** — 아직 어떤 promote 에도 사용되지 않은 문서 |
+| `scv/raw/stale/` | **consumed** — 승격에 사용된 문서. 어떤 계획(slug)들이 사용했는지 `scv/readpath.json` 의 `ref_docs` 에 누적 기록됩니다 |
+
+- 이동은 `action:promote` Step 8 (`readpath.sh consume`) 만 수행합니다 — 손으로 옮기거나 지우지 마세요.
+- 한 문서가 여러 기능에 재사용되면 `ref_docs` 의 slug 배열에 계속 쌓입니다.
+- `action:status` 가 unused 목록과, 소비 후 코드가 바뀌어 내용이 낡았을 수 있는 문서(`OUTDATED-CANDIDATE`)를 보여줍니다.
 
 ## 허용 형식
 
@@ -71,11 +84,11 @@ Raw 자료 중 팀이 "이건 공식화하자" 라고 합의한 것은 `scv/prom
 action:promote
 ```
 
-- the host agent 가 `scv/raw/` 전체를 훑어 주제별 승격 후보를 제안
+- the host agent 가 `scv/raw/` 의 unused 문서 전체를 훑어 주제별 승격 후보를 제안
 - 각 후보마다 사용자 확인(**Approve / Edit / Skip / Defer**)
-- 승인한 것만 `scv/promote/<topic>/index.md` 로 생성 (`status: draft` 로)
-- `raw_sources` frontmatter 에 원본 경로 자동 기록
-- **Raw 원본은 절대 삭제·이동하지 않음**
+- 승인한 것만 `scv/promote/<YYYYMMDD>-<author>-<slug>/` 폴더에 `PLAN.md` + `TESTS.md` 로 생성 (`status: planned` 으로)
+- PLAN.md 의 `raw_sources` frontmatter 에 원본 경로 자동 기록
+- **Raw 원본은 절대 삭제하지 않음** — 사용된 원본은 `scv/raw/stale/` 로 이동(내용 불변)하고 `ref_docs` 에 사용 이력이 남음
 
 옵션:
 - `action:promote --source "scv/raw/2026-04-*"` — 특정 파일만 대상
@@ -84,10 +97,10 @@ action:promote
 
 ### 방법 B — 수동 작성
 
-1. 주제 디렉토리 생성 (예: `scv/promote/feature-onboarding/`)
-2. `index.md` 에 frontmatter + 요약
-3. 필요 시 `design.md`, `api.md`, `assets/*` 추가
-4. frontmatter 에 `raw_sources: [scv/raw/...]` 로 출처 역추적
+1. 계획 폴더 생성 (예: `scv/promote/20260804-me-onboarding/`)
+2. `PLAN.md` 에 frontmatter + 계획, `TESTS.md` 에 테스트 시나리오 (`scv/PROMOTE.md` 규약 참조)
+3. 필요 시 `FEATURE_ARCHITECTURE.md`, `assets/*` 추가
+4. PLAN.md frontmatter 에 `raw_sources: [scv/raw/...]` 로 출처 역추적
 
 ## 금지 사항
 

@@ -13,6 +13,8 @@ inside the block.
 Inspects the project's SCV state:
 
 - **Raw changes**: files under `scv/raw/` added / modified / removed since `scv/readpath.json` was last updated.
+- **Raw lifecycle**: **unused** docs (still directly under `scv/raw/` — never consumed by any promote) vs **consumed** docs (moved to `scv/raw/stale/` by `/scv:promote`, shown with the promote slugs that used them from `readpath.json`'s `ref_docs`).
+- **Outdated candidates**: consumed docs that mention repo files changed since their `ref_commit` — their content may have drifted from the code. This is a heuristic flag; when the user wants to reuse such a doc, offer to verify its claims against the current code first.
 - **Active promote plans**: entries under `scv/promote/` waiting for implementation.
 - **Docs graph**: graphify skill presence + docs graph freshness (`missing` / `built` / `stale` / skill-not-installed).
 - **Archive**: count of completed plans under `scv/archive/`.
@@ -51,3 +53,18 @@ SCV resolves which `scv/` to use from context: `./scv`, else the nearest parent 
 3. Either:
    - Run `/scv:promote` to refine into promote plans (recommended — will also update the index), OR
    - Run `/scv:status --ack` to mark current state as baseline and defer.
+
+## Legacy backfill (projects older than the stale/ lifecycle)
+
+Projects promoted before the `scv/raw/stale/` lifecycle existed will list every
+historical raw doc as **unused**, even ones that old promote folders already
+consumed. If the unused list contains paths that appear in `raw_sources:` of
+PLAN.md files under `scv/promote/` or `scv/archive/`, offer a one-time backfill:
+for each such plan, run
+
+```
+!${CLAUDE_PLUGIN_ROOT}/scripts/readpath.sh consume <plan-slug> <raw path>...
+```
+
+and update that PLAN.md's `raw_sources` paths to the reported `MOVED` locations.
+Only do this with the user's approval — it moves files (content unchanged).
