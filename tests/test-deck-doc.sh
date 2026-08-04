@@ -94,6 +94,14 @@ has "$NS" 'class="tw"'           "regular table"
 has "$NS" 'pre class="mermaid"'  "mermaid diagram block"
 has "$NS" 'pre class="code"'     "code block"
 
+# 2b. mermaid visibility overrides — diagrams authored with the dark %%{init}%%
+# palette must stay readable on both themes (transparent card + theme-var
+# edges/labels; matches the reference deck's scv-mermaid-contrast block)
+has "$NS" 'id="scv-mermaid-contrast"'                        "mermaid contrast style block"
+has "$NS" 'pre.mermaid{background:transparent!important}'    "mermaid card transparent override"
+has "$NS" 'stroke:var(--fg)!important'                       "mermaid edges use theme fg"
+has "$NS" 'background-color:var(--bg)!important'             "mermaid edge labels use theme bg"
+
 # 2b. structure fidelity — nested lists render as REAL nested <ul> (tree), not fused/marked
 has   "$NS" '<li>다른 상위 항목</li>' "plain top-level bullet rendered"
 has   "$NS" '<li>상위 항목<ul>'       "nested bullets → nested <ul> inside the parent <li>"

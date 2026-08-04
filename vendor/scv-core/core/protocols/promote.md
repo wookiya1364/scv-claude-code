@@ -46,7 +46,7 @@ block the current task.
 
 **Non-negotiable rules:**
 - Never create / move / delete files without the user's explicit per-candidate approval.
-- Raw originals under `scv/raw/` are **never** deleted or moved.
+- Raw originals under `scv/raw/` are **never** deleted. The only sanctioned move is Step 8's `readpath.sh consume`, which relocates consumed originals (content unchanged) into `scv/raw/stale/` and records which slugs used them in `scv/readpath.json` (`ref_docs`). Never move or rename raw files by hand.
 - `status: active` is never set by you — leave every new scaffold as `planned` so the user reviews first.
 
 First, gather context:
@@ -55,7 +55,7 @@ First, gather context:
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/promote-helper.sh" "${SCV_ARGS[@]}"
 ```
 
-Parse the helper output — the lines `MODE:`, `TODAY:`, `AUTHOR:`, `STANDARD_VERSION:`, `GRAPHIFY_SKILL:`, `GRAPH_STATUS:`, `RAW_FILE_COUNT:`, `RAW_TOPIC_CLUSTERS:`, `SUGGEST_SPLIT:`, `SPLIT_REASON:` are the primary signals; section blocks (`=== scv/raw inventory ===` etc.) give you the content to work with.
+Parse the helper output — the lines `MODE:`, `TODAY:`, `AUTHOR:`, `STANDARD_VERSION:`, `GRAPHIFY_SKILL:`, `GRAPH_STATUS:`, `RAW_FILE_COUNT:`, `RAW_TOPIC_CLUSTERS:`, `SUGGEST_SPLIT:`, `SPLIT_REASON:`, `RAW_STALE_COUNT:`, `RAW_OUTDATED_COUNT:` are the primary signals; section blocks (`=== scv/raw inventory ===` etc.) give you the content to work with.
 
 ### Source material — raw / .conversations / both (v0.9.0+)
 
@@ -63,9 +63,9 @@ Before dialog, decide what counts as **source material** for this promote:
 
 | Situation | Source |
 |---|---|
-| `scv/raw/` non-empty AND `/scv:promote` invocation has no conversation file path | `scv/raw/` files (tracked by `readpath.json`) — the classic flow |
+| `scv/raw/` has **unused** files (outside `scv/raw/stale/`) AND `/scv:promote` invocation has no conversation file path | The unused `scv/raw/` files (lifecycle tracked in `readpath.json`) — the classic flow. Docs already under `scv/raw/stale/` are *consumed*; include one as an extra source only when the user explicitly asks — re-consuming appends the new slug to its `ref_docs` entry. If it is flagged `OUTDATED-CANDIDATE`, verify its claims against the current code first. |
 | `/scv:help` triggered this promote (Mode B Step B4) and passed a conversation file path | The conversation file at `scv/.conversations/<file>` is the source. Read its turns as the user's intent. `scv/raw/` may also have files — merge both as sources if so. |
-| `scv/raw/` empty AND no conversation triggered | Nothing to promote — print "Nothing to refine. Drop materials into `scv/raw/` or run `/scv:help \"<idea>\"` to start a conversation." Stop. |
+| No **unused** `scv/raw/` files AND no conversation triggered | Nothing to promote — print "Nothing to refine. Drop materials into `scv/raw/` or run `/scv:help \"<idea>\"` to start a conversation." (Consumed docs sit in `scv/raw/stale/` — mention they can be reused on explicit request.) Stop. |
 
 When the source includes a conversation file, also include the conversation's `slug` in the `raw_sources` array of the new PLAN.md frontmatter so traceability is preserved (e.g., `raw_sources: [scv/.conversations/20260506-103000-refund-button.md]`). The conversation file itself is *not* committed (gitignored), but the path serves as a local audit trail.
 
@@ -112,6 +112,7 @@ Summarize to the user:
 - How many raws changed (from `added=N modified=N removed=N`).
 - Whether the graph was updated.
 - What existing promote folders / archive folders already exist.
+- If `RAW_OUTDATED_COUNT > 0`: list the `OUTDATED-CANDIDATE` lines — these consumed docs mention files that changed since their consumption. Offer to verify each doc's claims against the current code before anyone relies on it as a source.
 
 #### Step 2.1 — Reference scan (deliberate sources only)
 
@@ -458,7 +459,7 @@ Build a `flowchart LR` (or `TB` if vertical layout fits better) showing the comp
 5. **Labels follow `LANG_RESOLVED` (Step 0)** — Mermaid node labels (the bracketed text inside `[Name]` / `[(Name)]`), edge labels (text between `|"..."|`), and subgraph names use the resolved language. Component identifiers (the Mermaid node IDs before the bracket, e.g., `OrderService` in `OrderService[주문 서비스]`) stay as code-style English to keep the Mermaid syntax stable. Function names / SQL / HTTP verbs in edge labels stay verbatim (`getOrder(orderId)` is identical in any language); only narrative descriptions translate.
 6. **Always start the mermaid block with the standard dark-theme directive** (v0.7.9+) — first line inside the ` ```mermaid ` fence (one line, no wrapping):
    ```
-   %%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#1e1e1e','primaryTextColor':'#fff','primaryBorderColor':'#888','lineColor':'#fff','secondaryColor':'#2d2d2d','tertiaryColor':'#1e1e1e','background':'#0d1117','edgeLabelBackground':'#1e1e1e'}}}%%
+   %%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#1e1e1e','primaryTextColor':'#fff','primaryBorderColor':'#9096a8','lineColor':'#e7e9f0','secondaryColor':'#2d2d2d','tertiaryColor':'#1e1e1e','background':'#171922','edgeLabelBackground':'#171922'}}}%%
    ```
    Forces dark backgrounds + white text + **white edge arrows**. Yellow-highlighted nodes (`classDef key fill:#FFE082,...,color:#000`) keep black text on yellow for strong visual emphasis. The user explicitly chose strong contrast over context-aware palettes ("큰 배경은 검은색, 화살표는 흰색"). This palette is consistent across GitHub light-mode page, GitHub dark-mode page, and GitHub's fullscreen modal popup.
 
@@ -474,7 +475,7 @@ Build a `flowchart LR` (or `TB` if vertical layout fits better) showing the comp
 
 ````markdown
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#1e1e1e','primaryTextColor':'#fff','primaryBorderColor':'#888','lineColor':'#fff','secondaryColor':'#2d2d2d','tertiaryColor':'#1e1e1e','background':'#0d1117','edgeLabelBackground':'#1e1e1e'}}}%%
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#1e1e1e','primaryTextColor':'#fff','primaryBorderColor':'#9096a8','lineColor':'#e7e9f0','secondaryColor':'#2d2d2d','tertiaryColor':'#1e1e1e','background':'#171922','edgeLabelBackground':'#171922'}}}%%
 flowchart LR
   Caller[Caller] -->|"functionName(arg1, arg2)"| ServiceA
   ServiceA -->|"validate(payload)"| ServiceB
@@ -570,7 +571,7 @@ Mapping algorithm:
 
 ````markdown
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#1e1e1e','primaryTextColor':'#fff','primaryBorderColor':'#888','lineColor':'#fff','secondaryColor':'#2d2d2d','tertiaryColor':'#1e1e1e','background':'#0d1117','edgeLabelBackground':'#1e1e1e'}}}%%
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#1e1e1e','primaryTextColor':'#fff','primaryBorderColor':'#9096a8','lineColor':'#e7e9f0','secondaryColor':'#2d2d2d','tertiaryColor':'#1e1e1e','background':'#171922','edgeLabelBackground':'#171922'}}}%%
 flowchart TB
   subgraph "Layer / Domain A"
     A1[Existing Service 1]
@@ -614,7 +615,7 @@ status: planned
 How this feature's components interact.
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#1e1e1e','primaryTextColor':'#fff','primaryBorderColor':'#888','lineColor':'#fff','secondaryColor':'#2d2d2d','tertiaryColor':'#1e1e1e','background':'#0d1117','edgeLabelBackground':'#1e1e1e'}}}%%
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#1e1e1e','primaryTextColor':'#fff','primaryBorderColor':'#9096a8','lineColor':'#e7e9f0','secondaryColor':'#2d2d2d','tertiaryColor':'#1e1e1e','background':'#171922','edgeLabelBackground':'#171922'}}}%%
 <Step 6.1 output>
 ```
 
@@ -625,7 +626,7 @@ Where this feature sits in the system. New components highlighted in yellow.
 > Source: <one of: `scv/ARCHITECTURE.md` | graphify graph (built <YYYY-MM-DD>) | omitted — first diagram only>
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#1e1e1e','primaryTextColor':'#fff','primaryBorderColor':'#888','lineColor':'#fff','secondaryColor':'#2d2d2d','tertiaryColor':'#1e1e1e','background':'#0d1117','edgeLabelBackground':'#1e1e1e'}}}%%
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#1e1e1e','primaryTextColor':'#fff','primaryBorderColor':'#9096a8','lineColor':'#e7e9f0','secondaryColor':'#2d2d2d','tertiaryColor':'#1e1e1e','background':'#171922','edgeLabelBackground':'#171922'}}}%%
 <Step 6.2 output>
 ```
 ````
@@ -785,20 +786,46 @@ slim (~7MB) renderer; if Node/pnpm are missing, relay the error and point to
 TESTS.md / FEATURE_ARCHITECTURE.md change later, re-run this** so the deck always
 tracks the plan.
 
-### Step 8 — Update readpath baseline
+### Step 8 — Consume raw sources + update baseline
 
-After all approved folders are created (and any FEATURE_ARCHITECTURE.md + deck are written), run:
+After all approved folders are created (and any FEATURE_ARCHITECTURE.md + deck are written):
+
+1. For **each** created folder, consume the raw docs it used — every `raw_sources` entry that lives under `scv/raw/` (skip `scv/.conversations/` paths):
+
+```
+!${CLAUDE_PLUGIN_ROOT}/scripts/readpath.sh consume <folder-slug> <raw path>...
+```
+
+`consume` moves each doc (content unchanged) into `scv/raw/stale/`, appends the folder slug to that doc's `ref_docs` entry in `scv/readpath.json` (a doc reused by several features accumulates all their slugs), stamps `ref_commit`/`consumed_at`, and refreshes the snapshot. Parse the output:
+
+- `MOVED\t<old>\t<new>` — **update the matching `raw_sources` path in that folder's PLAN.md** to the new `scv/raw/stale/...` location.
+- `KEPT\t<path>` — the doc was already in `stale/`; the slug was appended, no path change.
+- `REMAPPED\t<old>\t<new>` — a **shared source**: an earlier folder in this promote already moved this doc; the slug was appended to the existing `stale/` entry. Update this folder's PLAN.md `raw_sources` from `<old>` to `<new>` too. (Run `consume` per folder with each folder's original `raw_sources` paths — shared docs are handled automatically.)
+
+**Nested monorepo module** (e.g. this promote was `/scv:promote FE`): run every command in this step with the module's paths, exactly as the helper's inventory printed them — prefix the env overrides:
+
+```
+!RAW_DIR=FE/scv/raw STATE_FILE=FE/scv/readpath.json ${CLAUDE_PLUGIN_ROOT}/scripts/readpath.sh consume <folder-slug> FE/scv/raw/<file>...
+```
+
+(The same prefix applies to the `update` fallback below. Without it, `consume` rejects the module paths and `update` would rewrite the root umbrella's `scv/readpath.json` instead.)
+
+2. Only if this promote consumed **no** raw files (conversation-only), refresh the baseline instead:
 
 ```
 !${CLAUDE_PLUGIN_ROOT}/scripts/readpath.sh update
 ```
 
-This marks the current raw state as the new baseline so future `/scv:help` / `/scv:status` won't keep flagging the consumed files.
+(`consume` already rewrites the snapshot — do not run `update` on top of it.)
+
+After this step, files still directly under `scv/raw/` are exactly the **unused** docs. `/scv:status` lists them, and flags consumed docs whose content may have drifted from the code (`OUTDATED-CANDIDATE`).
 
 ### Step 9 — Report to user
 
 Summarize:
 - Created folders (list paths to PLAN.md + TESTS.md, FEATURE_ARCHITECTURE.md if generated, and the `<folder>.deck.html` 기획서)
+- Consumed raw docs: each `old → new` move into `scv/raw/stale/` and the slugs now on its `ref_docs` entry
+- Raw docs still unused (never promoted), if any remain
 - Graph update status
 - Baseline updated? (yes)
 - Next suggested command: `/scv:work <slug>` for the first new plan.
