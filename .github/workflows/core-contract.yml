@@ -1,6 +1,15 @@
 name: SCV Core contract
 
 on:
+  push:
+    branches: [main, stage, develop]
+    paths:
+      - 'adapter/**'
+      - 'vendor/scv-core/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'commands/**'
+      - 'protocols/**'
   pull_request:
     branches: [main, stage, develop]
     paths:
