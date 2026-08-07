@@ -89,5 +89,5 @@ leading module arg works for `list` / `adopt` / `mark` / `push`.
 ## Notes
 
 - Fan-out to multiple repos = run once per target (one handoff file each; addressing stays 1:1).
-- The decision + conversation are committed in the root repo (durable, cross-repo visible) — distinct from the gitignored local `scv/.conversations/`.
+- The decision + conversation are committed in the root repo (durable, cross-repo visible) — distinct from the single repo's own committed `scv/conversations/` / `scv/DECISIONS.md` (v0.22.0+), which stay repo-local.
 - Staging is explicit-path only; the command never runs `git add -A`.

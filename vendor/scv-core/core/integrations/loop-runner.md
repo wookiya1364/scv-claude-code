@@ -1,8 +1,10 @@
 # Ralph Loop 실행 템플릿 (SCV 외부 연동판)
 
 이 템플릿은 SCV 업무방식에 맞춘 Ralph Loop 실행 규칙입니다.
-프로젝트별 설정은 프로젝트 루트의 `scv/RALPH_PROMPT.md`(얇은 진입점)에 정의합니다.
-**모든 명세의 원천은 프로젝트 루트 `scv/` 디렉토리의 표준 문서**입니다.
+**모든 명세의 원천은 `scv/promote/<slug>/` 의 PLAN.md / TESTS.md 와
+`scv/SCV.md` 인덱스**입니다. 루프 진입 프롬프트(무엇에 집중할지, 패키지
+매니저, 빌드/테스트 명령 등)는 **사용자가 자유 형식으로 직접 작성**합니다 —
+SCV 가 정해주는 전용 설정 파일은 없습니다.
 
 > 이 파일은 `<host-config>/loop-template.md` 를 대체하도록 설계되었습니다.
 > `cp loop-runner.md <host-config>/loop-template.md` 로 교체하세요.
@@ -11,13 +13,11 @@
 
 ## 선행 조건 (구현 시작 전 반드시 확인)
 
-**모든 필수 표준 문서가 `status: active` 여야 구현 루프를 돈다.** 하나라도 `status: draft` 면 다음 지시를 먼저 수행:
+**구현 루프는 `scv/promote/<slug>/` 계획 단위로 돈다.** 대상 slug 의
+PLAN.md(Guardrails / Exit criteria 포함)와 TESTS.md 가 없으면 먼저
+`/scv:promote` 로 계획을 만든 뒤 진입한다.
 
-1. `scv/INTAKE.md` 를 읽고 해당 단계(draft 문서에 대응하는)를 사용자와 대화로 진행한다.
-2. 문서를 채운 뒤 사용자 승인 하에 `status: draft` → `active`.
-3. 그 후에만 아래 구현 루프로 진입.
-
-**draft 상태를 방치하고 구현을 시작하지 않는다.**
+**계획 없이 즉흥 구현을 시작하지 않는다.**
 
 ## 핵심 원칙: 될 때까지 수정 → 테스트 → 보고
 
@@ -34,15 +34,13 @@
 
 ## 실행 흐름
 
-1. **진입점 읽기**: `scv/RALPH_PROMPT.md` 를 읽는다. 이 파일은 표준 문서 경로, focus_phase, 패키지 매니저, 빌드/테스트 명령을 명시한다.
-2. **표준 문서 전부 읽기 (필수 + 조건부)**: `scv/SCV.md` 의 인덱스 순서대로 각 문서의 **현재 내용** 을 읽는다:
-   - `scv/INTAKE.md` — 프로세스 확인 (수정 금지)
-   - `scv/DOMAIN.md`, `scv/ARCHITECTURE.md` — 필수, 프로젝트별 내용
-   - `scv/DESIGN.md` — UI 있는 프로젝트면 필수
-   - `scv/AGENTS.md` — AI 에이전트 있으면 필수
-   - `scv/TESTING.md`, `scv/REPORTING.md` — 필수 설정
-   - `scv/promote/**` — 승격된 주제·계획 문서 (필요 시 해당 promote 만 로드)
-3. **Phase 목표 결정**: `scv/RALPH_PROMPT.md` 의 `focus_phase` 와 `scv/TESTING.md` 의 E2E 시나리오 카탈로그를 비교해 이번 이터레이션 목표를 정한다.
+1. **진입 프롬프트 읽기**: 사용자가 자유 형식으로 작성한 루프 지시문(이번
+   루프의 대상 slug, 패키지 매니저, 빌드/테스트 명령)을 읽는다.
+2. **계획 문서 읽기**: `scv/SCV.md` 인덱스를 확인한 뒤 대상
+   `scv/promote/<slug>/` 의 PLAN.md / TESTS.md (있으면
+   FEATURE_ARCHITECTURE.md, Related Documents)를 읽는다.
+3. **이터레이션 목표 결정**: PLAN.md 의 Exit criteria 와 TESTS.md 의
+   시나리오 목록을 비교해 이번 이터레이션 목표를 정한다.
 4. **반복 실행**: 매 반복마다 파일 상태를 확인하고, 미완료 항목 1~3개씩 진행한다.
 5. **Phase 완료·실패 알림**: **반드시 `/scv:report` Claude Code 스킬**로만 보낸다. 직접 API 호출 금지.
 
@@ -51,22 +49,22 @@
 ## 수정 → 테스트 → 보고 루프 (모든 작업에 적용)
 
 ### 기능 구현 시
-1. 코드 작성 (먼저 관련 표준 문서 재확인)
+1. 코드 작성 (먼저 대상 PLAN.md 의 Guardrails 재확인)
 2. 서버/앱 실행하여 동작 확인
 3. 실패 시: 로그 확인 → 원인 분석 → 코드 수정 → 2번으로
 4. 성공 시: 다음 작업으로
 
 ### E2E 테스트 시
-1. `scv/TESTING.md` 의 시나리오 카탈로그에서 해당 E2E 확인
+1. TESTS.md 의 시나리오 목록에서 해당 E2E 확인
 2. Playwright 또는 Chrome DevTools MCP 로 테스트 실행
 3. 검증 실패 시:
-   - **테스트 아티팩트 경로를 `scv/TESTING.md` 규칙으로 확인** (아래 "아티팩트 경로" 섹션)
+   - **테스트 아티팩트 경로를 아래 "아티팩트 경로" 규칙으로 확인**
    - `/scv:report "<phase>" failed --summary "<원인>" --attempt <N>` 호출
    - 원인 분석 → 코드 수정 → 1번으로
 4. 검증 통과 시:
    - `/scv:report "<phase>" passed --summary "<통과 항목>" --attempt <N>` 호출
 
-### 아티팩트 경로 (TESTING.md 규칙)
+### 아티팩트 경로 (SCV 아티팩트 계약)
 
 `/scv:report` 의 `collect-artifacts.sh` 가 자동 수집하는 경로:
 - Playwright: `test-results/**/*.{png,webm,mp4,zip}`
@@ -130,7 +128,7 @@ DISCORD_CHANNEL_ID_E2E_FAILURE=...
 
 - 매 반복에서 파일 시스템 상태를 확인하라. 이미 존재하는 파일은 건너뛰거나 필요 시 수정만.
 - `git commit` 은 Phase 별 1회. 메시지는 한국어 Angular 컨벤션.
-- 패키지 매니저는 `scv/RALPH_PROMPT.md` 에 명시된 것을 사용.
+- 패키지 매니저는 사용자의 진입 프롬프트에 명시된 것을 사용.
 - LLM 호출 시 `/no_think` 태그 사용 (Qwen 등 thinking 비활성화가 필요한 모델).
 
 ---
@@ -139,16 +137,15 @@ DISCORD_CHANNEL_ID_E2E_FAILURE=...
 
 `<promise>DONE</promise>` 은 다음 조건을 **모두** 만족한 후에만 출력하라:
 
-1. 모든 Phase 가 완료됨 — 각 Phase 의 `scv/TESTING.md` 성공 기준 통과
-2. `scv/RALPH_PROMPT.md` 의 모든 검증 항목 통과
+1. 모든 Phase 가 완료됨 — 대상 계획의 TESTS.md 성공 기준 통과
+2. PLAN.md 의 Exit criteria (있으면) 전부 충족
 3. 각 Phase 완료 직후 `/scv:report "<phase>" passed` 호출 결과가 `OK <thread_ref>` 였음 (즉, 협업툴에 실제로 전송됨)
 4. E2E 테스트가 있다면 모든 시나리오 통과 (실패 상태에서 DONE 출력 금지)
-5. `scv/AGENTS.md` 의 분포 테스트·골든셋이 통과율 임계치 이상
 
 ---
 
 ## 실행 명령어
 
 ```
-loop-runner "<host-config>/loop-template.md 를 읽고 실행 흐름을 따르라. 프로젝트 설정은 RALPH_PROMPT.md, 표준 명세는 scv/*.md, 보고는 /scv:report Claude Code 스킬을 사용한다." --max-iterations 35 --completion-promise "DONE"
+loop-runner "<host-config>/loop-template.md 를 읽고 실행 흐름을 따르라. 대상 계획은 scv/promote/<slug>/ 의 PLAN.md·TESTS.md, 보고는 /scv:report Claude Code 스킬을 사용한다." --max-iterations 35 --completion-promise "DONE"
 ```

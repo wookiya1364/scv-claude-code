@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Collect artifact file paths for a given status, per TESTING.md rules.
+# Collect artifact file paths for a given status (SCV artifact-path contract:
+# Playwright test-results/**, MCP test-results/mcp/**, logs test-results/logs/*.log).
 # Prints one absolute path per line to stdout. Silent if no artifacts.
 #
 # Usage: collect-artifacts.sh <status>
