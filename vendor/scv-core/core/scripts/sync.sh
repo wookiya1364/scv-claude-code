@@ -46,7 +46,7 @@ Options:
   --project-dir PATH   Target project directory (default: cwd).
   --dry-run            Print planned actions without modifying files.
   --force FILE         Force-overwrite a file whose merge_policy is 'preserve'.
-                       Use the relative path under the project (e.g. scv/DOMAIN.md).
+                       Use the relative path under the project.
                        May be passed multiple times.
 
 Workspace join (multi-repo):
@@ -322,6 +322,59 @@ shopt -u nullglob
 # contradicts the stale-move behavior their upgraded core now performs.
 if [[ -f "$TEMPLATE_DIR/scv/raw/README.md" ]]; then
   process_template_file "$TEMPLATE_DIR/scv/raw/README.md" "scv/raw"
+fi
+
+# scv/journal/README.md — the journal usage guide (v0.22.0+, merge_policy:
+# preserve). Same explicit-line propagation as raw/README.md so pre-0.22.0
+# projects receive the journal via sync; its siblings DECISIONS.md / TODO.md
+# ride the top-level scv/*.md glob above.
+if [[ -f "$TEMPLATE_DIR/scv/journal/README.md" ]]; then
+  process_template_file "$TEMPLATE_DIR/scv/journal/README.md" "scv/journal"
+fi
+
+# scv/routines/README.md — the routine convention guide (v0.22.0+,
+# merge_policy: overwrite). Same explicit-line propagation as raw/README.md:
+# ONLY the README travels — routine files are user-owned, and the example
+# routine templates (template/scv/routines/examples/) never leave core.
+if [[ -f "$TEMPLATE_DIR/scv/routines/README.md" ]]; then
+  process_template_file "$TEMPLATE_DIR/scv/routines/README.md" "scv/routines"
+fi
+
+# Retired standard docs (TEMPLATE_VERSION 2.0.0) — deleted from existing
+# projects, deliberately WITHOUT backup (user decision; git history is the
+# recovery path). Only these exact seven filenames, only directly under scv/.
+# The sync.md protocol instructs Claude Code to offer moving user-authored
+# content into DECISIONS.md BEFORE this runs. Symlinks are never followed or
+# deleted (fail-closed): the link target may be a file SCV does not own.
+#
+# One-time migration, twice guarded:
+# - Version gate: runs only while the project's stamped template version is
+#   pre-2.x ("unknown" = never-synced legacy). Once 2.0.0 is stamped, these
+#   seven names belong to the user again — a recreated file is never re-deleted.
+# - A symlinked scv/ DIRECTORY disables the pass entirely: every dst path
+#   would resolve through the link into a tree SCV does not own.
+RETIRED_DOCS=(DOMAIN.md ARCHITECTURE.md DESIGN.md AGENTS.md TESTING.md INTAKE.md RALPH_PROMPT.md)
+case "$LOCAL_VERSION" in
+  [2-9].*|[1-9][0-9]*.*) RETIRE_PASS=0 ;;
+  *)                     RETIRE_PASS=1 ;;
+esac
+if [[ $RETIRE_PASS -eq 1 && -L "$PROJECT_DIR/scv" ]]; then
+  CHANGES+=("WARN      scv/  (symlinked directory — retired-doc migration skipped; resolve the link and re-run sync)")
+  RETIRE_PASS=0
+fi
+if [[ $RETIRE_PASS -eq 1 ]]; then
+  for retired in "${RETIRED_DOCS[@]}"; do
+    dst="$PROJECT_DIR/scv/$retired"
+    if [[ -L "$dst" ]]; then
+      CHANGES+=("WARN      scv/$retired  (symlink — retired doc NOT deleted; remove it manually)")
+      continue
+    fi
+    [[ -f "$dst" ]] || continue
+    CHANGES+=("DELETED   scv/$retired")
+    if [[ $DRY_RUN -eq 0 ]]; then
+      rm -f "$dst"
+    fi
+  done
 fi
 
 # Stamp scv/SCV.md version markers (root instruction files stay untouched).

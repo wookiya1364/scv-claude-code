@@ -371,6 +371,66 @@ fi
 
 echo ""
 
+# ---------- [5b] recent decisions (scv/DECISIONS.md, v0.22.0+) ----------
+# Entries are `## [YYYY-MM-DD HH:MM] <author> — <title>` headers, append-only,
+# so the last N headers are the N most recent decisions.
+
+DECISIONS_FILE="$SCV_DIR/DECISIONS.md"
+DECISIONS_RECENT_N=5
+echo "[scv/DECISIONS.md — recent decisions]"
+if [[ ! -f "$DECISIONS_FILE" ]]; then
+  echo "  (file does not exist — /scv:sync seeds it)"
+else
+  DEC_ALL=$(grep -E '^## \[[0-9]{4}-[0-9]{2}-[0-9]{2}' "$DECISIONS_FILE" 2>/dev/null || true)
+  if [[ -z "$DEC_ALL" ]]; then
+    echo "  (no entries yet — promote approval / archive / obsolete triage append here)"
+  else
+    DEC_N=$(printf '%s\n' "$DEC_ALL" | grep -c .)
+    echo "  $DEC_N entr(y/ies) total — last $DECISIONS_RECENT_N:"
+    printf '%s\n' "$DEC_ALL" | tail -n "$DECISIONS_RECENT_N" | while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "  · ${line#\#\# }"
+    done
+  fi
+fi
+
+echo ""
+
+# ---------- [5c] open TODOs by author (scv/TODO.md, v0.22.0+) ----------
+# Open items are unindented `- [ ] (T-NNN) <내용> — @<author>, YYYY-MM-DD`
+# lines; the fenced format example in the template is indented so it never
+# counts.
+
+TODO_FILE="$SCV_DIR/TODO.md"
+echo "[scv/TODO.md — open items]"
+if [[ ! -f "$TODO_FILE" ]]; then
+  echo "  (file does not exist — /scv:sync seeds it)"
+else
+  TODO_OPEN=$(grep -E '^- \[ \]' "$TODO_FILE" 2>/dev/null || true)
+  if [[ -z "$TODO_OPEN" ]]; then
+    echo "  (none open)"
+  else
+    TODO_N=$(printf '%s\n' "$TODO_OPEN" | grep -c .)
+    BY_AUTHOR=$(printf '%s\n' "$TODO_OPEN" \
+      | sed -n 's/.*— *\(@[^,]*\).*/\1/p' \
+      | sort | uniq -c | sort -rn \
+      | awk '{printf "%s%s %s", (NR>1 ? " · " : ""), $2, $1} END {print ""}')
+    echo "  $TODO_N open — by author: ${BY_AUTHOR:-"(unattributed)"}"
+    shown=0; limit=10; [[ $VERBOSE -eq 1 ]] && limit=1000000
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      shown=$((shown+1))
+      if [[ $shown -gt $limit ]]; then
+        echo "  … (+$((TODO_N - limit)) more — rerun with --verbose to see all)"
+        break
+      fi
+      echo "  · ${line#- }"
+    done <<< "$TODO_OPEN"
+  fi
+fi
+
+echo ""
+
 # ---------- [6] PR attachments (orphan branch storage) ----------
 echo "[scv-attachments — PR media storage]"
 backend="${SCV_ATTACHMENTS_BACKEND:-git-orphan}"

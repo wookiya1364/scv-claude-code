@@ -42,11 +42,29 @@ Always run the dry-run first, even when the user omitted `--dry-run`:
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/sync.sh" --project-dir "$(pwd)" --dry-run "${SCV_ARGS[@]}"
 ```
 
-Summarize every `NEW`, `MIGRATE`, `MERGE`, `OVERWRITE`, `FORCED`, and `SKIP`
-entry. If a legacy index is the only state index, call out that the shared
-`scv/SCV.md` will be seeded while the legacy file remains intact. Ask for one
-explicit confirmation before applying. If the user declines, stop after the
-preview.
+Summarize every `NEW`, `MIGRATE`, `MERGE`, `OVERWRITE`, `FORCED`, `SKIP`,
+`DELETED`, and `WARN` entry. If a legacy index is the only state index, call
+out that the shared `scv/SCV.md` will be seeded while the legacy file remains
+intact. Ask for one explicit confirmation before applying. If the user
+declines, stop after the preview.
+
+**Retired standard docs (TEMPLATE_VERSION 2.0.0 — deletion, no backup).**
+The dry-run lists a `DELETED scv/<file>` entry for each retired standard doc
+still present in the project. The retired set is exactly these seven files under `scv/`: `DOMAIN.md` `ARCHITECTURE.md` `DESIGN.md` `AGENTS.md` `TESTING.md` `INTAKE.md` `RALPH_PROMPT.md` (retired 2.0.0).
+Applying the sync deletes them **immediately and without any backup** — git
+history is the only recovery path. Before asking for the apply confirmation:
+
+1. Open each file listed as `DELETED` and check whether it carries real
+   user-authored content (anything beyond the unfilled template's `<TODO>`
+   scaffolding or a plain `status:` flip).
+2. If real content is present, **first propose migrating the decisions worth
+   keeping into a version-controlled team note (e.g. `DECISIONS.md` / a
+   journal)** and offer to do that migration now. Only proceed with the sync
+   after the user has decided (migrate first, or delete as-is).
+3. Files reported as `WARN … (symlink …)` are never deleted by the script —
+   relay the warning and let the user remove the link themselves.
+
+No file other than those seven is ever deleted by sync.
 
 If the script reports an index conflict, stop. Never choose one version,
 overwrite either file, or perform a migration automatically.
@@ -60,9 +78,10 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/sync.sh" --project-dir "$(pwd)" "${SCV_ARGS[
 Semantics:
 - Files with `merge_policy: overwrite` → replaced
 - Files with `merge_policy: preserve` → skipped unless `--force FILE` is passed
-- Files with `merge_policy: merge-on-markers` (incl. scv/SCV.md, scv/TESTING.md, scv/REPORTING.md) → template replaces file, but existing frontmatter `status`, the `PROJECT:LOCAL` block, and the `SCV:WORKSPACE` block are restored from the local copy
+- Files with `merge_policy: merge-on-markers` (incl. scv/SCV.md, scv/REPORTING.md) → template replaces file, but existing frontmatter `status`, the `PROJECT:LOCAL` block, and the `SCV:WORKSPACE` block are restored from the local copy
 - `scv/promote/*.md` → never touched
-- All modified files are backed up to `.scv-backup/<timestamp>/` before changes
+- Retired standard docs (the seven listed in Step 0) → deleted, **no backup**; symlinks are left in place with a `WARN`
+- All modified files are backed up to `.scv-backup/<timestamp>/` before changes (deletions are exempt — user decision)
 
 The above is **Step 1 — template re-sync**. After it finishes (or is skipped), proceed to Step 2 below.
 

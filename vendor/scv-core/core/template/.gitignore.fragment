@@ -19,5 +19,5 @@ test-results/report-queue/
 .graphify_python
 .graphify_version
 
-# v0.9.0+ — action:help conversation mode (local sketch files)
-/scv/.conversations/
+# v0.22.0+ — 대화는 커밋됩니다: action:help conversation mode 는 redaction 을
+# 거쳐 scv/conversations/ 에 저장됩니다 (구 dot-conversations ignore 는 제거됨).
