@@ -1,6 +1,12 @@
 name: Cross-OS — model policy script
 
 on:
+  push:
+    branches: [main, stage, develop]
+    paths:
+      - 'scripts/apply-model-policy.sh'
+      - 'commands/*.md'
+      - '.github/workflows/test-model-policy.yml'
   pull_request:
     paths:
       - 'scripts/apply-model-policy.sh'
