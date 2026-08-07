@@ -17,8 +17,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 REQUIRED_KEYS=(name version status last_updated standard_version merge_policy)
-# N/A is valid: adoption-mode hydrate seeds standard docs as N/A so
-# the promote/work loop can run without enforcing full INTAKE.
+# N/A stays valid: scv/REPORTING.md seeds as N/A, and pre-2.0.0 projects may
+# still carry N/A docs the user chose to keep outside scv/.
 # planned/in_progress/testing/done/obsolete are PLAN.md states (see PROMOTE.md §9).
 # obsolete marks a plan that has been superseded and is skipped by /scv:regression.
 VALID_STATUS="draft active deprecated N/A planned in_progress testing done obsolete"
@@ -67,8 +67,9 @@ check_file() {
   fi
 }
 
-STANDARD_DOCS=(INTAKE PROMOTE ARCHITECTURE DESIGN DOMAIN AGENTS TESTING REPORTING RALPH_PROMPT)
-for doc in "${STANDARD_DOCS[@]}"; do
+# Workflow docs SCV still ships (TEMPLATE_VERSION 2.0.0 dropped the
+# standard-doc scaffolding; only these remain frontmatter-checked).
+for doc in PROMOTE REPORTING; do
   f="$PROJECT_DIR/scv/$doc.md"
   [[ -f "$f" ]] && check_file "$f"
 done

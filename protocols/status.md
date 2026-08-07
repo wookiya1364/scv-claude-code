@@ -18,6 +18,8 @@ Inspects the project's SCV state:
 - **Active promote plans**: entries under `scv/promote/` waiting for implementation.
 - **Docs graph**: graphify skill presence + docs graph freshness (`missing` / `built` / `stale` / skill-not-installed).
 - **Archive**: count of completed plans under `scv/archive/`.
+- **Recent decisions** (v0.22.0+): the last N entries of the append-only `scv/DECISIONS.md` (author-attributed — written by promote approval, work archive, and regression obsolete triage).
+- **Open TODOs** (v0.22.0+): unchecked `scv/TODO.md` items, counted per author (`@<author>`), listed with their `(T-NNN)` ids.
 - **Workspace** (multi-repo / monorepo only; silent for single repos): for a CHILD, the incoming handoffs addressed to this repo; for the ROOT umbrella, a coordination view grouping handoffs by target repo and status.
 
 ## Language preference

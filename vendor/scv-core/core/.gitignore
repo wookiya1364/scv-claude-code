@@ -35,6 +35,3 @@ DeckUI/dist-deck/
 DeckUI/dist/
 demo/node_modules/
 demo/out/
-
-# /scv:help local conversation drafts
-/scv/.conversations/

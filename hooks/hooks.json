@@ -1,0 +1,27 @@
+{
+  "description": "SCV journal capture — registers the vendored Core hook templates (scv-core docs/wrapper-integration.md §6 'Hook seam'). Non-blocking by contract: the templates exit 0 on every failure and write nothing outside scv/journal/. All journal writes route through journal-append.sh, whose redaction filter runs before anything hits disk.",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "SCV_CORE_ROOT=\"${CLAUDE_PLUGIN_ROOT}/vendor/scv-core/core\" bash \"${CLAUDE_PLUGIN_ROOT}/vendor/scv-core/core/template/hooks/on-user-prompt.sh\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "SCV_CORE_ROOT=\"${CLAUDE_PLUGIN_ROOT}/vendor/scv-core/core\" bash \"${CLAUDE_PLUGIN_ROOT}/vendor/scv-core/core/template/hooks/on-stop.sh\"",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}
