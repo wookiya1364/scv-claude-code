@@ -67,6 +67,13 @@ function listItemsTree(listNode) {
 const CALLOUT = { NOTE: "info", TIP: "good", IMPORTANT: "info", WARNING: "warn", CAUTION: "danger" };
 
 function blockOf(node, t) {
+  // SCV guidance-ablation markers (see core/scripts/guidance-filter.sh) are
+  // injection-time metadata, never document content. Without this guard the
+  // default case below would surface them as escaped-text paragraphs — a deck
+  // render must never expose the marker text. Only the exact marker comment is
+  // dropped; every other HTML comment keeps its existing (visible) behavior.
+  if (node.type === "html" && /^<!--\s*\/?SCV:GUIDANCE\s*-->$/.test(String(node.value).trim()))
+    return null;
   switch (node.type) {
     case "paragraph":
       return { type: "para", text: txt(node) };

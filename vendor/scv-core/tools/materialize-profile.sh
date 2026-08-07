@@ -77,9 +77,14 @@ if [[ "$ACTION_TEMPLATE" =~ ^\$([A-Za-z_][A-Za-z0-9_]*):\{action\}$ ]]; then
   ACTION_SIGIL_VAR="${BASH_REMATCH[1]}"
   SIGIL_DECL="${ACTION_SIGIL_VAR}='\$${ACTION_SIGIL_VAR}'"
   SHELL_FILES=()
+  # template/ is pruned for the same reason text_files() prunes it: template
+  # payloads (incl. template/hooks/*.sh) are project/wrapper-facing canonical
+  # files — no host rewriting ever runs on them, so the sigil never appears
+  # there and the declaration must not either (profiles must materialize an
+  # identical template/ tree).
   while IFS= read -r -d '' file; do
     SHELL_FILES+=("$file")
-  done < <(find "$CORE_ROOT" -type f -name '*.sh' -print0)
+  done < <(find "$CORE_ROOT" -path "$CORE_ROOT/template" -prune -o -type f -name '*.sh' -print0)
   if [[ ${#SHELL_FILES[@]} -gt 0 ]]; then
     SIGIL_DECL_VALUE="$SIGIL_DECL" \
       perl -0pi -e 's/\A(#![^\n]*\n)/$1$ENV{SIGIL_DECL_VALUE}\n/' \
@@ -119,6 +124,24 @@ if [[ "$ARGUMENT_STYLE" == "template-string" && -d "$CORE_ROOT/protocols" ]]; th
   while IFS= read -r -d '' protocol; do
     perl -pi -e 's/^```!$/```bash/' "$protocol"
   done < <(find "$CORE_ROOT/protocols" -type f -name '*.md' -print0)
+fi
+
+# Guidance-ablation injection filter (v0.22.0+). SCV_GUIDANCE=minimal strips
+# <!-- SCV:GUIDANCE --> blocks from the materialized protocol projection a
+# wrapper injects; the default (full) keeps every protocol byte-identical.
+# Canonical protocol sources are never modified — only this materialized copy.
+# The filter validates ALL protocol markers in every mode and aborts the whole
+# materialization on an unpaired/nested marker (fail-closed: a partial
+# injection is never produced).
+if [[ -d "$CORE_ROOT/protocols" && -f "$CORE_ROOT/scripts/guidance-filter.sh" ]]; then
+  PROTOCOL_FILES=()
+  while IFS= read -r -d '' protocol; do
+    PROTOCOL_FILES+=("$protocol")
+  done < <(find "$CORE_ROOT/protocols" -type f -name '*.md' -print0)
+  if [[ ${#PROTOCOL_FILES[@]} -gt 0 ]]; then
+    bash "$CORE_ROOT/scripts/guidance-filter.sh" \
+      --mode "${SCV_GUIDANCE:-full}" --in-place "${PROTOCOL_FILES[@]}"
+  fi
 fi
 
 {

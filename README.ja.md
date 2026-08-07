@@ -136,8 +136,9 @@ flowchart LR
 | `/scv:deck [<md>]` | **Markdown → 企画書 HTML.** 既定: ビルド不要の自己完結**ドキュメント**(上から下へ読み、PDF 印刷); **スライドプレゼン**を頼めば DeckUI デッキに。<br/>決定論的変換: 見出し→セクション, GFM テーブル, ` ```mermaid ` 図(CDN, オフライン時はコードテキストへ自動フォールバック), KPI タイル, As-Is/To-Be, 品質 lint — 元の Markdown が一緒に付く。<br/>全体像(アーキテクチャ)を context-first で構成、捏造しない。Node+pnpm 必要(このコマンドのみ; ドキュメント経路はスリム ~7MB のみ)。 |
 | `/scv:update` | **プラグイン self-update ガイド** (v0.11.2+).<br/>インストール済み vs 最新バージョン表示。<br/>`/plugin marketplace update scv-claude-code` + `/reload-plugins` への案内。<br/>read-only。 |
 | `/scv:regression` | archive された全 TESTS を回帰として実行 |
+| `/scv:routine [<name>\|--list]` | **メンテナンスルーティン** (v0.22.0+)。ルーティン 1 つ = `scv/routines/<name>.md` の markdown 1 ファイル — task + guardrails + exit criteria の契約 (step list ではない)。`--list` は NAME/CADENCE/REPORT 表、`--lint <file>` はルーティンファイル検査。SCV は決してスケジュールしない: `/loop 1d /scv:routine dead-code`、cron、CI スケジュール等のホスト機能でユーザーが登録。 |
 | `/scv:report` | フェーズ結果を Slack / Discord に通知 |
-| `/scv:sync` | **2 ステップ sync** (v0.11.3+).<br/>(1) プラグイン template → 標準ドキュメント (`merge_policy`)。<br/>(2) コード ↔ active promote slug の drift 検出 (`scope:` git diff + TESTS run)。<br/>archive は immutable。 |
+| `/scv:sync` | **2 ステップ sync** (v0.11.3+).<br/>(1) プラグイン template → ワークフロー文書 (`merge_policy`; 廃止された標準ドキュメント 7 種は 1 回だけ削除, v0.22.0+)。<br/>(2) コード ↔ active promote slug の drift 検出 (`scope:` git diff + TESTS run)。<br/>archive は immutable。 |
 | `/scv:install-deps` | 不足 CLI 自動検出 + インストール案内 (`gh` / `glab` / `jq` / `ffmpeg`) |
 | `/scv:workspace` | **マルチレポ(nested workspace)** — 対話型セットアップ: アンブレラに子として参加 / アンブレラ(root)作成 / 分離。長いフラグ不要。 |
 | `/scv:handoff` | **マルチレポ** — 他レポの対応開発が必要だと宣言 → アンブレラ scv repo に handoff(+ 決定 + 会話)を記録(push は毎回同意、チーム通知は任意)。 |
@@ -215,10 +216,28 @@ v0.20.0 から、共通ワークフローの動作はチェックサムで検証
 を参照してください。
 
 Wrapper と Core は独立してリリースします。この Claude アダプター release
-は `0.21.0` で、現在の Core pin は `vendor/scv-core/VERSION` と
+は `0.22.0` で、現在の Core pin は `vendor/scv-core/VERSION` と
 `core.lock` に記録されます。Core sync が更新するのは、そのチェックサム付き
 pin と生成 projection のみで、wrapper の `VERSION`、plugin manifest、
 marketplace version は変更しません。
+
+**Journal フック (v0.22.0+, 登録は wrapper 所有).** Core は自由会話まで
+コミットされるチーム・ジャーナル(`scv/journal/<YYYYMMDD>-<author>.md`)へ
+キャプチャする non-blocking フックテンプレート 2 種を提供し、登録はこの
+アダプターの `hooks/hooks.json` が担います:
+
+- `UserPromptSubmit` → `vendor/scv-core/core/template/hooks/on-user-prompt.sh`
+  (stdin JSON `prompt` フィールド → journal append)
+- `Stop` → `vendor/scv-core/core/template/hooks/on-stop.sh`
+  (stdin JSON `transcript_path` → assistant 要約 append)
+
+両コマンドとも `SCV_CORE_ROOT`(materialized core)を export し、プロジェクト
+ルートを cwd に実行されます。`scv/` の無いプロジェクトでは exit `0` +
+無記録。journal への書き込みはすべて Core の `journal-append.sh` を経由し、
+redaction フィルター (password/token/secret/api-key 値、`Bearer` トークン、
+`AKIA…` キー → `[REDACTED]`) がディスク書き込み前に実行されます —
+`scv/journal/` への直接書き込み禁止、blocking フック登録禁止。契約:
+scv-core `docs/wrapper-integration.md` §6 "Hook seam"。
 
 PLAN.md が単一の source of truth。外部ツール (Jira / Linear / Confluence / Google Doc) は `refs:` で*リンク*のみ — 複製しない。出力 (PR / MR / Slack / Discord) は同じ source から自動生成。
 
@@ -272,9 +291,9 @@ flowchart TB
 
 AI 協業チーム開発の 3 つの失敗モード — SCV が拒否するもの。
 
-**S — Standard (標準).** 標準ドキュメント (DOMAIN, ARCHITECTURE, DESIGN, TESTING, …) は `status: N/A` でシードされ、ユーザーが lift するまでそのまま。
+**S — Standard (標準).** 標準とはスナップショット文書ではなくワークフローそのもの。Core Template 2.0.0 から hydrate はワークフローファイルのみを seed します — モデルがコードベースから導出できる事実は事前に文書化しません。
 
-N/A は backlog ではなく定常状態。
+残す価値のある決定は、古びるスナップショット文書ではなく `scv/DECISIONS.md` と append-only の `scv/journal/` へ。
 
 **C — Cowork (協業).** `/scv:promote` は対話であって生成ではありません。
 
@@ -299,9 +318,11 @@ archived plan のテストは次の変更の回帰として回ります。
 my-project/
 ├── CLAUDE.md           # (任意 · ユーザー所有 — SCV は触らない)
 ├── scv/                # SCV が所有する領域
-│   ├── CLAUDE.md       # SCV ワークフローのインデックス
-│   ├── INTAKE.md PROMOTE.md DOMAIN.md ARCHITECTURE.md DESIGN.md
-│   ├── AGENTS.md TESTING.md REPORTING.md RALPH_PROMPT.md
+│   ├── SCV.md          # SCV ワークフローのインデックス
+│   ├── PROMOTE.md REPORTING.md
+│   ├── DECISIONS.md TODO.md
+│   ├── journal/        # append-only 著者別チームジャーナル (フックが記録)
+│   ├── routines/       # 1 ファイル完結のメンテナンスルーティン (/scv:routine)
 │   ├── readpath.json   # raw 変更スナップショット (自動管理)
 │   ├── promote/        # アクティブな計画 (YYYYMMDD-author-slug フォルダ)
 │   ├── archive/        # 完了した計画 (/scv:work が移動)
@@ -312,7 +333,7 @@ my-project/
 
 **Non-destructive**: ルート `CLAUDE.md` / `.env.example` はそのまま保持。SCV は `scv/` のみ作成、`.env.example.scv` を別途追加 + 既存 `.gitignore` に append。
 
-**標準ドキュメントは任意**。adoption モード (default) は 9 ドキュメントのうち 7 つを `status: N/A` で seed し lift を決めるまでそのまま。N/A は backlog ではなく定常状態。
+**標準ドキュメント 7 種は廃止 (Core Template 2.0.0, breaking)**。hydrate は adoption-only: `INTAKE.md`、`DOMAIN.md`、`ARCHITECTURE.md`、`DESIGN.md`、`AGENTS.md`、`TESTING.md`、`RALPH_PROMPT.md` は seed も sync もされません。既存プロジェクトでは明示的な `/scv:sync` 1 回がこの 7 ファイルを削除します (削除前にユーザー作成の内容を `scv/DECISIONS.md` へ移すことを先に提案; 復旧経路は git 履歴)。その後ユーザーが再作成したファイルはユーザー所有 — sync が再削除することはありません。
 
 ### 外部 Refs (Jira / Linear / PR / ドキュメント) — 自動検出
 

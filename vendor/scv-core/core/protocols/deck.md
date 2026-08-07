@@ -61,24 +61,24 @@ context from the project's own docs, **never inventing** a system it can't see.
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/deck-context.sh" "${SCV_ARGS[@]}"
 ```
 
-Parse `BIG_PICTURE:` + `MODE_HINT:` (and the `ARCHITECTURE` / `GRAPHIFY_GRAPH` / `FEATURE_ARCH` source lines).
+Parse `BIG_PICTURE:` + `MODE_HINT:` (and the `DOCS_CONTEXT` / `GRAPHIFY_GRAPH` / `FEATURE_ARCH` source lines).
 
-- **B — `BIG_PICTURE: absent`** → the deck can't show a whole that isn't documented, and you must not invent one. **Establish it first.** Offer by asking the user (default: draft): (1) **draft `<SCV_DIR>/ARCHITECTURE.md`** — a mermaid overview of the existing services/screens/data + short prose, built only from what the repo/user actually shows (user corrects real values); (2) **run `/scv:promote <slug>`** — generates `FEATURE_ARCHITECTURE.md` (a "position in whole" diagram); (3) **proceed feature-only** with a lint warning that the big picture is missing (the minimum). Once it exists, continue to A.
+- **B — `BIG_PICTURE: absent`** → the deck can't show a whole that isn't documented, and you must not invent one. **Establish it first.** Offer by asking the user (default: build the graph): (1) **run `/graphify`** — builds the docs/code knowledge graph that gives the As-Is whole; (2) **run `/scv:promote <slug>`** — generates `FEATURE_ARCHITECTURE.md` (a "position in whole" diagram); (3) **proceed feature-only** with a lint warning that the big picture is missing (the minimum). Once it exists, continue to A.
 - **A — `BIG_PICTURE: present`** → pull the sources below and compose the context-first structure.
 
 **Big-picture sources (priority):**
 1. `scv/promote/<slug>/FEATURE_ARCHITECTURE.md` — if this is a promote plan, it already has a "position in whole" diagram with `:::new` nodes.
-2. `scv/ARCHITECTURE.md` + the graphify docs graph (`.graphify/docs/`) — the existing system structure (the As-Is whole).
+2. The graphify docs graph (`.graphify/docs/`) + real architecture/screen docs under `docs/` — the existing system structure (the As-Is whole).
 3. The feature's `PLAN.md` (problem, goals/non-goals, steps) — the delta + the why.
 
 **Target section order** (compose into the source, or a `*-deck.md` working copy, with user approval):
 1. **배경 / 왜 지금인가** — problem, impact, why-now (from PLAN / problem statement).
-2. **전체 구조 (As-Is)** — a mermaid diagram of the existing system (from ARCHITECTURE / graphify).
+2. **전체 구조 (As-Is)** — a mermaid diagram of the existing system (from graphify / real project docs).
 3. **이 기능의 위치 (To-Be)** — the same diagram with **new/changed nodes highlighted** (`classDef new/changed` + `:::new` / `:::changed`) so "이 부분이 바뀐다"가 한눈에 보인다.
 4. **변경점 (As-Is → To-Be)** — a per-area table of what changes.
 5. Details — 목표/비목표, 요구사항, 화면, 데이터, 성공지표, 예외처리.
 
-**Faithfulness (non-negotiable):** the big picture must come from real docs. If no `ARCHITECTURE.md` / graphify graph / `FEATURE_ARCHITECTURE.md` exists, do **not** invent a system diagram — tell the user the deck can't show the whole until one exists (offer to draft `ARCHITECTURE.md`, or run `/scv:promote` which generates `FEATURE_ARCHITECTURE.md`), and proceed with what's available plus a lint warning. Ask for confirmation before rewriting the user's source.
+**Faithfulness (non-negotiable):** the big picture must come from real docs. If no graphify graph / `FEATURE_ARCHITECTURE.md` / real architecture doc exists, do **not** invent a system diagram — tell the user the deck can't show the whole until one exists (offer to run `/graphify`, or `/scv:promote` which generates `FEATURE_ARCHITECTURE.md`), and proceed with what's available plus a lint warning. Ask for confirmation before rewriting the user's source.
 
 ## Step 1 — Build
 
