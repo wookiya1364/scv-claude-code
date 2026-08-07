@@ -61,19 +61,6 @@ _doc_is_real() {
   return 0
 }
 
-if [[ -f "$SCV_DIR/ARCHITECTURE.md" ]]; then
-  if _doc_is_real "$SCV_DIR/ARCHITECTURE.md"; then
-    echo "ARCHITECTURE: present $SCV_DIR/ARCHITECTURE.md"; present=1
-  else
-    echo "ARCHITECTURE: template (unfilled <TODO> — not counted as big picture)"
-  fi
-else
-  echo "ARCHITECTURE: absent"
-fi
-# DESIGN/DOMAIN are extra context (do not by themselves count as the big picture).
-[[ -e "$SCV_DIR/DESIGN.md" ]]  && echo "DESIGN: present $SCV_DIR/DESIGN.md"   || echo "DESIGN: absent"
-[[ -e "$SCV_DIR/DOMAIN.md" ]]  && echo "DOMAIN: present $SCV_DIR/DOMAIN.md"   || echo "DOMAIN: absent"
-
 # Real architecture / screen / system / IA docs under docs/ (project root) or
 # <scv-parent>/docs — a strong big-picture source (e.g. a screens/IA doc).
 _bases=("docs")
@@ -117,5 +104,5 @@ if [[ $present -eq 1 ]]; then
   echo "MODE_HINT: A (pull existing big picture → compose context-first deck)"
 else
   echo "BIG_PICTURE: absent"
-  echo "MODE_HINT: B (no big picture found → help create ARCHITECTURE.md or run /scv:promote first, then A)"
+  echo "MODE_HINT: B (no big picture found → run /graphify or /scv:promote first, then A)"
 fi

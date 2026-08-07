@@ -120,8 +120,8 @@ const MAX_WF_DEPTH = 40; // guards runaway/adversarial card-in-card nesting from
 
 // ---- project-token override (screen mockup "theme" field) ----
 // 1순위(프로젝트 실제 토큰) / 2순위(scv 자체 스킨) 판별: scv 자체 스킨이 기본이고, 사용자가
-// "우리 프로젝트엔 디자인 토큰이 있다"고 말한 경우에만(commands/promote.md Step 6.4가
-// scv/DESIGN.md §5 를 읽어 판단) Claude Code 가 screen JSON 에 `theme` 필드로 실제 hex 값만
+// "우리 프로젝트엔 디자인 토큰이 있다"고 말한 경우에만(commands/promote.md Step 6.4의
+// 사용자 확인으로 판단) Claude Code 가 screen JSON 에 `theme` 필드로 실제 hex 값만
 // 넘긴다. 그 외 파생값(투명 배지 배경, 명암비 안전한 on-primary 텍스트)은 여기서 항상
 // 계산한다 — Claude Code 가 매번 대비를 직접 판단하게 두면 v0.18.0 에서 실제로 터진 WCAG
 // 버그가 재발한다. 검증 실패한 값은 조용히 무시하고 scv 기본값을 유지한다(크래시 없음).
@@ -148,8 +148,8 @@ const tint = (hex, alpha) => {
 };
 const WF_RADIUS_RE = /^\d+(\.\d+)?(px|rem|em)$/;
 
-// A screen block's optional `theme` (base hex colors only — exactly what a project's
-// own scv/DESIGN.md §5 documents) → an inline `style="--wf-*:..."` string that overrides
+// A screen block's optional `theme` (base hex colors only — exactly what the
+// user's own token source documents) → an inline `style="--wf-*:..."` string that overrides
 // the scv-native defaults declared on .wf-screen. Every value is independently
 // validated (hex/length regex) before use; anything that fails validation is dropped,
 // never inserted — the base CSS default silently takes over for that one property.

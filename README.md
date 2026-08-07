@@ -140,8 +140,9 @@ flowchart LR
 | `/scv:deck [<md>]` | **Markdown → 기획서 HTML.** Default: a buildless, self-contained **document** (scroll top-to-bottom, prints to PDF); ask for a **slide presentation** to build the DeckUI deck instead.<br/>Deterministic transform: headings→sections, GFM tables, ` ```mermaid ` diagrams (CDN, with offline text fallback), KPI tiles, As-Is/To-Be, quality lint — the raw markdown travels with it.<br/>Composes the big picture (architecture) context-first; never invents. Node + pnpm required (this command only; the document path installs just a slim ~7MB stack). |
 | `/scv:update` | **Plugin self-update guide** — show installed vs latest version, walk through `/plugin marketplace update scv-claude-code` + `/reload-plugins`. Read-only. (v0.11.2+) |
 | `/scv:regression` | Run every archived TESTS as a regression suite |
+| `/scv:routine [<name>\|--list]` | **Maintenance routines** (v0.22.0+). One markdown contract per routine under `scv/routines/<name>.md` — task + guardrails + exit criteria, never a step list. `--list` shows the NAME/CADENCE/REPORT table; `--lint <file>` checks a routine file. SCV never schedules: register the cadence yourself with host features (`/loop 1d /scv:routine dead-code`, cron, CI schedule). |
 | `/scv:report` | Post a phase result to Slack or Discord |
-| `/scv:sync` | **Two-step sync** (v0.11.3+).<br/>(1) Template re-sync to standard docs (`merge_policy`).<br/>(2) Drift detection between code and active promote slugs (`scope:` git diff + TESTS run).<br/>Archive immutable. |
+| `/scv:sync` | **Two-step sync** (v0.11.3+).<br/>(1) Template re-sync to the workflow docs (`merge_policy`; retires the seven legacy standard docs once, v0.22.0+).<br/>(2) Drift detection between code and active promote slugs (`scope:` git diff + TESTS run).<br/>Archive immutable. |
 | `/scv:install-deps` | Detect & install missing CLIs (`gh` / `glab` / `jq` / `ffmpeg`) |
 | `/scv:workspace` | **Multi-repo (nested workspace)** — interactive setup: join an umbrella as a child / create the umbrella (root) / detach. No long flags. |
 | `/scv:handoff` | **Multi-repo** — declare another repo needs corresponding dev → writes a handoff (+ decision + conversation) into the umbrella scv repo (push consent-gated; optional team ping). |
@@ -217,10 +218,28 @@ before the normal `develop → stage → main` promotion. See
 [`docs/design/shared-core-wrapper.md`](docs/design/shared-core-wrapper.md).
 
 Wrapper and Core releases are intentionally independent. This Claude adapter
-release is `0.21.0`; the current Core pin is recorded in
+release is `0.22.0`; the current Core pin is recorded in
 `vendor/scv-core/VERSION` and `core.lock`. Core sync updates that checksummed
 pin and generated projection, but never rewrites the wrapper `VERSION`, plugin
 manifest, or marketplace version.
+
+**Journal hooks (v0.22.0+, wrapper-owned registration).** Core ships two
+non-blocking hook templates that capture free conversation into the committed
+team journal (`scv/journal/<YYYYMMDD>-<author>.md`); registering them is this
+adapter's job, done by the plugin's `hooks/hooks.json`:
+
+- `UserPromptSubmit` → `vendor/scv-core/core/template/hooks/on-user-prompt.sh`
+  (stdin JSON `prompt` field → journal append)
+- `Stop` → `vendor/scv-core/core/template/hooks/on-stop.sh`
+  (stdin JSON `transcript_path` → assistant summary append)
+
+Both commands export `SCV_CORE_ROOT` (the materialized core) and run with the
+project root as cwd; on a project without `scv/` they exit `0` and write
+nothing. All journal writes route through Core's `journal-append.sh`, whose
+redaction filter (password/token/secret/api-key values, `Bearer` tokens,
+`AKIA…` keys → `[REDACTED]`) runs before anything hits disk — never write to
+`scv/journal/` directly, and never register these as blocking hooks. Contract:
+scv-core `docs/wrapper-integration.md` §6 "Hook seam".
 
 PLAN.md is the single source of truth. External tools (Jira / Linear / Confluence / Google Doc) are linked via `refs:` — never copied. Outputs (PR / MR / Slack / Discord) are auto-generated from the same source.
 
@@ -278,9 +297,9 @@ flowchart TB
 
 Three failure modes of AI-assisted team development — and what SCV refuses to do about each.
 
-**S — Standard.** Standard docs (DOMAIN, ARCHITECTURE, DESIGN, TESTING, …) seed at `status: N/A` and stay that way until you lift one.
+**S — Standard.** The standard is the workflow, not snapshot docs. Since Core Template 2.0.0 hydrate seeds only the workflow files — facts the model can derive from the codebase are never pre-documented.
 
-N/A is a steady state, not a backlog.
+Decisions worth keeping go to `scv/DECISIONS.md` and the append-only `scv/journal/`, not into stale snapshot documents.
 
 **C — Cowork.** `/scv:promote` is a dialog, not a generation.
 
@@ -305,9 +324,11 @@ Failures triage into regression / obsolete / flaky — never silently skipped.
 my-project/
 ├── CLAUDE.md           # (optional, user-owned — SCV never touches it)
 ├── scv/                # SCV owns everything under here
-│   ├── CLAUDE.md       # SCV workflow index
-│   ├── INTAKE.md PROMOTE.md DOMAIN.md ARCHITECTURE.md DESIGN.md
-│   ├── AGENTS.md TESTING.md REPORTING.md RALPH_PROMPT.md
+│   ├── SCV.md          # SCV workflow index
+│   ├── PROMOTE.md REPORTING.md
+│   ├── DECISIONS.md TODO.md
+│   ├── journal/        # append-only per-author team journal (hook-fed)
+│   ├── routines/       # one-file maintenance routines (/scv:routine)
 │   ├── readpath.json   # raw change snapshot (auto-managed)
 │   ├── promote/        # Active plans (YYYYMMDD-author-slug folders)
 │   ├── archive/        # Completed plans (moved by /scv:work)
@@ -318,7 +339,7 @@ my-project/
 
 **Non-destructive**: existing root `CLAUDE.md` / `.env.example` stay intact. SCV creates `scv/` + separate `.env.example.scv` + appends to existing `.gitignore`.
 
-**Standard docs are optional**. Adoption mode (default) seeds 7 of 9 docs as `status: N/A` and stays that way until you lift one. N/A is a steady state, not a backlog.
+**Standard docs are retired (Core Template 2.0.0, breaking)**. Hydrate is adoption-only: `INTAKE.md`, `DOMAIN.md`, `ARCHITECTURE.md`, `DESIGN.md`, `AGENTS.md`, `TESTING.md`, and `RALPH_PROMPT.md` are no longer seeded or synced. On an existing project, one explicit `/scv:sync` deletes those seven files (it offers to move user-authored content into `scv/DECISIONS.md` first; git history is the recovery path). Files you recreate afterwards belong to you — sync never deletes them again.
 
 ### External Refs (Jira / Linear / PR / Docs) — Auto-Detection
 

@@ -50,6 +50,8 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/regression.sh" "${SCV_ARGS[@]}"
 
 Parse the header keys: `MODE:`, `TODAY:`, `SCOPE:`, `TAG_FILTER:`, `TOTAL_SLUGS:`, `SKIPPED_SUPERSEDED:`, `SKIPPED_OBSOLETE:`, `SKIPPED_SCENARIOS:`, `EXECUTED_SLUGS:`, `PASSED_SLUGS:`, `FAILED_SLUGS:`. Blocks: `=== skip list ===`, `=== execution ===`, `=== summary ===`. If failures occur, a `failed_slugs:` line is present.
 
+Hosts with subagent / parallel-workflow support MAY fan out independent slugs to parallel runs (one slug per agent via `--only <slug>`, each slug's `## How to run` is self-contained); skip-graph resolution, verdict rules, and the per-slug triage below are unchanged (v0.22.0+).
+
 ## Step 1 — All-pass path
 
 If `FAILED_SLUGS: 0`:
@@ -117,8 +119,24 @@ Answer handling:
      - Add `obsoleted_at: <TODAY>` if missing
      - Add `obsoleted_by: manual` if missing
   3. Never touch TESTS.md or ARCHIVED_AT.md.
-  4. Report one line to the user: "Marked `<slug>` as obsolete (PLAN.md frontmatter only)."
-  5. Log `[obsolete] <slug>` to triage log.
+  4. **Decision log append (v0.22.0+)** — the WHY of an obsolete verdict used
+     to evaporate with the triage session; record it. Append **one** entry to
+     `scv/DECISIONS.md` (append-only — never edit existing entries; seed the
+     file via `/scv:sync` if missing). The entry reuses the handoff decision
+     format. **author is mandatory — never write an anonymous entry** (resolve
+     via `git config user.name` → `GIT_AUTHOR_NAME` → `USER`):
+
+     ```markdown
+     ## [<YYYY-MM-DD HH:MM>] <author> — <slug> marked obsolete
+
+     - verdict: obsolete
+     - why: <1–3 lines — WHY this feature is intentionally dead (replaced
+       without a supersedes declaration / environment change / deprecation),
+       as the user explained it in this triage>
+     - refs: scv/archive/<slug>/PLAN.md
+     ```
+  5. Report one line to the user: "Marked `<slug>` as obsolete (PLAN.md frontmatter + DECISIONS.md entry)."
+  6. Log `[obsolete] <slug>` to triage log.
 - **[3] flaky**: Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/regression.sh --only <slug> --quiet` up to 2 times. On pass, log `[flaky→pass on retry N] <slug>`. If both retries fail, re-fire the 3-way dialog.
 
 ## Step 3 — Final summary

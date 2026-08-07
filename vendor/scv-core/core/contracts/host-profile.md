@@ -67,7 +67,7 @@ distinguishes it from an independent state copy:
 
 If multiple non-pointer state files exist and differ byte-for-byte, read-only
 actions report the conflict and mutating sync stops without changing files.
-Readable state plus `scv/INTAKE.md` remains hydrated during that conflict;
+Readable state plus `scv/PROMOTE.md` remains hydrated during that conflict;
 conflict and hydration are separate axes.
 
 Wrappers must delegate state inspection and pointer finalization to

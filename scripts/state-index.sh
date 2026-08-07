@@ -179,7 +179,7 @@ else
 fi
 
 hydrated=no
-if [[ "$state_kind" != missing && -f "$SCV_DIR/INTAKE.md" ]]; then
+if [[ "$state_kind" != missing && -f "$SCV_DIR/PROMOTE.md" ]]; then
   hydrated=yes
 fi
 
@@ -355,7 +355,7 @@ echo "LEGACY_STATE_BACKUP: $backup_rel"
 state_kind=canonical
 state_file="$CANONICAL"
 hydrated=no
-[[ -f "$SCV_DIR/INTAKE.md" ]] && hydrated=yes
+[[ -f "$SCV_DIR/PROMOTE.md" ]] && hydrated=yes
 report_state
 echo "MIGRATION_COMPLETE: yes"
 trap - EXIT

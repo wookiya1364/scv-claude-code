@@ -66,8 +66,10 @@ State inspection and migration are resolved once in the pinned Core
 `core/scripts/state-index.sh`; wrapper adapters only preserve argv and delegate.
 Pointers are recognized solely by the exact line
 `<!-- SCV:HOST-POINTER target=SCV.md -->`, independent of host-specific header
-prose. A readable canonical or active legacy index together with `INTAKE.md`
-remains hydrated even when divergent active indexes cause an rc 4 conflict.
+prose. A readable canonical or active legacy index together with `PROMOTE.md`
+(the hydration marker since Core Template 2.0.0 retired the seven standard
+docs, `INTAKE.md` included) remains hydrated even when divergent active
+indexes cause an rc 4 conflict.
 A pointer without its canonical target remains broken and unhydrated.
 
 Root-level `scripts/`, `template/`, `DeckUI/`, and `assets/` remain for
