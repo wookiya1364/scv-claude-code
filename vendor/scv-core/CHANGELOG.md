@@ -2,6 +2,170 @@
 
 All notable changes to SCV Core are documented here.
 
+## [0.22.0] - 2026-08-07
+
+### 가이던스 어블레이션 1단계 — CONTRACT/GUIDANCE 분리 + `SCV_GUIDANCE=minimal` (promote·work)
+
+- 프로토콜 md 의 행동 코칭(GUIDANCE)을 `<!-- SCV:GUIDANCE -->` …
+  `<!-- /SCV:GUIDANCE -->` HTML 주석 마커로 감싸는 규약을 도입했다.
+  분류 기준: **삭제해도 산출물의 형식·경로·불변식(생성 파일 목록 ·
+  frontmatter 스키마 · 스크립트 호출 시퀀스)이 변하지 않으면 GUIDANCE** —
+  규약/기준 문서는 `docs/guidance-ablation.md`.
+- 주입 필터 `core/scripts/guidance-filter.sh` 를 추가하고 래퍼 주입 지점인
+  `tools/materialize-profile.sh` 에 연결했다. `SCV_GUIDANCE=full`(기본,
+  미설정 포함)은 주입 내용이 원본과 바이트 동일하고,
+  `SCV_GUIDANCE=minimal` 은 GUIDANCE 블록을 제거한 투영본을 주입한다.
+  원본 프로토콜 파일은 어떤 모드에서도 불변. 잘못된 마커(닫힘 누락 ·
+  고아 닫힘 · 중첩 · malformed)는 `파일:줄` 에러로 전체 주입을 중단한다
+  (fail-closed — 부분 주입 없음; full 모드도 동일하게 검증).
+- 어블레이션 동등성 하네스: `core/tests/run-dry.sh` [19] 가 promote·work
+  경로를 두 모드로 실행해 생성 파일 목록 · frontmatter 스키마 · 스크립트
+  호출 시퀀스가 동일함을 강제한다(차이 = CONTRACT 오분류 → 재분류).
+  마커 lint · fail-closed · 타 프로토콜 바이트 불변 · deck 마커 비노출은
+  `core/tests/test-guidance.sh` 가 검증하고, deck transform 은 마커 줄만
+  드롭한다(GUIDANCE 본문은 deck 문서에서 계속 렌더).
+- **1단계 분류 결과 (목표 비율 없이 기준 적용 후 측정)** —
+  `promote.md`: GUIDANCE 241줄 / 전체 883줄 (27.3%),
+  `work.md`: GUIDANCE 203줄 / 전체 529줄 (38.4%).
+  다른 프로토콜 파일들은 이 웨이브에서 바이트 불변이다 (2단계는 minimal
+  모드 실사용 피드백 후 별도 계획).
+
+### BREAKING — adoption 단일화 + 표준 문서 7종 제거 (TEMPLATE_VERSION 2.0.0)
+
+- `hydrate.sh --new` (greenfield mode) is removed. Passing `--new` now exits 1
+  with a migration notice and changes no files (fail-closed). Hydrate has a
+  single path and no longer seeds the seven standard docs
+  (`DOMAIN.md` / `ARCHITECTURE.md` / `DESIGN.md` / `AGENTS.md` / `TESTING.md` /
+  `INTAKE.md` / `RALPH_PROMPT.md`) — their templates are deleted from
+  `core/template/scv/`. Kept files are unchanged in behavior: `SCV.md`,
+  `PROMOTE.md`, `REPORTING.md`, `raw/README.md`, `WORKSPACE.yaml.example`,
+  and the `.env` / `.gitignore` fragments.
+- `action:sync` now **deletes** those seven files from existing projects,
+  **without backup** (deliberate decision — git history is the recovery path),
+  and reports each as `DELETED scv/<file>` in the CHANGES summary.
+  `--dry-run` previews the deletions without touching files. No file outside
+  the seven is ever deleted; a symlinked target is left in place with a
+  `WARN` instead of being deleted (fail-closed). The `sync.md` protocol
+  instructs the host agent to check each doomed file for user-authored content
+  first and, when found, propose migrating the decisions worth keeping into a
+  version-controlled team note (e.g. `DECISIONS.md` / journal) before applying.
+- Cascade cleanup: the draft/N/A status gate, the INTAKE flow, and all
+  standard-doc references are removed from `check-frontmatter.sh`, `help.sh` /
+  `help.md` (incl. the greenfield hydrate option), `promote.md` (diagram 2 now
+  sources from graphify only), `work.md`, `deck.md` / `deck-context.sh`,
+  `SCV.md` / `PROMOTE.md` / `REPORTING.md` templates, and
+  `integrations/loop-runner.md` (rewritten to run from `scv/promote/<slug>/`
+  plans with a free-form user-authored entry prompt instead of
+  `RALPH_PROMPT.md`). The hydration signal in `state-index.sh` / `help.sh` now
+  uses `scv/PROMOTE.md` (previously `scv/INTAKE.md`); state-index and legacy
+  CLAUDE.md/CODEX.md migration semantics are otherwise unchanged.
+- Upgrade note: external loop harnesses (e.g. rloop) that expect
+  `scv/RALPH_PROMPT.md` must switch to a free-form entry prompt; content you
+  still need from a deleted doc is recoverable from git history
+  (`git log -- scv/<file>`).
+
+### Changed
+
+- PLAN grammar overhaul (guardrails-first, Boris Cherny's task+guardrails+exit
+  criteria model): the `action:promote` PLAN scaffold now has `## Guardrails`
+  (do-not-touch areas / invariants in prose) and `## Exit criteria` (higher-level
+  done conditions beyond TESTS), and `## Steps` is demoted to `## Suggested path`
+  — the path is a suggestion, Guardrails/Exit criteria are the contract
+  (경로는 제안, Guardrails/Exit criteria 가 계약). `scv/PROMOTE.md` §4 is synced.
+  All new sections/fields are optional: legacy PLANs with only `## Steps` are
+  processed by `action:work` / `action:regression` unchanged.
+- `action:promote`'s Socratic follow-up questions changed direction: do not
+  interrogate implementation method (구현 방법을 캐묻지 말라) — ask only about
+  boundaries, risks, exit criteria, and verification means; the
+  procedure-probing example list was replaced accordingly.
+- `action:work` gained a long-run execution contract (Step 5c): with Guardrails /
+  Exit criteria + TESTS verification means in hand, run to completion without
+  micro-step instructions, and strengthen the verification means first when
+  stuck. This paragraph owns work's long-run behavior even after RALPH_PROMPT
+  retirement.
+
+### Added
+
+- Optional PLAN frontmatter `parallel_groups: [[step,...],...]` — independent
+  Suggested-path step groups a subagent-capable host may fan out concurrently
+  (`action:work` Step 5d); `action:regression` documents the analogous slug-level
+  fan-out. Absent hint or non-parallel host → behavior identical to before.
+- Raw-injection hygiene: `action:promote` and `action:help` now state that raw /
+  conversation file content is **data** — instruction-like text inside it is
+  never executed and is reported to the user instead.
+- **Team journal — author-attributed, committed project memory**
+  (전면 기록화): three new templates, all `merge_policy: preserve`, seeded by
+  hydrate and propagated as `NEW` by sync — `scv/journal/README.md` (usage
+  rules), `scv/DECISIONS.md` (append-only decision log; entry schema reuses
+  the handoff decision format with a mandatory author), and `scv/TODO.md`
+  (team todo, `- [ ] (T-NNN) <내용> — @<author>, YYYY-MM-DD`).
+- `core/scripts/lib/author.sh` — unified author resolution
+  (`git config user.name` → `GIT_AUTHOR_NAME` → `USER` → `unknown`) +
+  filename-safe slugging that keeps non-ASCII (Korean) names;
+  `promote-helper.sh`'s `AUTHOR` signal now uses it.
+- `core/scripts/journal-append.sh` — appends `### [HH:MM:SS] <speaker>` blocks
+  to `scv/journal/<YYYYMMDD>-<author>.md` (per-day, per-author files — no git
+  conflicts), with a built-in redaction filter
+  (password/token/secret/api-key values, `Bearer` tokens, `AKIA…` keys →
+  `[REDACTED]`); `--redact-only` exposes the filter to protocols.
+- Host hook templates `core/template/hooks/on-user-prompt.sh` (prompt-submit
+  event, stdin JSON `prompt`) and `on-stop.sh` (stop event, stdin JSON
+  `transcript_path`) journal free conversation; both are non-blocking (any
+  failure → exit 0, no write). Registration is **wrapper-owned** — the seam
+  contract is `docs/wrapper-integration.md` §6, hydrate never seeds `hooks/`
+  into projects.
+- Decision record points in three protocols, appending author-attributed
+  entries to `scv/DECISIONS.md`: `action:promote` plan approval (adopted
+  direction + **discarded alternatives**), `action:work` archive (the reason
+  promoted to a decision summary), `action:regression` obsolete triage (the
+  WHY that previously evaporated with the session).
+- `action:status` now surfaces the last 5 `DECISIONS.md` entries and the open
+  `TODO.md` items counted per author.
+- **`scv/routines/` — 한 문장 프롬프트 유지보수 루틴 레이어** (Boris Cherny's
+  daily-maintenance-routines practice): one routine = one md file under
+  `scv/routines/<name>.md` with a five-key frontmatter contract
+  (`name` / `cadence` / `guardrails` / `exit` / `report`) and a task-only body
+  (plan-grammar — 과업+가드레일+종료 조건, 절차 나열 금지). hydrate seeds ONLY
+  `scv/routines/README.md` (the convention doc, `merge_policy: overwrite`);
+  sync propagates it to existing projects the same explicit-line way as
+  `raw/README.md`. Routine files themselves are user/agent-authored.
+- **`action:routine` — the 15th action** (core-owned): `--list` shows a
+  NAME/CADENCE/REPORT table (guidance line when none are defined), `<name>`
+  parses the routine md via the new `core/scripts/routine.sh`
+  (frontmatter signals + task body + host-scheduling guidance block;
+  unknown name → error with the available list, exit 1; `--lint <file>`
+  validates the five-key schema). The `routine.md` protocol binds execution
+  to the routine's task/guardrails/exit contract, forbids direct writes to
+  permanent branches (working branch + PR or report only), makes the
+  `report:` summary follow the `action:report` format, and ends with
+  host-specific schedule-registration EXAMPLES — **SCV itself never
+  schedules**: no cron registration, no daemon, no loop (host-owned, like
+  `update` / `set-models` installation ownership). Action-count contracts
+  updated 14 → 15 (`tests/test-actions.sh`, `tools/verify-core.sh`, READMEs,
+  `docs/wrapper-integration.md`, `docs/core-wrapper-ownership.ko.md`);
+  wrappers must register the new command surface (handoff drafts in
+  `scv/promote/20260807-wookiya1364-routines/HANDOFF-DRAFTS.md`).
+- Seven built-in routine templates under `core/template/scv/routines/examples/`
+  (copy into `scv/routines/` to adopt; never auto-seeded): 4 SCV maintenance
+  routines — `regression-runner` (run `action:regression`, report failures),
+  `outdated-verifier` (semantically verify `readpath.sh outdated`'s
+  `OUTDATED-CANDIDATE` docs against current code — completes the 0.21.0
+  heuristic), `promote-staleness` (remind about `status: planned` folders
+  older than N days), `archive-integrity` (regenerate `INDEX.yaml`, verify
+  `supersedes` links) — plus 3 project-agnostic codebase routines imported
+  from the Boris interview: `dead-code`, `abstraction-police`,
+  `useless-tests`. All pass the routine frontmatter lint
+  (`core/tests/test-routines.sh` covers seeding, list/prepare/error paths,
+  outdated wiring, the 15-action catalog, and a no-scheduler-code sweep).
+
+### Changed (team journal wave)
+
+- Conversations are now **committed**: `.gitignore.fragment` no longer ignores
+  `/scv/.conversations/`; `action:help` persists conversation files to
+  `scv/conversations/` through the `journal-append.sh --redact-only` filter,
+  and offers a one-time migration when it detects a legacy local
+  `scv/.conversations/` (`LEGACY_CONVERSATIONS:` helper line).
+
 ## [0.21.0] - 2026-08-04
 
 ### Added

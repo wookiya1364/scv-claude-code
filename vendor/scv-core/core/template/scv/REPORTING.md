@@ -1,7 +1,7 @@
 ---
 name: reporting
 version: 1.0.0
-status: draft
+status: N/A
 last_updated: 2026-04-17
 applies_to: []
 owners: ["@team"]
@@ -12,7 +12,7 @@ merge_policy: merge-on-markers
 
 # REPORTING — Collab tool reporting convention
 
-> This document is closer to **configuration**. the host agent confirms the user's collab tool and channels in `INTAKE.md` Step 6, then records them in the `PROJECT:LOCAL` block.
+> This document is closer to **configuration**. the host agent confirms the user's collab tool and channels through dialogue, then records them in the `PROJECT:LOCAL` block.
 
 ## How to elicit (order of questions)
 

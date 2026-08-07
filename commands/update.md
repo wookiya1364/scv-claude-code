@@ -74,7 +74,7 @@ After the user reports running both commands, suggest re-invoking `/scv:update`.
 
 Claude Code slash commands run in a sandboxed protocol — they cannot programmatically invoke other slash commands (`/plugin marketplace update`, `/reload-plugins`) on behalf of the user. `/scv:update` therefore acts as a *diagnostic + guide*, not an automatic updater.
 
-For the project-level template re-sync (`scv/CLAUDE.md`, `scv/TESTING.md`, etc. after a plugin update bumps the template), run `/scv:sync` separately. `/scv:update` does not touch project files.
+For the project-level template re-sync (`scv/SCV.md`, `scv/PROMOTE.md`, etc. after a plugin update bumps the template), run `/scv:sync` separately. `/scv:update` does not touch project files.
 
 ## Never
 
