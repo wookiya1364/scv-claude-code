@@ -99,6 +99,13 @@
       "execution_class": "economy",
       "protocol": "protocols/set-models.md",
       "entrypoint": null
+    },
+    {
+      "id": "routine",
+      "owner": "core",
+      "execution_class": "deep",
+      "protocol": "protocols/routine.md",
+      "entrypoint": "scripts/routine.sh"
     }
   ]
 }

@@ -136,8 +136,9 @@ flowchart LR
 | `/scv:deck [<md>]` | **마크다운 → 기획서 HTML.** 기본: 빌드 없는 자체완결 **문서**(위→아래로 읽고 PDF 인쇄); **슬라이드 프레젠테이션**을 요청하면 DeckUI 덱으로.<br/>결정론적 변환: 제목→섹션, GFM 표, ` ```mermaid ` 다이어그램(CDN, 오프라인 시 코드 텍스트 자동 폴백), KPI 타일, As-Is/To-Be, 품질 린트 — 원문 마크다운이 함께 담김.<br/>큰 그림(아키텍처)을 context-first 로 구성, 지어내지 않음. Node+pnpm 필요(이 명령만; 문서 경로는 슬림 ~7MB 만 설치). |
 | `/scv:update` | **플러그인 self-update 안내** — 설치된 vs 최신 버전 표시, `/plugin marketplace update scv-claude-code` + `/reload-plugins` 안내. read-only. (v0.11.2+) |
 | `/scv:regression` | archive 된 모든 TESTS 를 회귀로 실행 |
+| `/scv:routine [<name>\|--list]` | **유지보수 루틴** (v0.22.0+). 루틴 1개 = `scv/routines/<name>.md` 마크다운 1개 — task + guardrails + exit criteria 계약 (step list 아님). `--list` 는 NAME/CADENCE/REPORT 표, `--lint <file>` 은 루틴 파일 검사. SCV 는 절대 스케줄링하지 않음: `/loop 1d /scv:routine dead-code`, cron, CI 스케줄 등 호스트 기능으로 직접 등록. |
 | `/scv:report` | 단계 결과를 Slack / Discord 에 보고 |
-| `/scv:sync` | **2-step sync** (v0.11.3+).<br/>(1) 플러그인 template → 표준 문서 (`merge_policy`).<br/>(2) 코드 ↔ active promote slug 의 drift 검출 (`scope:` git diff + TESTS run).<br/>archive 는 immutable. |
+| `/scv:sync` | **2-step sync** (v0.11.3+).<br/>(1) 플러그인 template → 워크플로 문서 (`merge_policy`; 폐기된 표준 문서 7종은 1회 삭제, v0.22.0+).<br/>(2) 코드 ↔ active promote slug 의 drift 검출 (`scope:` git diff + TESTS run).<br/>archive 는 immutable. |
 | `/scv:install-deps` | 누락 CLI 자동 감지 + 설치 안내 (`gh` / `glab` / `jq` / `ffmpeg`) |
 | `/scv:workspace` | **멀티레포(nested workspace)** — 대화형 셋업: 우산에 자식으로 합류 / 우산(root) 생성 / 분리. 긴 플래그 불필요. |
 | `/scv:handoff` | **멀티레포** — 다른 레포의 대응개발 필요를 선언 → 우산 scv repo 에 handoff(+ 결정 + 대화) 기록 (push 는 매번 동의, 팀 알림 선택). |
@@ -221,6 +222,22 @@ Wrapper와 Core는 서로 독립적으로 릴리스합니다. 이 Claude 어댑�
 기록됩니다. Core sync는 그 체크섬 pin과 생성 projection만 갱신하며 wrapper
 `VERSION`, plugin manifest, marketplace version은 변경하지 않습니다.
 
+**Journal 훅 (v0.22.0+, 등록은 wrapper 소유).** Core 는 자유대화까지 커밋되는
+팀 저널(`scv/journal/<YYYYMMDD>-<author>.md`)로 캡처하는 non-blocking 훅
+템플릿 2종을 제공하고, 등록은 이 어댑터의 `hooks/hooks.json` 이 담당합니다:
+
+- `UserPromptSubmit` → `vendor/scv-core/core/template/hooks/on-user-prompt.sh`
+  (stdin JSON `prompt` 필드 → journal append)
+- `Stop` → `vendor/scv-core/core/template/hooks/on-stop.sh`
+  (stdin JSON `transcript_path` → assistant 요약 append)
+
+두 커맨드 모두 `SCV_CORE_ROOT`(materialized core)를 export 하고 프로젝트
+루트를 cwd 로 실행됩니다. `scv/` 가 없는 프로젝트에서는 exit `0` + 무기록.
+모든 journal 쓰기는 Core 의 `journal-append.sh` 를 경유하며, redaction 필터
+(password/token/secret/api-key 값, `Bearer` 토큰, `AKIA…` 키 → `[REDACTED]`)
+가 디스크 기록 전에 실행됩니다 — `scv/journal/` 직접 쓰기 금지, blocking 훅
+등록 금지. 계약: scv-core `docs/wrapper-integration.md` §6 "Hook seam".
+
 PLAN.md 가 단일 source of truth. 외부 도구 (Jira / Linear / Confluence / Google Doc) 는 `refs:` 로 *링크* 만 — 복사 안 함. 출력 (PR / MR / Slack / Discord) 은 같은 source 에서 자동 생성.
 
 ```mermaid
@@ -273,9 +290,9 @@ flowchart TB
 
 AI 협업 팀 개발의 세 가지 실패 모드 — SCV 가 거부하는 것.
 
-**S — Standard (표준).** 표준 문서 (DOMAIN, ARCHITECTURE, DESIGN, TESTING, …) 는 `status: N/A` 로 시드되고 사용자가 lift 할 때까지 그대로.
+**S — Standard (표준).** 표준은 스냅샷 문서가 아니라 워크플로 자체. Core Template 2.0.0 부터 hydrate 는 워크플로 파일만 시드합니다 — 모델이 코드베이스에서 유도할 수 있는 사실은 미리 문서화하지 않습니다.
 
-N/A 는 backlog 가 아니라 정상 상태.
+남길 가치가 있는 결정은 낡아가는 스냅샷 문서가 아니라 `scv/DECISIONS.md` 와 append-only `scv/journal/` 로 갑니다.
 
 **C — Cowork (협업).** `/scv:promote` 는 대화이지 생성이 아닙니다.
 
@@ -300,9 +317,11 @@ PLAN.md 에 들어가는 건 사용자가 말한 것 — LLM 이 추측한 게 �
 my-project/
 ├── CLAUDE.md           # (선택, 사용자 소유 — SCV 가 건드리지 않음)
 ├── scv/                # SCV 가 소유하는 영역
-│   ├── CLAUDE.md       # SCV 워크플로 인덱스
-│   ├── INTAKE.md PROMOTE.md DOMAIN.md ARCHITECTURE.md DESIGN.md
-│   ├── AGENTS.md TESTING.md REPORTING.md RALPH_PROMPT.md
+│   ├── SCV.md          # SCV 워크플로 인덱스
+│   ├── PROMOTE.md REPORTING.md
+│   ├── DECISIONS.md TODO.md
+│   ├── journal/        # append-only 작성자별 팀 저널 (훅이 기록)
+│   ├── routines/       # 파일 1개짜리 유지보수 루틴 (/scv:routine)
 │   ├── readpath.json   # raw 변경 스냅샷 (자동 관리)
 │   ├── promote/        # 활성 계획 (YYYYMMDD-author-slug 폴더)
 │   ├── archive/        # 완료 계획 (/scv:work 가 이동)
@@ -313,7 +332,7 @@ my-project/
 
 **Non-destructive**: 루트 `CLAUDE.md` / `.env.example` 그대로 보존. SCV 는 `scv/` 만 만들고, `.env.example.scv` 별도 추가 + 기존 `.gitignore` 에 append.
 
-**표준 문서는 옵션**. adoption 모드 (default) 가 9 문서 중 7 개를 `status: N/A` 로 시드하고 lift 결정할 때까지 그대로. N/A 는 backlog 가 아니라 정상 상태.
+**표준 문서 7종 폐기 (Core Template 2.0.0, breaking)**. hydrate 는 adoption-only: `INTAKE.md`, `DOMAIN.md`, `ARCHITECTURE.md`, `DESIGN.md`, `AGENTS.md`, `TESTING.md`, `RALPH_PROMPT.md` 는 더 이상 시드/동기화되지 않습니다. 기존 프로젝트에서는 명시적 `/scv:sync` 1회가 이 7개 파일을 삭제합니다 (삭제 전에 사용자가 직접 쓴 내용을 `scv/DECISIONS.md` 로 옮길지 먼저 제안; 복구 경로는 git 이력). 이후 사용자가 다시 만든 파일은 사용자 소유 — sync 가 재삭제하지 않습니다.
 
 ### 외부 Refs (Jira / Linear / PR / 문서) — 자동 인식
 

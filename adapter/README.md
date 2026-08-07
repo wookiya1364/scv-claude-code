@@ -13,6 +13,14 @@ Adapter-owned behavior:
 - `scripts/apply-model-policy.sh`, `scripts/update.sh`, and the thin
   `scripts/hydrate.sh`/`scripts/sync.sh` state adapters
 - the `adapter/scripts/state-index.sh` delegation shim
+- `hooks/hooks.json` — journal-capture hook registration (Core 0.22.0 hook
+  seam, `docs/wrapper-integration.md` §6 in scv-core): binds Claude Code's
+  `UserPromptSubmit`/`Stop` events to the vendored templates
+  `vendor/scv-core/core/template/hooks/on-user-prompt.sh` /
+  `on-stop.sh`, exporting `SCV_CORE_ROOT`. The templates themselves (and
+  the `journal-append.sh` redaction path they call) are core-owned;
+  registration must stay non-blocking and must never write to
+  `scv/journal/` directly
 
 Core-owned behavior:
 

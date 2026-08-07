@@ -45,6 +45,10 @@
 #      skin), a valid `theme` field emits validated inline --wf-* vars with COMPUTED
 #      on-primary/tint derivatives, and invalid/malicious values are dropped silently
 #      (never reach the HTML in any form — no CSS/attribute injection).
+#  17. v0.22.0 PLAN grammar — the new scaffold section names (Guardrails /
+#      Exit criteria / Suggested path) are ordinary H2 sections: rendered as body
+#      sections, listed in the print TOC AND the on-screen jump-nav (no transform
+#      alias needed, nothing dropped or renamed).
 set -uo pipefail
 
 HERE="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -399,6 +403,51 @@ node "$DECKDOC/doc.mjs" "$TMP/theme-bad.md" --out "$TMP/theme-bad.html" --no-sou
 hasnt "$TMP/theme-bad.html" 'javascript:'  "an invalid/malicious primary value never reaches the output"
 hasnt "$TMP/theme-bad.html" '10px; }'      "the attribute-breakout PAYLOAD (not the document's own, always-present, unrelated </style> tag) never reaches the output"
 hasnt "$TMP/theme-bad.html" '<script>alert(1)</script>' "no raw <script> ever gets injected via a theme field"
+
+# 17. v0.22.0 PLAN grammar — new scaffold section names are first-class deck sections.
+#     Built as a slug folder (the promote Step 7 path) so this exercises the real
+#     PLAN.md shape the new scaffold produces.
+SLUGDIR6="$TMP/20260807-tester-grammar"
+mkdir -p "$SLUGDIR6"
+cat > "$SLUGDIR6/PLAN.md" <<'MD'
+---
+title: 문법 개편 샘플
+slug: 20260807-tester-grammar
+status: planned
+parallel_groups: [[1, 2], [3]]
+---
+
+# 문법 개편 샘플
+
+## Summary
+
+본문
+
+## Guardrails
+
+- 기존 결제 한도 체크는 건드리지 않는다
+
+## Exit criteria
+
+- 시나리오 7건 통과
+
+## Suggested path
+
+1. 스캐폴드 수정
+2. 테스트 갱신
+3. 문서 동기화
+MD
+node "$DECKDOC/doc.mjs" "$SLUGDIR6" --out "$TMP/grammar.html" --no-source >/dev/null 2>&1
+GR="$TMP/grammar.html"
+has "$GR" '<h2>Guardrails</h2>'      "PLAN grammar: Guardrails renders as a normal H2 section"
+has "$GR" '<h2>Exit criteria</h2>'   "PLAN grammar: Exit criteria renders as a normal H2 section"
+has "$GR" '<h2>Suggested path</h2>'  "PLAN grammar: Suggested path renders as a normal H2 section"
+has "$GR" '>Guardrails</a>'          "PLAN grammar: Guardrails listed in the print TOC"
+has "$GR" '>Exit criteria</a>'       "PLAN grammar: Exit criteria listed in the print TOC"
+has "$GR" '. Guardrails</button>'    "PLAN grammar: Guardrails pill in the on-screen jump-nav"
+has "$GR" '. Exit criteria</button>' "PLAN grammar: Exit criteria pill in the on-screen jump-nav"
+has "$GR" '. Suggested path</button>' "PLAN grammar: Suggested path pill in the on-screen jump-nav"
+hasnt "$GR" 'parallel_groups'        "PLAN grammar: frontmatter (incl. parallel_groups) not leaked into the body"
 
 echo ""
 echo "test-deck-doc: $pass passed, $fail failed"

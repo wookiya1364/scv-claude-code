@@ -12,9 +12,9 @@ Current versions:
 
 | Contract | Version | Meaning |
 |---|---:|---|
-| SCV Core | `0.21.0` | Shared behavior and release payload |
+| SCV Core | `0.22.0` | Shared behavior and release payload |
 | Core API | `1` | Wrapper/core integration contract |
-| Template | `1.0.0` | Hydrated project-template schema |
+| Template | `2.0.0` | Hydrated project-template schema |
 
 The installable plugins live in:
 
@@ -32,7 +32,7 @@ scv-core release (immutable tarball + SHA-256)
                                       └── runs locally; no runtime fetch
 ```
 
-Core owns 12 of the 14 SCV actions. `update` and `set-models` are deliberately
+Core owns 13 of the 15 SCV actions. `update` and `set-models` are deliberately
 adapter-owned because installation and model selection depend on the host.
 Canonical protocols use `action:<name>` and `{{SCV_ARGS}}`; wrapper syntax and
 argument transport are supplied only through a validated host profile.

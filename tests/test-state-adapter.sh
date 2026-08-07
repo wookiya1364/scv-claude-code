@@ -125,11 +125,13 @@ set -e
   fail "help or invalid arguments created a migration backup"
 pass "help and invalid arguments stay read-only"
 
-grep -q '^status: N/A' "$PROJECT/scv/DOMAIN.md" ||
-  fail "legacy project lost adoption-mode N/A status"
+# TEMPLATE 2.0.0: hydrate is adoption-only — the retired standard docs
+# (DOMAIN.md and friends) must never be seeded.
+[[ ! -e "$PROJECT/scv/DOMAIN.md" && ! -e "$PROJECT/scv/INTAKE.md" ]] ||
+  fail "adoption-only hydrate seeded a retired standard doc"
 readpath_before=$(cksum "$PROJECT/scv/readpath.json")
 legacy_before=$(cksum "$PROJECT/scv/CODEX.md")
-pass "legacy N/A state and readpath baseline exist"
+pass "adoption-only state and readpath baseline exist"
 
 "$SYNC" --project-dir "$PROJECT" --dry-run >/dev/null
 [[ ! -f "$PROJECT/scv/SCV.md" ]] ||
@@ -153,8 +155,8 @@ grep -qxF '<!-- SCV:HOST-POINTER target=SCV.md -->' \
 find "$PROJECT/.scv-backup" \
   -path '*/shared-core-migration-*/CODEX.md' -type f | grep -q . ||
   fail "legacy CODEX.md backup is absent"
-grep -q '^status: N/A' "$PROJECT/scv/DOMAIN.md" ||
-  fail "explicit migration changed adoption-mode N/A status"
+[[ ! -e "$PROJECT/scv/DOMAIN.md" && ! -e "$PROJECT/scv/INTAKE.md" ]] ||
+  fail "explicit migration resurrected a retired standard doc"
 [[ "$(cksum "$PROJECT/scv/readpath.json")" == "$readpath_before" ]] ||
   fail "explicit migration changed the readpath baseline"
 pass "explicit sync preserves state and installs a pointer"

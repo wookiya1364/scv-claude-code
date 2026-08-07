@@ -53,7 +53,7 @@ fi
 
 for action in \
   codegen deck handoff help install-deps promote regression report \
-  set-models status sync update work workspace; do
+  routine set-models status sync update work workspace; do
   [[ -f "commands/$action.md" ]] || fail "missing commands/$action.md"
   grep -q "^model: " "commands/$action.md" ||
     fail "commands/$action.md lost Claude model metadata"
