@@ -28,9 +28,10 @@ def require(condition: bool, message: str) -> None:
 
 
 require(
-    re.search(r"(?m)^  push:", contract) is None
+    re.search(r"(?m)^  push:\n    branches: \[main, stage, develop\]", contract)
+    is not None
     and "workflow_dispatch:" not in contract,
-    "Core contract runs only on promotion PRs",
+    "Core contract runs on promotion PRs and channel pushes (main run record)",
 )
 require(
     "group: core-contract-${{ github.event.pull_request.number || github.ref }}"
@@ -88,10 +89,11 @@ require(
     "Core update proposal reuses the contract without duplicate state tests",
 )
 require(
-    re.search(r"(?m)^  push:", model) is None
+    re.search(r"(?m)^  push:\n    branches: \[main, stage, develop\]", model)
+    is not None
     and "group: model-policy-${{ github.event.pull_request.number || github.ref }}"
     in model,
-    "model-policy checks do not repeat after merge",
+    "model-policy runs on PRs and channel pushes without duplicate concurrent runs",
 )
 require(
     "group: branch-flow-${{ github.event.pull_request.number || github.ref }}"
