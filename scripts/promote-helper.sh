@@ -21,6 +21,8 @@ source "$SCRIPT_DIR/lib/env.sh"
 source "$SCRIPT_DIR/lib/scvroot.sh"
 # shellcheck source=lib/host-profile.sh
 source "$SCRIPT_DIR/lib/host-profile.sh"
+# shellcheck source=lib/author.sh
+source "$SCRIPT_DIR/lib/author.sh"
 env_load 2>/dev/null || true
 
 MODE="promote"       # promote | dry-run | graph-only
@@ -49,15 +51,10 @@ scv_init_paths "$SCV_TARGET"
 echo "MODE: $MODE"
 echo "TODAY: $(date +%Y-%m-%d)"
 
-# Author suggestion: git config user.name → lowercase, spaces → dashes
-AUTHOR=""
-if command -v git >/dev/null 2>&1; then
-  raw_name=$(git config user.name 2>/dev/null || true)
-  if [[ -n "$raw_name" ]]; then
-    AUTHOR=$(printf '%s' "$raw_name" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd '[:alnum:]-_')
-  fi
-fi
-[[ -z "$AUTHOR" ]] && AUTHOR="unknown"
+# Author suggestion — unified resolution via lib/author.sh (v0.22.0+):
+# git config user.name → $GIT_AUTHOR_NAME → $USER → unknown, slugged for
+# filenames. Same signal journal-append.sh and the record protocols use.
+AUTHOR="$(scv_author)"
 echo "AUTHOR: $AUTHOR"
 
 # Extract STANDARD:VERSION from the shared index or a wrapper-declared legacy

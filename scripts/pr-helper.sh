@@ -283,7 +283,7 @@ TMP_BODY=$(mktemp)
   echo
   echo "## $L_STEPS"
   echo
-  extract_section "$PLAN_FILE" "^## (Steps|단계|ステップ)" | trim_blank_lines
+  extract_section "$PLAN_FILE" "^## (Suggested path|Steps|단계|ステップ)" | trim_blank_lines
   echo
 
   # FEATURE_ARCHITECTURE.md (v0.7.1+) — extract ```mermaid``` fenced blocks and

@@ -44,9 +44,11 @@ else
   echo "ARG_CONVERSATION:"
 fi
 
-# Unfinished conversations = active files in scv/.conversations/ (NOT under archive/).
-# v0.9.0+: persisted by /scv:help conversation mode, gitignored.
-CONV_DIR="scv/.conversations"
+# Unfinished conversations = active files in scv/conversations/ (NOT under archive/).
+# v0.9.0+: persisted by /scv:help conversation mode.
+# v0.22.0+: the directory is COMMITTED (redaction-filtered) — the pre-0.22.0
+# gitignored scv/.conversations/ is detected below for migration.
+CONV_DIR="scv/conversations"
 
 # The helper is strictly read-only, including argument-bearing diagnosis. The
 # host protocol creates a conversation file only after the user explicitly
@@ -63,6 +65,18 @@ if [[ -n "$UNFINISHED" ]]; then
   printf '  %s\n' $UNFINISHED
 else
   echo "UNFINISHED_CONVERSATIONS: (none)"
+fi
+
+# v0.22.0+ — legacy gitignored conversation dir detection (read-only). The
+# help protocol proposes migrating these files (through the redaction filter)
+# into the committed scv/conversations/.
+LEGACY_CONV_DIR="scv/.conversations"
+if [[ -d "$LEGACY_CONV_DIR" ]]; then
+  LEGACY_CONV_N=$(find "$LEGACY_CONV_DIR" -type f -name '*.md' \
+                    ! -name 'README.md' 2>/dev/null | wc -l | tr -d ' ')
+  echo "LEGACY_CONVERSATIONS: $LEGACY_CONV_DIR (${LEGACY_CONV_N:-0} file(s)) — migration to scv/conversations/ recommended"
+else
+  echo "LEGACY_CONVERSATIONS: (none)"
 fi
 echo ""
 
@@ -139,18 +153,17 @@ cat <<'EOF'
 ╚══════════════════════════════════════════════════════════════════════╝
 
 Core idea (S·C·V)
-  S  Standard — humans fill design docs through dialogue (scv/INTAKE.md)
+  S  Standard — one shared plan grammar: PLAN + TESTS per promote folder
   C  Cowork   — drop into scv/raw, promote to scv/promote/ for team handoff
   V  Verify   — implement → E2E → Slack/Discord report each Phase
 
-Workflow (default = adoption / --new = greenfield)
+Workflow
   ① hydrate         → copy the empty template into the project
   ② .env setup      → NOTIFIER_PROVIDER=slack|discord, tokens/channels
   ③ scv/raw/        → drop existing material (notes, sketches, PDFs) — optional
   ④ /scv:promote    → raw → scv/promote/<YYYYMMDD>-<author>-<slug>/ (PLAN + TESTS)
   ⑤ /scv:work       → implement · test · move to archive on pass
-  (opt) INTAKE.md   → for new projects (--new), fill standard docs via dialogue
-  (opt) Ralph loop  → external template (copy loop-runner.md → <host-config>/loop-template.md)
+  (opt) loop harness → external template (copy loop-runner.md → <host-config>/loop-template.md)
   (opt) /scv:regression → periodic / pre-release accumulated regression. Optional pre-flight before ⑤'s archive too.
 
 Skills
@@ -164,6 +177,7 @@ Skills
   /scv:sync       Safe merge on template version bump
   /scv:workspace  Multi-repo setup: join an umbrella / create a root / detach (interactive, no flags)
   /scv:handoff    Multi-repo: declare another repo needs corresponding dev (→ root scv repo)
+  action:routine    Run a named maintenance routine from scv/routines/ (--list to enumerate)
   /scv:update     Claude Code marketplace update guide
   /scv:set-models Explain Claude Code session-level model selection compatibility
 
@@ -221,9 +235,6 @@ STATE_CONFLICT=0
 STATE_POINTER_BROKEN=0
 ENV_SET=0
 RAW_COUNT=0
-DRAFT_DOCS=()
-ACTIVE_DOCS=()
-NA_DOCS=()
 
 # Hydration check. A wrapper-declared legacy index is accepted for reads until
 # its adapter migrates the project to the shared SCV.md index.
@@ -241,11 +252,11 @@ if [[ -n "$SCV_INDEX_CONFLICTS" ]]; then
   echo "STATE_INDEX_CONFLICT:"
   printf '  %s\n' "$SCV_INDEX_CONFLICTS"
 fi
-if [[ -f "$SCV_INDEX_PATH" && -f "scv/INTAKE.md" ]]; then
+if [[ -f "$SCV_INDEX_PATH" && -f "scv/PROMOTE.md" ]]; then
   HYDRATED=1
-  echo "  [✓] hydrate complete ($SCV_INDEX_PATH + scv/INTAKE.md exist)"
+  echo "  [✓] hydrate complete ($SCV_INDEX_PATH + scv/PROMOTE.md exist)"
 else
-  echo "  [✗] hydrate not done ($SCV_INDEX_PATH / scv/INTAKE.md missing)"
+  echo "  [✗] hydrate not done ($SCV_INDEX_PATH / scv/PROMOTE.md missing)"
 fi
 
 # .env check
@@ -330,40 +341,6 @@ if [[ ${#DEP_MISSING_HARD[@]} -gt 0 || ${#DEP_MISSING_SOFT[@]} -gt 0 ]]; then
   fi
 fi
 
-# Document status
-if [[ $HYDRATED -eq 1 ]]; then
-  for doc in INTAKE PROMOTE DOMAIN ARCHITECTURE DESIGN AGENTS TESTING REPORTING RALPH_PROMPT; do
-    f="scv/$doc.md"
-    [[ ! -f "$f" ]] && continue
-    st=$(awk '/^---[[:space:]]*$/{c++; next} c==1 && /^status:/{print $2; exit}' "$f" | tr -d '[:space:]')
-    case "$st" in
-      draft)   DRAFT_DOCS+=("$doc") ;;
-      active)  ACTIVE_DOCS+=("$doc") ;;
-      N/A|na)  NA_DOCS+=("$doc") ;;
-      *)       DRAFT_DOCS+=("$doc") ;;
-    esac
-  done
-
-  if [[ ${#DRAFT_DOCS[@]} -eq 0 ]]; then
-    # No docs in draft state — adoption mode is operating normally. Compress
-    # to one line so first-time users don't read N/A as "9 things I owe".
-    # In adoption mode, N/A is the steady state.
-    printf '  Standard docs: %d active, %d N/A — adoption mode default. Lift any N/A doc to draft only when you decide to document that subsystem.\n' \
-      "${#ACTIVE_DOCS[@]}" "${#NA_DOCS[@]}"
-  else
-    # At least one doc is in draft state — the user is actively filling
-    # something, so show the breakdown so the "needs filling" hint surfaces.
-    echo "  Document status:"
-    if [[ ${#ACTIVE_DOCS[@]} -gt 0 ]]; then
-      printf '    active  : %s\n' "${ACTIVE_DOCS[*]}"
-    fi
-    printf '    draft   : %s  ← needs filling\n' "${DRAFT_DOCS[*]}"
-    if [[ ${#NA_DOCS[@]} -gt 0 ]]; then
-      printf '    N/A     : %s\n' "${NA_DOCS[*]}"
-    fi
-  fi
-fi
-
 # Raw inventory
 if [[ -d "scv/raw" ]]; then
   RAW_COUNT=$(find scv/raw -type f ! -name 'README.md' 2>/dev/null | wc -l | tr -d ' ')
@@ -442,20 +419,13 @@ elif [[ $STATE_CONFLICT -eq 1 ]]; then
 EOF
 elif [[ $HYDRATED -eq 0 ]]; then
   cat <<EOF
-  This directory is not hydrated yet. Pick one of two modes.
+  This directory is not hydrated yet.
 
-  ── default · adoption mode (recommended) — apply SCV to an existing project ──
-  Standard docs seed with status: N/A and /scv:promote, /scv:work are
-  usable right away. Document only the scope you need.
+  Hydrate seeds only the SCV workflow files (scv/SCV.md, scv/PROMOTE.md,
+  scv/REPORTING.md, scv/raw/, promote/, archive/) — /scv:promote and
+  /scv:work are usable right away on new and existing projects alike.
 
     bash "$PLUGIN_ROOT/scripts/hydrate.sh" init .
-
-  ── --new · greenfield mode — fill all standard docs via INTAKE for a new project ──
-  Standard docs seed with status: draft and /scv:help walks you through
-  the INTAKE protocol filling DOMAIN / ARCHITECTURE / ... one at a time.
-  Use this only when truly starting from zero.
-
-    bash "$PLUGIN_ROOT/scripts/hydrate.sh" init . --new
 
   Run /scv:help again afterwards to see the next step.
 EOF
@@ -468,23 +438,6 @@ elif [[ $ENV_SET -eq 0 ]]; then
   2. Set NOTIFIER_PROVIDER (slack or discord)
   3. Fill in the matching Bot token and SLACK_CHANNEL_ID_* (or DISCORD_*)
   4. Run /scv:help again
-EOF
-elif [[ ${#DRAFT_DOCS[@]} -gt 0 ]]; then
-  active_list="${ACTIVE_DOCS[*]:-(none)}"
-  cat <<EOF
-  Standard document status:
-    active : $active_list
-    draft  : ${DRAFT_DOCS[*]}
-
-  Run INTAKE. Claude Code will first ask whether to resume or start over.
-
-  - Phrase to give Claude Code (copyable):
-
-    "Read scv/INTAKE.md and follow the §1 'resume check' procedure to
-     verify current status first, then ask whether to [A] resume or
-     [B] start over before doing anything. Don't jump straight to step 0."
-
-  - Drop any existing raw material into scv/raw/ so Claude Code can reference it.
 EOF
 elif [[ "$RAW_CHANGES_TOTAL" -gt 0 ]]; then
   cat <<EOF
@@ -561,7 +514,6 @@ cat <<EOF
 
   Key documents (created under scv/ after hydrate — project-root instructions are untouched):
     $SCV_INDEX_PATH     — resolved SCV workflow index + rules
-    scv/INTAKE.md     — Dialogue protocol (project bootstrap order)
     scv/PROMOTE.md    — raw → promote → archive promotion convention
 
 EOF

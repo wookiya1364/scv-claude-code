@@ -39,19 +39,19 @@ Drop into scv/raw/ → action:promote (the host agent refines via dialogue)
 action:help "I want to add a refund button to checkout"
 ```
 
-This enters **conversation mode** — the host agent refines your idea with you (asking goal / scope / acceptance questions), persists every turn to `scv/.conversations/<timestamp>-<slug>.md` (gitignored, local), and offers to draft `PLAN.md + TESTS.md` when there's enough information. You can:
+This enters **conversation mode** — the host agent refines your idea with you (asking goal / scope / acceptance questions), persists every turn to `scv/conversations/<timestamp>-<slug>.md` (committed, redaction-filtered — v0.22.0+), and offers to draft `PLAN.md + TESTS.md` when there's enough information. You can:
 
 - **Quit anytime** — the conversation file is saved turn-by-turn. Run `action:help "<continue idea>"` later to resume.
-- **Promote without `scv/raw/`** — choice [1] in the conversation's "ready?" prompt creates the plan directly. Conversation stays in `.conversations/` (gitignored).
+- **Promote without `scv/raw/`** — choice [1] in the conversation's "ready?" prompt creates the plan directly. Conversation stays in `scv/conversations/` (committed).
 - **Promote with team traceability** — choice [2] also copies the conversation to `scv/raw/<YYYYMMDD>-<author>-<slug>.md` (committable). Pick this when teammates value the raw-thinking history.
 
 If you already have files in `scv/raw/`, the classic flow (§1.5 below) still works — `action:help "..."` is the *additional* entry, not a replacement.
 
 ---
 
-## 1.5. Adoption mode usage (default mode)
+## 1.5. Everyday usage (single path)
 
-If hydrated with `hydrate.sh init .` (default), you're in this mode. Standard docs (DOMAIN, ARCHITECTURE, etc.) seed at `status: N/A` and **INTAKE is not forced**. The promote loop still works:
+Hydrate seeds only the workflow files — there is no scaffolding to fill before the promote loop works:
 
 1. For the **subsystem unit** you'll work on, drop material (meeting notes, specs, external specs) into `scv/raw/`.
 2. `action:promote` → creates `scv/promote/<YYYYMMDD>-<author>-<slug>/`.
@@ -59,9 +59,7 @@ If hydrated with `hydrate.sh init .` (default), you're in this mode. Standard do
 4. Existing Confluence specs or Jira tickets connect via `refs:` — **no need to rewrite the body**.
 5. `action:work <slug>` to implement → test → archive.
 
-If you decide to formally document a specific subsystem, lift just that section in `scv/DOMAIN.md` (etc.) by tightening the scope: `N/A → draft → active`. You don't need to fill everything at once.
-
-> **Realistic path for large legacy adoption** — scope in just 1 subsystem (e.g., payment refactor) for a month, confirm value, then expand to other teams / subsystems. Project-wide INTAKE is unrealistic and only causes drift.
+> **Realistic path for large legacy adoption** — scope in just 1 subsystem (e.g., payment refactor) for a month, confirm value, then expand to other teams / subsystems. Facts the model can derive from the codebase need no pre-documentation; decisions worth keeping belong in version-controlled team notes (e.g. `DECISIONS.md` / a journal).
 
 ---
 
@@ -197,7 +195,7 @@ supersedes:
 supersedes_scenarios:
   - 20251201-kmlee-legacy-login:T3    # Only T3 of legacy-login is retired; other T's still run
 # Optional — file-path globs this plan is allowed to touch (used by action:codegen as a guard).
-# If omitted, the natural scope from PLAN.md Steps applies (current action:work behavior).
+# If omitted, the natural scope from PLAN.md Suggested path (legacy: Steps) applies (current action:work behavior).
 scope:
   - "src/auth/**"
   - "tests/auth/**"
@@ -206,6 +204,10 @@ scope:
 invariants:
   - "기존 비밀번호 정책 (8자 이상, 특수문자 1개) 유지"
   - "session token 저장 위치 변경 금지"
+# Optional (v0.22.0+) — independent Suggested-path step groups that MAY run in parallel.
+# Each inner array lists step numbers with no dependency on each other; groups run in
+# declaration order. Hosts without subagent/workflow support ignore this entirely.
+parallel_groups: [[1, 2], [3]]
 ---
 
 # {{title}}
@@ -225,7 +227,28 @@ invariants:
 
 5–15 lines of full design summary. If this section exceeds 50 lines → split into `ARCH.md` recommended.
 
-## Steps
+## Guardrails
+
+What must NOT be done: untouchable areas, forbidden approaches, and the invariants
+to protect (cross-reference frontmatter `invariants:` — restate them here in prose
+when they need context or scope).
+
+- ...
+
+## Exit criteria
+
+When is this plan DONE beyond "TESTS pass"? Higher-level, observable end conditions
+("what being true means we can stop").
+
+- All TESTS.md scenarios pass
+- ...
+
+## Suggested path
+
+The path is a suggestion — Guardrails and Exit criteria are the contract
+(경로는 제안, Guardrails/Exit criteria 가 계약). The implementing model may follow
+a better path when it finds one. (Legacy PLANs titled `## Steps` remain valid —
+`action:work` / `action:regression` process both forms.)
 
 1. ...
 2. ...
@@ -267,8 +290,9 @@ invariants:
 | `epic` | — | When splitting a large user request into multiple features, group them under the same epic slug (count is content-driven — the host agent proposes + user adjusts). `action:status` shows epic progress; `action:work`'s PR auto-creation uses the epic branch as base. See §8d |
 | `kind` | — | `feature` (default) / `refactor` (epic-closing integration cleanup) / `retirement` (pure removal — §8c). Used by the host agent for epic flow / refactor guidance |
 | `lang` | — | (v0.7.3+) The resolved language for this promote's content + diagrams + commit/PR text. Set by `action:promote` Step 0 — auto-resolved from `settings.json language` and `.env SCV_LANG`, or via user confirmation when those mismatch. Read by `action:work` Step 9d and `pr-helper.sh` for full localization (PR title, body labels like `## Summary` / `## 요약` / `## 概要`, footer `🗂 Archived` / `🗂 보관됨` / `🗂 アーカイブ済み`). Values: `english` / `korean` / `japanese` / free-form. Empty / unknown → English fallback. |
-| `scope` | — | (v0.11.0+) Optional file-path glob array this plan is allowed to touch. Used by `action:codegen` Step 7 as a guard — Edit/Write outside these globs emits a warning (does not block). If omitted, the natural scope from PLAN.md Steps applies (current `action:work` behavior, unchanged). Example: `["src/auth/**", "tests/auth/**"]`. |
+| `scope` | — | (v0.11.0+) Optional file-path glob array this plan is allowed to touch. Used by `action:codegen` Step 7 as a guard — Edit/Write outside these globs emits a warning (does not block). If omitted, the natural scope from PLAN.md Suggested path (legacy: Steps) applies (current `action:work` behavior, unchanged). Example: `["src/auth/**", "tests/auth/**"]`. |
 | `invariants` | — | (v0.11.0+) Optional string array of *existing behaviors this plan must NOT break*. Used by `action:codegen` Step 7 as a per-iteration self-check (LLM re-reads each item after every Green iteration; user confirmation if unsure). Targets T5 logic-skip — the cheat pattern where a focused change silently omits an unrelated invariant. Capture only what's easy to violate; not a general regression list. Example: `["기존 결제 한도 체크 유지", "음수 환불 금지"]`. `action:work` does not enforce this field. |
+| `parallel_groups` | — | (v0.22.0+) Optional array of arrays of `## Suggested path` step numbers — each inner array is a group of mutually independent steps a subagent-capable host MAY run concurrently (groups run in declaration order; each TESTS scenario is still verified independently — see `action:work` Step 5d, `action:regression` allows the analogous slug-level fan-out). Absent field, or a host without parallel capability → behavior identical to sequential execution. Example: `[[1, 2], [3]]`. |
 
 ### `refs:` spec — vendor-neutral external references
 
@@ -398,8 +422,8 @@ pnpm exec playwright test e2e/<YYYYMMDD>-<AUTHOR>-<slug>.spec.ts   # this plan's
 ```
 
 - The PR video then shows **that feature**, not a shared smoke or the whole suite.
-  Feature videos on green PRs require `video: 'on'` (the template default — see §3.3
-  in `scv/TESTING.md`; `retain-on-failure` would leave a passing feature PR videoless).
+  Feature videos on green PRs require `video: 'on'` in the project's Playwright
+  config (`retain-on-failure` would leave a passing feature PR videoless).
 - `action:regression` re-runs each *archived* slug's `## How to run`, so the feature is
   re-verified exactly as in its PR; the accumulated per-slug specs are the full suite.
 - Keep the block to the **spec only** — don't bundle project-wide `tsc -b` / lint: a
@@ -431,7 +455,7 @@ If any of those is ambiguous, `action:work` will ask the user before starting im
 
 ### Auto video evidence attachment (v0.3+)
 
-If Playwright (`video: 'on'`) or an equivalent tool produces .webm/.mp4 under `test-results/`, `action:work` Step 9d's PR creation **auto-embeds** them inline into the PR body. Videos are pushed to a separate `scv-attachments` orphan branch (so the working branch's git history stays clean), and auto-deleted N days after PR merge. See `TESTING.md §3.3` for details.
+If Playwright (`video: 'on'`) or an equivalent tool produces .webm/.mp4 under `test-results/`, `action:work` Step 9d's PR creation **auto-embeds** them inline into the PR body. Videos are pushed to a separate `scv-attachments` orphan branch (so the working branch's git history stays clean), and auto-deleted N days after PR merge.
 
 ### Authoring guide for regression re-runs
 
@@ -473,15 +497,13 @@ Trivial changes (typo fix, single-line null guard, patch dep bump) get no value 
 **Diagram 2's data source:**
 
 ```
-scv/ARCHITECTURE.md status?
-  ├─ active or draft → use it as the layout reference
-  └─ N/A → check graphify
-      ├─ skill installed + graph fresh → use .graphify/docs/graphify-out/
-      ├─ skill installed + graph stale/missing → ask user (run graphify? skip? other?)
-      └─ skill missing → ask user (skip? other?)
+graphify status?
+  ├─ skill installed + graph fresh → use .graphify/docs/graphify-out/
+  ├─ skill installed + graph stale/missing → ask user (run graphify? skip? other?)
+  └─ skill missing → ask user (skip? other?)
 ```
 
-`action:promote` decides this branching automatically. The user only sees the resulting user confirmation when there is a real decision to make (graphify run-or-skip when ARCHITECTURE.md is `N/A`).
+`action:promote` decides this branching automatically. The user only sees the resulting user confirmation when there is a real decision to make (graphify run-or-skip).
 
 **File location and frontmatter:**
 
@@ -519,7 +541,7 @@ flowchart LR
 
 ## 2. Position in whole architecture
 
-> Source: <ARCHITECTURE.md | graphify graph (built YYYY-MM-DD) | skipped>
+> Source: <graphify graph (built YYYY-MM-DD) | skipped>
 
 ```mermaid
 %%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#1e1e1e','primaryTextColor':'#fff','primaryBorderColor':'#9096a8','lineColor':'#e7e9f0','secondaryColor':'#2d2d2d','tertiaryColor':'#1e1e1e','background':'#171922','edgeLabelBackground':'#171922'}}}%%
@@ -533,7 +555,7 @@ flowchart TB
 
 - New components introduced by this feature are highlighted with the `new` class (yellow fill, orange stroke).
 - The "Source:" line in section 2 is mandatory when section 2 is present — it makes the diagram's accuracy basis auditable.
-- If diagram 2 is skipped (graphify missing AND ARCHITECTURE.md `N/A`), section 2 is replaced by a one-line note pointing at how to enable it (lift ARCHITECTURE.md or run `/graphify`).
+- If diagram 2 is skipped (no graphify graph available), section 2 is replaced by a one-line note pointing at how to enable it (run `/graphify`).
 - LLM-generated Mermaid may have syntax errors or wrong labels. Treat the file like PLAN.md / TESTS.md — review and edit before `action:work`.
 - The file is **not enforced** by `action:work` or `action:regression`. Its value is human comprehension, not gating.
 
@@ -670,7 +692,7 @@ supersedes:
 Remove payment-v1 (`/api/v1/pay/*`) endpoints and return 410 Gone.
 Clients have completed migration to payment-v2.
 
-## Steps
+## Suggested path
 1. Delete /api/v1/pay/* route handlers
 2. Add catch-all returning 410 Gone
 3. Monitor access logs for residual calls 24h post-deploy
@@ -770,7 +792,7 @@ audit-log, settlement-batch, partner-callback — N items; actual count
 varies per epic). Each unit PR was OK in isolation, but post-integration
 these items surfaced.
 
-## Steps
+## Suggested path
 
 1. Consolidate duplicate helpers across features (`utils/payment.ts`)
 2. Naming consistency (`charge_id` vs `paymentId` unified)
