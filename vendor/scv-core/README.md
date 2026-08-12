@@ -12,7 +12,7 @@ Current versions:
 
 | Contract | Version | Meaning |
 |---|---:|---|
-| SCV Core | `0.22.0` | Shared behavior and release payload |
+| SCV Core | `0.23.0` | Shared behavior and release payload |
 | Core API | `1` | Wrapper/core integration contract |
 | Template | `2.0.0` | Hydrated project-template schema |
 
@@ -116,11 +116,13 @@ For version `X.Y.Z`, this creates:
 - `scv-core-vX.Y.Z.tar.gz`
 - `scv-core-vX.Y.Z.tar.gz.sha256`
 
-A `vX.Y.Z` tag publishes those files. When a cross-repository token is
-configured it also sends an immediate Core-sync event; scheduled polling in
-both wrappers is the no-secret fallback. Wrapper automation verifies the
-checksum, regenerates its host-specific projection, runs regression tests, and
-opens a PR to `develop`. See [Release and integrity](docs/release.md).
+A `vX.Y.Z` tag publishes those files and then notifies both wrappers with a
+Core-sync event. The cross-repository token is required: a release that cannot
+notify them is marked failed, though the published assets are unaffected. Both
+wrappers also poll daily, so a failed notification delays propagation rather
+than losing it. Wrapper automation verifies the checksum, regenerates its
+host-specific projection, runs regression tests, and opens a PR to `develop`.
+See [Release and integrity](docs/release.md).
 
 ## Contributing
 

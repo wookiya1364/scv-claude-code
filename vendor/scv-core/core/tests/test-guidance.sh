@@ -85,9 +85,18 @@ for s in "promote-helper.sh" "handoff.sh" "deck.sh" "readpath.sh" \
          "scv/DECISIONS.md" "<YYYYMMDD>-<AUTHOR>-<slug>" "Never silently overwrite"; do
   grep -qF -- "$s" "$TMP/promote.min.md" && ok || bad "minimal promote.md: contract lost: $s"
 done
-for s in "work.sh" "regression.sh" "pr-helper.sh" "deck.sh" \
+# Every CONTRACT string that must survive ablation has to be registered here by
+# hand: run-dry [19a] only diffs script calls and column-0 frontmatter keys, and
+# [19b] never runs an agent — so a contract line wrongly wrapped in GUIDANCE
+# markers disappears for minimal users with every other test still green. This
+# array is the only detector. Add an anchor whenever work.md gains a CONTRACT line.
+for s in "work.sh" "regression.sh" "pr-helper.sh" "deck.sh" "drift-detect.sh" \
          "--archive" "status: obsolete" "obsoleted_at" "ARCHIVED_AT.md" \
-         "All tests passed. Archive" "video: 'on'" "scv/DECISIONS.md"; do
+         "All tests passed. Archive" "video: 'on'" "scv/DECISIONS.md" \
+         "- path delta:" "Step 9b.0 only" \
+         "Implementation principles" "reuse what is there" \
+         "simplest implementation" "one clear concern" "costly to reverse" \
+         "Guardrails override them"; do
   grep -qF -- "$s" "$TMP/work.min.md" && ok || bad "minimal work.md: contract lost: $s"
 done
 
