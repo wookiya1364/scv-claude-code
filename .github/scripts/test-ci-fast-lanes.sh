@@ -69,13 +69,32 @@ require(
     == 1,
     "automatic CI uses one representative atomic updater smoke",
 )
+# The two-minute cap exists so automatic CI gives fast feedback. promote.yml is
+# not CI: it is a manually triggered orchestrator whose whole job is waiting for
+# other workflows' checks, so a two-minute cap would guarantee failure. It stays
+# out of this rule and is capped separately below.
+AUTOMATIC_CI = {
+    name: text for name, text in workflows.items() if name != "promote.yml"
+}
 require(
     all(
         text.count("\n    runs-on:")
         == text.count("\n    timeout-minutes: 2")
-        for text in workflows.values()
+        for text in AUTOMATIC_CI.values()
     ),
-    "every GitHub Actions job has a hard two-minute execution limit",
+    "every automatic CI job has a hard two-minute execution limit",
+)
+require(
+    "workflow_dispatch:" in workflows["promote.yml"]
+    and "\n  push:" not in workflows["promote.yml"]
+    and "\n  schedule:" not in workflows["promote.yml"]
+    and "\n  pull_request:" not in workflows["promote.yml"],
+    "the promotion orchestrator is manual only — never automatic",
+)
+require(
+    workflows["promote.yml"].count("\n    runs-on:")
+    == workflows["promote.yml"].count("\n    timeout-minutes: 45"),
+    "the promotion orchestrator is still bounded (45 minutes)",
 )
 require(
     "test-sync-core-atomicity.sh"
