@@ -44,3 +44,11 @@ DISCUSS.md
 
 # v0.9.0+ — /scv:help conversation mode (local sketch files, gitignored)
 /scv/.conversations/
+
+# This repository builds the plugin; it is not a project that uses it. The
+# marketplace ships the whole tracked tree, so anything under scv/ would land in
+# every user's plugin payload — plans, conversations, and the hook-fed journal
+# alike. The prose rule is "never hydrate this repo"; this line is that rule with
+# teeth, for the moment /scv:workspace, /scv:help, or a stray mkdir creates the
+# directory anyway.
+/scv/

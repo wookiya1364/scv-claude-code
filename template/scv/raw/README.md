@@ -95,12 +95,21 @@ action:promote
 - `action:promote --topic feature-onboarding` — 주제 힌트
 - `action:promote --dry-run` — 제안만, 파일 생성 안 함
 
-### 방법 B — 수동 작성
+### 원자료가 아직 없다면
 
-1. 계획 폴더 생성 (예: `scv/promote/20260804-me-onboarding/`)
-2. `PLAN.md` 에 frontmatter + 계획, `TESTS.md` 에 테스트 시나리오 (`scv/PROMOTE.md` 규약 참조)
-3. 필요 시 `FEATURE_ARCHITECTURE.md`, `assets/*` 추가
-4. PLAN.md frontmatter 에 `raw_sources: [scv/raw/...]` 로 출처 역추적
+`action:promote` 는 다듬을 것이 없으면 거절합니다. 아이디어만 있는 상태라면
+대화부터 시작하세요:
+
+```
+action:help "<하려는 것 한 줄>"
+```
+
+대화가 충분히 구체화되면 그 자리에서 `action:promote` 로 넘어가고, 대화 기록이
+`raw_sources` 에 남아 출처가 역추적됩니다.
+
+계획 폴더를 손으로 만들지 마세요. 파일 모양은 같아도 원자료 소비(`readpath.sh
+consume`)와 출처 기록이 빠지기 때문에, 나중에 "이 계획이 무엇에서 나왔는지" 를
+되짚을 수 없습니다. 작업 공간 가드도 손으로 만든 계획 파일 생성을 거부합니다.
 
 ## 금지 사항
 

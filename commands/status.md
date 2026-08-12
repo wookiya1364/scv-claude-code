@@ -1,5 +1,5 @@
 ---
-description: "Show raw changes since last index + list of active promote plans."
+description: "Show raw changes since last index + list of active promote plans. Use whenever the user asks what is in flight, what changed, or where things stand — not only when they type /scv:status. Never summarize project state from memory; this command reads it."
 argument-hint: "[module]"
 allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/status.sh:*)"]
 model: haiku

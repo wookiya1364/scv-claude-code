@@ -1,5 +1,5 @@
 ---
-description: "Refine scv/raw/ material into a scv/promote/<YYYYMMDD>-<author>-<slug>/ folder with PLAN.md + TESTS.md. Optionally updates the docs knowledge graph. Interactive; no files written without user approval."
+description: "Refine scv/raw/ material into a scv/promote/<YYYYMMDD>-<author>-<slug>/ folder with PLAN.md + TESTS.md. Optionally updates the docs knowledge graph. Interactive; no files written without user approval. Use whenever the user wants a change planned, specced, or broken down before implementation — 'plan this', 'write a spec', 'what should we build' — not only when they type /scv:promote. Never draft PLAN.md or TESTS.md yourself instead of running this; a plan written by hand skips the raw-material lifecycle and leaves no provenance."
 argument-hint: ""
 allowed-tools:
   - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/promote-helper.sh:*)"
@@ -123,8 +123,17 @@ messages, and PR text in one resolved language:
 
 When the user explicitly requests a different language for promoted artifacts,
 use it for this promote. Ask whether to persist it as `SCV_PROMOTE_LANG`; do not
-write the cache without approval. Update `.env` portably and preserve every
-unrelated line.
+write the cache without approval. On approval, write it with the Core script —
+never by hand-editing `.env`:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/env-set.sh" SCV_PROMOTE_LANG=<value>
+```
+
+The script updates `.env` portably and is what makes it preserve every other
+setting — every unrelated line survives byte for byte, including values holding
+`$` or spaces. `--unset SCV_PROMOTE_LANG` clears the cache so the question is
+asked again.
 
 **Resolved value** = `LANG_RESOLVED`. Use it for **all** of:
 - PLAN.md `lang:` frontmatter (Step 5)
@@ -539,13 +548,13 @@ Question: "Add architecture diagrams to <folder> (FEATURE_ARCHITECTURE.md)?"
 [2] "No — skip diagrams for this folder"
     description:
     "For trivial changes (single-line guard, typo fix, patch-version dep
-     bump) PLAN.md alone is enough. You can write FEATURE_ARCHITECTURE.md
-     by hand later if needed — the file is conventional, not enforced."
+     bump) PLAN.md alone is enough. Re-run /scv:promote on this folder
+     later if you decide you want the diagrams after all."
 
 [3] (free-form) "Other — type your direction"
     description:
     "Examples: 'only the first diagram, second has no value here' /
-     'data flow perspective only' / 'wait, I'll write by hand'."
+     'data flow perspective only' / 'skip for now, ask me again later'."
 ```
 <!-- /SCV:GUIDANCE -->
 
