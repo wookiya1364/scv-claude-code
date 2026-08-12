@@ -1,5 +1,5 @@
 {
-  "description": "SCV journal capture — registers the vendored Core hook templates (scv-core docs/wrapper-integration.md §6 'Hook seam'). Non-blocking by contract: the templates exit 0 on every failure and write nothing outside scv/journal/. All journal writes route through journal-append.sh, whose redaction filter runs before anything hits disk.",
+  "description": "SCV hooks. Two kinds, and the distinction is the contract: the journal capture on UserPromptSubmit/Stop is non-blocking by design (the templates exit 0 on every failure and write nothing outside scv/journal/, with redaction running before anything hits disk), while the PreToolUse guard is deliberately blocking — it denies writes no SCV action accounts for. The guard fails open on internal error and is inert in projects that have not adopted SCV. See vendor/scv-core/core/contracts/guard.md.",
   "hooks": {
     "UserPromptSubmit": [
       {
@@ -19,6 +19,49 @@
             "type": "command",
             "command": "SCV_CORE_ROOT=\"${CLAUDE_PLUGIN_ROOT}/vendor/scv-core/core\" bash \"${CLAUDE_PLUGIN_ROOT}/vendor/scv-core/core/template/hooks/on-stop.sh\"",
             "timeout": 60
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "SCV_GUARD_MODE=mint SCV_GUARD_SCRIPTS=\"${CLAUDE_PLUGIN_ROOT}/vendor/scv-core/core/scripts\" SCV_GUARD_EXEMPT=\".claude/settings.json:.claude/settings.local.json\" bash \"${CLAUDE_PLUGIN_ROOT}/vendor/scv-core/core/template/hooks/guard.sh\"",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "SCV_GUARD_MODE=gate-bash SCV_GUARD_SCRIPTS=\"${CLAUDE_PLUGIN_ROOT}/vendor/scv-core/core/scripts\" SCV_GUARD_EXEMPT=\".claude/settings.json:.claude/settings.local.json\" bash \"${CLAUDE_PLUGIN_ROOT}/vendor/scv-core/core/template/hooks/guard.sh\"",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "SCV_GUARD_MODE=gate-write SCV_GUARD_SCRIPTS=\"${CLAUDE_PLUGIN_ROOT}/vendor/scv-core/core/scripts\" SCV_GUARD_EXEMPT=\".claude/settings.json:.claude/settings.local.json\" bash \"${CLAUDE_PLUGIN_ROOT}/vendor/scv-core/core/template/hooks/guard.sh\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptExpansion": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "SCV_GUARD_MODE=mint SCV_GUARD_SCRIPTS=\"${CLAUDE_PLUGIN_ROOT}/vendor/scv-core/core/scripts\" SCV_GUARD_EXEMPT=\".claude/settings.json:.claude/settings.local.json\" bash \"${CLAUDE_PLUGIN_ROOT}/vendor/scv-core/core/template/hooks/guard.sh\"",
+            "timeout": 5
           }
         ]
       }

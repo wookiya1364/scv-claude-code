@@ -77,6 +77,18 @@ Hydrate seeds only the workflow files — there is no scaffolding to fill before
 
 If even one of the five is suspect, take the formal promote loop. **The default decision is "formal promote loop"** — fast-path is a deliberate exception for obvious cases.
 
+### Declare it first — `action:work --fast "<intent>"`
+
+Before making a fast-path change, run:
+
+```bash
+action:work --fast "<one line: what you are changing and why it qualifies>"
+```
+
+It writes nothing. It prints the five criteria and the team's current line ceiling so the exception is checked rather than assumed, and it records that this session took the fast-path deliberately instead of skipping SCV by accident. **A fast-path change without this declaration is not a fast-path change — it is an undeclared edit**, and the workspace guard treats it as one.
+
+This is the whole difference between the sanctioned exception and the failure mode it resembles: both produce a small commit with no promote folder, and only the declaration distinguishes them.
+
 ### Team override — `SCV_FAST_PATH_LINE_THRESHOLD`
 
 The 5-line ceiling is a default, not dogma. Teams shipping mostly to mature codebases can raise it; teams in security-sensitive domains can lower it. Set in the project's `.env`:
@@ -588,7 +600,7 @@ If the user explicitly says **"split it"**, ignore the criteria and split. If **
 |---|---|---|
 | 1. Refine raw | `action:promote` | Confirm slug/title via dialogue → create folder + PLAN + TESTS scaffold → update `scv/readpath.json` |
 | 2. Implement / verify | `action:work <slug>` | Read PLAN + TESTS, implement, run TESTS, report result, ask about archive |
-| 3. Archive | `action:work` or manual | On tests pass + user approval: move `promote/<slug>/` → `archive/<slug>/` + create `ARCHIVED_AT.md` |
+| 3. Archive | `action:work --archive` | On tests pass + user approval: move `promote/<slug>/` → `archive/<slug>/` + create `ARCHIVED_AT.md` |
 
 ---
 
