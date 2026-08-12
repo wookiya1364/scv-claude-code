@@ -59,6 +59,45 @@ for action in \
     fail "commands/$action.md lost Claude model metadata"
 done
 
+# The frontmatter must actually parse, and every command must say *when* to
+# reach for it. A description that only states what the command does gives the
+# model no reason to run it when the user asks in plain language — it writes the
+# output itself instead, which is the failure this contract exists to prevent.
+# Parsing is checked here because a stray quote inside the description silently
+# breaks discovery: the file still looks right to grep.
+python3 - <<'PYCHECK' || fail 'command frontmatter is unparseable or lacks an invocation trigger'
+import sys
+from pathlib import Path
+
+try:
+    import yaml
+except ImportError:
+    print("SKIP: PyYAML unavailable; frontmatter parse check skipped")
+    sys.exit(0)
+
+failures = []
+for path in sorted(Path("commands").glob("*.md")):
+    text = path.read_text()
+    parts = text.split("---")
+    if len(parts) < 3:
+        failures.append(f"{path}: no frontmatter block")
+        continue
+    try:
+        data = yaml.safe_load(parts[1])
+    except yaml.YAMLError as exc:
+        first = str(exc).splitlines()[0]
+        failures.append(f"{path}: frontmatter does not parse ({first})")
+        continue
+    description = (data or {}).get("description", "")
+    if "Use when" not in description:
+        failures.append(f"{path}: description never says when to use the command")
+
+for line in failures:
+    print(f"FAIL: {line}")
+sys.exit(1 if failures else 0)
+PYCHECK
+echo "PASS: command frontmatter parses and states when to invoke"
+
 python3 - <<'PY' || fail '$ARGUMENTS leaked into a pre-model shell block'
 from pathlib import Path
 
