@@ -40,6 +40,24 @@ auto-detect from the user's latest message → English. Technical identifiers
 (skill invocation names, frontmatter keys, env var names, SCV terms like
 `promote`/`archive`) stay as-is in every language.
 
+## Plain language first
+
+Say it the short way first. A reader who understands the short version can ask
+for more; a reader lost in the long version asks for nothing.
+
+- One idea per sentence. If a sentence needs a comma to join two clauses, it is
+  usually two sentences.
+- Use the plain name, not the category name. "the file that records decisions"
+  lands faster than "the decision persistence layer".
+- Lead with what happens to the user, then why it happens.
+- A comparison to something ordinary is worth more than a precise description
+  the reader cannot picture. Use one when it gets there faster.
+- Define a term of art in the same breath you first use it, or drop the term.
+- Detail is not owed up front. Offer it, and give it when asked.
+
+This governs everything the user reads: questions, plans, progress reports,
+summaries, and explanations of what went wrong.
+
 ## Non-negotiable rules
 
 - **Never modify the body of TESTS.md** during codegen — the test is the spec. If TESTS appear under-specified, stop and ask the user to revise TESTS first; do not infer requirements from PLAN.md alone.
@@ -117,6 +135,7 @@ Walk failing cases in the order the test runner reports them. For each case:
    - Follow PLAN.md's `Steps` order.
    - **Scope guard**: if PLAN.md frontmatter has `scope:` (glob array, v0.11.0+ — see `scv/PROMOTE.md` §4), Edit/Write outside those globs emits a warning *"out-of-scope path: <path> (not in PLAN.md scope: <globs>) — continue? (default no)"* by asking the user. Does not auto-block. If `scope:` is omitted, fall back to natural scope from PLAN.md Steps (current `/scv:work` behavior).
    - Avoid speculative refactor — that belongs to Step 8.
+   - Apply the **Implementation principles** from `/scv:work` Step 6 — reuse what is there before building, simplest implementation that satisfies the requirement, one clear concern per component, and long-term choices where they are costly to reverse. PLAN.md `Guardrails` override them. TDD's minimal-code rule already covers the second; the other three still apply here, because reuse and boundaries get decided while writing the code, not in Step 8's refactor.
 5. **Re-run TESTS** (full suite when fast; use the test runner's `--grep` / case-filter if the suite is slow and the case has a stable identifier):
    - Picked case now passes + no regression on previously passing cases → **invariants self-check** (next sub-step) → next case.
    - Picked case still fails → record attempt count. Retry up to **3 attempts total per case**.
