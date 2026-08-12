@@ -144,7 +144,7 @@ Walk failing cases in the order the test runner reports them. For each case:
 6. **Iteration budget exhausted (3 attempts)** → stop. Report to the user:
    - "Could not pass `<case>` after 3 attempts. Last error: `<message>`. Last diff: `<short summary>`."
    - Ask one concise question with options:
-     - [1] "Take over manually — pause codegen, I'll continue with `/scv:work` or by hand"
+     - [1] "Take over — pause codegen, I'll continue with `/scv:work`"
      - [2] "Revise TESTS — the case may be unreachable as written"
      - [3] "Skip this case and continue with the rest — PLAN will NOT be archived"
 

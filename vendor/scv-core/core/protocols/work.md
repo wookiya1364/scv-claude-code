@@ -514,10 +514,12 @@ options:
 ```
 <!-- /SCV:GUIDANCE -->
 
-After the answer, Claude Code uses `Edit` to append one line to `.env` (creating `.env` if absent):
+After the answer, record it with the Core script (which creates `.env` when
+absent). Do not hand-edit `.env`:
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/env-set.sh" SCV_ATTACHMENTS_RETENTION_DAYS=<N>
 ```
-SCV_ATTACHMENTS_RETENTION_DAYS=<N>   # or 'never'
-```
+`<N>` is a day count, or `never` to keep attachments indefinitely.
 
 #### Step 9d-main — PR creation confirmation
 
@@ -624,7 +626,7 @@ PLAN.md frontmatter preset `kind: refactor`, `epic: <epic-slug>`,
 
  [2] "Later — next time"
      description:
-     "Don't create now. You can create it later via /scv:promote or by hand. The epic
+     "Don't create now. You can create it later via /scv:promote. The epic
       is shown as 'refactor pending' in /scv:status."
 ```
 <!-- /SCV:GUIDANCE -->

@@ -18,8 +18,17 @@ jobs:
     timeout-minutes: 2
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Enforce branch flow (CLAUDE.md §10)
         env:
           TARGET_BRANCH: ${{ github.base_ref }}
           SOURCE_BRANCH: ${{ github.head_ref }}
         run: sh scripts/check-branch-flow.sh
+      - name: Provenance gate
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: bash vendor/scv-core/core/scripts/check-provenance.sh

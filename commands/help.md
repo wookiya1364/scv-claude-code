@@ -72,7 +72,16 @@ After the user picks:
 - [3] Japanese → store `SCV_LANG=japanese`
 - [4] Other → ask a follow-up free-text question ("Which language? e.g., spanish, french, german") and store the lowercase value as `SCV_LANG=<value>`.
 
-If project `.env` does not exist, create it with just that line. If it exists, append the line (without disturbing existing entries).
+Write it with the Core script, which creates `.env` when absent and leaves every
+unrelated line byte for byte:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/env-set.sh" SCV_LANG=<value>
+```
+
+Do not hand-edit `.env` for this. The script is what makes the write legible to
+the workspace guard — and this question is asked before any other helper runs, so
+an editor-tool write here would be the first thing a fresh project ever attempts.
 
 From this point on, use the chosen language for all user-facing output in this and future SCV skills.
 
