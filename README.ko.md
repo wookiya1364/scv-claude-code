@@ -218,6 +218,8 @@ AI 가 팀 코드를 짜기 시작하면 세 가지가 어긋납니다.
 
 BMAD/GSD 로 spec → code 단계 진행하고, SCV 의 archive 가 그 밑에서 회귀 안전망 누적.
 
+이때 한 가지 제약이 있습니다. 작업 공간 가드는 세션 안에서 SCV 명령과 엮이지 않는 쓰기를 거부하는데, 다른 도구의 쓰기는 계획 없는 편집과 구분되지 않습니다. SCV 명령을 한 번만 실행하면 됩니다 — 읽기 전용인 `/scv:status` 로 충분하고, 이후 세션은 평소대로 진행됩니다.
+
 **더 큰 변경의 경우**: multi-feature 변경을 *여러 slug* 으로 분할하고 동일한 `epic:` (PLAN.md frontmatter) 아래 묶음.
 
 `scv/PROMOTE.md` §8d 의 epic + multi-slug 패턴 참조.
@@ -247,7 +249,7 @@ v0.20.0부터 공통 워크플로 동작은 체크섬으로 검증하고 버전�
 참고하세요.
 
 Wrapper와 Core는 서로 독립적으로 릴리스합니다. 이 Claude 어댑터 release는
-`0.24.0`이고 현재 Core pin은 `vendor/scv-core/VERSION`과 `core.lock`에
+`0.25.0`이고 현재 Core pin은 `vendor/scv-core/VERSION`과 `core.lock`에
 기록됩니다. Core sync는 그 체크섬 pin과 생성 projection만 갱신하며 wrapper
 `VERSION`, plugin manifest, marketplace version은 변경하지 않습니다.
 

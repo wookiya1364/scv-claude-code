@@ -17,6 +17,10 @@ fi
 #   work.sh <slug> --archive      Move promote/<slug>/ → archive/<slug>/
 #                                 Auto-writes ARCHIVED_AT.md.
 #   work.sh <slug> --archive --reason="..."
+#   work.sh --fast "<intent>"     Declare a fast-path change (PROMOTE.md §1.6).
+#                                 Emits the criteria to check and the line ceiling;
+#                                 writes nothing. Required before a fast-path edit
+#                                 so the change is announced rather than assumed.
 #
 # Output header (same style as promote-helper.sh) — Claude Code parses these keys:
 #   MODE / TODAY / AUTHOR / GRAPHIFY_SKILL / GRAPH_STATUS
@@ -44,16 +48,23 @@ MODE="prepare"
 TARGET_SLUG=""
 REASON=""
 SCV_TARGET=""
+FAST_INTENT=""
 
 for a in "$@"; do
   case "$a" in
     --archive)    MODE="archive" ;;
+    --fast)       MODE="fast" ;;
+    --fast=*)     MODE="fast"; FAST_INTENT="${a#--fast=}" ;;
     --reason=*)   REASON="${a#--reason=}" ;;
     -h|--help)
       sed -n '2,16p' "$0"; exit 0 ;;
     -*)  echo "Unknown flag: $a" >&2; exit 1 ;;
     *)
-      if [[ -z "$SCV_TARGET" && -z "$TARGET_SLUG" ]] && scv_target_path "$a" >/dev/null 2>&1; then
+      # In fast mode the free-form intent is the payload, not a slug — a fast-path
+      # change has no promote folder by definition, so slug resolution would fail.
+      if [[ "$MODE" == "fast" && -z "$FAST_INTENT" ]]; then
+        FAST_INTENT="$a"
+      elif [[ -z "$SCV_TARGET" && -z "$TARGET_SLUG" ]] && scv_target_path "$a" >/dev/null 2>&1; then
         SCV_TARGET="$a"          # leading module dir (monorepo), e.g. `work FE <slug>`
       elif [[ -z "$TARGET_SLUG" ]]; then
         TARGET_SLUG="$a"
@@ -82,6 +93,31 @@ if command -v git >/dev/null 2>&1; then
 fi
 [[ -z "$AUTHOR" ]] && AUTHOR="unknown"
 echo "AUTHOR: $AUTHOR"
+
+# ---------- fast-path declaration (PROMOTE.md §1.6) ----------
+# A fast-path change is a sanctioned exception to the promote loop, and it used to
+# be the one legitimate path that ran no command at all — which made it
+# indistinguishable from skipping SCV entirely. Declaring it here costs one call,
+# writes nothing, and makes the exception observable instead of assumed.
+if [[ "$MODE" == "fast" ]]; then
+  if [[ -z "$FAST_INTENT" ]]; then
+    echo "FAST_ERROR: --fast needs the change's intent, e.g. --fast \"typo in readpath.sh usage text\"" >&2
+    exit 2
+  fi
+  echo "FAST_INTENT: $FAST_INTENT"
+  echo "FAST_LINE_CEILING: ${SCV_FAST_PATH_LINE_THRESHOLD:-5}"
+  cat <<'CRITERIA'
+FAST_CRITERIA: all five must hold, or take the formal promote loop instead
+  1. single simple intent (typo / null-guard hotfix / patch-version dep bump / doc tweak)
+  2. within the line ceiling above, inside one function or block
+  3. no new behavior, API, or feature
+  4. covered by existing regression TESTS
+  5. the PR description fits in one paragraph
+FAST_REMINDER: verification is NOT skipped — run the affected tests before the PR.
+  When in doubt, promote.
+CRITERIA
+  exit 0
+fi
 
 # Graphify skill check (shared logic with promote-helper.sh)
 GRAPHIFY_SKILL="missing"
