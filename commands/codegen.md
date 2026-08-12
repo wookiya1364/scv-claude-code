@@ -1,5 +1,5 @@
 ---
-description: "TDD-first codegen for a scv/promote/<slug>/ plan. Verifies TESTS fail first (Red), then iteratively writes the minimum code to pass each case (Green). Hands off archive/PR/regression to /scv:work."
+description: "TDD-first codegen for a scv/promote/<slug>/ plan. Verifies TESTS fail first (Red), then iteratively writes the minimum code to pass each case (Green). Hands off archive/PR/regression to /scv:work. Use whenever the user wants a plan implemented test-first — 'TDD', 'tests first', 'red-green' — not only when they type /scv:codegen. Never hand-roll the red/green loop instead of running this."
 argument-hint: "[<module>] [<slug>]"
 allowed-tools:
   - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/work.sh:*)"
