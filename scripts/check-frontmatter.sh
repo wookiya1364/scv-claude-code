@@ -7,11 +7,16 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 source "$SCRIPT_DIR/lib/yaml.sh"
 
 PROJECT_DIR="."
+SINGLE_PLAN=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --project-dir) PROJECT_DIR="$2"; shift 2 ;;
+    # Check one file against the PLAN schema. The provenance gate uses this so
+    # the schema lives here only — a second implementation would drift from this
+    # one and the two would disagree about what a valid plan is.
+    --plan)        SINGLE_PLAN="$2"; shift 2 ;;
     -h|--help)
-      echo "Usage: check-frontmatter.sh [--project-dir PATH]"; exit 0 ;;
+      echo "Usage: check-frontmatter.sh [--project-dir PATH] [--plan FILE]"; exit 0 ;;
     *) echo "Unknown flag: $1" >&2; exit 1 ;;
   esac
 done
@@ -86,6 +91,22 @@ check_file() {
   fi
 }
 
+if [[ -n "$SINGLE_PLAN" ]]; then
+  if [[ ! -f "$SINGLE_PLAN" ]]; then
+    echo "✖ $SINGLE_PLAN: no such file"
+    exit 1
+  fi
+  PROJECT_DIR="$(dirname "$SINGLE_PLAN")"
+  check_file "$SINGLE_PLAN" plan
+  if [[ $VIOLATIONS -gt 0 ]]; then
+    echo ""
+    echo "→ $VIOLATIONS violation(s) found"
+    exit 1
+  fi
+  echo "✓ $SINGLE_PLAN: frontmatter valid"
+  exit 0
+fi
+
 # Workflow docs SCV still ships (TEMPLATE_VERSION 2.0.0 dropped the
 # standard-doc scaffolding; only these remain frontmatter-checked).
 for doc in PROMOTE REPORTING; do
@@ -97,8 +118,12 @@ done
 # as a folder holding PLAN.md; flat scv/promote/*.md and */index.md appear
 # nowhere in that contract, so this script has no schema to hold them to and
 # does not invent one.
+# Archived plans are linted too. They used to be skipped, which meant a repo with
+# an empty promote/ passed with "all valid" while every plan it had ever shipped
+# went unchecked — the work action archives before opening the PR, so promote/ is
+# empty at exactly the moment the check matters.
 shopt -s nullglob
-for f in "$PROJECT_DIR/scv/promote"/*/PLAN.md; do
+for f in "$PROJECT_DIR/scv/promote"/*/PLAN.md "$PROJECT_DIR/scv/archive"/*/PLAN.md; do
   check_file "$f" plan
 done
 shopt -u nullglob

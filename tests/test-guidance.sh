@@ -173,19 +173,21 @@ else
   echo "  (skip) tools/materialize-profile.sh not present — injection-point checks skipped"
 fi
 
-# ---- [6] other protocols are untouched by phase 1 --------------------------
+# ---- [6] guidance markers live only where phase 1 put them -----------------
+# The marker-leak check is the durable property: only promote.md and work.md are
+# marker-annotated, so the ablation filter has exactly two files to reason about.
+#
+# This section used to also assert `git diff HEAD -- core/protocols/` touched
+# nothing but those two. That clause was a scaffold for the in-flight phase-1
+# commit and does not survive it: CI always checks out a clean tree, so it could
+# never fail there, while locally it failed on every unrelated protocol edit —
+# a check that only ever fires on legitimate work. Removed rather than widened;
+# the marker scope below is what it was really guarding.
 for f in "$STANDARD_ROOT"/protocols/*.md; do
   base="${f##*/}"
   [[ "$base" == "promote.md" || "$base" == "work.md" ]] && continue
   grep -qF -- "SCV:GUIDANCE" "$f" && bad "phase-1 scope: marker leaked into $base" || ok
 done
-if git -C "$REPO_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
-  && git -C "$REPO_ROOT" ls-files --error-unmatch core/protocols/help.md >/dev/null 2>&1; then
-  CHANGED=$(git -C "$REPO_ROOT" diff --name-only HEAD -- core/protocols/ | grep -vE '^core/protocols/(promote|work)\.md$' || true)
-  [[ -z "$CHANGED" ]] && ok || bad "phase-1 scope: byte change outside promote/work: $CHANGED"
-else
-  ok  # not a scv-core git checkout (vendored copy) — diff scope not applicable
-fi
 
 # ---- [7] deck render never exposes the markers -----------------------------
 DECKDOC="$STANDARD_ROOT/DeckUI/scripts/deckdoc"
