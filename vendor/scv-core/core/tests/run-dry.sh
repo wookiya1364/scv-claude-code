@@ -1280,14 +1280,12 @@ FRONT_APP=$(mktemp -d)
 mkdir -p "$FRONT_APP/scv/promote/20260424-tester-good"
 cat > "$FRONT_APP/scv/promote/20260424-tester-good/PLAN.md" <<'EOF'
 ---
-name: plan
-version: 1.0.0
-status: planned
-last_updated: 2026-04-24
-standard_version: 1.0.0
-merge_policy: preserve
 title: good
 slug: 20260424-tester-good
+author: tester
+created_at: 2026-04-24
+status: planned
+tags: [test]
 kind: refactor
 epic: epic-test
 ---
@@ -1300,14 +1298,12 @@ EOF
 mkdir -p "$FRONT_APP/scv/promote/20260424-tester-bad"
 cat > "$FRONT_APP/scv/promote/20260424-tester-bad/PLAN.md" <<'EOF'
 ---
-name: plan
-version: 1.0.0
-status: planned
-last_updated: 2026-04-24
-standard_version: 1.0.0
-merge_policy: preserve
 title: bad
 slug: 20260424-tester-bad
+author: tester
+created_at: 2026-04-24
+status: planned
+tags: [test]
 kind: nonsense
 ---
 EOF
@@ -1317,6 +1313,85 @@ else
   pass "check-frontmatter: kind=nonsense rejected"
 fi
 rm -rf "$FRONT_APP"
+
+# A plan written straight from the scv/PROMOTE.md §4 template must pass, and a
+# plan missing one of its required keys must not. Before v0.23.0 this script
+# applied the standard-doc header schema to plans, so the documented template
+# failed and only hand-built fixtures passed.
+SCHEMA_APP=$(mktemp -d)
+"$HYDRATE" init "$SCHEMA_APP" >/dev/null 2>&1
+mkdir -p "$SCHEMA_APP/scv/promote/20260811-tester-template"
+cat > "$SCHEMA_APP/scv/promote/20260811-tester-template/PLAN.md" <<'EOF'
+---
+title: Template-shaped plan
+slug: 20260811-tester-template
+author: tester
+created_at: 2026-08-11
+status: planned
+tags: [schema]
+---
+EOF
+"$CHECK_FRONT" --project-dir "$SCHEMA_APP" >/dev/null 2>&1 \
+  && pass "check-frontmatter: PROMOTE.md §4 template PLAN accepted" \
+  || fail "check-frontmatter: rejected a PLAN written from the documented template"
+
+# drop a required PLAN key
+mkdir -p "$SCHEMA_APP/scv/promote/20260811-tester-noauthor"
+cat > "$SCHEMA_APP/scv/promote/20260811-tester-noauthor/PLAN.md" <<'EOF'
+---
+title: Missing author
+slug: 20260811-tester-noauthor
+created_at: 2026-08-11
+status: planned
+tags: [schema]
+---
+EOF
+if "$CHECK_FRONT" --project-dir "$SCHEMA_APP" >/dev/null 2>&1; then
+  fail "check-frontmatter: should reject a PLAN missing 'author'"
+else
+  pass "check-frontmatter: PLAN missing 'author' rejected"
+fi
+rm -rf "$SCHEMA_APP/scv/promote/20260811-tester-noauthor"
+
+# The two schemas must not leak into each other. A plan carrying the standard-doc
+# header is exactly what the pre-0.23.0 fixtures looked like, and it is what kept
+# the defect green — so assert it now fails.
+mkdir -p "$SCHEMA_APP/scv/promote/20260811-tester-stddoc"
+cat > "$SCHEMA_APP/scv/promote/20260811-tester-stddoc/PLAN.md" <<'EOF'
+---
+name: plan
+version: 1.0.0
+status: draft
+last_updated: 2026-08-11
+standard_version: 1.0.0
+merge_policy: preserve
+---
+EOF
+if "$CHECK_FRONT" --project-dir "$SCHEMA_APP" >/dev/null 2>&1; then
+  fail "check-frontmatter: should reject a PLAN carrying the standard-doc header"
+else
+  pass "check-frontmatter: standard-doc header rejected in a PLAN"
+fi
+rm -rf "$SCHEMA_APP/scv/promote/20260811-tester-stddoc"
+
+# Status vocabularies are per-schema: `draft` belongs to workflow docs only.
+mkdir -p "$SCHEMA_APP/scv/promote/20260811-tester-draft"
+cat > "$SCHEMA_APP/scv/promote/20260811-tester-draft/PLAN.md" <<'EOF'
+---
+title: Draft-status plan
+slug: 20260811-tester-draft
+author: tester
+created_at: 2026-08-11
+status: draft
+tags: [schema]
+---
+EOF
+if "$CHECK_FRONT" --project-dir "$SCHEMA_APP" >/dev/null 2>&1; then
+  fail "check-frontmatter: should reject status=draft in a PLAN"
+else
+  pass "check-frontmatter: workflow-doc status rejected in a PLAN"
+fi
+rm -rf "$SCHEMA_APP"
 
 echo
 echo "=== [11x] /scv:status — epic progress section ==="
@@ -3256,14 +3331,12 @@ mkdir -p "$PG_APP/scv/promote/20260807-tester-parallel" "$PG_APP/scv/promote/202
          "$PG_APP/scv/raw" "$PG_APP/scv/archive"
 cat > "$PG_APP/scv/promote/20260807-tester-parallel/PLAN.md" <<'EOF'
 ---
-name: plan
-version: 1.0.0
-status: planned
-last_updated: 2026-08-07
-standard_version: 1.0.0
-merge_policy: preserve
 title: Parallel-hinted plan
 slug: 20260807-tester-parallel
+author: tester
+created_at: 2026-08-07
+status: planned
+tags: [test]
 kind: feature
 parallel_groups: [[1, 2], [3]]
 ---
@@ -3292,14 +3365,12 @@ exit 0
 EOF
 cat > "$PG_APP/scv/promote/20260807-tester-legacy/PLAN.md" <<'EOF'
 ---
-name: plan
-version: 1.0.0
-status: planned
-last_updated: 2026-08-07
-standard_version: 1.0.0
-merge_policy: preserve
 title: Legacy steps-only plan
 slug: 20260807-tester-legacy
+author: tester
+created_at: 2026-08-07
+status: planned
+tags: [test]
 kind: feature
 ---
 
@@ -3570,6 +3641,34 @@ grep -qF "(T-001) keep me" "$OLDJ_APP/scv/TODO.md" \
   || fail "sync: user TODO item lost"
 
 echo
+echo "=== [15p] v0.23.0 — plain-language rule in every user-facing protocol ==="
+# Every protocol that resolves a language must also carry the plain-language
+# rule, and the wording must be one text — a per-file variant is unmaintainable.
+# set-models.md / update.md are adapter-owned stubs with no user-facing output,
+# so they carry neither section.
+PLAIN_TARGETS=$(grep -l "^## Language preference" "$PROTOCOL_ROOT"/*.md | sort)
+PLAIN_N=$(printf '%s\n' "$PLAIN_TARGETS" | grep -c .)
+PLAIN_HAVE=$(grep -l "^## Plain language first$" "$PROTOCOL_ROOT"/*.md | grep -c .)
+[[ "$PLAIN_N" -ge 13 ]] \
+  && pass "plain-language: $PLAIN_N protocols resolve a language" \
+  || fail "plain-language: only $PLAIN_N protocols resolve a language (expected >= 13)"
+[[ "$PLAIN_N" -eq "$PLAIN_HAVE" ]] \
+  && pass "plain-language: rule present in all $PLAIN_HAVE of them" \
+  || fail "plain-language: rule missing — $PLAIN_HAVE of $PLAIN_N protocols have it"
+PLAIN_VARIANTS=$(printf '%s\n' "$PLAIN_TARGETS" | while read -r f; do
+  awk '/^## Plain language first$/{p=1} p&&/^## /&&!/^## Plain language first$/{exit} p' "$f" \
+    | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' | md5sum | cut -d' ' -f1
+done | sort -u | grep -c .)
+[[ "$PLAIN_VARIANTS" -eq 1 ]] \
+  && pass "plain-language: one shared wording across protocols" \
+  || fail "plain-language: $PLAIN_VARIANTS different wordings found"
+for stub in set-models update; do
+  grep -q "^## Plain language first$" "$PROTOCOL_ROOT/$stub.md" \
+    && fail "plain-language: adapter stub $stub.md should not carry the rule" \
+    || pass "plain-language: adapter stub $stub.md excluded"
+done
+
+echo
 echo "=== [16] v0.22.0 — decision record points in 3 protocols (Scenario 7) ==="
 # promote.md — plan approval appends adopted direction + discarded alternatives
 assert_contains "$PROMOTE_CMD" "Step 5.1 — Decision log append"
@@ -3580,6 +3679,19 @@ assert_contains "$PROMOTE_CMD" "버린 대안"
 assert_contains "$WORK_CMD" "Step 9b.0 — Decision log append"
 assert_contains "$WORK_CMD" "scv/DECISIONS.md"
 assert_contains "$WORK_CMD" "verdict: archived"
+# work.md — the archive entry carries the implementation delta (v0.23.0+), and the
+# manual --archive short-circuit still reaches Step 9b.0
+assert_contains "$WORK_CMD" "- path delta:"
+assert_contains "$WORK_CMD" "Step 9b.0 only"
+assert_contains "$WORK_CMD" "drift-detect.sh"
+# work.md/codegen.md — implementation principles (v0.23.0+), PLAN Guardrails win
+assert_contains "$WORK_CMD" "Implementation principles"
+assert_contains "$WORK_CMD" "reuse what is there"
+assert_contains "$WORK_CMD" "simplest implementation"
+assert_contains "$WORK_CMD" "one clear concern"
+assert_contains "$WORK_CMD" "costly to"
+assert_contains "$WORK_CMD" "Guardrails override them"
+assert_contains "$CODEGEN_CMD" "Implementation principles"
 # regression.md — obsolete verdict records the WHY
 assert_contains "$REGRESSION_CMD" "Decision log append"
 assert_contains "$REGRESSION_CMD" "scv/DECISIONS.md"
