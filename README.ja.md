@@ -120,6 +120,35 @@ flowchart LR
 
 **なぜこのループが重要か**. 6 か月後、誰かが知らない古い機能を壊しても、その機能の archive されたテストが自動で検出します。チームが SCV と長く使うほど、セーフティネットが厚くなります。
 
+### archive がテスト以外に残すもの (v0.23.0+)
+
+計画はどの道を行くかを書きます。`/scv:work` はより良い道を見つけたらそちらへ進んでよい — なので 6 か月後に知りたいのは計画が何と言ったかではなく、実際にはどこへ進み、なぜそうしたかです。
+
+archive 時にそれを `scv/DECISIONS.md` へ残します。
+
+```markdown
+## [2026-08-12 10:49] sspark — 返金フロー archived
+
+- verdict: archived
+- why: この計画が何を決め、実装して何が分かったか
+- path delta: キューをやめて直接呼び出しにした — キューが必要だったのは
+  リトライだけで、API はすでに冪等だった
+- refs: scv/archive/20260812-sspark-refund-flow/PLAN.md
+```
+
+`path delta` は放っておけばセッションと共に消える一行です。計画どおりなら一語で終わります — `as planned`。
+
+### `/scv:work` が実装時に守ること (v0.23.0+)
+
+計画の `Guardrails` が別を指示しない限り、4 つが既定で適用されます。
+
+- 既存コードをまず探して再利用します。すでに一つのやり方がある処理に二つ目を作りません。
+- 現在の要求を完全に満たす最も単純な実装を選びます。誰も指定していない未来のために作りません。
+- 関心事ひとつにつきコンポーネントひとつ、読み手が名前を付けられる境界を保ちます。
+- 元に戻すのが高くつく決定 (データモデル・モジュール境界・公開契約) は長期視点で決めます。後で置き換える前提の間に合わせは作りません。
+
+説明も短い方を先に出します。追えない計画は承認できず、追えない報告は判断材料になりません。質問・計画・進捗報告は平易な説明から始め、求められたら深く入ります。
+
 ---
 
 ## スラッシュコマンド <a id="slash-commands"></a>
@@ -222,7 +251,7 @@ pin と生成 projection のみで、wrapper の `VERSION`、plugin manifest、
 marketplace version は変更しません。
 
 **Journal フック (v0.22.0+, 登録は wrapper 所有).** Core は自由会話まで
-コミットされるチーム・ジャーナル(`scv/journal/<YYYYMMDD>-<author>.md`)へ
+ジャーナル(`scv/journal/<YYYYMMDD>-<author>.md`、既定で gitignore)へ
 キャプチャする non-blocking フックテンプレート 2 種を提供し、登録はこの
 アダプターの `hooks/hooks.json` が担います:
 
@@ -293,7 +322,7 @@ AI 協業チーム開発の 3 つの失敗モード — SCV が拒否するも�
 
 **S — Standard (標準).** 標準とはスナップショット文書ではなくワークフローそのもの。Core Template 2.0.0 から hydrate はワークフローファイルのみを seed します — モデルがコードベースから導出できる事実は事前に文書化しません。
 
-残す価値のある決定は、古びるスナップショット文書ではなく `scv/DECISIONS.md` と append-only の `scv/journal/` へ。
+残す価値のある決定は、古びるスナップショット文書ではなく `scv/DECISIONS.md` へ — append-only、著者帰属、コミットされます。
 
 **C — Cowork (協業).** `/scv:promote` は対話であって生成ではありません。
 
@@ -321,7 +350,8 @@ my-project/
 │   ├── SCV.md          # SCV ワークフローのインデックス
 │   ├── PROMOTE.md REPORTING.md
 │   ├── DECISIONS.md TODO.md
-│   ├── journal/        # append-only 著者別チームジャーナル (フックが記録)
+│   ├── conversations/  # 計画になった /scv:help の対話 (コミットされる)
+│   ├── journal/        # フックが記録する全プロンプト — 既定で gitignore
 │   ├── routines/       # 1 ファイル完結のメンテナンスルーティン (/scv:routine)
 │   ├── readpath.json   # raw 変更スナップショット (自動管理)
 │   ├── promote/        # アクティブな計画 (YYYYMMDD-author-slug フォルダ)
@@ -332,6 +362,8 @@ my-project/
 ```
 
 **Non-destructive**: ルート `CLAUDE.md` / `.env.example` はそのまま保持。SCV は `scv/` のみ作成、`.env.example.scv` を別途追加 + 既存 `.gitignore` に append。
+
+**2 種類の記録、2 種類の方針 (v0.23.0+)**。`scv/conversations/` には計画になった `/scv:help` の対話が入り、コミットされます — 計画の根拠は計画と一緒にあるべきだからです。`scv/journal/` は違います。フックが**すべて**のプロンプトを記録します、何にもならなかったものまで。それをリポジトリに入れてよいかは誰が読めるかに依存するため、hydrate は `scv/journal/` を gitignore し、選択を委ねます。共有するなら `.gitignore` からその行を削除してください — ただし何が蓄積されたかを先に確認してください、redaction はヒューリスティックです。一度コミットすると ignore を戻しても追跡は外れません (`git rm --cached` が必要で、過去のコミットには内容が残ります)。
 
 **標準ドキュメント 7 種は廃止 (Core Template 2.0.0, breaking)**。hydrate は adoption-only: `INTAKE.md`、`DOMAIN.md`、`ARCHITECTURE.md`、`DESIGN.md`、`AGENTS.md`、`TESTING.md`、`RALPH_PROMPT.md` は seed も sync もされません。既存プロジェクトでは明示的な `/scv:sync` 1 回がこの 7 ファイルを削除します (削除前にユーザー作成の内容を `scv/DECISIONS.md` へ移すことを先に提案; 復旧経路は git 履歴)。その後ユーザーが再作成したファイルはユーザー所有 — sync が再削除することはありません。
 
