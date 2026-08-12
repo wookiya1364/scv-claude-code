@@ -21,3 +21,13 @@ test-results/report-queue/
 
 # v0.22.0+ — 대화는 커밋됩니다: action:help conversation mode 는 redaction 을
 # 거쳐 scv/conversations/ 에 저장됩니다 (구 dot-conversations ignore 는 제거됨).
+
+# v0.23.0+ — journal 은 기본 ignore 입니다.
+#
+# scv/conversations/ 에는 계획으로 이어진 대화만 남지만, journal 에는 훅이
+# 자유대화까지 전부 받아씁니다. 그것을 올릴지는 저장소 성격에 따라 달라지므로
+# 기본값을 "올리지 않음"으로 둡니다.
+#
+# 팀 맥락으로 공유하고 싶으면 이 줄을 지우세요. 그때는 저장소 공개 범위와
+# journal 에 남는 내용을 먼저 확인하세요 — redaction 은 휴리스틱입니다.
+scv/journal/
