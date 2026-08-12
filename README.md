@@ -419,6 +419,9 @@ The `demo/` directory holds Remotion compositions that produce the README's GIFs
 
 - Run `tests/run-dry.sh` before PRs
 - Follow SemVer for `VERSION` bumps
+- Releasing: **[docs/RELEASING.md](docs/RELEASING.md)** — bump with
+  `scripts/set-wrapper-version.sh`, then `gh workflow run promote.yml`. Do not
+  promote or tag by hand.
 
 
 ---
