@@ -124,6 +124,35 @@ flowchart LR
 
 **Why the loop matters.** Six months later, someone breaks an old feature they never knew about — and the test from that feature's archived plan catches it automatically. The longer your team works with SCV, the thicker your safety net grows.
 
+### What the archive keeps besides the tests (v0.23.0+)
+
+A plan says which route to take. `/scv:work` is allowed to take a better one when it finds it — so the interesting question six months later is not what the plan said, but where the work went instead, and why.
+
+Archiving now appends that to `scv/DECISIONS.md`:
+
+```markdown
+## [2026-08-12 10:49] sspark — Refund flow archived
+
+- verdict: archived
+- why: what this plan decided, and what the implementation taught us
+- path delta: switched from a queue to a direct call — the queue only
+  mattered for retries, and the API is already idempotent
+- refs: scv/archive/20260812-sspark-refund-flow/PLAN.md
+```
+
+`path delta` is the line that would otherwise vanish with the session. When the route matched the plan, it is one word: `as planned`.
+
+### How `/scv:work` decides (v0.23.0+)
+
+Four defaults apply while implementing, unless the plan's `Guardrails` say otherwise:
+
+- Search the existing codebase first; extend or reuse what is there, rather than adding a second way to do the same thing.
+- Choose the simplest implementation that fully satisfies the current requirement — not a future one nobody specified.
+- Keep components modular, with one clear concern and boundaries a reader can name.
+- For decisions that are costly to reverse (data model, module boundaries, published contracts), decide for the long term. No stopgap you already plan to replace.
+
+SCV also asks for the short explanation first. A plan you cannot follow cannot be approved, and a report you cannot follow is not a basis for a decision — so questions, plans, and progress reports lead with the plain version, and go deeper when you ask.
+
 ---
 
 ## Slash Commands
@@ -224,8 +253,9 @@ pin and generated projection, but never rewrites the wrapper `VERSION`, plugin
 manifest, or marketplace version.
 
 **Journal hooks (v0.22.0+, wrapper-owned registration).** Core ships two
-non-blocking hook templates that capture free conversation into the committed
-team journal (`scv/journal/<YYYYMMDD>-<author>.md`); registering them is this
+non-blocking hook templates that capture free conversation into the local
+journal (`scv/journal/<YYYYMMDD>-<author>.md`, gitignored by default);
+registering them is this
 adapter's job, done by the plugin's `hooks/hooks.json`:
 
 - `UserPromptSubmit` → `vendor/scv-core/core/template/hooks/on-user-prompt.sh`
@@ -299,7 +329,7 @@ Three failure modes of AI-assisted team development — and what SCV refuses to 
 
 **S — Standard.** The standard is the workflow, not snapshot docs. Since Core Template 2.0.0 hydrate seeds only the workflow files — facts the model can derive from the codebase are never pre-documented.
 
-Decisions worth keeping go to `scv/DECISIONS.md` and the append-only `scv/journal/`, not into stale snapshot documents.
+Decisions worth keeping go to `scv/DECISIONS.md` — append-only, attributed, and committed — not into stale snapshot documents.
 
 **C — Cowork.** `/scv:promote` is a dialog, not a generation.
 
@@ -327,7 +357,8 @@ my-project/
 │   ├── SCV.md          # SCV workflow index
 │   ├── PROMOTE.md REPORTING.md
 │   ├── DECISIONS.md TODO.md
-│   ├── journal/        # append-only per-author team journal (hook-fed)
+│   ├── conversations/  # /scv:help dialogs that became plans (committed)
+│   ├── journal/        # every prompt, hook-fed — gitignored by default
 │   ├── routines/       # one-file maintenance routines (/scv:routine)
 │   ├── readpath.json   # raw change snapshot (auto-managed)
 │   ├── promote/        # Active plans (YYYYMMDD-author-slug folders)
@@ -338,6 +369,8 @@ my-project/
 ```
 
 **Non-destructive**: existing root `CLAUDE.md` / `.env.example` stay intact. SCV creates `scv/` + separate `.env.example.scv` + appends to existing `.gitignore`.
+
+**Two records, two policies (v0.23.0+)**. `scv/conversations/` holds the `/scv:help` dialogs that turned into plans — those are committed, because the reasoning behind a plan belongs with the plan. `scv/journal/` is different: the hooks feed it *every* prompt, including the ones that never became anything. Whether that belongs in your repository depends on who can read it, so hydrate gitignores `scv/journal/` and leaves the choice to you. To share it, delete that line from `.gitignore` — but look at what has accumulated first, because redaction is a heuristic. Once committed, restoring the ignore rule does not untrack the files (`git rm --cached` does, and past commits keep the content).
 
 **Standard docs are retired (Core Template 2.0.0, breaking)**. Hydrate is adoption-only: `INTAKE.md`, `DOMAIN.md`, `ARCHITECTURE.md`, `DESIGN.md`, `AGENTS.md`, `TESTING.md`, and `RALPH_PROMPT.md` are no longer seeded or synced. On an existing project, one explicit `/scv:sync` deletes those seven files (it offers to move user-authored content into `scv/DECISIONS.md` first; git history is the recovery path). Files you recreate afterwards belong to you — sync never deletes them again.
 

@@ -120,6 +120,35 @@ flowchart LR
 
 **왜 이 흐름이 중요한가**. 6 개월 뒤 누군가 모르고 옛 기능을 깨뜨려도, 그 기능의 archive 된 테스트가 자동으로 발견합니다. 팀이 SCV 와 오래 일할수록 안전망이 두터워집니다.
 
+### archive 가 테스트 말고 남기는 것 (v0.23.0+)
+
+계획은 어느 길로 갈지 적습니다. `/scv:work` 는 더 나은 길을 찾으면 그리로 가도 됩니다 — 그래서 6 개월 뒤에 궁금한 건 계획이 뭐라고 했는지가 아니라, 실제로는 어디로 갔고 왜 그랬는지입니다.
+
+이제 archive 할 때 그걸 `scv/DECISIONS.md` 에 남깁니다.
+
+```markdown
+## [2026-08-12 10:49] sspark — 환불 흐름 archived
+
+- verdict: archived
+- why: 이 계획이 무엇을 정했고, 구현하면서 무엇을 알게 됐는지
+- path delta: 큐 대신 직접 호출로 바꿨다 — 큐가 필요했던 건 재시도뿐인데
+  API 가 이미 멱등이었다
+- refs: scv/archive/20260812-sspark-refund-flow/PLAN.md
+```
+
+`path delta` 는 그냥 두면 세션과 함께 사라지는 줄입니다. 계획대로 갔으면 한 단어로 끝납니다 — `as planned`.
+
+### `/scv:work` 가 구현할 때 지키는 것 (v0.23.0+)
+
+계획의 `Guardrails` 가 다르게 말하지 않는 한, 네 가지가 기본으로 적용됩니다.
+
+- 기존 코드를 먼저 찾아 재활용합니다. 이미 한 방식이 있는 일에 두 번째 방식을 만들지 않습니다.
+- 현재 요구를 완전히 충족하는 가장 단순한 구현을 고릅니다. 아무도 말하지 않은 미래를 위해 짓지 않습니다.
+- 관심사 하나당 컴포넌트 하나, 독자가 이름 붙일 수 있는 경계를 유지합니다.
+- 되돌리기 비싼 결정(데이터 모델·모듈 경계·공개 계약)은 장기 관점으로 정합니다. 나중에 교체할 임시방편은 만들지 않습니다.
+
+설명도 짧은 쪽을 먼저 냅니다. 따라갈 수 없는 계획은 승인할 수 없고, 따라갈 수 없는 보고는 판단 근거가 되지 못합니다. 그래서 질문·계획·진행 보고는 쉬운 설명으로 시작하고, 더 물어보시면 그때 파고듭니다.
+
 ---
 
 ## 슬래시 커맨드 <a id="slash-commands"></a>
@@ -222,8 +251,8 @@ Wrapper와 Core는 서로 독립적으로 릴리스합니다. 이 Claude 어댑�
 기록됩니다. Core sync는 그 체크섬 pin과 생성 projection만 갱신하며 wrapper
 `VERSION`, plugin manifest, marketplace version은 변경하지 않습니다.
 
-**Journal 훅 (v0.22.0+, 등록은 wrapper 소유).** Core 는 자유대화까지 커밋되는
-팀 저널(`scv/journal/<YYYYMMDD>-<author>.md`)로 캡처하는 non-blocking 훅
+**Journal 훅 (v0.22.0+, 등록은 wrapper 소유).** Core 는 자유대화까지
+저널(`scv/journal/<YYYYMMDD>-<author>.md`, 기본 gitignore)로 캡처하는 non-blocking 훅
 템플릿 2종을 제공하고, 등록은 이 어댑터의 `hooks/hooks.json` 이 담당합니다:
 
 - `UserPromptSubmit` → `vendor/scv-core/core/template/hooks/on-user-prompt.sh`
@@ -292,7 +321,7 @@ AI 협업 팀 개발의 세 가지 실패 모드 — SCV 가 거부하는 것.
 
 **S — Standard (표준).** 표준은 스냅샷 문서가 아니라 워크플로 자체. Core Template 2.0.0 부터 hydrate 는 워크플로 파일만 시드합니다 — 모델이 코드베이스에서 유도할 수 있는 사실은 미리 문서화하지 않습니다.
 
-남길 가치가 있는 결정은 낡아가는 스냅샷 문서가 아니라 `scv/DECISIONS.md` 와 append-only `scv/journal/` 로 갑니다.
+남길 가치가 있는 결정은 낡아가는 스냅샷 문서가 아니라 `scv/DECISIONS.md` 로 갑니다 — append-only, 작성자 귀속, 커밋됩니다.
 
 **C — Cowork (협업).** `/scv:promote` 는 대화이지 생성이 아닙니다.
 
@@ -320,7 +349,8 @@ my-project/
 │   ├── SCV.md          # SCV 워크플로 인덱스
 │   ├── PROMOTE.md REPORTING.md
 │   ├── DECISIONS.md TODO.md
-│   ├── journal/        # append-only 작성자별 팀 저널 (훅이 기록)
+│   ├── conversations/  # 계획이 된 /scv:help 대화 (커밋됨)
+│   ├── journal/        # 훅이 받아쓰는 모든 프롬프트 — 기본 gitignore
 │   ├── routines/       # 파일 1개짜리 유지보수 루틴 (/scv:routine)
 │   ├── readpath.json   # raw 변경 스냅샷 (자동 관리)
 │   ├── promote/        # 활성 계획 (YYYYMMDD-author-slug 폴더)
@@ -331,6 +361,8 @@ my-project/
 ```
 
 **Non-destructive**: 루트 `CLAUDE.md` / `.env.example` 그대로 보존. SCV 는 `scv/` 만 만들고, `.env.example.scv` 별도 추가 + 기존 `.gitignore` 에 append.
+
+**두 가지 기록, 두 가지 정책 (v0.23.0+)**. `scv/conversations/` 에는 계획이 된 `/scv:help` 대화가 담기고 커밋됩니다 — 계획의 근거는 계획과 함께 있어야 하니까요. `scv/journal/` 은 다릅니다. 훅이 **모든** 프롬프트를 받아씁니다, 아무것도 되지 않은 것까지요. 그게 저장소에 들어가도 되는지는 누가 읽을 수 있느냐에 달렸으므로, hydrate 는 `scv/journal/` 을 gitignore 하고 선택을 남깁니다. 공유하려면 `.gitignore` 에서 그 줄을 지우세요 — 다만 지금까지 뭐가 쌓였는지 먼저 보세요, redaction 은 휴리스틱입니다. 한 번 커밋한 뒤에는 ignore 규칙을 되돌려도 추적이 끊기지 않습니다 (`git rm --cached` 가 필요하고, 과거 커밋에는 내용이 남습니다).
 
 **표준 문서 7종 폐기 (Core Template 2.0.0, breaking)**. hydrate 는 adoption-only: `INTAKE.md`, `DOMAIN.md`, `ARCHITECTURE.md`, `DESIGN.md`, `AGENTS.md`, `TESTING.md`, `RALPH_PROMPT.md` 는 더 이상 시드/동기화되지 않습니다. 기존 프로젝트에서는 명시적 `/scv:sync` 1회가 이 7개 파일을 삭제합니다 (삭제 전에 사용자가 직접 쓴 내용을 `scv/DECISIONS.md` 로 옮길지 먼저 제안; 복구 경로는 git 이력). 이후 사용자가 다시 만든 파일은 사용자 소유 — sync 가 재삭제하지 않습니다.
 
