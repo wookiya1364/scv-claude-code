@@ -1,5 +1,5 @@
 ---
-description: "Turn a markdown planning doc into a spec-grade 기획서 HTML — a buildless, self-contained document by default, or an on-screen slide presentation when you ask for one. Deterministic md→deck transform + a quality/gap lint; the raw markdown travels with it."
+description: "Turn a markdown planning doc into a spec-grade 기획서 HTML — a buildless, self-contained document by default, or an on-screen slide presentation when you ask for one. Deterministic md→deck transform + a quality/gap lint; the raw markdown travels with it. Use whenever the user wants a planning document turned into something readable or presentable — 'make this a doc', '기획서로', 'slides' — not only when they type /scv:deck. Never hand-write the HTML."
 argument-hint: "[<path-to-markdown>]"
 allowed-tools:
   - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/deck.sh:*)"

@@ -1,5 +1,5 @@
 ---
-description: "Execute one maintenance routine defined in scv/routines/<name>.md (task + guardrails + exit-criteria contract), or list defined routines. SCV never schedules — pair with host features like /loop or cron yourself."
+description: "Execute one maintenance routine defined in scv/routines/<name>.md (task + guardrails + exit-criteria contract), or list defined routines. SCV never schedules — pair with host features like /loop or cron yourself. Use whenever the user asks to run a recurring maintenance task, or asks what routines exist — not only when they type /scv:routine."
 argument-hint: "[<module>] [--list | <name> | --lint <file>]"
 allowed-tools:
   - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/routine.sh:*)"
