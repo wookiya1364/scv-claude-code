@@ -411,6 +411,8 @@ Discord: `NOTIFIER_PROVIDER=discord` + `DISCORD_BOT_TOKEN` + `DISCORD_CHANNEL_ID
 
 - PR 전에 `tests/run-dry.sh` 통과 확인
 - `VERSION` bump 은 SemVer 따름
+- 릴리스: **[docs/RELEASING.md](docs/RELEASING.md)** — `scripts/set-wrapper-version.sh`
+  로 버전을 올리고 `gh workflow run promote.yml`. 승격과 태그를 손으로 하지 않습니다.
 
 
 ---
