@@ -21,7 +21,7 @@ merge_policy: overwrite
 - 경로: `scv/routines/<name>.md` — 루틴 1개당 파일 1개. `README.md` 는 예외(이 문서).
 - hydrate 는 이 README 만 시딩합니다. 루틴 파일은 사용자/에이전트가 추가합니다.
 - 시작 템플릿: SCV Core 의 `core/template/scv/routines/examples/` 에 내장 예시
-  7종이 있습니다 — 필요한 것을 이 폴더로 복사해 수정하세요.
+  8종이 있습니다 — 필요한 것을 이 폴더로 복사해 수정하세요.
 
 ## Frontmatter 스키마 (5개 키 전부 필수)
 
