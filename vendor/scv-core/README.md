@@ -12,7 +12,7 @@ Current versions:
 
 | Contract | Version | Meaning |
 |---|---:|---|
-| SCV Core | `0.23.0` | Shared behavior and release payload |
+| SCV Core | `0.24.0` | Shared behavior and release payload |
 | Core API | `1` | Wrapper/core integration contract |
 | Template | `2.0.0` | Hydrated project-template schema |
 
