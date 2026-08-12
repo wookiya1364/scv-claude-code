@@ -412,6 +412,8 @@ Discord: `NOTIFIER_PROVIDER=discord` + `DISCORD_BOT_TOKEN` + `DISCORD_CHANNEL_ID
 
 - PR の前に `tests/run-dry.sh` を通す
 - `VERSION` は SemVer に従う
+- リリース: **[docs/RELEASING.md](docs/RELEASING.md)** — `scripts/set-wrapper-version.sh`
+  でバージョンを上げ、`gh workflow run promote.yml`。昇格とタグを手作業で行いません。
 
 
 ---
