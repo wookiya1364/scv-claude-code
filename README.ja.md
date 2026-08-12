@@ -218,6 +218,8 @@ AI がチームのコードを書き始めると、3 つのことが噛み合わ
 
 BMAD/GSD で spec → code フェーズを進めて、SCV の archive がその下で回帰セーフティネットを累積。
 
+その際の制約が一つあります。ワークスペースガードはセッション内の SCV コマンドに紐づかない書き込みを拒否しますが、他ツールの書き込みは計画のない編集と区別できません。SCV コマンドを一度実行すれば解決します — 読み取り専用の `/scv:status` で十分で、以降のセッションは通常どおり進みます。
+
 **より大きな変更の場合**: multi-feature 変更を *複数 slug* に分割し、同じ `epic:` (PLAN.md frontmatter) 下にグループ化。`scv/PROMOTE.md` §8d の epic + multi-slug パターン参照。
 
 ### `/scv:codegen` が合うとき (TDD-first 変形、v0.11.0+ · *experimental*)
@@ -245,7 +247,7 @@ v0.20.0 から、共通ワークフローの動作はチェックサムで検証
 を参照してください。
 
 Wrapper と Core は独立してリリースします。この Claude アダプター release
-は `0.24.0` で、現在の Core pin は `vendor/scv-core/VERSION` と
+は `0.25.0` で、現在の Core pin は `vendor/scv-core/VERSION` と
 `core.lock` に記録されます。Core sync が更新するのは、そのチェックサム付き
 pin と生成 projection のみで、wrapper の `VERSION`、plugin manifest、
 marketplace version は変更しません。

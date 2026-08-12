@@ -1,5 +1,5 @@
 ---
-description: "Choose a model policy and apply it to every SCV command's frontmatter. Persists the choice in .env so /scv:sync can reapply on template updates."
+description: "Choose a model policy and apply it to every SCV command's frontmatter. Persists the choice in .env so /scv:sync can reapply on template updates. Use whenever the user wants to change which model SCV commands run on — not only when they type /scv:set-models."
 argument-hint: "[recommended|all-opus|all-sonnet|all-haiku|session-default]"
 allowed-tools:
   - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/apply-model-policy.sh:*)"
@@ -79,12 +79,14 @@ The script will print per-file changes (`status: haiku -> opus` / `report: ok (h
 
 The choice must survive `/scv:sync` (which re-renders frontmatter from templates). Persist it:
 
-1. **Read** the project root's `.env` file (path: `$PWD/.env`).
-   - If `.env` does not exist: create it with the single line `SCV_MODEL_POLICY=<POLICY>`.
-2. **If `.env` already contains a line matching `^SCV_MODEL_POLICY=`**:
-   - Use **Edit** to replace the existing line's value with the new `<POLICY>`.
-3. **If `.env` exists but has no `SCV_MODEL_POLICY` line**:
-   - Use **Edit** to append `SCV_MODEL_POLICY=<POLICY>` on a new line at the end (preserve existing content).
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/vendor/scv-core/core/scripts/env-set.sh" SCV_MODEL_POLICY=<POLICY>
+```
+
+It creates `.env` when absent, replaces the key in place when present, and leaves
+every unrelated line byte for byte. Do not hand-edit `.env` with Write or Edit —
+the script is what keeps this write legible to the workspace guard, and a
+hand-rolled sed or an editor call would either be denied or slip past unrecorded.
 
 The value MUST be the literal policy identifier (e.g., `recommended`), never quoted, never with spaces.
 

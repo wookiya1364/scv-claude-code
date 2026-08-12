@@ -222,6 +222,8 @@ When AI starts writing your team's code, three things break down.
 
 You can use BMAD/GSD for the spec → code phase, and let SCV's archive accumulate the regression net underneath.
 
+One constraint when you do: the workspace guard denies writes it cannot tie to an SCV command in the session, and another tool's writes look the same as an unplanned edit. Run any SCV command once — `/scv:status` is read-only and enough — and the rest of the session proceeds normally.
+
 **For larger changes**: split a multi-feature change into multiple slugs grouped under one `epic:` (PLAN.md frontmatter). See `scv/PROMOTE.md` §8d for the epic + multi-slug pattern.
 
 ### When `/scv:codegen` fits (TDD-first variant, v0.11.0+ · *experimental*)
@@ -247,7 +249,7 @@ before the normal `develop → stage → main` promotion. See
 [`docs/design/shared-core-wrapper.md`](docs/design/shared-core-wrapper.md).
 
 Wrapper and Core releases are intentionally independent. This Claude adapter
-release is `0.24.0`; the current Core pin is recorded in
+release is `0.25.0`; the current Core pin is recorded in
 `vendor/scv-core/VERSION` and `core.lock`. Core sync updates that checksummed
 pin and generated projection, but never rewrites the wrapper `VERSION`, plugin
 manifest, or marketplace version.
