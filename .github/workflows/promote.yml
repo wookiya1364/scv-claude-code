@@ -63,15 +63,33 @@ jobs:
             fi
             local number="${url##*/}"
 
+            # Checks do not exist the instant a PR is created — GitHub schedules
+            # them a moment later. Asking once and concluding "none" raced that
+            # window, so the workflow went straight to merge and was rejected by
+            # the required-checks rule on a PR whose checks were about to pass.
+            #
+            # Ask how many checks EXIST, not whether they pass. `gh pr checks`
+            # exits non-zero while any check is still pending, so using its exit
+            # code as an existence probe reads "not yet" for the entire wait and
+            # then concludes there are none — which is the same bug wearing a
+            # longer timeout.
             echo "Waiting for checks on #${number}..."
-            if gh pr checks "$number" >/dev/null 2>&1 \
-               || gh pr checks "$number" 2>&1 | grep -qv 'no checks reported'; then
+            local waited=0 count=0
+            while [ "$waited" -lt 120 ]; do
+              count=$(gh pr view "$number" --json statusCheckRollup \
+                       --jq '.statusCheckRollup | length' 2>/dev/null || echo 0)
+              [ "${count:-0}" -gt 0 ] && break
+              sleep 5
+              waited=$((waited + 5))
+            done
+
+            if [ "${count:-0}" -gt 0 ]; then
               gh pr checks "$number" --watch --fail-fast || {
                 echo "::error::Checks failed on #${number} (${head} → ${base}). The chain stops here; the PR stays open."
                 return 1
               }
             else
-              echo "::notice::#${number} has no checks to wait for."
+              echo "::notice::#${number} still reported 0 checks after ${waited}s."
             fi
 
             gh pr merge "$number" --merge || {

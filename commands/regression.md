@@ -1,5 +1,5 @@
 ---
-description: "Run accumulated regression across scv/archive/**/TESTS.md (and optionally promote/) with supersede/obsolete skip graph. On failure, triage each slug via AskUserQuestion (regression / obsolete / flaky)."
+description: "Run accumulated regression across scv/archive/**/TESTS.md (and optionally promote/) with supersede/obsolete skip graph. On failure, triage each slug via AskUserQuestion (regression / obsolete / flaky). Use whenever the user asks whether past features still pass, or before archiving anything — 'run the tests', 'is anything broken' — not only when they type /scv:regression. Never assemble the archived test suite by hand."
 argument-hint: "[<slug-prefix>]"
 allowed-tools:
   - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/regression.sh:*)"

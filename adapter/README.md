@@ -19,8 +19,12 @@ Adapter-owned behavior:
   `vendor/scv-core/core/template/hooks/on-user-prompt.sh` /
   `on-stop.sh`, exporting `SCV_CORE_ROOT`. The templates themselves (and
   the `journal-append.sh` redaction path they call) are core-owned;
-  registration must stay non-blocking and must never write to
-  `scv/journal/` directly
+  the journal registration must stay non-blocking and must never write to
+  `scv/journal/` directly. The `PreToolUse` / `UserPromptExpansion`
+  registrations are a separate seam and are deliberately blocking: they
+  point at `template/hooks/guard.sh`, which denies writes no SCV action
+  accounts for. Non-blocking is a property of the journal templates, not of
+  hooks as a category — see `vendor/scv-core/core/contracts/guard.md`
 
 Core-owned behavior:
 

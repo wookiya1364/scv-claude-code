@@ -1,5 +1,5 @@
 ---
-description: "Declare that another repo needs corresponding development: write a handoff (+ decision + conversation) into the workspace root scv repo. Multi-repo (nested) only."
+description: "Declare that another repo needs corresponding development: write a handoff (+ decision + conversation) into the workspace root scv repo. Multi-repo (nested) only. Use whenever work in this repo implies a change another repo must make — not only when they type /scv:handoff. Never leave that dependency in prose; this command records it where the other repo will see it."
 argument-hint: "[module] [to-repo and what they must build]"
 allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/handoff.sh:*)", "Write", "AskUserQuestion"]
 model: opus

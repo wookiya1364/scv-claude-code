@@ -1,5 +1,5 @@
 ---
-description: "Post a phase/status report to the team channel per REPORTING.md. Reads .env NOTIFIER_PROVIDER (slack|discord) and uploads E2E artifacts from test-results/."
+description: "Post a phase/status report to the team channel per REPORTING.md. Reads .env NOTIFIER_PROVIDER (slack|discord) and uploads E2E artifacts from test-results/. Use whenever the user asks to tell the team, post an update, or share progress — not only when they type /scv:report. Never compose the message by hand; this one follows REPORTING.md and attaches the real artifacts."
 argument-hint: "\"<phase-name>\" <status>"
 allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/report.sh:*)"]
 model: haiku

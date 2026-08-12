@@ -1,5 +1,5 @@
 ---
-description: "Sync the SCV template into this project, honoring frontmatter merge_policy. PROJECT:LOCAL blocks are always preserved."
+description: "Sync the SCV template into this project, honoring frontmatter merge_policy. PROJECT:LOCAL blocks are always preserved. Use whenever the user updated the plugin, asks to refresh SCV's own files, or asks whether code has drifted from an active plan — not only when they type /scv:sync."
 argument-hint: ""
 allowed-tools:
   - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/sync.sh:*)"
