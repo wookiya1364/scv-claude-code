@@ -189,6 +189,7 @@ ADAPTER_SCRIPTS='
 apply-model-policy.sh
 hydrate.sh
 project-core.sh
+set-wrapper-version.sh
 sync-core-paths.py
 sync-core.sh
 sync.sh
