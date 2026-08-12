@@ -1,5 +1,5 @@
 ---
-description: "Implement a scv/promote/<slug>/ plan. Reads PLAN.md + TESTS.md, proposes/loads Related Documents as needed, runs the tests, and optionally archives on success."
+description: "Implement a scv/promote/<slug>/ plan. Reads PLAN.md + TESTS.md, proposes/loads Related Documents as needed, runs the tests, and optionally archives on success. Use whenever the user wants an existing plan implemented — 'build it', 'implement the plan', 'let's do it' — not only when they type /scv:work. Never implement a promote plan by editing files directly; this command loads the plan, runs its TESTS, and records what actually changed."
 argument-hint: "[<module>] [<slug>]"
 allowed-tools:
   - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/work.sh:*)"

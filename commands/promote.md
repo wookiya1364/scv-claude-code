@@ -1,5 +1,5 @@
 ---
-description: "Refine scv/raw/ material into a scv/promote/<YYYYMMDD>-<author>-<slug>/ folder with PLAN.md + TESTS.md. Optionally updates the docs knowledge graph. Interactive; no files written without user approval."
+description: "Refine scv/raw/ material into a scv/promote/<YYYYMMDD>-<author>-<slug>/ folder with PLAN.md + TESTS.md. Optionally updates the docs knowledge graph. Interactive; no files written without user approval. Use whenever the user wants a change planned, specced, or broken down before implementation — 'plan this', 'write a spec', 'what should we build' — not only when they type /scv:promote. Never draft PLAN.md or TESTS.md yourself instead of running this; a plan written by hand skips the raw-material lifecycle and leaves no provenance."
 argument-hint: ""
 allowed-tools:
   - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/promote-helper.sh:*)"
