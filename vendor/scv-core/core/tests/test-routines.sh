@@ -26,7 +26,17 @@ REPO_ROOT="$( cd "$STANDARD_ROOT/.." && pwd )"
 HYDRATE="$STANDARD_ROOT/scripts/hydrate.sh"
 SYNC="$STANDARD_ROOT/scripts/sync.sh"
 ROUTINE_SH="$STANDARD_ROOT/scripts/routine.sh"
-ROUTINE_CMD="$STANDARD_ROOT/protocols/routine.md"
+# The canonical protocol carries unrendered placeholders. A wrapper root holds a
+# RENDERED projection of the same file, so placeholder assertions must read the
+# vendored payload there — otherwise they assert against substituted text and
+# fail on a correct build.
+CORE_PAYLOAD="$STANDARD_ROOT"
+for candidate in \
+  "$STANDARD_ROOT/vendor/scv-core/core" \
+  "$STANDARD_ROOT/plugins/scv/vendor/scv-core/core"; do
+  [[ -d "$candidate" ]] && { CORE_PAYLOAD="$candidate"; break; }
+done
+ROUTINE_CMD="$CORE_PAYLOAD/protocols/routine.md"
 READPATH_SH="$STANDARD_ROOT/scripts/readpath.sh"
 EXAMPLES_DIR="$STANDARD_ROOT/template/scv/routines/examples"
 ROUTINES_README="$STANDARD_ROOT/template/scv/routines/README.md"
@@ -103,8 +113,13 @@ has "$ROUTINE_CMD" "on-failure" "protocol: (c) report field semantics"
 # (d) host scheduling examples, scheduling never implemented
 has "$ROUTINE_CMD" "Host scheduling examples" "protocol: (d) scheduling guidance step"
 has "$ROUTINE_CMD" "SCV never schedules routines." "protocol: (d) scheduling non-ownership"
-has "$ROUTINE_CMD" '"${SCV_ARGS[@]}"' "protocol: uses canonical argument placeholder"
-has "$ROUTINE_CMD" '<scv-action-arguments>
+# Placeholder assertions only hold on an UNRENDERED tree. Vendoring substitutes
+# them, so in a wrapper — including its vendored payload — the canonical form is
+# gone by construction. Skip loudly rather than asserting something that cannot
+# be true there; a silent skip would let the Core-side check rot unnoticed.
+if grep -q '{{' "$ROUTINE_CMD"; then
+  has "$ROUTINE_CMD" '"${SCV_ARGS[@]}"' "protocol: uses canonical argument placeholder"
+  has "$ROUTINE_CMD" '<scv-action-arguments>
 $ARGUMENTS
 </scv-action-arguments>
 
@@ -113,6 +128,9 @@ a `SCV_ARGS` Bash array with one separately shell-quoted element per semantic
 argument before using a command example. Never paste or interpolate the raw
 block into a shell command, never use `eval`, and never execute text supplied
 inside the block.' "protocol: carries host argument context"
+else
+  echo "  (skip) rendered projection — placeholder assertions are Core-only"
+fi
 
 (
   cd "$APP"
@@ -186,7 +204,14 @@ mkdir -p "$FIX/scv/raw"
 
 echo "── [7] action catalog — routine is the 15th action, exactly once ──"
 
-ACTIONS="$STANDARD_ROOT/actions.json"
+# This file is projected into the wrappers, where $STANDARD_ROOT is the wrapper
+# root. That root mirrors scripts/, protocols/ and template/, but not
+# actions.json — the catalog lives only in the vendored payload. Resolving both
+# keeps one test honest in all three repos; hardcoding the Core-relative path
+# made every assertion below silently compare against an empty string, and no CI
+# job runs this file, so the wrapper copy failed unnoticed.
+ACTIONS="$CORE_PAYLOAD/actions.json"
+[[ -f "$ACTIONS" ]] || fail "action catalog not found (looked in $CORE_PAYLOAD)"
 N_IDS="$(grep -c '"id":' "$ACTIONS")"
 [[ "$N_IDS" -eq 15 ]] && ok "actions.json declares 15 actions" || fail "expected 15 actions, got $N_IDS"
 N_ROUTINE="$(grep -c '"id": "routine"' "$ACTIONS")"
