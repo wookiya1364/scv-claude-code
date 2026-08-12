@@ -1,5 +1,5 @@
 ---
-description: "Choose a model policy and apply it to every SCV command's frontmatter. Persists the choice in .env so /scv:sync can reapply on template updates."
+description: "Choose a model policy and apply it to every SCV command's frontmatter. Persists the choice in .env so /scv:sync can reapply on template updates. Use whenever the user wants to change which model SCV commands run on — not only when they type /scv:set-models."
 argument-hint: "[recommended|all-opus|all-sonnet|all-haiku|session-default]"
 allowed-tools:
   - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/apply-model-policy.sh:*)"
