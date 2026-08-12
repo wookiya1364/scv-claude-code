@@ -16,12 +16,23 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-REQUIRED_KEYS=(name version status last_updated standard_version merge_policy)
-# N/A stays valid: scv/REPORTING.md seeds as N/A, and pre-2.0.0 projects may
-# still carry N/A docs the user chose to keep outside scv/.
-# planned/in_progress/testing/done/obsolete are PLAN.md states (see PROMOTE.md §9).
-# obsolete marks a plan that has been superseded and is skipped by /scv:regression.
-VALID_STATUS="draft active deprecated N/A planned in_progress testing done obsolete"
+# Two schemas, because two kinds of file live under scv/.
+#
+# Workflow docs (PROMOTE.md / REPORTING.md) are shipped templates and carry the
+# standard-doc header. Promotion plans carry the PLAN schema declared in
+# scv/PROMOTE.md §4 — a completely different key set. This script used to apply
+# the standard-doc keys to plans too, which meant every plan an author wrote
+# from the documented template failed the check. Nothing caught it because the
+# only callers are tests whose fixtures were hand-built with the standard-doc
+# keys instead of the PLAN template.
+STANDARD_DOC_KEYS=(name version status last_updated standard_version merge_policy)
+PLAN_KEYS=(title slug author created_at status tags)
+# Status vocabularies are per-schema too. A merged list would let a plan claim
+# `status: draft` and a workflow doc claim `status: testing` — the two lifecycles
+# have nothing in common. PLAN states are PROMOTE.md §9; N/A stays valid for
+# workflow docs because scv/REPORTING.md seeds that way.
+STANDARD_DOC_STATUS="draft active deprecated N/A"
+PLAN_STATUS="planned in_progress testing done obsolete"
 VALID_POLICY="overwrite preserve merge-on-markers"
 # PLAN.md frontmatter `kind` (optional; defaults to feature when absent).
 # See PROMOTE.md §8d/§8e for epic/refactor flow, §8c for retirement.
@@ -30,7 +41,15 @@ VIOLATIONS=0
 
 check_file() {
   local file="$1"
+  local schema="${2:-standard-doc}"
   local rel="${file#$PROJECT_DIR/}"
+  local -a required
+
+  local valid_status
+  case "$schema" in
+    plan) required=("${PLAN_KEYS[@]}");         valid_status="$PLAN_STATUS" ;;
+    *)    required=("${STANDARD_DOC_KEYS[@]}"); valid_status="$STANDARD_DOC_STATUS" ;;
+  esac
 
   # Frontmatter must exist
   if ! grep -q "^---" "$file"; then
@@ -39,7 +58,7 @@ check_file() {
     return
   fi
 
-  for key in "${REQUIRED_KEYS[@]}"; do
+  for key in "${required[@]}"; do
     if ! yaml_has_key "$file" "$key"; then
       echo "✖ $rel: missing required key '$key'"
       VIOLATIONS=$((VIOLATIONS + 1))
@@ -52,8 +71,8 @@ check_file() {
   kind=$(yaml_get "$file" "kind")
 
   # Use space-padded exact match so values with "/" (e.g. N/A) work correctly
-  if [[ -n "$status" ]] && ! printf ' %s ' "$VALID_STATUS" | grep -qF " $status "; then
-    echo "✖ $rel: invalid status '$status' (expected: $VALID_STATUS)"
+  if [[ -n "$status" ]] && ! printf ' %s ' "$valid_status" | grep -qF " $status "; then
+    echo "✖ $rel: invalid status '$status' (expected: $valid_status)"
     VIOLATIONS=$((VIOLATIONS + 1))
   fi
   if [[ -n "$policy" ]] && ! echo "$VALID_POLICY" | grep -qw "$policy"; then
@@ -74,15 +93,13 @@ for doc in PROMOTE REPORTING; do
   [[ -f "$f" ]] && check_file "$f"
 done
 
+# Only the documented plan form is linted. scv/PROMOTE.md §3 defines a promotion
+# as a folder holding PLAN.md; flat scv/promote/*.md and */index.md appear
+# nowhere in that contract, so this script has no schema to hold them to and
+# does not invent one.
 shopt -s nullglob
-for f in "$PROJECT_DIR/scv/promote"/*.md; do
-  check_file "$f"
-done
 for f in "$PROJECT_DIR/scv/promote"/*/PLAN.md; do
-  check_file "$f"
-done
-for f in "$PROJECT_DIR/scv/promote"/*/index.md; do
-  check_file "$f"
+  check_file "$f" plan
 done
 shopt -u nullglob
 
