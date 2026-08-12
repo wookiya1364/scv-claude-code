@@ -21,6 +21,24 @@ Resolve the user's preferred language with this priority, then use it for ALL us
 
 Technical identifiers (tool names like `gh`, `glab`, `ffmpeg`, command names, file paths, env var names) stay as-is. If `.env` `SCV_LANG` is unset, suggest `/scv:help` once to lock the preference (don't block — fall back to auto-detect / English for now).
 
+## Plain language first
+
+Say it the short way first. A reader who understands the short version can ask
+for more; a reader lost in the long version asks for nothing.
+
+- One idea per sentence. If a sentence needs a comma to join two clauses, it is
+  usually two sentences.
+- Use the plain name, not the category name. "the file that records decisions"
+  lands faster than "the decision persistence layer".
+- Lead with what happens to the user, then why it happens.
+- A comparison to something ordinary is worth more than a precise description
+  the reader cannot picture. Use one when it gets there faster.
+- Define a term of art in the same breath you first use it, or drop the term.
+- Detail is not owed up front. Offer it, and give it when asked.
+
+This governs everything the user reads: questions, plans, progress reports,
+summaries, and explanations of what went wrong.
+
 ## Step 0 — Run --check
 
 ```bash
