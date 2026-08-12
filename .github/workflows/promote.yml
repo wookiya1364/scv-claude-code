@@ -1,0 +1,118 @@
+name: Promote and release
+
+# One button for the whole promotion chain. The branch ruleset requires a pull
+# request for every permanent branch, so this opens them, waits for their checks,
+# and merges — it never pushes to a permanent branch directly.
+#
+# Manual trigger only. That is the human gate: nothing here runs on a schedule
+# or on push.
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "Tag main and publish a GitHub release when the chain lands"
+        type: boolean
+        default: true
+      notes_file:
+        description: "Release notes path (blank = generate from commits)"
+        type: string
+        required: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: promote
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      # scv-core stores SCV_WRAPPER_SYNC_TOKEN; the wrappers store
+      # SCV_CORE_SYNC_TOKEN. One file works in all three by trying both.
+      GH_TOKEN: ${{ secrets.SCV_WRAPPER_SYNC_TOKEN || secrets.SCV_CORE_SYNC_TOKEN || github.token }}
+      REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.SCV_WRAPPER_SYNC_TOKEN || secrets.SCV_CORE_SYNC_TOKEN || github.token }}
+
+      - name: Promote develop to stage, then stage to main
+        run: |
+          set -uo pipefail
+
+          promote() {
+            local head="$1" base="$2"
+            if [ -z "$(git log --oneline "origin/${base}..origin/${head}")" ]; then
+              echo "::notice::${head} has nothing ${base} is missing — skipping."
+              return 0
+            fi
+
+            local url
+            if ! url=$(gh pr create --base "$base" --head "$head" \
+                --title "chore: promote ${head} → ${base}" \
+                --body "Opened by the promote workflow. ${head} is ahead of ${base}."); then
+              url=$(gh pr list --base "$base" --head "$head" --state open --json url --jq '.[0].url // ""')
+              [ -n "$url" ] || { echo "::error::Could not open or find a ${head} → ${base} PR."; return 1; }
+              echo "Reusing the open PR: $url"
+            fi
+            local number="${url##*/}"
+
+            echo "Waiting for checks on #${number}..."
+            if gh pr checks "$number" >/dev/null 2>&1 \
+               || gh pr checks "$number" 2>&1 | grep -qv 'no checks reported'; then
+              gh pr checks "$number" --watch --fail-fast || {
+                echo "::error::Checks failed on #${number} (${head} → ${base}). The chain stops here; the PR stays open."
+                return 1
+              }
+            else
+              echo "::notice::#${number} has no checks to wait for."
+            fi
+
+            gh pr merge "$number" --merge || {
+              echo "::error::Could not merge #${number}."
+              return 1
+            }
+            echo "Merged #${number} (${head} → ${base})."
+            git fetch --quiet origin
+          }
+
+          git fetch --quiet origin
+          promote develop stage || exit 1
+          promote stage main || exit 1
+
+      - name: Tag main and publish the release
+        if: inputs.release
+        env:
+          # Through env, never spliced into the script body: `${{ }}` inside
+          # `run:` is substituted before bash sees it, so a crafted input would
+          # execute as shell.
+          NOTES_FILE: ${{ inputs.notes_file }}
+        run: |
+          set -uo pipefail
+          git fetch --quiet origin
+          git checkout --quiet origin/main
+
+          version="$(tr -d '[:space:]' < VERSION)"
+          tag="v${version}"
+
+          if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null 2>&1; then
+            echo "::notice::${tag} already exists — nothing to publish."
+            exit 0
+          fi
+
+          git tag -a "$tag" -m "${REPO#*/} ${tag}"
+          git push origin "$tag"
+
+          notes="${NOTES_FILE:-}"
+          if [ -n "$notes" ] && [ -f "$notes" ]; then
+            gh release create "$tag" --title "${REPO#*/} ${tag}" --notes-file "$notes"
+          else
+            gh release create "$tag" --title "${REPO#*/} ${tag}" --generate-notes
+          fi
+          echo "Published ${tag}."
