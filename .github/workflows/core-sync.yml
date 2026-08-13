@@ -101,11 +101,21 @@ jobs:
           declined_pr=$(gh pr list --base develop --head "$branch" --state closed \
             --json url,state --jq '[.[] | select(.state == "CLOSED")] | .[0].url // ""')
 
-          # A closed (not merged) PR is a maintainer declining this upgrade. The
-          # branch survives a close, so without this the next run would rebuild
-          # and re-propose it, and declining would never stick.
-          if [[ -n "$declined_pr" && -z "$open_pr" ]]; then
-            echo "::notice::${TARGET_VERSION} was declined ($declined_pr). Delete $branch to propose it again."
+          # A closed (not merged) PR is a maintainer declining this upgrade, and the
+          # branch survives a close, so without this the next run rebuilds and
+          # re-proposes it.
+          #
+          # The remote_sha condition is what makes the printed remedy true.
+          # `gh pr list --head` matches the PR record's stored headRefName, which
+          # GitHub keeps forever — deleting the branch does NOT clear the match.
+          # Requiring the branch to still exist is what turns "delete it" into a
+          # real escape instead of a permanent, silent stop.
+          #
+          # Warning, not notice: this also suppresses a same-version repair (the
+          # pin is re-proposed when the vendored tree fails verification), and a
+          # green run that quietly did nothing is the failure mode worth seeing.
+          if [[ -n "$declined_pr" && -z "$open_pr" && -n "$remote_sha" ]]; then
+            echo "::warning::${TARGET_VERSION} was declined ($declined_pr) and $branch still exists, so it will not be re-proposed. Delete the branch to propose it again."
             echo "existing=yes" >> "$GITHUB_OUTPUT"
             echo "branch=$branch" >> "$GITHUB_OUTPUT"
             exit 0
@@ -143,18 +153,24 @@ jobs:
 
           if ! git diff --quiet "origin/$branch" HEAD; then
             # The remote branch was cut from an older develop; rebuild it on the
-            # current one. Refuse if anyone but this bot last touched the branch —
-            # a maintainer resolving a conflict there must not be overwritten.
-            tip_author=$(git log -1 --format='%ae' "origin/$branch")
-            if [[ "$tip_author" != "$BOT_EMAIL" ]]; then
-              echo "::error::$branch was last pushed by $tip_author, not this job. Refusing to force-push over someone else's work; resolve it by hand or delete the branch." >&2
-              exit 1
-            fi
-            if ! git push --force-with-lease="refs/heads/$branch:$remote_sha" origin "$branch"; then
+            # current one — unless someone else has been working there.
+            #
+            # %ce, not %ae. Git carries the original AUTHOR through amend, rebase
+            # and cherry-pick, so a maintainer resolving a conflict on a bot
+            # commit still reads as the bot by author. The committer is who
+            # actually created the object, which is the question being asked.
+            tip_committer=$(git log -1 --format='%ce' "origin/$branch")
+            if [[ "$tip_committer" != "$BOT_EMAIL" ]]; then
+              # Skip, do not fail. Someone working on the branch is a normal
+              # state, and turning the nightly run red for it trains people to
+              # ignore it. Their work stays; the PR below is handled as usual.
+              echo "::warning::$branch was last committed by $tip_committer, not this job — leaving it alone. Resolve it by hand, or delete the branch to let the sync rebuild it."
+            elif ! git push --force-with-lease="refs/heads/$branch:$remote_sha" origin "$branch"; then
               echo "::error::Could not refresh $branch — the remote moved after this run read it. Re-run the workflow." >&2
               exit 1
+            else
+              echo "::notice::Refreshed $branch onto current develop."
             fi
-            echo "::notice::Refreshed $branch onto current develop."
           fi
 
           # Whether or not the tree moved, a branch with no open PR needs one.
