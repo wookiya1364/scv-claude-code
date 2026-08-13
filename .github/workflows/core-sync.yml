@@ -163,8 +163,18 @@ jobs:
             if [[ "$tip_committer" != "$BOT_EMAIL" ]]; then
               # Skip, do not fail. Someone working on the branch is a normal
               # state, and turning the nightly run red for it trains people to
-              # ignore it. Their work stays; the PR below is handled as usual.
-              echo "::warning::$branch was last committed by $tip_committer, not this job — leaving it alone. Resolve it by hand, or delete the branch to let the sync rebuild it."
+              # ignore it. Their work stays.
+              #
+              # Stop here rather than falling through, though: this run neither
+              # pushed nor validated what is on that branch, and the PR body
+              # below attests to checksum, contract and regression checks. Those
+              # ran against the local commit just discarded. Opening a PR that
+              # claims them for someone else's half-finished tree is how an
+              # unverified payload gets merged on trust.
+              echo "::warning::$branch was last committed by $tip_committer, not this job — leaving it alone and opening no PR for it. Resolve it by hand, or delete the branch to let the sync rebuild it."
+              echo "existing=yes" >> "$GITHUB_OUTPUT"
+              echo "branch=$branch" >> "$GITHUB_OUTPUT"
+              exit 0
             elif ! git push --force-with-lease="refs/heads/$branch:$remote_sha" origin "$branch"; then
               echo "::error::Could not refresh $branch — the remote moved after this run read it. Re-run the workflow." >&2
               exit 1
@@ -205,7 +215,12 @@ jobs:
           updater or atomic-swap files changed. The complete adversarial suite
           remains an explicit local maintainer preflight.
 
-          This PR was opened by the scheduled/manual core sync workflow." 2>&1); then
+          This PR was opened by the scheduled/manual core sync workflow.
+
+          **Do not want this version?** Close this PR and leave the branch in
+          place — that is what tells the sync you declined, and it stops
+          re-proposing. GitHub offers \"Delete branch\" in the same box; taking it
+          re-opens the question on the next run." 2>&1); then
             printf '%s\n' "$output" >&2
             echo "::error::PR creation failed. Enable GitHub Actions PR creation in repository settings or configure SCV_CORE_SYNC_TOKEN with Contents and Pull requests write access." >&2
             exit 1
