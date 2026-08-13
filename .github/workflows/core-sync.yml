@@ -87,31 +87,54 @@ jobs:
           TARGET_VERSION: ${{ steps.version.outputs.version }}
         run: |
           branch="chore/core-v${TARGET_VERSION}"
-          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
-            pr_url=$(gh pr list \
-              --base develop \
-              --head "$branch" \
-              --state open \
-              --json url \
-              --jq '.[0].url // ""')
-            if [[ -n "$pr_url" ]]; then
-              echo "existing=yes" >> "$GITHUB_OUTPUT"
-              echo "Existing core update PR: $pr_url"
-            else
-              echo "existing=no" >> "$GITHUB_OUTPUT"
-            fi
-            echo "branch=$branch" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          git switch -c "$branch"
           git config user.name "scv-core-sync[bot]"
           git config user.email "scv-core-sync[bot]@users.noreply.github.com"
+          git switch -c "$branch"
           git add \
             vendor/scv-core core.lock TEMPLATE_VERSION host-profile.env \
             scripts template DeckUI assets protocols commands tests \
             ralph-template-scv.md
           git diff --cached --check
+
+          # A sync must only ever move the vendored payload forward. If building
+          # it removed anything outside that tree, something is wrong with the
+          # sync itself — stop rather than propose a PR that deletes repository
+          # files.
+          stray_deletes=$(git diff --cached --name-only --diff-filter=D \
+            | grep -v '^vendor/scv-core/' || true)
+          if [[ -n "$stray_deletes" ]]; then
+            echo "::error::Core sync would delete files outside the vendored payload:" >&2
+            printf '%s\n' "$stray_deletes" >&2
+            exit 1
+          fi
+
           git commit -m "chore(core): sync scv-core v${TARGET_VERSION}"
+
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            git fetch --quiet origin "refs/heads/$branch:refs/remotes/origin/$branch"
+            if git diff --quiet "origin/$branch" HEAD; then
+              # Same tree — the open PR is already current.
+              echo "existing=yes" >> "$GITHUB_OUTPUT"
+              echo "branch=$branch" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            # The remote branch was cut from an older develop. Left alone it
+            # becomes a revert of everything merged since — the branch still
+            # carries the right vendor payload, but merging it rolls back
+            # unrelated work. Rebuild it on top of current develop instead.
+            if ! git push --force-with-lease origin "$branch"; then
+              echo "::error::Could not refresh the stale sync branch $branch." >&2
+              exit 1
+            fi
+            echo "::notice::Refreshed $branch onto current develop."
+            pr_url=$(gh pr list --base develop --head "$branch" --state open \
+              --json url --jq '.[0].url // ""')
+            [[ -n "$pr_url" ]] && echo "existing=yes" >> "$GITHUB_OUTPUT" \
+                               || echo "existing=no" >> "$GITHUB_OUTPUT"
+            echo "branch=$branch" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           if ! git push --set-upstream origin "$branch"; then
             echo "::error::Branch push failed. Configure SCV_CORE_SYNC_TOKEN with repository Contents write access, or grant contents:write to the workflow token." >&2
             exit 1
