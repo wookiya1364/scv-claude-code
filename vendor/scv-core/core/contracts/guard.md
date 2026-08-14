@@ -98,6 +98,11 @@ session. What the guard enforces is "an SCV action ran in this session", not
 provenance gate at merge time. The two layers do different jobs and must not be
 described as if they did the same one.
 
+A third gate, `check-vendor-provenance.sh`, sits beside the provenance one and
+answers a different question again: not what produced a change, but who moved
+the pinned Core. It is not part of this contract and never denies a tool call —
+it is named here only so the three are not mistaken for one.
+
 ## Self-block audit
 
 Every protocol that writes a guarded path must run an action script before that
