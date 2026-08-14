@@ -68,6 +68,20 @@ if node "$DECKDOC/static-mermaid.mjs" "$TMP/deck.html" > "$TMP/embed.out" 2> "$T
   hasnt "$TMP/deck.html" 'id="scv-static-reveal"'               "build-only reveal style stripped"
   hasnt "$TMP/deck.html" 'data-scv-mermaid-static-done'         "completion marker stripped"
   has   "$TMP/deck.html" 'id="scv-mermaid-contrast"'            "contrast overrides survive the embed"
+  # Mermaid bakes its palette three ways and each defeats ordinary CSS. If any
+  # comes back, the diagram freezes to whatever the author pasted into the fence
+  # and the deck can no longer theme what it renders.
+  has   "$TMP/deck.html" 'class="scv-mmd"'                      "the svg is normalized for restyling"
+  has   "$TMP/deck.html" 'id="scv-mmd-1"'                       "the svg id is deterministic (rebuilds stay byte-identical)"
+  if grep -qE '#mermaid-[0-9]' "$TMP/deck.html"; then
+    echo "  ✗ id-scoped mermaid rules survived — author CSS cannot win"; fail=$((fail+1))
+  else pass=$((pass+1)); fi
+  # Look inside the SVG only. The page's own stylesheet carries a comment that
+  # quotes the very attribute this checks for, and a whole-file grep reported the
+  # explanation of the fix as the bug.
+  if sed -n '/<svg/,/<\/svg>/p' "$TMP/deck.html" | grep -qE 'style="[^"]*(fill|stroke):'; then
+    echo "  ✗ inline colour attributes survived — classDef nodes stay frozen"; fail=$((fail+1))
+  else pass=$((pass+1)); fi
   head -c 15 "$TMP/deck.html" | grep -qi '<!doctype' \
     && pass=$((pass+1)) || { echo "  ✗ doctype preserved/prepended"; fail=$((fail+1)); }
 else
@@ -81,5 +95,6 @@ else
 fi
 
 echo ""
+
 echo "── test-deck-static-mermaid: $pass passed, $fail failed ──"
 exit $(( fail > 0 ? 1 : 0 ))

@@ -91,7 +91,7 @@ const looksRendered = (dom) =>
 // MUST be async (spawn, not spawnSync): the page is served by THIS process's
 // http server, so a blocked event loop would deadlock Chrome's page load until
 // its timeout — the classic self-serve pitfall.
-function renderOnce(extraArgs) {
+function renderOnce(extraArgs, useProfile = false) {
   const profile = mkdtempSync(join(tmpdir(), "scv-deck-chrome-"));
   return new Promise((resolve) => {
     const child = spawn(
@@ -102,7 +102,12 @@ function renderOnce(extraArgs) {
         "--hide-scrollbars",
         "--no-first-run",
         "--disable-extensions",
-        `--user-data-dir=${profile}`,
+        // A --user-data-dir makes --dump-dom emit nothing at all on Chrome 149
+        // (0 bytes, exit 0), so every attempt in the ladder below failed and the
+        // deck silently shipped the CDN loader instead of a baked SVG.
+        // --incognito gives the same clean-state isolation the profile was there
+        // for. The profile form stays reachable for hosts without incognito.
+        ...(useProfile ? [`--user-data-dir=${profile}`] : ["--incognito"]),
         "--virtual-time-budget=30000",
         "--dump-dom",
         url,
@@ -137,8 +142,18 @@ function renderOnce(extraArgs) {
 let dom = "";
 // New headless first; some sandboxed/CI environments need --no-sandbox; very old
 // Chrome only knows the legacy --headless flag.
-for (const attempt of [["--headless=new"], ["--headless=new", "--no-sandbox"], ["--headless", "--no-sandbox"]]) {
+// Two independent things silence --dump-dom on this browser: a --user-data-dir,
+// and the absence of --no-sandbox. The old ladder varied only the second, so on
+// a machine that needs both it never produced a single byte and the skip looked
+// like "offline? CDN blocked?" rather than a browser-flag problem.
+for (const attempt of [
+  ["--headless=new", "--no-sandbox"],
+  ["--headless=new"],
+  ["--headless", "--no-sandbox"],
+]) {
   dom = await renderOnce(attempt);
+  if (dom && dom.includes("</html>")) break;
+  dom = await renderOnce(attempt, true);
   if (looksRendered(dom)) break;
 }
 server.close();
@@ -155,6 +170,64 @@ dom = dom
   .replace(/<script type="module" id="scv-mermaid-loader">[\s\S]*?<\/script>/, "")
   .replace(/<style id="scv-static-reveal">[\s\S]*?<\/style>/, "")
   .replace(/ data-scv-mermaid-static-done="1"/, "");
+// ---- make the frozen SVG restylable ------------------------------------
+// Mermaid bakes its palette three ways, and each defeats ordinary CSS:
+//   - an internal <style> scoped to #mermaid-<timestamp>, specificity (1,1,0)
+//   - !important on many of those rules
+//   - inline style="fill:… !important" on classDef nodes, which nothing beats
+// Strip all three so the page's own tokens can paint the diagram. Without this
+// the palette an author pasted into the fence is frozen for the life of the
+// file, and the deck cannot theme what it renders.
+//
+// Fails OPEN: a markup change in a future mermaid degrades to today's baked
+// colours rather than failing the build.
+function normalizeMermaidSvg(input) {
+  try {
+    return input.replace(/<svg\b[^>]*\bid="mermaid-\d+"[\s\S]*?<\/svg>/g, (svg) => {
+      let s = svg;
+      const idm = s.match(/id="(mermaid-\d+)"/);
+      if (!idm) return svg;
+      const id = idm[1];
+
+      // ID-scoped -> class-scoped, so author rules at (0,1,0) can win.
+      s = s.split("#" + id).join(".scv-mmd");
+      s = s.replace(/\s*!important/g, "");
+
+      // The inline attribute is the only carrier no stylesheet can out-rank.
+      s = s.replace(/style="([^"]*)"/g, (m, decls) => {
+        const kept = decls
+          .split(";")
+          .filter((d) => d.trim() && !/^\s*(fill|stroke|color|background(-color)?)\s*:/i.test(d));
+        return kept.length ? 'style="' + kept.join(";") + '"' : "";
+      });
+
+      // A build-timestamp id makes every rebuild a different file; this artifact
+      // is committed on every promote. Fixed id, stable bytes, and url(#…)
+      // marker references stay consistent because the rename is global.
+      s = s.split(id).join("scv-mmd-1");
+      s = s.replace(/<svg\b/, '<svg class="scv-mmd"');
+
+      // Natural size, not 100% of a 694px column. The viewBox is the only place
+      // the real dimensions survive; width="100%" plus max-width scaled a
+      // 1437px graph to 0.483 and rendered 16px labels at 7.7px.
+      const vb = s.match(/viewBox="([^"]+)"/);
+      if (vb) {
+        const p = vb[1].trim().split(/\s+/).map(Number);
+        if (p.length === 4 && p[2] > 0 && p[3] > 0) {
+          s = s.replace(/\swidth="[^"]*"/, "").replace(/\sheight="[^"]*"/, "");
+          s = s.replace(/style="[^"]*max-width:[^"]*"/g, "");
+          s = s.replace(/<svg\b/, '<svg width="' + p[2] + '" height="' + p[3] + '"');
+        }
+      }
+      return s;
+    });
+  } catch (err) {
+    console.error("static-mermaid: normalization skipped (" + err.message + ")");
+    return input;
+  }
+}
+dom = normalizeMermaidSvg(dom);
+
 if (!/^\s*<!doctype/i.test(dom)) dom = "<!DOCTYPE html>\n" + dom;
 if (!dom.endsWith("\n")) dom += "\n";
 
