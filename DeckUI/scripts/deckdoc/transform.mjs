@@ -25,6 +25,26 @@ const txt = (n) =>
         ? n.children.map(txt).join("")
         : n.value || "";
 
+// A list is a key/value table only when every item is exactly
+// "**Label** <separator> value" — one paragraph, a leading strong node, and text
+// after it. Returns [[label, value], …] or null.
+function kvRows(node) {
+  const items = node.children || [];
+  if (items.length < 2) return null;
+  const rows = [];
+  for (const li of items) {
+    const kids = li.children || [];
+    if (kids.length !== 1 || kids[0].type !== "paragraph") return null;
+    const parts = kids[0].children || [];
+    if (parts.length < 2 || parts[0].type !== "strong") return null;
+    const label = txt(parts[0]).trim();
+    const rest = parts.slice(1).map(txt).join("").replace(/^\s*[—–\-:·]\s*/, "").trim();
+    if (!label || !rest) return null;
+    rows.push([label, rest]);
+  }
+  return rows;
+}
+
 // Flatten a list into display lines. Each item's OWN text = its non-list block
 // children joined with a space (so words never fuse — txt()'s ""-join is only
 // safe for inline nodes). A nested sub-list is indented one level and marked
@@ -77,12 +97,34 @@ function blockOf(node, t) {
   switch (node.type) {
     case "paragraph":
       return { type: "para", text: txt(node) };
-    case "list":
+    case "list": {
+      // A list of "**Label** — value" lines is a key/value table wearing bullets.
+      // render.mjs has had a "kv" case since the start and nothing ever produced
+      // one, because this branch flattens the mdast first and txt() destroys the
+      // strong node that marks the label.
+      //
+      // Deliberately narrow: EVERY item must be a single paragraph that opens
+      // with a strong node and has text after it, and the list must not be
+      // ordered or nested. A list where only some items match stays a list —
+      // guessing there would silently restructure ordinary prose.
+      const kv = !node.ordered && kvRows(node);
+      if (kv) return { type: "kv", rows: kv };
       // items = flat marked lines (slide renderer); tree = nested (document renderer).
       // ordered carried so the renderer emits <ol> with correct per-level numbering.
       return { type: "bullets", ordered: !!node.ordered, items: listLines(node, 0), tree: listItemsTree(node) };
+    }
     case "code":
-      if (node.lang === "mermaid") return { type: "mermaid", code: node.value };
+      if (node.lang === "mermaid") {
+        // Drop a leading %%{init:…}%% directive. promote.md tells the author to
+        // paste a fixed palette into every fence, and that directive overrides
+        // the renderer's own theme — so the deck's colours lived in prose
+        // authoring instructions and could not follow the page.
+        //
+        // The .md on disk is untouched; only the copy the deck renders loses it.
+        // GitHub still sees the directive, which is what it was written for.
+        const code = node.value.replace(/^\s*%%\{\s*init\s*:[\s\S]*?\}%%\s*\n?/, "");
+        return { type: "mermaid", code };
+      }
       if (node.lang === "screen") {
         // Claude Code authors a screen mockup as a JSON object inside a ```screen fence
         // (see commands/promote.md for the schema) — parsed here, deterministically,
