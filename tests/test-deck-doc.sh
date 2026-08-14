@@ -102,9 +102,21 @@ has "$NS" 'pre class="code"'     "code block"
 # palette must stay readable on both themes (transparent card + theme-var
 # edges/labels; matches the reference deck's scv-mermaid-contrast block)
 has "$NS" 'id="scv-mermaid-contrast"'                        "mermaid contrast style block"
-has "$NS" 'pre.mermaid{background:transparent!important}'    "mermaid card transparent override"
-has "$NS" 'stroke:var(--fg)!important'                       "mermaid edges use theme fg"
-has "$NS" 'background-color:var(--bg)!important'             "mermaid edge labels use theme bg"
+# The palette is no longer fought for with !important. static-mermaid.mjs strips
+# the id-scoped rules, the !important flags and the inline colour attributes from
+# the baked SVG, so ordinary specificity wins and the rules read as plain CSS.
+has  "$NS" 'pre.mermaid .flowchart-link'                     "mermaid edges are token-painted"
+has  "$NS" 'stroke:var(--fg-body)'                           "mermaid edges use a theme token"
+has  "$NS" 'pre.mermaid .node rect'                          "mermaid nodes are token-painted"
+hasnt "$NS" 'stroke:var(--fg)!important'                     "mermaid no longer needs !important"
+# The figure breaks out of the 840px text measure and stops shrinking at 900px.
+# Scaling all the way down is what rendered 16px labels at 7.7px.
+has  "$NS" '100cqw'                                          "the figure measures the reading area, not the text column"
+has  "$NS" 'min-width:900px'                                 "the diagram stops shrinking and scrolls instead"
+# <pre> defaults to white-space:pre, which inherits into every label and stopped
+# mermaid's two-line edge boxes from ever wrapping.
+has  "$NS" 'pre.mermaid foreignObject'                       "labels are allowed to wrap inside the pre"
+hasnt "$NS" 'fontFamily: "inherit"'                          "mermaid gets a real font stack, not a keyword it cannot measure"
 
 # 2b. structure fidelity — nested lists render as REAL nested <ul> (tree), not fused/marked
 has   "$NS" '<li>다른 상위 항목</li>' "plain top-level bullet rendered"
@@ -250,12 +262,16 @@ has "$DOC" '".slide-page.active pre.mermaid"' "mermaid run is scoped to the ACTI
 has "$DOC" 'beforeprint'                      "printing forces a full (unscoped) mermaid pass so unvisited pages still render"
 
 # 12. dark-default theme (toggle button, pre-paint init, no FOUC) + draggable panel resize
-has   "$NS" ":root{--fg:#e7e9f0"            "dark palette is the :root default"
-has   "$NS" 'html[data-theme="light"]'      "light palette is an explicit override, not the default"
-has   "$NS" 'id="scvThemeBtn"'              "theme toggle button present in the header"
-has   "$NS" 'function scvToggleTheme'       "theme toggle handler present"
-has   "$NS" "localStorage.getItem('scv-deck-theme'"  "theme choice is read back from localStorage"
-has   "$DOC" "localStorage.getItem('scv-deck-theme')==='light')document.documentElement.setAttribute" "pre-paint theme init runs before <style>/<body> (no flash of the wrong theme)"
+# Dark only, by the owner's decision — their deck skill pins "dark 테마". The
+# light values survive in exactly one place a reader cannot reach: @media print.
+has   "$NS" "--bg:#0a0a0a"                  "the dark ground is the only screen palette"
+hasnt "$NS" 'html[data-theme="light"]'      "no second palette a reader can select"
+has   "$NS" "@media print"                  "paper still gets light values"
+has   "$NS" "--primary-text:#fc7184"        "the rose has a text form (the fill form is 2.50:1 as text)"
+hasnt "$NS" 'id="scvThemeBtn"'              "no theme toggle button"
+hasnt "$NS" 'function scvToggleTheme'       "no theme toggle handler"
+hasnt "$NS" "scv-deck-theme"                "no persisted theme choice"
+hasnt "$DOC" "scv-deck-theme"               "no pre-paint theme script — there is one theme"
 has   "$DOC" 'id="scvResizeHandle"'          "panel resize handle present (needs a source panel — checked on DOC, not NS)"
 has   "$DOC" "addEventListener('mousedown'"  "resize drag handler wired"
 has   "$DOC" 'Math.max(320, window.innerWidth - 420)' "resize clamps to the original SourcePanel bounds (min 320px, main keeps ≥420px)"
@@ -315,10 +331,12 @@ has "$TMP/typehijack.html" 'class="wf-frame"' "a \"type\":\"table\" key inside t
 
 # 14e. WCAG contrast fixes — the two previously-hardcoded white-on-accent rules now use
 #      theme-aware on-* variables (dark-default primary #7c93ff read 2.81:1 with white).
-has "$NS" '--on-primary:#12163a' "dark theme defines a readable on-primary text color (not hardcoded white)"
-has "$NS" '--on-primary:#ffffff' "light theme's on-primary override is declared explicitly"
+has "$NS" '--on-primary:#fafafa' "text on the brand plate is declared (7.58:1 on #a50036)"
+has "$NS" '--on-primary:#ffffff' "print declares its own on-primary"
 has "$NS" '--on-warn'            "on-warn text color variable defined (lint-count badge)"
-has "$NS" 'color:var(--on-primary)' "active nav pill uses the theme-aware on-primary color"
+# The active pill is the LIGHT rose carrying near-black. Filling it with the dark
+# rose measures 2.50:1 against the ground, so which pill is active is unreadable.
+has "$NS" '.deck-nav-item.active{background:var(--primary-text);color:var(--bg)' "the active pill is legible against the ground"
 has "$NS" 'color:var(--on-warn)'    "lint-count badge uses the theme-aware on-warn color"
 hasnt "$NS" '.deck-nav-item.active{background:var(--primary);color:#fff' "active nav pill no longer hardcodes white text"
 hasnt "$NS" '.lint-count{display:inline-block;background:var(--warn);color:#fff' "lint-count badge no longer hardcodes white text"
