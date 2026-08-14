@@ -247,42 +247,100 @@ function renderScreen(b, t) {
     .join("");
   // theme absent (the common case — no project tokens told to us) → identical to before,
   // zero behavior change. theme present → inline style overrides just the validated keys.
-  return `<div class="wf-screen"${themeStyleOf(b.theme)}>${b.title ? `<div class="wf-screen-label">${esc(b.title)}</div>` : ""}<div class="wf-frame">${nav}<div class="wf-body">${body}</div></div></div>`;
+  // The title becomes browser chrome inside the frame rather than a caption above
+  // it — the reference's ScreenFrame. The label already exists in the authored
+  // JSON, so this is the one reference primitive that ports whole.
+  const chrome = b.title
+    ? `<div class="wf-chrome"><span class="wf-dot wf-dot-r"></span><span class="wf-dot wf-dot-y"></span><span class="wf-dot wf-dot-g"></span><span class="wf-url">${esc(b.title)}</span></div>`
+    : "";
+  return `<div class="wf-screen"${themeStyleOf(b.theme)}><div class="wf-frame">${chrome}${nav}<div class="wf-body">${body}</div></div></div>`;
 }
 
 const CSS = `
-/* 다크가 기본값(--bg/--panel 등 전부). 라이트는 html[data-theme="light"] 오버라이드 —
+/* Dark only — the light token set and its toggle were removed:
    FE 프로젝트의 다크-기본+라이트-오버라이드 관례와 동일한 모양(속성 하나만 바뀌면
    전체가 재테마된다). head 맨 앞 인라인 스크립트가 pre-paint 로 저장된 선택을 적용해
    깜빡임(FOUC)이 없다. */
-:root{--fg:#e7e9f0;--muted:#9096a8;--bg:#171922;--panel:#1d2029;--border:#2c3040;--primary:#7c93ff;--warn:#e0ab48;--danger:#ef6b6b;--good:#3ecf8e;--page-bg:#0d0e13;--on-primary:#12163a;--on-warn:#241a06;}
-html[data-theme="light"]{--fg:#1a1d24;--muted:#5b6270;--bg:#ffffff;--panel:#f6f7f9;--border:#e3e6ea;--primary:#2f6feb;--warn:#b8860b;--danger:#c0392b;--good:#1e8e5a;--page-bg:#f6f7f9;--on-primary:#ffffff;}
+/* Dark only. Ported from the owner's DesignSystem .dark block (shadcn oklch ->
+   sRGB, every neutral at chroma 0). The blue-cast greys this replaces
+   (#171922 / #1d2029 / #2c3040 / #9096a8) were the single loudest reason the
+   two decks read as different systems.
+
+   Contrast figures are WCAG 2.x, measured against the surface named. */
+:root{
+  /* surfaces */
+  --bg:#0a0a0a;                  /* the one ground */
+  --panel:#171717;               /* cards, aside, code */
+  --surface-2:#121212;           /* zebra rows, quiet fills */
+  --surface-3:#151515;           /* table head, code block */
+
+  /* text */
+  --fg:#fafafa;                  /* 18.97:1 on --bg */
+  --fg-body:#e2e2e2;             /* 15.28:1 on --bg  · body copy */
+  --fg-soft:#d6d6d6;             /* 13.62:1 on --bg  · text inside a tinted card */
+  --muted-foreground:#a1a1a1;    /*  7.66:1 on --bg  · 6.94:1 on --panel */
+
+  /* lines — alpha so ONE value composites correctly over bg and panel alike */
+  --border:rgba(255,255,255,.10);
+  --border-strong:#707070;       /* load-bearing rules. Measured where it actually
+                                    sits, not on --bg: 3.62:1 on --panel (node
+                                    fill), 3.69:1 on --surface-3 (figure ground),
+                                    5.87:1 on --bg. #4d4d4d cleared 3:1 against
+                                    --bg alone and failed at 2.12:1 on a node. */
+  --ring:#737373;                /*  4.18:1 on --bg */
+
+  /* brand — the owner's rose, kept for a public product on their say-so.
+     TWO values, because one cannot do both jobs: oklch(.455 .188 13.697)
+     = #a50036 measures 2.50:1 as text on --bg and is unreadable. The text
+     value is the same hue lifted in lightness only. */
+  --primary:#a50036;             /* fill · white on it 7.58:1 */
+  --primary-text:#fc7184;        /* text · 7.39:1 on --bg · 6.69:1 on --panel */
+  --on-primary:#fafafa;          /* 7.58:1 on the --primary plate */
+
+  /* status */
+  --good:#4bd39a;                /*  9.53:1 on --bg */
+  --warn:#e3b153;                /*  9.18:1 on --bg */
+  --danger:#f4837f;              /*  7.22:1 on --bg */
+  --on-warn:#241a06;             /*  8.72:1 on the --warn plate */
+}
 *{box-sizing:border-box}
 html,body{height:100%}
 html{scroll-behavior:smooth}
-body{margin:0;font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR",sans-serif;color:var(--fg);background:var(--page-bg)}
+body{margin:0;font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR",sans-serif;color:var(--fg);background:var(--bg)}
+/* Controls do not inherit the document font — a UA default applies unless asked.
+   Six controls below set font-size alone or an invalid \`font:\` shorthand, and
+   all of them rendered in 13.333px/400/Arial. This one line is what makes the
+   per-control rules that follow actually reach the element. */
+button,input,select,textarea{font:inherit;color:inherit}
 /* 문서 = 스크롤되는 본문(좌) + 상시 원문 마크다운 패널(우, sticky) — 이게 scv:deck 의
    정체성이다: 렌더링과 원문이 늘 같은 화면에 나란히 있어야 서로 어긋나지 않았다는 게
    보장된다. 인쇄 시에는 패널을 접고 본문 뒤에 원문을 부록으로 붙인다(.print-source). */
-.shell{display:flex;height:100vh;overflow:hidden}
-.scroll-main{flex:1;min-width:0;overflow-y:auto}
-.wrap{max-width:840px;margin:0 auto;background:var(--bg);min-height:100%;padding:0 clamp(20px,5vw,56px) 96px;box-shadow:0 0 0 1px var(--border)}
-header.doc{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--border);margin:0 calc(clamp(20px,5vw,56px)*-1);padding:18px clamp(20px,5vw,56px);display:flex;align-items:center;gap:14px;justify-content:space-between}
-header.doc h1{font-size:22px;margin:0;font-weight:700}
+/* Three rows over the viewport: header, content, footer. The header and the
+   footer are chrome and must not scroll away with the text — before this they
+   lived inside .wrap and pushed 268px of nav in front of the first sentence. */
+.shell{display:grid;grid-template-rows:auto 1fr auto;height:100svh;overflow:hidden}
+.shell-mid{display:flex;min-height:0;overflow:hidden}
+/* A container so a figure can measure the READING area and break out of the
+   840px text column. 100vw would count the source panel too and push the
+   diagram under it. */
+.scroll-main{flex:1;min-width:0;overflow-y:auto;container-type:inline-size}
+.wrap{--doc-pad:clamp(20px,5vw,56px);max-width:840px;margin:0 auto;min-height:100%;padding:0 var(--doc-pad) 96px}
+header.doc{display:flex;align-items:center;gap:16px;min-width:0;background:var(--bg);border-bottom:1px solid var(--border);padding:11px 20px}
+header.doc h1{font-size:15px;font-weight:600;margin:0;flex-shrink:0;max-width:34ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--fg)}
 .header-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
-.theme-toggle,.panel-toggle{flex-shrink:0;font:600 12px/1 inherit;color:var(--muted);background:var(--panel);border:1px solid var(--border);border-radius:7px;padding:7px 11px;cursor:pointer}
-.theme-toggle:hover,.panel-toggle:hover{background:var(--border);color:var(--fg)}
+.panel-toggle{flex-shrink:0;font-weight:600;font-size:12px;line-height:1;color:var(--muted-foreground);background:var(--panel);border:1px solid var(--border);border-radius:7px;padding:7px 11px;cursor:pointer}
+.panel-toggle:hover{background:var(--border);color:var(--fg)}
 .panel-toggle .kbd{opacity:.55;margin-left:4px}
 .source-panel{position:relative;width:min(440px,38vw);flex-shrink:0;border-left:1px solid var(--border);background:var(--panel);display:flex;flex-direction:column}
 .source-panel.closed{display:none}
 .panel-resize-handle{position:absolute;left:0;top:0;bottom:0;width:7px;margin-left:-4px;cursor:col-resize;z-index:6}
 .panel-resize-handle:hover{background:rgba(127,137,160,.25)}
 .panel-head{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
-.panel-title{font-size:12px;color:var(--muted);font-weight:700;letter-spacing:.02em}
-.panel-close{border:none;background:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px 7px;border-radius:5px;line-height:1.4}
+.panel-title{font-size:12px;color:var(--muted-foreground);font-weight:700;letter-spacing:.02em}
+.panel-close{border:none;background:none;color:var(--muted-foreground);cursor:pointer;font-size:14px;padding:2px 7px;border-radius:5px;line-height:1.4}
 .panel-close:hover{background:var(--border);color:var(--fg)}
 .panel-tabs{display:flex;gap:2px;padding:9px 12px 0;border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto}
-.panel-tab{font:600 12px/1 inherit;color:var(--muted);padding:7px 10px;border:none;background:none;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap}
+.panel-tab{font-weight:600;font-size:12px;line-height:1;color:var(--muted-foreground);padding:7px 10px;border:none;background:none;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap}
 .panel-tab.active{color:var(--fg);border-bottom-color:var(--primary)}
 .panel-body{flex:1;overflow-y:auto;padding:14px}
 .panel-body .src-doc{display:none;margin:0}
@@ -292,7 +350,7 @@ header.doc h1{font-size:22px;margin:0;font-weight:700}
    deck-nav(아래) 가 같은 역할을 대신한다 — 페이지 번호 pill + 클릭 이동. */
 @media screen{nav.toc{display:none}}
 nav.toc{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px 18px;margin:26px 0}
-nav.toc h3{margin:0 0 8px;font-size:12px;letter-spacing:.04em;color:var(--muted);text-transform:uppercase}
+nav.toc h3{margin:0 0 8px;font-size:12px;letter-spacing:.04em;color:var(--muted-foreground);text-transform:uppercase}
 nav.toc ol{margin:0;padding-left:20px;columns:2;gap:24px}
 nav.toc a{color:var(--fg);text-decoration:none}
 nav.toc a:hover{color:var(--primary);text-decoration:underline}
@@ -300,58 +358,102 @@ section{padding:22px 0;border-top:1px solid var(--border)}
 section:first-of-type{border-top:none}
 /* 페이지 넘김(화면 전용) — 한 번에 한 섹션만. 인쇄 시엔 전부 펼쳐서 보여준다. */
 @media screen{.slide-page{display:none}.slide-page.active{display:block}}
-.deck-nav{display:flex;flex-wrap:wrap;gap:6px;margin:20px 0}
-.deck-nav-item{font:600 12px/1 inherit;color:var(--muted);background:var(--panel);border:1px solid var(--border);border-radius:7px;padding:7px 11px;cursor:pointer;white-space:nowrap}
+/* One scrolling row, never wrapped. The reference sets flex-wrap AND
+   overflow-x-auto together; flex-wrap wins, and fed 19 labels its own header
+   grows to three rows. nowrap is the one place this deliberately differs. */
+.deck-nav{display:flex;flex-wrap:nowrap;gap:4px;margin:0;flex:1;min-width:0;overflow-x:auto;scrollbar-width:thin}
+.deck-nav::-webkit-scrollbar{height:6px}
+.deck-nav::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+.deck-nav-item{font-weight:400;font-size:12px;line-height:16px;color:var(--muted-foreground);background:none;border:none;border-radius:4px;padding:4px 8px;cursor:pointer;white-space:nowrap}
 .deck-nav-item:hover{color:var(--fg)}
-.deck-nav-item.active{background:var(--primary);color:var(--on-primary);border-color:var(--primary)}
-.deck-footer{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:8px;padding-top:20px;border-top:1px solid var(--border)}
-.deck-arrow{font:600 13px/1 inherit;color:var(--fg);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 16px;cursor:pointer}
+.deck-nav-item.active{background:var(--primary-text);color:var(--bg);font-weight:500}
+.deck-footer{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:0;padding:11px 20px;border-top:1px solid var(--border);background:var(--bg)}
+.deck-arrow{font-weight:600;font-size:13px;line-height:1;color:var(--fg);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 16px;cursor:pointer}
 .deck-arrow:disabled{opacity:.35;cursor:default}
 .deck-arrow:not(:disabled):hover{background:var(--panel)}
 .deck-dots{display:flex;align-items:center;gap:6px}
 .deck-dot{width:8px;height:8px;border-radius:999px;background:var(--border);border:none;cursor:pointer;padding:0}
 .deck-dot.active{background:var(--primary);width:20px;border-radius:5px}
-.deck-counter{font-size:12px;color:var(--muted);min-width:52px;text-align:center}
-mark.src-hl{background:#ffe58a;color:#3a2f00;border-radius:3px;padding:0 1px}
-h2{font-size:19px;margin:.2em 0 .6em;font-weight:700}
-h4{margin:.2em 0 .4em;font-size:14px}
-.subhead{font-size:15px;font-weight:600;margin:1.1em 0 .3em;color:var(--fg)}
-.kicker{font-size:12px;color:var(--muted);letter-spacing:.03em;margin-bottom:2px}
-.sub{color:var(--muted);margin:-.2em 0 1em}
-p{margin:.5em 0}
-ul,ol{margin:.4em 0;padding-left:22px}
-li{margin:.25em 0}
+.deck-counter{font-size:12px;color:var(--muted-foreground);min-width:52px;text-align:center}
+mark.src-hl{background:color-mix(in srgb,var(--warn) 20%,transparent);color:var(--fg);border-left:2px solid var(--warn);border-radius:0;padding:0 2px}
+h2{font-size:32px;line-height:1.15;letter-spacing:-.02em;margin:.1em 0 .5em;font-weight:700;color:var(--fg)}
+h4{margin:1.1em 0 .35em;font-size:17px;font-weight:600;color:var(--fg)}
+.subhead{font-size:20px;font-weight:600;margin:1.4em 0 .4em;color:var(--fg)}
+.kicker{font-size:14px;font-weight:600;letter-spacing:.02em;color:var(--primary-text);margin-bottom:6px}
+.sub{font-size:18px;line-height:1.55;color:var(--muted-foreground);margin:-.1em 0 1.3em;max-width:62ch}
+p{margin:.65em 0;font-size:15px;line-height:1.625;color:var(--fg-body)}
+ul{margin:.6em 0;padding-left:0;list-style:none}
+ol{margin:.6em 0;padding-left:22px}
+li{margin:0;font-size:15px;line-height:1.625;color:var(--fg-body)}
+ul>li{position:relative;padding-left:18px;margin:8px 0}
+ul>li::before{content:"";position:absolute;left:0;top:.62em;width:6px;height:6px;border-radius:50%;background:color-mix(in srgb,var(--primary-text) 70%,transparent)}
+ol>li{margin:8px 0}
 .tw{overflow-x:auto;margin:.8em 0}
-table{border-collapse:collapse;width:100%;font-size:14.5px}
-th,td{border:1px solid var(--border);padding:8px 11px;text-align:left;vertical-align:top}
-thead th{background:var(--panel);font-weight:600}
-table.kv th{background:var(--panel);width:30%;white-space:nowrap}
+table{border-collapse:collapse;width:100%;font-size:14px;border:1px solid var(--border);border-radius:10px;overflow:hidden}
+th,td{border:none;border-bottom:1px solid var(--border);padding:10px 14px;text-align:left;vertical-align:top;color:var(--fg-body)}
+tbody tr:last-child td{border-bottom:none}
+thead th{background:var(--surface-3);font-weight:600;font-size:12px;letter-spacing:.02em;color:var(--muted-foreground)}
+table.kv th{background:none;width:30%;white-space:nowrap;font-weight:500;color:var(--muted-foreground)}
 .kpi{display:flex;flex-wrap:wrap;gap:12px;margin:.8em 0}
 .kpi-card{flex:1 1 160px;border:1px solid var(--border);border-radius:10px;padding:12px 14px;background:var(--panel)}
-.kpi-label{font-size:13px;color:var(--muted);margin-bottom:6px}
+.kpi-label{font-size:13px;color:var(--muted-foreground);margin-bottom:6px}
 .kpi-nums{display:flex;align-items:center;gap:8px;font-weight:700}
-.kpi-nums .base{color:var(--muted)}
+.kpi-nums .base{color:var(--muted-foreground)}
 .kpi-nums .arrow{color:var(--primary)}
 .kpi-nums .target{color:var(--good)}
 .goals{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:.8em 0}
 .goal-col{border:1px solid var(--border);border-radius:10px;padding:10px 14px}
 .goal-col.g{border-left:4px solid var(--good)}
 .goal-col.ng{border-left:4px solid var(--danger)}
-pre.code{background:#0f1320;color:#e6e9f0;border-radius:10px;padding:14px 16px;overflow-x:auto;font:13px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;margin:.8em 0}
+pre.code{background:var(--surface-3);color:var(--fg-body);border-radius:10px;padding:14px 16px;overflow-x:auto;font:13px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;margin:.8em 0}
 /* mermaid 는 항상 라이트 카드에 그린다(테마 무관, pre.code 가 항상 다크인 것과 대칭) —
    mermaid 렌더 테마를 다크로 다시 그리려면 이미 SVG 로 처리된 노드를 되돌려야 해서
    토글마다 재처리가 필요해진다. 대신 다이어그램 카드 자체를 고정 라이트로 둬서
    토글과 무관하게 항상 선명하게 읽힌다. */
-pre.mermaid{background:#f6f7f9;border:1px solid var(--border);border-radius:10px;padding:16px;text-align:center;margin:.8em 0}
+/* A figure, not a paragraph. The SVG now carries its natural width, so the
+   frame scrolls instead of shrinking it — a 1437px graph squeezed into an
+   840px column rendered its 16px labels at 7.7px, which was the single worst
+   readability defect in the deck. */
+/* Full bleed: the figure uses the whole reading area, not the 840px measure the
+   prose wants. A 1388px graph inside an 840px column left ~215px of dead gutter
+   on each side AND a scrollbar — the worst of both. */
+pre.mermaid{background:var(--surface-3);border:1px solid var(--border-strong);border-radius:10px;padding:14px;margin:1.1em 0;overflow-x:auto;text-align:left}
+@supports (width:100cqw){
+  pre.mermaid{
+    /* A 16px gutter, not the prose gutter. Text wants a comfortable measure; a
+       figure wants the glass. With the source panel open — which is the deck's
+       whole point and stays open — every pixel of the reading area counts. */
+    --bleed:calc(100cqw - 32px);
+    width:var(--bleed);
+    max-width:var(--bleed);
+    margin-inline:calc((100% - var(--bleed)) / 2);
+  }
+}
+/* Fit the frame when there is room; below 900px stop shrinking and scroll
+   instead. Scaling all the way down is what made 16px labels render at 7.7px,
+   and a scrollbar is better than text nobody can read. */
+pre.mermaid svg{max-width:100%;min-width:900px;height:auto}
+/* The diagram lives in a <pre>, whose UA default is white-space:pre, and that
+   inherits into every label. Mermaid sizes an edge label's box for TWO wrapped
+   lines (200x48.75) and the text then refused to wrap, so anything past 200px
+   was clipped mid-word — "BASE_REF, HEAD_REF, PR_TITLE" measured 230px of text
+   in a 200px box. Labels are prose, not preformatted text. */
+pre.mermaid foreignObject,pre.mermaid foreignObject *{white-space:normal}
+/* On a narrow window there is nothing to floor — let it fit rather than force
+   a scrollbar the reader cannot escape. */
+@media (max-width:900px){pre.mermaid svg{min-width:0}}
 pre.mermaid.mermaid-fallback{text-align:left;white-space:pre;overflow-x:auto;background:#0f1320;color:#e6e9f0;font:13px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;padding:30px 16px 14px;position:relative}
-pre.mermaid.mermaid-fallback::before{content:"\\29c9 \\b2e4\\c774\\c5b4\\adf8\\b7a8 \\c6d0\\bcf8 (\\c624\\d504\\b77c\\c778 \\b610\\b294 CDN \\bbf8\\b85c\\b4dc)";position:absolute;top:8px;left:16px;font:600 11px/1 -apple-system,sans-serif;color:#9aa4b2}
-.callout{border:1px solid var(--border);border-left-width:4px;border-radius:8px;padding:11px 14px;margin:.8em 0;background:var(--panel)}
-.callout-title{font-weight:700;font-size:13px;margin-bottom:3px}
-.callout.info{border-left-color:var(--primary)}
-.callout.good{border-left-color:var(--good)}
-.callout.warn{border-left-color:var(--warn)}
-.callout.danger{border-left-color:var(--danger)}
-.callout.next{border-left-color:var(--primary)}
+pre.mermaid.mermaid-fallback::before{content:"\\29c9 \\b2e4\\c774\\c5b4\\adf8\\b7a8 \\c6d0\\bcf8 (\\c624\\d504\\b77c\\c778 \\b610\\b294 CDN \\bbf8\\b85c\\b4dc)";position:absolute;top:8px;left:16px;font:600 11px/1 -apple-system,sans-serif;color:var(--muted-foreground)}
+/* A tinted card, not a left rule — the reference's Callout. color-mix keeps one
+   hue per tone instead of a second hand-picked hex for the fill. */
+.callout{border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin:1em 0;background:var(--panel)}
+.callout-title{font-weight:600;font-size:16px;margin-bottom:4px;color:var(--fg)}
+.callout p,.callout li{font-size:14px;color:var(--fg-soft)}
+.callout.info{border-color:color-mix(in srgb,var(--primary-text) 30%,transparent);background:color-mix(in srgb,var(--primary-text) 10%,var(--bg))}
+.callout.good{border-color:color-mix(in srgb,var(--good) 30%,transparent);background:color-mix(in srgb,var(--good) 10%,var(--bg))}
+.callout.warn{border-color:color-mix(in srgb,var(--warn) 30%,transparent);background:color-mix(in srgb,var(--warn) 10%,var(--bg))}
+.callout.danger{border-color:color-mix(in srgb,var(--danger) 30%,transparent);background:color-mix(in srgb,var(--danger) 10%,var(--bg))}
+.callout.next{border-style:dashed;border-color:var(--border-strong);background:var(--surface-2)}
 .lint h2{color:var(--warn)}
 .lint-count{display:inline-block;background:var(--warn);color:var(--on-warn);border-radius:999px;font-size:12px;padding:1px 9px;vertical-align:middle}
 /* 화면목업(와이어프레임) 킷 — scv 자체 기본 스킨(2순위 폴백): DesignSystem 의 실제
@@ -372,8 +474,11 @@ pre.mermaid.mermaid-fallback::before{content:"\\29c9 \\b2e4\\c774\\c5b4\\adf8\\b
   --wf-warn:#e0ab48; --wf-warn-bg:rgba(224,171,72,.15);
   --wf-radius:10px; --wf-radius-pill:999px;
 }
-.wf-screen-label{font-size:12px;color:var(--muted);margin-bottom:6px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
-.wf-frame{border:1px solid var(--wf-border);border-radius:var(--wf-radius);background:var(--wf-bg);color:var(--wf-fg);overflow:hidden}
+.wf-chrome{display:flex;align-items:center;gap:7px;padding:9px 12px;border-bottom:1px solid var(--wf-border);background:var(--wf-card)}
+.wf-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0;opacity:.7}
+.wf-dot-r{background:#fb2c36}.wf-dot-y{background:#fe9a00}.wf-dot-g{background:#00bc7d}
+.wf-url{margin-left:6px;padding:2px 8px;border-radius:5px;background:var(--wf-muted);color:var(--wf-muted-fg,var(--muted-foreground));font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wf-frame{border:1px solid var(--wf-border);border-radius:calc(var(--wf-radius) + 4px);background:var(--wf-bg);color:var(--wf-fg);overflow:hidden}
 .wf-nav{display:flex;gap:2px;padding:0 16px;border-bottom:1px solid var(--wf-border);background:var(--wf-bg);flex-wrap:wrap}
 .wf-nav-item{font-size:13px;color:var(--wf-muted-fg);padding:12px 11px;border-bottom:2px solid transparent}
 .wf-nav-item.active{color:var(--wf-fg);font-weight:600;border-bottom-color:var(--wf-primary)}
@@ -385,7 +490,7 @@ pre.mermaid.mermaid-fallback::before{content:"\\29c9 \\b2e4\\c774\\c5b4\\adf8\\b
 .wf-tabs{display:flex;gap:2px;margin-bottom:12px;border-bottom:1px solid var(--wf-border)}
 .wf-tab{font-size:12.5px;color:var(--wf-muted-fg);padding:7px 11px;border-bottom:2px solid transparent}
 .wf-tab.active{color:var(--wf-fg);font-weight:600;border-bottom-color:var(--wf-muted-fg)}
-.wf-btn{font:500 12.5px/1 inherit;padding:8px 13px;border-radius:8px;border:1px solid transparent;background:var(--wf-muted);color:var(--wf-fg);cursor:default}
+.wf-btn{font-weight:500;font-size:12.5px;line-height:1;padding:8px 13px;border-radius:8px;border:1px solid transparent;background:var(--wf-muted);color:var(--wf-fg);cursor:default}
 .wf-btn-primary{background:var(--wf-primary);color:var(--wf-primary-fg)}
 .wf-btn-danger{background:var(--wf-danger-bg);color:var(--wf-danger)}
 .wf-input{display:inline-flex;align-items:center;font-size:12.5px;color:var(--wf-muted-fg);padding:8px 12px;border:1px solid var(--wf-border);border-radius:8px;background:var(--wf-card);min-width:120px}
@@ -408,18 +513,47 @@ pre.mermaid.mermaid-fallback::before{content:"\\29c9 \\b2e4\\c774\\c5b4\\adf8\\b
 .wf-text{font-size:12.5px;color:var(--wf-fg);margin:.3em 0}
 @media (max-width:900px){.source-panel{width:min(360px,44vw)}}
 @media (max-width:640px){.goals{grid-template-columns:1fr}nav.toc ol{columns:1}.shell{flex-direction:column;height:auto;overflow:visible}.scroll-main{overflow:visible}.source-panel{width:100%;height:60vh}}
+/* Paper is the one place the light values live. This is not a second theme the
+   reader can choose — @media print is unreachable on screen, persists nothing,
+   and shows no control. The screen deck stays dark only.
+   It has to redeclare the TOKENS, not just body: the old block set
+   background:#fff on body while every surface below it kept painting from
+   --bg, so the PDF was 20 pages of dark slabs on a white sheet. */
 @media print{
+  :root{
+    --bg:#ffffff; --panel:#f6f7f8; --surface-2:#fafafa; --surface-3:#f4f4f5;
+    --fg:#111418;                /* 17.74:1 on white */
+    --fg-body:#1c1f24;           /* 15.42:1 */
+    --fg-soft:#33373d;           /* 10.87:1 */
+    --muted-foreground:#565d6b;  /*  6.45:1 */
+    --border:rgba(0,0,0,.14); --border-strong:#8a8f98; --ring:#8a8f98;
+    --primary:#a50036;           /* the brand fill survives; white on it 7.58:1 */
+    --primary-text:#8f0030;      /*  8.75:1 on white — the light form of the rose */
+    --on-primary:#ffffff;
+    --good:#0f7a4d;              /*  5.24:1 */
+    --warn:#8a6100;              /*  5.40:1 */
+    --danger:#b32d1f;            /*  6.18:1 */
+    --on-warn:#fdf6e6;
+    --wf-bg:#ffffff; --wf-fg:#111418; --wf-card:#f6f6f7;
+    --wf-border:rgba(0,0,0,.16); --wf-muted:#f0f0f1; --wf-muted-fg:#565d6b;
+  }
+  @page{size:A4;margin:14mm 12mm}
   body{background:#fff;display:block;height:auto}
   .shell{display:block;height:auto;overflow:visible}
+  .shell-mid{display:block;overflow:visible}
   .scroll-main{overflow:visible;height:auto}
   .wrap{box-shadow:none;max-width:none;padding:0}
-  header.doc{position:static}
-  .panel-toggle{display:none}
-  .source-panel{display:none}
-  .deck-nav{display:none}
-  .deck-footer{display:none}
+  header.doc{position:static;border-bottom:1px solid var(--border);padding:0 0 8px}
+  .panel-toggle,.source-panel,.deck-nav,.deck-footer{display:none}
   nav.toc{display:block;break-inside:avoid}
-  section{break-inside:avoid}
+  /* break-inside:avoid on a 3000px section dumps most of a page. Keep headings
+     with what follows and protect only the things that must not split. */
+  h2,h3,h4,.subhead{break-after:avoid}
+  figure,table,pre.code,.callout,.wf-screen{break-inside:avoid}
+  /* Paper cannot scroll, so a wide graph gets its own landscape sheet. */
+  @page dg{size:A4 landscape;margin:12mm}
+  pre.mermaid{page:dg;overflow:visible;break-inside:avoid;max-height:180mm}
+  pre.mermaid svg{max-width:100%;height:auto}
   .print-source{display:block;break-before:page}
   .print-source h3{margin-top:1.6em;font-size:14px}
 }
@@ -492,8 +626,7 @@ export function renderHtml(data, opts = {}) {
   const panelToggle = sources.length
     ? `<button class="panel-toggle" onclick="scvTogglePanel()" title="${esc(t("sourcePanelToggleTitle"))}">${esc(t("sourcePanelLabel"))} <span class="kbd">S</span></button>`
     : "";
-  const themeToggle = `<button class="theme-toggle" id="scvThemeBtn" onclick="scvToggleTheme()" title="${esc(t("themeToggleTitle"))}"></button>`;
-  const headerActions = `<div class="header-actions">${themeToggle}${panelToggle}</div>`;
+  const headerActions = `<div class="header-actions">${panelToggle}</div>`;
   const panelTabs =
     sources.length > 1
       ? `<div class="panel-tabs">${sources
@@ -571,7 +704,18 @@ export function renderHtml(data, opts = {}) {
     n = Math.max(0, Math.min(total - 1, n));
     scvPageIdx = n;
     document.querySelectorAll('.slide-page').forEach(function(p){ p.classList.toggle('active', p.dataset.idx === String(n)); });
-    document.querySelectorAll('.deck-nav-item').forEach(function(el){ el.classList.toggle('active', el.dataset.idx === String(n)); });
+    document.querySelectorAll('.deck-nav-item').forEach(function(el){
+      var on = el.dataset.idx === String(n);
+      el.classList.toggle('active', on);
+      // The nav is one scrolling row now, so the active pill can sit past the
+      // right edge. Scroll the STRIP, not the page — scrollIntoView on the
+      // element would also scroll .scroll-main and lose the reader's place.
+      if (on && el.parentElement) {
+        var strip = el.parentElement;
+        var left = el.offsetLeft - (strip.clientWidth - el.offsetWidth) / 2;
+        strip.scrollTo({ left: Math.max(0, left), behavior: 'smooth' });
+      }
+    });
     document.querySelectorAll('.deck-dot').forEach(function(el){ el.classList.toggle('active', el.dataset.idx === String(n)); });
     if (typeof window.scvRunMermaid === 'function') { try { window.scvRunMermaid(); } catch (e) {} }
     var prevBtn = document.getElementById('scvPrev'), nextBtn = document.getElementById('scvNext'), counter = document.getElementById('scvCounter');
@@ -631,7 +775,7 @@ export function renderHtml(data, opts = {}) {
   }
   document.addEventListener('keydown', function(e){
     var t = e.target;
-    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
     if (e.key === 'ArrowRight' || e.key === 'PageDown') scvGoto(scvIdx() + 1);
     else if (e.key === 'ArrowLeft' || e.key === 'PageUp') scvGoto(scvIdx() - 1);
     else if (e.key === 'Home') scvGoto(0);
@@ -651,7 +795,11 @@ export function renderHtml(data, opts = {}) {
       : `<script type="module" id="scv-mermaid-loader">
   try {
     const { default: mermaid } = await import("https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs");
-    mermaid.initialize({ startOnLoad: false, theme: "default", securityLevel: "strict" });
+    // The page's own stack, verbatim. "inherit" is not a font NAME: mermaid could
+    // not measure with it, fell back to a default width of 200px per label, and
+    // every label longer than that was clipped inside its foreignObject.
+    const SCV_FONT_STACK = '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR",sans-serif';
+    mermaid.initialize({ startOnLoad: false, theme: "base", themeVariables: { fontFamily: SCV_FONT_STACK, fontSize: "16px" }, flowchart: { useMaxWidth: false, htmlLabels: true }, securityLevel: "strict" });
     // Scoped to the ACTIVE page only: mermaid measures text at run-time, so a diagram
     // processed while its .slide-page is display:none comes out zero/tiny-sized — and
     // because mermaid marks nodes data-processed="true" and skips them afterwards, that
@@ -682,63 +830,57 @@ export function renderHtml(data, opts = {}) {
   }
 </script>`;
 
-  // 다크 기본값 + 라이트 오버라이드. localStorage 에 저장된 선택을 <head> 맨 앞에서
-  // (스타일/본문 파싱 전) 적용해 라이트를 골랐던 사용자가 재방문 시 깜빡임 없이 바로
-  // 라이트로 뜨게 한다.
-  const themeInit = `<script>(function(){try{if(localStorage.getItem('scv-deck-theme')==='light')document.documentElement.setAttribute('data-theme','light');}catch(e){}})();</script>`;
-  const THEME_LIGHT_LABEL = JSON.stringify(t("themeLight"));
-  const THEME_DARK_LABEL = JSON.stringify(t("themeDark"));
-  const themeScript = `<script>
-  function scvThemeLabel(){ return document.documentElement.getAttribute('data-theme')==='light' ? ${THEME_LIGHT_LABEL} : ${THEME_DARK_LABEL}; }
-  function scvToggleTheme(){
-    var html = document.documentElement;
-    var next = html.getAttribute('data-theme')==='light' ? 'dark' : 'light';
-    if (next === 'light') html.setAttribute('data-theme','light'); else html.removeAttribute('data-theme');
-    try { localStorage.setItem('scv-deck-theme', next); } catch(e){}
-    var btn = document.getElementById('scvThemeBtn');
-    if (btn) btn.textContent = scvThemeLabel();
-  }
-  document.addEventListener('DOMContentLoaded', function(){
-    var btn = document.getElementById('scvThemeBtn');
-    if (btn) btn.textContent = scvThemeLabel();
-  });
-</script>`;
 
   const HTML_LANG = { english: "en", korean: "ko", japanese: "ja" }[normalizeLang(opts.lang)] || "en";
   const title = esc(data.title || data.slug || t("untitledDeck"));
   return `<!doctype html>
 <html lang="${HTML_LANG}">
 <head>
-${themeInit}
+
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${title}</title>
 <style>${CSS}</style>
 <style id="scv-mermaid-contrast">
-pre.mermaid{background:transparent!important}
-pre.mermaid .flowchart-link,pre.mermaid .edgePath .path{stroke:var(--fg)!important;stroke-width:2px!important}
-pre.mermaid .marker,pre.mermaid marker path{fill:var(--fg)!important;stroke:var(--fg)!important}
-pre.mermaid .edgeLabel,pre.mermaid .edgeLabel p,pre.mermaid .labelBkg{background-color:var(--bg)!important;color:var(--fg)!important}
+/* Diagram palette. static-mermaid.mjs strips the id-scoped rules, the
+   !important flags and the inline colour attributes first, so plain specificity
+   is enough here — before that, an author rule at (1,3,1) with !important still
+   lost to style="fill:#FFE082 !important" on a classDef node. */
+pre.mermaid .flowchart-link,pre.mermaid .edgePath .path,pre.mermaid path.flowchart-link{stroke:var(--fg-body);stroke-width:1.6px;fill:none}
+pre.mermaid .marker,pre.mermaid marker path,pre.mermaid .arrowMarkerPath{fill:var(--fg-body);stroke:var(--fg-body)}
+pre.mermaid .node rect,pre.mermaid .node circle,pre.mermaid .node polygon,pre.mermaid .node path{fill:var(--panel);stroke:var(--border-strong);stroke-width:1.2px}
+pre.mermaid .nodeLabel,pre.mermaid .nodeLabel p,pre.mermaid .label,pre.mermaid text{fill:var(--fg);color:var(--fg)}
+pre.mermaid .edgeLabel,pre.mermaid .edgeLabel p{background-color:var(--surface-3);color:var(--fg-body)}
+pre.mermaid .edgeLabel rect,pre.mermaid .labelBkg{fill:var(--surface-3);opacity:1}
+pre.mermaid .cluster rect{fill:var(--surface-2);stroke:var(--border-strong)}
+pre.mermaid .cluster text,pre.mermaid .cluster .nodeLabel{fill:var(--muted-foreground);color:var(--muted-foreground)}
+/* The two semantic highlights the protocol sanctions. Any other per-node colour
+   is stripped, so these are the only ones that survive — deck.md says so. */
+pre.mermaid .node.new rect,pre.mermaid g.new rect{fill:#5a4415;stroke:var(--warn);stroke-width:1.8px}
+pre.mermaid .node.new .nodeLabel,pre.mermaid g.new .nodeLabel{fill:#f6e8c8;color:#f6e8c8}
+pre.mermaid .node.changed rect,pre.mermaid g.changed rect{fill:#16324f;stroke:#6fb4f2;stroke-width:1.8px}
+pre.mermaid .node.changed .nodeLabel,pre.mermaid g.changed .nodeLabel{fill:#d9ecff;color:#d9ecff}
 </style>
 </head>
 <body>
 <div class="shell">
+<header class="doc"><h1>${title}</h1>${deckNav}${headerActions}</header>
+<div class="shell-mid">
 <div class="scroll-main">
 <div class="wrap">
-<header class="doc"><h1>${title}</h1>${headerActions}</header>
 ${toc ? `<nav class="toc"><h3>${esc(t("toc"))}</h3><ol>${toc}</ol></nav>` : ""}
-${deckNav}
 ${sections}
 ${lintSection}
-${deckFooter}
 ${printSource}
 </div>
 </div>
 ${sourcePanel}
 </div>
+${deckFooter}
+</div>
 ${mermaidScript}
 ${pageScript}
-${themeScript}
+
 </body>
 </html>
 `;
