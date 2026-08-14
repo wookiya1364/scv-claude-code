@@ -63,35 +63,78 @@ jobs:
             fi
             local number="${url##*/}"
 
-            # Checks do not exist the instant a PR is created — GitHub schedules
-            # them a moment later. Asking once and concluding "none" raced that
-            # window, so the workflow went straight to merge and was rejected by
-            # the required-checks rule on a PR whose checks were about to pass.
+            # >>> await-mergeable — replayed verbatim by tests/test-promote-wait.sh.
+            # Keep both markers. The test slices between them and runs the real
+            # block against recorded fixtures; without them it fails loudly
+            # rather than silently testing nothing.
             #
-            # Ask how many checks EXIST, not whether they pass. `gh pr checks`
-            # exits non-zero while any check is still pending, so using its exit
-            # code as an existence probe reads "not yet" for the entire wait and
-            # then concludes there are none — which is the same bug wearing a
-            # longer timeout.
-            echo "Waiting for checks on #${number}..."
-            local waited=0 count=0
-            while [ "$waited" -lt 120 ]; do
-              count=$(gh pr view "$number" --json statusCheckRollup \
-                       --jq '.statusCheckRollup | length' 2>/dev/null || echo 0)
-              [ "${count:-0}" -gt 0 ] && break
-              sleep 5
-              waited=$((waited + 5))
+            # Wait for GitHub's own mergeability verdict, not for a check count.
+            #
+            # This block has now been wrong in both directions, so the reasoning
+            # is worth keeping. First it asked whether checks had passed — but
+            # `gh pr checks` exits non-zero while any check is pending, so that
+            # read "not yet" for the whole wait. Then it asked how many checks
+            # EXIST, which raced the moment of creation from the other side: a
+            # matrix job that
+            # a path filter skips is reported under its UNEXPANDED name — the
+            # literal "Contract (<matrix.os placeholder>)", conclusion SKIPPED —
+            # and it lands before the real jobs exist. So the count was 1
+            # immediately, the loop broke, `gh pr checks --watch` saw one
+            # COMPLETED entry and returned success, and the merge was then
+            # rejected because the required checks had not started. That cost two
+            # hand-merges in the 0.26.0 release.
+            #
+            # The fix is not "wait for more checks" — that same placeholder would
+            # then hold the state at UNSTABLE forever and nothing would ever
+            # merge. Three independent facts have to line up: nothing failed,
+            # nothing is still running, and GitHub itself no longer calls the PR
+            # BLOCKED. Only the last one knows what the required set is.
+            echo "Waiting for #${number} to become mergeable..."
+            local waited=0 state=UNKNOWN failed=0 pending=0 ready=0 json=""
+            while [ "$waited" -lt 900 ]; do
+              json="$(gh pr view "$number" --json mergeStateStatus,statusCheckRollup 2>/dev/null || true)"
+              if [ -n "$json" ]; then
+                state="$(printf '%s' "$json" | jq -r '.mergeStateStatus // "UNKNOWN"')"
+                # Two shapes share this list: a check run carries status+conclusion,
+                # a commit status carries state only. Read both or half the CI is
+                # invisible here.
+                failed="$(printf '%s' "$json" | jq '[.statusCheckRollup[]?
+                  | select(.conclusion=="FAILURE" or .conclusion=="TIMED_OUT"
+                        or .conclusion=="CANCELLED" or .conclusion=="ACTION_REQUIRED"
+                        or .state=="FAILURE" or .state=="ERROR")] | length')"
+                pending="$(printf '%s' "$json" | jq '[.statusCheckRollup[]?
+                  | select((.status? // "COMPLETED") != "COMPLETED" or .state=="PENDING"
+                        or .state=="EXPECTED")] | length')"
+
+                if [ "${failed:-0}" -gt 0 ]; then
+                  echo "::error::Checks failed on #${number} (${head} → ${base}). The chain stops here; the PR stays open."
+                  return 1
+                fi
+                case "$state" in
+                  DIRTY)
+                    echo "::error::#${number} (${head} → ${base}) conflicts with its base. Resolve it by hand; the chain stops here."
+                    return 1 ;;
+                  DRAFT)
+                    echo "::error::#${number} is still a draft."
+                    return 1 ;;
+                  BEHIND)
+                    # Strict required checks: the head has to carry the base's tip.
+                    gh pr update-branch "$number" >/dev/null 2>&1 || true ;;
+                esac
+                if [ "${pending:-0}" -eq 0 ] && [ "$state" != "BLOCKED" ] && [ "$state" != "UNKNOWN" ]; then
+                  ready=1
+                  break
+                fi
+              fi
+              sleep 10
+              waited=$((waited + 10))
             done
 
-            if [ "${count:-0}" -gt 0 ]; then
-              gh pr checks "$number" --watch --fail-fast || {
-                echo "::error::Checks failed on #${number} (${head} → ${base}). The chain stops here; the PR stays open."
-                return 1
-              }
-            else
-              echo "::notice::#${number} still reported 0 checks after ${waited}s."
+            if [ "$ready" -ne 1 ]; then
+              echo "::error::#${number} was still ${state} with ${pending} check(s) running after ${waited}s — not merging. Nothing is left half-promoted; the PR stays open."
+              return 1
             fi
-
+            # <<< await-mergeable
             gh pr merge "$number" --merge || {
               echo "::error::Could not merge #${number}."
               return 1
