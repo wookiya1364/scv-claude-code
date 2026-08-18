@@ -23,7 +23,7 @@ Drop materials → Claude refines them with you → implementation runs the test
 <a href="https://github.com/wookiya1364/scv-claude-code/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/wookiya1364/scv-claude-code?label=release&color=blue&cacheSeconds=300" /></a>
 <img alt="License" src="https://img.shields.io/badge/license-MIT-green" />
 <img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude%20Code-plugin-D97757" />
-<img alt="Regression" src="https://img.shields.io/badge/tests-874_PASS-brightgreen" />
+<img alt="Regression" src="https://img.shields.io/badge/tests-951_PASS-brightgreen" />
 <img alt="i18n" src="https://img.shields.io/badge/i18n-EN_·_KO_·_JA-purple" />
 </p>
 
@@ -32,6 +32,7 @@ Drop materials → Claude refines them with you → implementation runs the test
 <a href="#5-minute-walkthrough">5-min walkthrough</a> ·
 <a href="#the-loop">The Loop</a> ·
 <a href="#slash-commands">Commands</a> ·
+<a href="#workspace-guard">Guard</a> ·
 <a href="#why-scv">Why SCV?</a> ·
 <a href="#architecture--integrations">Architecture</a> ·
 <a href="#philosophy-standard--cowork--verify">Philosophy</a> ·
@@ -172,9 +173,62 @@ SCV also asks for the short explanation first. A plan you cannot follow cannot b
 | `/scv:routine [<name>\|--list]` | **Maintenance routines** (v0.22.0+). One markdown contract per routine under `scv/routines/<name>.md` — task + guardrails + exit criteria, never a step list. `--list` shows the NAME/CADENCE/REPORT table; `--lint <file>` checks a routine file. SCV never schedules: register the cadence yourself with host features (`/loop 1d /scv:routine dead-code`, cron, CI schedule). |
 | `/scv:report` | Post a phase result to Slack or Discord |
 | `/scv:sync` | **Two-step sync** (v0.11.3+).<br/>(1) Template re-sync to the workflow docs (`merge_policy`; retires the seven legacy standard docs once, v0.22.0+).<br/>(2) Drift detection between code and active promote slugs (`scope:` git diff + TESTS run).<br/>Archive immutable. |
+| `/scv:set-models` | Pick a model policy — `recommended` / `all-opus` / `all-sonnet` / `all-haiku` / `session-default` — and apply it to every SCV command's frontmatter. Stored as `SCV_MODEL_POLICY` in `.env` so `/scv:sync` reapplies it after a template update. (v0.12.0+) |
 | `/scv:install-deps` | Detect & install missing CLIs (`gh` / `glab` / `jq` / `ffmpeg`) |
 | `/scv:workspace` | **Multi-repo (nested workspace)** — interactive setup: join an umbrella as a child / create the umbrella (root) / detach. No long flags. |
 | `/scv:handoff` | **Multi-repo** — declare another repo needs corresponding dev → writes a handoff (+ decision + conversation) into the umbrella scv repo (push consent-gated; optional team ping). |
+
+---
+
+## The workspace guard (v0.25.0+) <a id="workspace-guard"></a>
+
+The plugin registers one **blocking** hook: a `PreToolUse` guard, wired in
+`hooks/hooks.json` to `vendor/scv-core/core/template/hooks/guard.sh`. Unlike the
+journal hooks below, this one can refuse a write, so it is worth knowing about before
+you meet it. It refuses exactly two things.
+
+- **A plan file created by hand.** `PLAN.md`, `TESTS.md` and
+  `FEATURE_ARCHITECTURE.md` under `scv/promote/<slug>/` may not be *created* outside
+  an SCV action. Editing one that already exists is always allowed — filling in
+  `<TODO>` spots and moving `status:` along are normal steps.
+- **A write outside `scv/` when no SCV action has run in the session.** From the
+  outside, a change that belongs to planned work and one that does not are
+  indistinguishable. The guard asks for one signal that SCV is involved at all.
+
+**What clears the block.** Any SCV command mints a *receipt* for the session. The
+host reports that the command started, and the model cannot fabricate a host event —
+that is what makes the receipt worth keying on. `/scv:status` is read-only and enough.
+One receipt covers one session in one project; a receipt earned in another checkout
+does not unlock this one.
+
+**Always allowed by the outside-write rule, receipt or not**: `*.md`, `.gitignore`,
+`.gitattributes`, `LICENSE`, plus `.claude/settings.json` and
+`.claude/settings.local.json`, which this plugin passes to the guard as host
+configuration. `.env` is deliberately *not* on that list. These exemptions do not
+reach the plan-file rule — a new `scv/promote/<slug>/PLAN.md` is refused even though
+it ends in `.md`.
+
+**Turning it off**: set `SCV_GUARD=off` in the environment of the process that runs
+Claude Code (`SCV_GUARD_RULE_B=off` keeps the plan-file rule and drops the
+outside-write one). It is read from the process environment only, never from a file in
+the project — a file the agent can write is a file the agent can exempt itself with.
+
+**When it stays out of the way.** The guard fails **open** on the two problems that
+leave it unable to judge at all — an empty payload, and no JSON reader on the machine.
+Either prints one line to stderr and allows the call. Only an explicit rule match
+denies. Note the receipt store is not in that set: if it cannot be written, no receipt
+ever exists, and every non-exempt write is refused rather than allowed. It is also
+inert in a project that has not adopted SCV: it walks up from the tool call's own
+directory looking for `scv/`, and allows immediately when there is none.
+
+Contract:
+[`vendor/scv-core/core/contracts/guard.md`](vendor/scv-core/core/contracts/guard.md).
+
+The guard answers "did an SCV action run in this session", not "does this write belong
+to planned work". The second question is a merge-time one. Core ships a CI gate for it
+(`vendor/scv-core/core/scripts/check-provenance.sh`, which fails a pull request that
+changes code without adding an archived plan), but hydrate installs no workflow into
+your project — wiring that gate is your call.
 
 ---
 
@@ -222,7 +276,7 @@ When AI starts writing your team's code, three things break down.
 
 You can use BMAD/GSD for the spec → code phase, and let SCV's archive accumulate the regression net underneath.
 
-One constraint when you do: the workspace guard denies writes it cannot tie to an SCV command in the session, and another tool's writes look the same as an unplanned edit. Run any SCV command once — `/scv:status` is read-only and enough — and the rest of the session proceeds normally.
+One constraint when you do: the [workspace guard](#workspace-guard) denies writes it cannot tie to an SCV command in the session, and another tool's writes look the same as an unplanned edit. Run any SCV command once — `/scv:status` is read-only and enough — and the rest of the session proceeds normally.
 
 **For larger changes**: split a multi-feature change into multiple slugs grouped under one `epic:` (PLAN.md frontmatter). See `scv/PROMOTE.md` §8d for the epic + multi-slug pattern.
 
@@ -249,7 +303,7 @@ before the normal `develop → stage → main` promotion. See
 [`docs/design/shared-core-wrapper.md`](docs/design/shared-core-wrapper.md).
 
 Wrapper and Core releases are intentionally independent. This Claude adapter
-release is `0.27.0`; the current Core pin is recorded in
+release is `0.27.0`; the Core pin it carries is recorded in
 `vendor/scv-core/VERSION` and `core.lock`. Core sync updates that checksummed
 pin and generated projection, but never rewrites the wrapper `VERSION`, plugin
 manifest, or marketplace version.
@@ -272,6 +326,12 @@ redaction filter (password/token/secret/api-key values, `Bearer` tokens,
 `AKIA…` keys → `[REDACTED]`) runs before anything hits disk — never write to
 `scv/journal/` directly, and never register these as blocking hooks. Contract:
 scv-core `docs/wrapper-integration.md` §6 "Hook seam".
+
+The same `hooks/hooks.json` also registers the one hook that *is* blocking — the
+`PreToolUse` [workspace guard](#workspace-guard) (v0.25.0+). Core ships the script
+host-neutral; the wrapper decides which host event maps to which mode by passing
+`SCV_GUARD_MODE` (`mint` / `gate-write` / `gate-bash`) per entry, so the script never
+names a host.
 
 PLAN.md is the single source of truth. External tools (Jira / Linear / Confluence / Google Doc) are linked via `refs:` — never copied. Outputs (PR / MR / Slack / Discord) are auto-generated from the same source.
 
@@ -322,7 +382,7 @@ flowchart TB
 
 - Single source of truth — PLAN.md written once · PR / regression / Slack all read from it.
 - External tools stay external — `refs:` link to tickets · no body copy · link resolves when ticket changes.
-- Vendor-agnostic backends — `gh` / `glab` first-class via `lib/pr-platform.sh` · adding Bitbucket / Gitea = a new adapter.
+- Vendor-agnostic backends — `gh` / `glab` first-class via `scripts/lib/pr-platform.sh` · adding Bitbucket / Gitea = a new adapter.
 - Multi-language by default — PR / Mermaid / commits follow your `SCV_LANG` (English · 한국어 · 日本語).
 
 ## Philosophy: Standard · Cowork · Verify

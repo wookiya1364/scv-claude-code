@@ -63,10 +63,11 @@ jobs:
             fi
             local number="${url##*/}"
 
-            # >>> await-mergeable — replayed verbatim by tests/test-promote-wait.sh.
-            # Keep both markers. The test slices between them and runs the real
-            # block against recorded fixtures; without them it fails loudly
-            # rather than silently testing nothing.
+            # >>> await-mergeable — kept in sync with scv-core's promote.yml, where
+            # tests/test-promote-wait.sh slices this block out between these two
+            # markers and runs it against recorded fixtures. That test lives in
+            # Core's repo-root tests/, which is not vendored, so nothing here
+            # replays it — keep the markers anyway so the two files stay diffable.
             #
             # Wait for GitHub's own mergeability verdict, not for a check count.
             #
