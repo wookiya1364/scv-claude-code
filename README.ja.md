@@ -222,6 +222,27 @@ archive 時にそれを `scv/DECISIONS.md` へ残します。
 契約:
 [`vendor/scv-core/core/contracts/guard.md`](vendor/scv-core/core/contracts/guard.md)。
 
+### effort governor がこのホストでどう対応するか (Core 0.29.0+)
+
+SCV は実装前に計画の実行バンドを判定します(`effort-class.sh`、バックテストを
+通過した 3 規則。`.env` の `SCV_EFFORT_MODE=auto|ask|off`、既定は `auto`)。
+セッションの effort 設定には触れません — governor が変えるのは実行の形です。
+このホストでのバンド×段階の対応:
+
+| 段階 | standard | heavy | orchestration |
+|---|---|---|---|
+| 機械的 (スキャン・deck 生成) | low | low | low |
+| 軽い統合 (レポート) | medium | medium | medium |
+| 実装 | high | xhigh | xhigh |
+| 検証 | high 単発 | max 敵対 1 パス | マルチエージェント fan-out |
+
+`standard` の計画はマルチエージェント workflow を起動しません — fan-out が
+コストの支配項です。昇格は上方向のみ(同一段階の赤 2 回、または反証の繰り返し →
+1 バンド上へ、通知 1 行、再承認なし)。計画 frontmatter の
+`effort_class: standard|heavy|orchestration` 宣言か、会話での一言でいつでも
+判定を覆せます。
+
+
 ガードが答える問いは「このセッションで SCV アクションが走ったか」であって、
 「この書き込みは計画された作業に属するか」ではありません。2 つ目はマージ時の
 問いです。Core はその用途の CI ゲートを同梱していますが
@@ -304,7 +325,7 @@ v0.20.0 から、共通ワークフローの動作はチェックサムで検証
 を参照してください。
 
 Wrapper と Core は独立してリリースします。この Claude アダプター release
-は `0.28.0` で、これが担いでいる Core pin は
+は `0.29.0` で、これが担いでいる Core pin は
 `vendor/scv-core/VERSION` と `core.lock` に記録されます。Core sync が更新するのは、そのチェックサム付き
 pin と生成 projection のみで、wrapper の `VERSION`、plugin manifest、
 marketplace version は変更しません。

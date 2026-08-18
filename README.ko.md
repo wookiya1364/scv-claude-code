@@ -220,6 +220,27 @@ payload 가 비었을 때, 그리고 그 기계에 JSON 리더가 없을 때. �
 계약:
 [`vendor/scv-core/core/contracts/guard.md`](vendor/scv-core/core/contracts/guard.md).
 
+### effort governor 가 이 호스트에서 매핑되는 방식 (Core 0.29.0+)
+
+SCV 는 구현 전에 계획의 실행 밴드를 판정합니다(`effort-class.sh`, 백테스트 통과
+3규칙; `.env` 의 `SCV_EFFORT_MODE=auto|ask|off`, 기본 `auto`). 세션 effort 설정은
+건드리지 않습니다 — 거버너가 조절하는 것은 실행 방식입니다. 이 호스트의
+밴드×단계 격자:
+
+| 단계 | standard | heavy | orchestration |
+|---|---|---|---|
+| 기계 (스캔·덱 생성) | low | low | low |
+| 경량 종합 (보고) | medium | medium | medium |
+| 구현 | high | xhigh | xhigh |
+| 검증 | high 단일 | max 적대 1패스 | 다중 에이전트 팬아웃 |
+
+`standard` 계획은 다중 에이전트 워크플로를 띄우지 않습니다 — 팬아웃이 비용의
+지배항입니다. 승급은 위로만(같은 단계 적색 2회 또는 반박 반복 → 한 밴드 위, 한 줄
+통지, 재승인 없음). 계획 frontmatter 의
+`effort_class: standard|heavy|orchestration` 선언이나 대화 중 한마디로 언제든
+판정을 뒤집을 수 있습니다.
+
+
 가드가 답하는 질문은 "이 세션에서 SCV 액션이 실행됐는가" 이지, "이 쓰기가 계획된
 작업에 속하는가" 가 아닙니다. 두 번째 질문은 머지 시점의 것입니다. Core 는 그
 용도의 CI 게이트를 제공하지만
@@ -304,7 +325,7 @@ v0.20.0부터 공통 워크플로 동작은 체크섬으로 검증하고 버전�
 참고하세요.
 
 Wrapper와 Core는 서로 독립적으로 릴리스합니다. 이 Claude 어댑터 release는
-`0.28.0`이고, 이 릴리스가 물고 있는 Core pin은 `vendor/scv-core/VERSION`과
+`0.29.0`이고, 이 릴리스가 물고 있는 Core pin은 `vendor/scv-core/VERSION`과
 `core.lock`에 기록됩니다. Core sync는 그 체크섬 pin과 생성 projection만 갱신하며 wrapper
 `VERSION`, plugin manifest, marketplace version은 변경하지 않습니다.
 
