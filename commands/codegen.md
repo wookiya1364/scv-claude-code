@@ -91,6 +91,25 @@ Parse the header (`MODE:`, `SCV_DIR:`, `TARGET_SLUG:`, `PLAN_FILE:`, `TESTS_FILE
 
 See `references/protocols/work.md` Steps 1–5b for full detail. This command follows that protocol verbatim — do not re-implement it here.
 
+### Step 5e — Effort governor (v0.29.0+)
+
+Identical contract to `/scv:work` Step 5e, applied before the Red–Green loop
+begins. Read `.env` `SCV_EFFORT_MODE` (unset means `auto`; `off` skips this
+step entirely with no classifier call and no output), then judge:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/effort-class.sh" "<SCV_DIR>/promote/<slug>"
+```
+
+Apply the same band→stage policy: mechanical stages at the lowest delegated
+effort, and — the load-bearing rule — **no multi-agent fan-out for a
+`standard` plan's iterations or verification**. Auto-promotion is upward only:
+two consecutive red runs that fail for the SAME reason (not the expected TDD
+red) or more than one verification refutation move the band up one step with a
+one-line notice; `EFFORT_ESCALATION: armed` promotes on the first. The
+expected Red of Step 6 is the contract working, never a promotion trigger.
+Record judged band, used band, and promotions in the archive `--reason`.
+
 ### Step 6 — Red pre-flight (TDD-first specific)
 
 Before any code change, run TESTS in the current state to verify all relevant cases **fail**. This is the safety gate of TDD-first codegen.
