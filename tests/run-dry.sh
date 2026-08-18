@@ -3425,13 +3425,17 @@ rm -rf "$PG_APP"
 
 echo
 echo "=== [10] sync --dry-run (version detection) ==="
-# Force a local divergence on a merge-on-markers file so sync reports MERGE
+# Force a local divergence on a merge-on-markers file. APP is not a git work
+# tree, so under the dirty-refusal contract the truthful report is DIRTY, not
+# MERGE — there is no history to restore the local note from, and sync must
+# say so instead of merging over it. (The MERGE path itself is covered by
+# test-sync-dirty.sh with a committed divergence.)
 printf '\n<!-- local note: force divergence -->\n' >> "$APP/scv/REPORTING.md"
 OUT=$("$SYNC" --project-dir "$APP" --dry-run 2>&1)
 rc=$?
 assert_ok_exit "$rc" "sync --dry-run: exit 0"
 assert_out_contains "local=${VERSION_NOW} → remote=${VERSION_NOW}" "$OUT" "sync: version parity detected"
-assert_out_contains "MERGE     scv/REPORTING.md" "$OUT" "sync: merge-on-markers policy honored (scv/ prefix)"
+assert_out_contains "DIRTY     scv/REPORTING.md" "$OUT" "sync: an unrestorable local edit is refused by name (scv/ prefix)"
 
 echo
 echo "=== [12] v2.0.0 — sync deletes the retired standard docs (Scenarios 3-6) ==="

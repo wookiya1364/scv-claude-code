@@ -5,7 +5,7 @@
 .env
 .env.local
 
-# SCV sync 백업
+# state-index 마이그레이션 격리 + 0.28.0 이전 sync 백업 잔재
 .scv-backup/
 
 # 테스트 아티팩트
