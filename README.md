@@ -224,6 +224,27 @@ directory looking for `scv/`, and allows immediately when there is none.
 Contract:
 [`vendor/scv-core/core/contracts/guard.md`](vendor/scv-core/core/contracts/guard.md).
 
+### How the effort governor maps to this host (Core 0.29.0+)
+
+SCV judges each plan's execution band before implementing (`effort-class.sh`,
+three backtested rules; `SCV_EFFORT_MODE=auto|ask|off` in `.env`, default
+`auto`). Your session effort setting is never touched — the governor shapes
+HOW the work runs. On this host the band-by-stage grid lands as:
+
+| stage | standard | heavy | orchestration |
+|---|---|---|---|
+| mechanical (scans, deck builds) | low | low | low |
+| light synthesis (reports) | medium | medium | medium |
+| implementation | high | xhigh | xhigh |
+| verification | high, single pass | max, one adversarial pass | multi-agent fan-out |
+
+A `standard` plan never launches multi-agent workflows — that fan-out is the
+dominant cost. Promotion is upward only (two same-stage red runs, or repeated
+verifier refutation → one band up, one notice line, no re-approval). Override
+any judgment with `effort_class: standard|heavy|orchestration` in the plan's
+frontmatter, or just say so in the conversation.
+
+
 The guard answers "did an SCV action run in this session", not "does this write belong
 to planned work". The second question is a merge-time one. Core ships a CI gate for it
 (`vendor/scv-core/core/scripts/check-provenance.sh`, which fails a pull request that
@@ -303,7 +324,7 @@ before the normal `develop → stage → main` promotion. See
 [`docs/design/shared-core-wrapper.md`](docs/design/shared-core-wrapper.md).
 
 Wrapper and Core releases are intentionally independent. This Claude adapter
-release is `0.28.0`; the Core pin it carries is recorded in
+release is `0.29.0`; the Core pin it carries is recorded in
 `vendor/scv-core/VERSION` and `core.lock`. Core sync updates that checksummed
 pin and generated projection, but never rewrites the wrapper `VERSION`, plugin
 manifest, or marketplace version.
