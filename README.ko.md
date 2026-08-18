@@ -23,7 +23,7 @@ Drop materials → Claude refines them with you → implementation runs the test
 <a href="https://github.com/wookiya1364/scv-claude-code/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/wookiya1364/scv-claude-code?label=release&color=blue&cacheSeconds=300" /></a>
 <img alt="License" src="https://img.shields.io/badge/license-MIT-green" />
 <img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude%20Code-plugin-D97757" />
-<img alt="Regression" src="https://img.shields.io/badge/tests-874_PASS-brightgreen" />
+<img alt="Regression" src="https://img.shields.io/badge/tests-951_PASS-brightgreen" />
 <img alt="i18n" src="https://img.shields.io/badge/i18n-EN_·_KO_·_JA-purple" />
 </p>
 
@@ -32,6 +32,7 @@ Drop materials → Claude refines them with you → implementation runs the test
 <a href="#5-minute-walkthrough">5-min walkthrough</a> ·
 <a href="#the-loop">The Loop</a> ·
 <a href="#slash-commands">Commands</a> ·
+<a href="#workspace-guard">Guard</a> ·
 <a href="#why-scv">Why SCV?</a> ·
 <a href="#architecture--integrations">Architecture</a> ·
 <a href="#philosophy-standard--cowork--verify">Philosophy</a> ·
@@ -168,9 +169,63 @@ flowchart LR
 | `/scv:routine [<name>\|--list]` | **유지보수 루틴** (v0.22.0+). 루틴 1개 = `scv/routines/<name>.md` 마크다운 1개 — task + guardrails + exit criteria 계약 (step list 아님). `--list` 는 NAME/CADENCE/REPORT 표, `--lint <file>` 은 루틴 파일 검사. SCV 는 절대 스케줄링하지 않음: `/loop 1d /scv:routine dead-code`, cron, CI 스케줄 등 호스트 기능으로 직접 등록. |
 | `/scv:report` | 단계 결과를 Slack / Discord 에 보고 |
 | `/scv:sync` | **2-step sync** (v0.11.3+).<br/>(1) 플러그인 template → 워크플로 문서 (`merge_policy`; 폐기된 표준 문서 7종은 1회 삭제, v0.22.0+).<br/>(2) 코드 ↔ active promote slug 의 drift 검출 (`scope:` git diff + TESTS run).<br/>archive 는 immutable. |
+| `/scv:set-models` | 모델 정책 선택 — `recommended` / `all-opus` / `all-sonnet` / `all-haiku` / `session-default` — 후 모든 SCV 커맨드 frontmatter 에 적용. 선택은 `.env` 의 `SCV_MODEL_POLICY` 로 저장되어, template 갱신 뒤 `/scv:sync` 가 다시 적용. (v0.12.0+) |
 | `/scv:install-deps` | 누락 CLI 자동 감지 + 설치 안내 (`gh` / `glab` / `jq` / `ffmpeg`) |
 | `/scv:workspace` | **멀티레포(nested workspace)** — 대화형 셋업: 우산에 자식으로 합류 / 우산(root) 생성 / 분리. 긴 플래그 불필요. |
 | `/scv:handoff` | **멀티레포** — 다른 레포의 대응개발 필요를 선언 → 우산 scv repo 에 handoff(+ 결정 + 대화) 기록 (push 는 매번 동의, 팀 알림 선택). |
+
+---
+
+## 작업 공간 가드 (v0.25.0+) <a id="workspace-guard"></a>
+
+플러그인이 등록하는 훅 중 *차단하는* 것은 하나뿐입니다 — `hooks/hooks.json` 이
+`vendor/scv-core/core/template/hooks/guard.sh` 에 연결한 `PreToolUse` 가드입니다.
+아래의 journal 훅과 달리 이 훅은 쓰기를 거부할 수 있으니, 마주치기 전에 알아두는
+편이 좋습니다. 거부하는 것은 정확히 두 가지입니다.
+
+- **손으로 만든 plan 파일.** `scv/promote/<slug>/` 아래의 `PLAN.md`, `TESTS.md`,
+  `FEATURE_ARCHITECTURE.md` 는 SCV 액션 밖에서 *생성* 할 수 없습니다. 이미 있는
+  파일을 편집하는 건 언제나 허용됩니다 — `<TODO>` 를 채우고 `status:` 를 넘기는
+  건 정상 단계니까요.
+- **세션에서 SCV 액션이 한 번도 실행되지 않은 상태의 `scv/` 바깥 쓰기.** 바깥에서
+  보면 계획된 작업의 변경과 그렇지 않은 변경은 똑같이 생겼습니다. 가드는 SCV 가
+  관여했다는 신호 하나를 요구합니다.
+
+**무엇이 차단을 푸는가.** SCV 커맨드를 실행하면 그 세션에 대한 *영수증(receipt)* 이
+발행됩니다. 커맨드가 시작됐다고 알려주는 쪽은 호스트이고, 모델은 호스트 이벤트를
+위조할 수 없습니다 — 영수증을 기준으로 삼는 이유가 그것입니다. 읽기 전용인
+`/scv:status` 로 충분합니다. 영수증 하나는 한 프로젝트의 한 세션만 덮습니다. 다른
+체크아웃에서 받은 영수증은 여기를 풀어주지 않습니다.
+
+**바깥 쓰기 규칙에 한해, 영수증과 무관하게 항상 허용**: `*.md`, `.gitignore`,
+`.gitattributes`, `LICENSE`, 그리고 이 플러그인이 호스트 설정으로 가드에 넘기는
+`.claude/settings.json` 과 `.claude/settings.local.json`. `.env` 는 의도적으로 이
+목록에 *없습니다*. 이 예외는 plan 파일 규칙까지 가지 않습니다 — 새로 만드는
+`scv/promote/<slug>/PLAN.md` 는 `.md` 라도 거부됩니다.
+
+**끄는 방법**: Claude Code 를 실행하는 프로세스의 환경에 `SCV_GUARD=off` 를
+설정합니다 (`SCV_GUARD_RULE_B=off` 는 plan 파일 규칙만 남기고 바깥 쓰기 규칙을
+끕니다). 이 값은 오직 프로세스 환경에서만 읽고, 프로젝트 안의 파일에서는 절대
+읽지 않습니다 — 에이전트가 쓸 수 있는 파일이면 에이전트가 스스로를 예외로
+만들 수 있으니까요.
+
+**가드가 비켜서는 때.** 가드는 아예 판단이 불가능한 두 경우에 **fail open** 합니다 —
+payload 가 비었을 때, 그리고 그 기계에 JSON 리더가 없을 때. 둘 다 stderr 에 한 줄
+찍고 그대로 허용합니다. 명시적으로 규칙에 걸릴 때만 거부합니다. 영수증 저장소는
+여기 포함되지 않습니다: 쓸 수 없으면 영수증이 아예 생기지 않고, 면제 대상이 아닌
+쓰기는 허용이 아니라 전부 거부됩니다. SCV 를 도입하지 않은
+프로젝트에서는 아예 무동작입니다: 툴 호출이 일어난 디렉토리에서 위로 올라가며
+`scv/` 를 찾고, 없으면 즉시 허용합니다.
+
+계약:
+[`vendor/scv-core/core/contracts/guard.md`](vendor/scv-core/core/contracts/guard.md).
+
+가드가 답하는 질문은 "이 세션에서 SCV 액션이 실행됐는가" 이지, "이 쓰기가 계획된
+작업에 속하는가" 가 아닙니다. 두 번째 질문은 머지 시점의 것입니다. Core 는 그
+용도의 CI 게이트를 제공하지만
+(`vendor/scv-core/core/scripts/check-provenance.sh` — 아카이브된 plan 없이 코드를
+바꾼 PR 을 실패시킵니다), hydrate 는 프로젝트에 워크플로를 설치하지 않습니다.
+연결할지는 사용자의 선택입니다.
 
 ---
 
@@ -218,7 +273,7 @@ AI 가 팀 코드를 짜기 시작하면 세 가지가 어긋납니다.
 
 BMAD/GSD 로 spec → code 단계 진행하고, SCV 의 archive 가 그 밑에서 회귀 안전망 누적.
 
-이때 한 가지 제약이 있습니다. 작업 공간 가드는 세션 안에서 SCV 명령과 엮이지 않는 쓰기를 거부하는데, 다른 도구의 쓰기는 계획 없는 편집과 구분되지 않습니다. SCV 명령을 한 번만 실행하면 됩니다 — 읽기 전용인 `/scv:status` 로 충분하고, 이후 세션은 평소대로 진행됩니다.
+이때 한 가지 제약이 있습니다. [작업 공간 가드](#workspace-guard)는 세션 안에서 SCV 명령과 엮이지 않는 쓰기를 거부하는데, 다른 도구의 쓰기는 계획 없는 편집과 구분되지 않습니다. SCV 명령을 한 번만 실행하면 됩니다 — 읽기 전용인 `/scv:status` 로 충분하고, 이후 세션은 평소대로 진행됩니다.
 
 **더 큰 변경의 경우**: multi-feature 변경을 *여러 slug* 으로 분할하고 동일한 `epic:` (PLAN.md frontmatter) 아래 묶음.
 
@@ -249,8 +304,8 @@ v0.20.0부터 공통 워크플로 동작은 체크섬으로 검증하고 버전�
 참고하세요.
 
 Wrapper와 Core는 서로 독립적으로 릴리스합니다. 이 Claude 어댑터 release는
-`0.27.0`이고 현재 Core pin은 `vendor/scv-core/VERSION`과 `core.lock`에
-기록됩니다. Core sync는 그 체크섬 pin과 생성 projection만 갱신하며 wrapper
+`0.27.0`이고, 이 릴리스가 물고 있는 Core pin은 `vendor/scv-core/VERSION`과
+`core.lock`에 기록됩니다. Core sync는 그 체크섬 pin과 생성 projection만 갱신하며 wrapper
 `VERSION`, plugin manifest, marketplace version은 변경하지 않습니다.
 
 **Journal 훅 (v0.22.0+, 등록은 wrapper 소유).** Core 는 자유대화까지
@@ -268,6 +323,12 @@ Wrapper와 Core는 서로 독립적으로 릴리스합니다. 이 Claude 어댑�
 (password/token/secret/api-key 값, `Bearer` 토큰, `AKIA…` 키 → `[REDACTED]`)
 가 디스크 기록 전에 실행됩니다 — `scv/journal/` 직접 쓰기 금지, blocking 훅
 등록 금지. 계약: scv-core `docs/wrapper-integration.md` §6 "Hook seam".
+
+같은 `hooks/hooks.json` 이 유일하게 *차단하는* 훅도 등록합니다 — `PreToolUse`
+[작업 공간 가드](#workspace-guard) (v0.25.0+). Core 는 이 스크립트를 host-neutral
+로 제공하고, 어떤 호스트 이벤트를 어떤 모드에 연결할지는 wrapper 가 항목마다
+`SCV_GUARD_MODE`(`mint` / `gate-write` / `gate-bash`)로 넘겨 정합니다. 그래서
+스크립트는 호스트 이름을 담지 않습니다.
 
 PLAN.md 가 단일 source of truth. 외부 도구 (Jira / Linear / Confluence / Google Doc) 는 `refs:` 로 *링크* 만 — 복사 안 함. 출력 (PR / MR / Slack / Discord) 은 같은 source 에서 자동 생성.
 
@@ -314,7 +375,7 @@ flowchart TB
 
 - 단일 source of truth — PLAN.md 한 번만 작성 · PR / regression / Slack 모두 여기서 읽음.
 - 외부 도구는 외부에 둠 — `refs:` 로 티켓 링크 · 본문 복사 안 함 · 티켓 갱신돼도 링크는 유효.
-- vendor-agnostic 백엔드 — `lib/pr-platform.sh` 통해 `gh` / `glab` first-class · Bitbucket / Gitea 추가 = 새 어댑터.
+- vendor-agnostic 백엔드 — `scripts/lib/pr-platform.sh` 통해 `gh` / `glab` first-class · Bitbucket / Gitea 추가 = 새 어댑터.
 - 다국어 default — PR / Mermaid / commit 모두 `SCV_LANG` 따라감 (English · 한국어 · 日本語).
 
 ## 철학: Standard · Cowork · Verify <a id="philosophy-standard--cowork--verify"></a>
