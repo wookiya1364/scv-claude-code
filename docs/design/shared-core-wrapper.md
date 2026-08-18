@@ -166,4 +166,5 @@ bash tests/test-sync-core-atomicity.sh
 Ubuntu and macOS fast checks remain because they cover GNU/BSD and filesystem
 differences in parallel. The Windows model-policy job covers Git Bash and
 CRLF behavior. Concurrency cancels stale runs when a PR head changes, and
-every workflow job is bounded by `timeout-minutes: 2`.
+every workflow job is bounded by `timeout-minutes: 2`, except `promote.yml`,
+which is 45 because it waits on the release chain's checks.

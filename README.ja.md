@@ -23,7 +23,7 @@ Drop materials → Claude refines them with you → implementation runs the test
 <a href="https://github.com/wookiya1364/scv-claude-code/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/wookiya1364/scv-claude-code?label=release&color=blue&cacheSeconds=300" /></a>
 <img alt="License" src="https://img.shields.io/badge/license-MIT-green" />
 <img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude%20Code-plugin-D97757" />
-<img alt="Regression" src="https://img.shields.io/badge/tests-874_PASS-brightgreen" />
+<img alt="Regression" src="https://img.shields.io/badge/tests-951_PASS-brightgreen" />
 <img alt="i18n" src="https://img.shields.io/badge/i18n-EN_·_KO_·_JA-purple" />
 </p>
 
@@ -32,6 +32,7 @@ Drop materials → Claude refines them with you → implementation runs the test
 <a href="#5-minute-walkthrough">5-min walkthrough</a> ·
 <a href="#the-loop">The Loop</a> ·
 <a href="#slash-commands">Commands</a> ·
+<a href="#workspace-guard">Guard</a> ·
 <a href="#why-scv">Why SCV?</a> ·
 <a href="#architecture--integrations">Architecture</a> ·
 <a href="#philosophy-standard--cowork--verify">Philosophy</a> ·
@@ -168,9 +169,65 @@ archive 時にそれを `scv/DECISIONS.md` へ残します。
 | `/scv:routine [<name>\|--list]` | **メンテナンスルーティン** (v0.22.0+)。ルーティン 1 つ = `scv/routines/<name>.md` の markdown 1 ファイル — task + guardrails + exit criteria の契約 (step list ではない)。`--list` は NAME/CADENCE/REPORT 表、`--lint <file>` はルーティンファイル検査。SCV は決してスケジュールしない: `/loop 1d /scv:routine dead-code`、cron、CI スケジュール等のホスト機能でユーザーが登録。 |
 | `/scv:report` | フェーズ結果を Slack / Discord に通知 |
 | `/scv:sync` | **2 ステップ sync** (v0.11.3+).<br/>(1) プラグイン template → ワークフロー文書 (`merge_policy`; 廃止された標準ドキュメント 7 種は 1 回だけ削除, v0.22.0+)。<br/>(2) コード ↔ active promote slug の drift 検出 (`scope:` git diff + TESTS run)。<br/>archive は immutable。 |
+| `/scv:set-models` | モデルポリシーを選択 — `recommended` / `all-opus` / `all-sonnet` / `all-haiku` / `session-default` — し、全 SCV コマンドの frontmatter に適用。選択は `.env` の `SCV_MODEL_POLICY` に保存され、template 更新後に `/scv:sync` が再適用。(v0.12.0+) |
 | `/scv:install-deps` | 不足 CLI 自動検出 + インストール案内 (`gh` / `glab` / `jq` / `ffmpeg`) |
 | `/scv:workspace` | **マルチレポ(nested workspace)** — 対話型セットアップ: アンブレラに子として参加 / アンブレラ(root)作成 / 分離。長いフラグ不要。 |
 | `/scv:handoff` | **マルチレポ** — 他レポの対応開発が必要だと宣言 → アンブレラ scv repo に handoff(+ 決定 + 会話)を記録(push は毎回同意、チーム通知は任意)。 |
+
+---
+
+## ワークスペースガード (v0.25.0+) <a id="workspace-guard"></a>
+
+プラグインが登録するフックのうち、*ブロックする*ものは 1 つだけです —
+`hooks/hooks.json` が `vendor/scv-core/core/template/hooks/guard.sh` に繋いだ
+`PreToolUse` ガードです。後述の journal フックと違い、これは書き込みを拒否
+できます。出会う前に知っておく価値があります。拒否するのはちょうど 2 つです。
+
+- **手で作られた plan ファイル。** `scv/promote/<slug>/` 配下の `PLAN.md`、
+  `TESTS.md`、`FEATURE_ARCHITECTURE.md` は SCV アクションの外では*作成*
+  できません。すでにあるファイルの編集は常に許可されます — `<TODO>` を埋め、
+  `status:` を進めるのは通常のステップだからです。
+- **セッション内で SCV アクションが 1 度も走っていない状態での `scv/` 外への
+  書き込み。** 外から見ると、計画された作業の変更とそうでない変更は同じ形を
+  しています。ガードは SCV が関与したという signal を 1 つだけ求めます。
+
+**何がブロックを解くか。** SCV コマンドを実行すると、そのセッションに対する
+*レシート(receipt)* が発行されます。コマンドが始まったと報告するのはホストで
+あり、モデルはホストイベントを捏造できません — レシートを鍵にする理由が
+これです。読み取り専用の `/scv:status` で十分です。レシート 1 つは 1 プロジェクト
+の 1 セッションだけを覆います。別のチェックアウトで得たレシートはここを解錠
+しません。
+
+**外部書き込みの規則に限り、レシートに関係なく常に許可**: `*.md`、`.gitignore`、
+`.gitattributes`、`LICENSE`、そしてこのプラグインがホスト設定としてガードに渡す
+`.claude/settings.json` と `.claude/settings.local.json`。`.env` は意図的に
+この一覧に*入れていません*。この免除は plan ファイルの規則には届きません —
+新規作成の `scv/promote/<slug>/PLAN.md` は `.md` でも拒否されます。
+
+**無効化の方法**: Claude Code を動かすプロセスの環境に `SCV_GUARD=off` を設定
+します(`SCV_GUARD_RULE_B=off` は plan ファイルの規則を残し、外部書き込みの
+規則だけを外します)。この値はプロセス環境からのみ読み、プロジェクト内の
+ファイルからは決して読みません — エージェントが書けるファイルなら、
+エージェントは自分自身を例外にできてしまうからです。
+
+**ガードが引き下がるとき。** ガードは、判断そのものが不可能な二つの場合に
+**fail open** します — payload が空のとき、そしてその機械に JSON リーダーが
+無いとき。どちらも stderr に 1 行出して、その呼び出しを許可します。明示的に
+ルールへ一致したときだけ拒否します。レシート置き場はこれに含まれません:
+書き込めなければレシートは一つも生まれず、免除対象でない書き込みは許可では
+なくすべて拒否されます。SCV を導入していないプロジェクトでは完全に不活性です:
+ツール呼び出しのディレクトリから上へ辿って `scv/` を探し、無ければ即座に
+許可します。
+
+契約:
+[`vendor/scv-core/core/contracts/guard.md`](vendor/scv-core/core/contracts/guard.md)。
+
+ガードが答える問いは「このセッションで SCV アクションが走ったか」であって、
+「この書き込みは計画された作業に属するか」ではありません。2 つ目はマージ時の
+問いです。Core はその用途の CI ゲートを同梱していますが
+(`vendor/scv-core/core/scripts/check-provenance.sh` — archive された plan なしに
+コードを変更した PR を失敗させます)、hydrate はプロジェクトにワークフローを
+インストールしません。繋ぐかどうかは利用者の判断です。
 
 ---
 
@@ -218,7 +275,7 @@ AI がチームのコードを書き始めると、3 つのことが噛み合わ
 
 BMAD/GSD で spec → code フェーズを進めて、SCV の archive がその下で回帰セーフティネットを累積。
 
-その際の制約が一つあります。ワークスペースガードはセッション内の SCV コマンドに紐づかない書き込みを拒否しますが、他ツールの書き込みは計画のない編集と区別できません。SCV コマンドを一度実行すれば解決します — 読み取り専用の `/scv:status` で十分で、以降のセッションは通常どおり進みます。
+その際の制約が一つあります。[ワークスペースガード](#workspace-guard)はセッション内の SCV コマンドに紐づかない書き込みを拒否しますが、他ツールの書き込みは計画のない編集と区別できません。SCV コマンドを一度実行すれば解決します — 読み取り専用の `/scv:status` で十分で、以降のセッションは通常どおり進みます。
 
 **より大きな変更の場合**: multi-feature 変更を *複数 slug* に分割し、同じ `epic:` (PLAN.md frontmatter) 下にグループ化。`scv/PROMOTE.md` §8d の epic + multi-slug パターン参照。
 
@@ -247,8 +304,8 @@ v0.20.0 から、共通ワークフローの動作はチェックサムで検証
 を参照してください。
 
 Wrapper と Core は独立してリリースします。この Claude アダプター release
-は `0.27.0` で、現在の Core pin は `vendor/scv-core/VERSION` と
-`core.lock` に記録されます。Core sync が更新するのは、そのチェックサム付き
+は `0.27.0` で、これが担いでいる Core pin は
+`vendor/scv-core/VERSION` と `core.lock` に記録されます。Core sync が更新するのは、そのチェックサム付き
 pin と生成 projection のみで、wrapper の `VERSION`、plugin manifest、
 marketplace version は変更しません。
 
@@ -269,6 +326,13 @@ redaction フィルター (password/token/secret/api-key 値、`Bearer` トー�
 `AKIA…` キー → `[REDACTED]`) がディスク書き込み前に実行されます —
 `scv/journal/` への直接書き込み禁止、blocking フック登録禁止。契約:
 scv-core `docs/wrapper-integration.md` §6 "Hook seam"。
+
+同じ `hooks/hooks.json` は、唯一の*ブロックする*フックも登録します —
+`PreToolUse` の[ワークスペースガード](#workspace-guard) (v0.25.0+)。Core は
+スクリプトを host-neutral のまま提供し、どのホストイベントをどのモードに
+対応させるかは wrapper がエントリごとに `SCV_GUARD_MODE`(`mint` /
+`gate-write` / `gate-bash`)で渡して決めます。だからスクリプトはホスト名を
+一切含みません。
 
 PLAN.md が単一の source of truth。外部ツール (Jira / Linear / Confluence / Google Doc) は `refs:` で*リンク*のみ — 複製しない。出力 (PR / MR / Slack / Discord) は同じ source から自動生成。
 
@@ -315,7 +379,7 @@ flowchart TB
 
 - 単一の source of truth — PLAN.md は一度だけ書く · PR / regression / Slack すべてここから読む。
 - 外部ツールは外部に — `refs:` でチケットへリンク · 本文の複製なし · チケット更新時もリンクは有効。
-- vendor-agnostic バックエンド — `lib/pr-platform.sh` 経由で `gh` / `glab` first-class · Bitbucket / Gitea 追加 = 新アダプター。
+- vendor-agnostic バックエンド — `scripts/lib/pr-platform.sh` 経由で `gh` / `glab` first-class · Bitbucket / Gitea 追加 = 新アダプター。
 - 多言語デフォルト — PR / Mermaid / commit すべて `SCV_LANG` に従う (English · 한국어 · 日本語)。
 
 ## 哲学: Standard · Cowork · Verify <a id="philosophy-standard--cowork--verify"></a>
