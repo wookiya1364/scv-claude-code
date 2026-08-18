@@ -222,6 +222,66 @@ Relation to Ralph Loop: this paragraph is what owns `/scv:work`'s long-run behav
 If PLAN.md frontmatter declares `parallel_groups:` (e.g. `parallel_groups: [[1, 2], [3]]` — inner arrays of Suggested-path step numbers that are independent of each other), and your host supports subagents / parallel workflows, you MAY fan out: run the steps of each group concurrently (groups themselves run in declaration order), then verify each TESTS scenario independently before merging results. The hint never changes WHAT must hold — Guardrails / Exit criteria / TESTS remain the contract for every parallel branch. If the field is absent, or the host has no parallel capability, behave exactly as before (sequential execution — zero behavior change).
 <!-- /SCV:GUIDANCE -->
 
+### Step 5e — Effort governor (v0.29.0+)
+
+The session's effort setting belongs to the user and is never changed here.
+What this step controls is HOW the work runs — whether heavy stages fan out,
+and how much reasoning delegated stages request — so a light plan stays cheap
+even under a maximal session posture, with zero user intervention.
+
+Read the mode from `.env` `SCV_EFFORT_MODE` (unset means `auto`). When `off`,
+skip this entire step: do not run the classifier, print nothing, execute
+exactly as the protocol did before this step existed.
+
+Otherwise judge the plan:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/effort-class.sh" "<SCV_DIR>/promote/<slug>"
+```
+
+Parse `EFFORT_CLASS` (standard | heavy | orchestration), `EFFORT_REASON`, and
+`EFFORT_ESCALATION` (armed | normal). The judgment is deterministic and its
+reason line is the audit trail — always surface it in the one-line notice.
+
+**Band → execution policy.** Weight attaches to STAGES, not to the task:
+
+| stage | standard | heavy | orchestration |
+|---|---|---|---|
+| mechanical (scans, projections, deck builds, bulk reads) | lowest delegated effort | lowest | lowest |
+| light synthesis (report assembly, summaries) | second-lowest | second-lowest | second-lowest |
+| implementation | main flow, **no multi-agent fan-out** | delegate hard parts at elevated per-call effort where the host allows | elevated |
+| verification | single pass | one strong adversarial pass at the host's highest single-call effort | multi-agent fan-out where the host supports it; sequential degrade otherwise |
+
+The load-bearing rule: **when `EFFORT_CLASS` is standard, do not launch
+multi-agent orchestration for this plan's implementation or verification.**
+Fan-out is the dominant cost, and a standard plan has not contracted for it.
+
+**Mode behavior:**
+
+- `auto` — print one line and proceed per the policy, asking nothing:
+  `scv: effort <band> — <reason> (escalation <armed|normal>)`
+- `ask` — only when the band and the session's effort posture disagree by two
+  or more steps, ask ONE two-option question (run per the band / run per the
+  session posture); continue immediately with the chosen shape. Never restart
+  the action over this. When the gap is smaller, behave as `auto`.
+- Any mode: the user's explicit instruction in the conversation overrides the
+  judgment — record `declared by user` as the reason and proceed.
+
+**Auto-promotion (upward only; active whenever a judgment was made):**
+
+- Triggers: the same stage fails its tests twice in a row, or independent
+  verification refutes the work more than once.
+- Action: move one band up (standard → heavy → orchestration), notify in one
+  line, continue. No re-approval. Never demote during verification.
+- `EFFORT_ESCALATION: armed` promotes on the FIRST refutation instead of the
+  second — the pre-arming exists because the one backtest miss carried
+  exactly these markers.
+
+**Record for recalibration:** at archive time (Step 9b), include in
+`--reason` the judged band, the band actually used, and any promotions. The
+archive is the dataset — the classifier's rules survived one backtest and
+must face the next one with this run in it.
+
 ### Step 6 — Implement
 
 Follow `PLAN.md`'s `Suggested path` (legacy PLANs: `Steps`) as the default route — it is a suggestion, not the contract; if you find a better path that satisfies the Guardrails and Exit criteria, take it and tell the user in one line — keep that line: Step 9b.0 records it as the archive's `path delta:`. For each step:

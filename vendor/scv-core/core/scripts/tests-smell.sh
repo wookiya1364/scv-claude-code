@@ -53,6 +53,34 @@ if (( assertions > 0 )) && (( type_only * 2 > assertions )); then
   warnings+=("type-heavy assertions: $type_only of $assertions assertions are typeof checks — codegen may pass with empty stubs")
 fi
 
+# Durability smells (v0.29.0+). A TESTS.md outlives its pull request: the
+# regression action replays How-to-run from the archive forever. Two patterns
+# read fine at implementation time and go permanently red the moment the work
+# is committed — four archived plans went that way before anyone noticed.
+#
+# (1) Pre-commit state assertions: `git diff --name-only HEAD` scoping ("this
+# edit only touched X") is only true in the uncommitted working tree.
+git_diff_asserts=$(grep -cE 'git diff (--name-only |--stat )?HEAD' "$TESTS_FILE" 2>/dev/null || true)
+if (( git_diff_asserts > 0 )); then
+  warnings+=("pre-commit state assertion: $git_diff_asserts \`git diff ... HEAD\` check(s) — true only before the work is committed, permanently false once archived")
+fi
+
+# (2) Referenced scripts that do not exist. Heuristic: resolve each
+# path-looking token ending in .sh against the repo root (walk up from the
+# TESTS file until a directory holding core/ or a .git marker). One archived
+# plan called a test file that was never created, and stayed red from day one.
+_root="$(cd "$(dirname "$TESTS_FILE")" && pwd)"
+while [[ -n "$_root" && "$_root" != "/" ]]; do
+  if [[ -d "$_root/core" || -d "$_root/.git" || -d "$_root/vendor/scv-core" ]]; then break; fi
+  _root="$(dirname "$_root")"
+done
+if [[ -n "$_root" && "$_root" != "/" ]]; then
+  while IFS= read -r _ref; do
+    [[ -n "$_ref" ]] || continue
+    [[ -f "$_root/$_ref" ]] || warnings+=("missing script reference: $_ref does not exist under $_root — an archived How-to-run would fail on it forever")
+  done < <(grep -oE '(core|tests|scripts)/[A-Za-z0-9._/-]+\.sh' "$TESTS_FILE" 2>/dev/null | sort -u)
+fi
+
 if [[ ${#warnings[@]} -eq 0 ]]; then
   echo "TESTS_SMELL: clean"
 else

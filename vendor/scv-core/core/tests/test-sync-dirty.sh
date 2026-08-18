@@ -7,6 +7,14 @@
 # can restore may be replaced, a file git cannot restore is refused by name.
 # These cases pin the refusal down from both sides — what must be refused, and
 # what must still flow.
+#
+# Every sentinel is a CANARY-*-9f3a token, never a plausible English phrase.
+# The first version used "uncommitted work" — and then a documentation edit
+# added the words "the uncommitted working tree" to the very template this
+# suite copies around, so a fully successful overwrite still grepped positive
+# and T2 reported the override broken. The fourth self-trapping test this
+# project has caught; the cure is the same every time: a sentinel must be a
+# string the real content can never legitimately contain.
 
 set -uo pipefail
 
@@ -58,36 +66,36 @@ grep -q '^merge_policy: overwrite' "$CORE/template/scv/PROMOTE.md" \
 
 echo "=== T1 — no snapshot directory, ever ==="
 P="$(mk_project t1)"
-( cd "$P" && printf '\nlocal drift\n' >> "$TARGET" && git commit -qam drift )
+( cd "$P" && printf '\nCANARY-DRIFT-9f3a\n' >> "$TARGET" && git commit -qam drift )
 out="$(bash "$SYNC" --project-dir "$P" 2>&1)"
-grep -q 'local drift' "$P/$TARGET" && fail "T1 a committed drift was not overwritten" \
+grep -q 'CANARY-DRIFT-9f3a' "$P/$TARGET" && fail "T1 a committed drift was not overwritten" \
                                    || pass "T1 a committed drift is overwritten (git holds the old content)"
 [[ -e "$P/.scv-backup" ]] && fail "T1 .scv-backup was created" || pass "T1 no .scv-backup directory"
 grep -q 'Backups:' <<<"$out" && fail "T1 a Backups report survived" || pass "T1 no Backups report"
 
 echo "=== T2 — an uncommitted change refuses by name ==="
 P="$(mk_project t2)"
-( cd "$P" && printf '\nuncommitted work\n' >> "$TARGET" )
+( cd "$P" && printf '\nCANARY-DIRTY-9f3a\n' >> "$TARGET" )
 out="$(bash "$SYNC" --project-dir "$P" 2>&1)"
-grep -q 'uncommitted work' "$P/$TARGET" && pass "T2 the dirty file was not touched" \
+grep -q 'CANARY-DIRTY-9f3a' "$P/$TARGET" && pass "T2 the dirty file was not touched" \
                                         || fail "T2 the dirty file was overwritten — work lost"
 grep -q "DIRTY.*$TARGET" <<<"$out" && pass "T2 the refusal names the file" \
                                    || fail "T2 no DIRTY report" "$out"
 out="$(bash "$SYNC" --project-dir "$P" --force "$TARGET" 2>&1)"
-grep -q 'uncommitted work' "$P/$TARGET" && fail "T2 --force did not override" \
+grep -q 'CANARY-DIRTY-9f3a' "$P/$TARGET" && fail "T2 --force did not override" \
                                         || pass "T2 --force overrides the refusal"
 
 echo "=== T3 — no git history means no overwrite ==="
 P="$(mk_project t3)"
 ( cd "$P" && git rm -q --cached "$TARGET" && git commit -qm untrack \
-  && printf '\nuntracked variant\n' >> "$TARGET" )
+  && printf '\nCANARY-UNTRACKED-9f3a\n' >> "$TARGET" )
 out="$(bash "$SYNC" --project-dir "$P" 2>&1)"
-grep -q 'untracked variant' "$P/$TARGET" && pass "T3 an untracked differing file is refused" \
+grep -q 'CANARY-UNTRACKED-9f3a' "$P/$TARGET" && pass "T3 an untracked differing file is refused" \
                                          || fail "T3 an untracked file was overwritten — unrecoverable"
 P="$(mk_project t3b nogit)"
-printf '\nno repo here\n' >> "$P/$TARGET"
+printf '\nCANARY-NOGIT-9f3a\n' >> "$P/$TARGET"
 out="$(bash "$SYNC" --project-dir "$P" 2>&1)"
-grep -q 'no repo here' "$P/$TARGET" && pass "T3 outside a git work tree every differing file is refused" \
+grep -q 'CANARY-NOGIT-9f3a' "$P/$TARGET" && pass "T3 outside a git work tree every differing file is refused" \
                                     || fail "T3 a no-git project was overwritten"
 grep -q 'DIRTY' <<<"$out" && pass "T3 the no-git refusal is reported" || fail "T3 silent refusal" "$out"
 
@@ -104,9 +112,9 @@ grep -q 'DIRTY' <<<"$out" && fail "T4 identical untracked files were reported di
 
 echo "=== T5 — merge-on-markers respects the same refusal ==="
 P="$(mk_project t5)"
-( cd "$P" && printf '\nedit outside markers\n' >> scv/SCV.md )
+( cd "$P" && printf '\nCANARY-OUTSIDE-9f3a\n' >> scv/SCV.md )
 out="$(bash "$SYNC" --project-dir "$P" 2>&1)"
-if grep -q 'edit outside markers' "$P/scv/SCV.md"; then
+if grep -q 'CANARY-OUTSIDE-9f3a' "$P/scv/SCV.md"; then
   # Either the merge preserved it (template unchanged → cmp equal is impossible
   # here since we appended) or the refusal fired. Both keep the edit; the
   # refusal is the one that reports it.
@@ -120,14 +128,14 @@ echo "=== T6 — a committed divergence still merges (the refusal is only for th
 P="$(mk_project t6)"
 ( cd "$P"
   perl -0pi -e 's/(<!-- PROJECT:LOCAL START -->).*?(<!-- PROJECT:LOCAL END -->)/$1\nkeep-me: local rule\n$2/s' scv/SCV.md
-  printf '\ncommitted note outside markers\n' >> scv/SCV.md
+  printf '\nCANARY-COMMITTED-9f3a\n' >> scv/SCV.md
   git commit -qam customized )
 out="$(bash "$SYNC" --project-dir "$P" 2>&1)"
 grep -q "MERGE.*SCV.md" <<<"$out" && pass "T6 a committed divergence takes the MERGE path" \
                                   || fail "T6 no MERGE for a committed divergence" "$out"
 grep -q 'keep-me: local rule' "$P/scv/SCV.md" && pass "T6 the PROJECT:LOCAL block survived the merge" \
                                               || fail "T6 the merge lost the PROJECT:LOCAL block"
-grep -q 'committed note outside markers' "$P/scv/SCV.md" && fail "T6 the outside-marker edit survived — merge did not run" \
+grep -q 'CANARY-COMMITTED-9f3a' "$P/scv/SCV.md" && fail "T6 the outside-marker edit survived — merge did not run" \
                                                          || pass "T6 the outside-marker edit was replaced (git holds it)"
 
 echo "=== T7 — a symlinked doc is never written through ==="
@@ -136,11 +144,11 @@ echo "=== T7 — a symlinked doc is never written through ==="
 # adversarial review destroyed an 853-line file this way.
 P="$(mk_project t7)"
 mkdir -p "$WORK/outside"
-printf 'IRREPLACEABLE NOTES\n' > "$WORK/outside/notes.md"
+printf 'CANARY-LINKTGT-9f3a\n' > "$WORK/outside/notes.md"
 ( cd "$P" && rm "$TARGET" && ln -s "$WORK/outside/notes.md" "$TARGET" \
   && git add -A && git commit -qm link )
 out="$(bash "$SYNC" --project-dir "$P" 2>&1)"
-grep -q 'IRREPLACEABLE NOTES' "$WORK/outside/notes.md" && pass "T7 the link target is untouched" \
+grep -q 'CANARY-LINKTGT-9f3a' "$WORK/outside/notes.md" && pass "T7 the link target is untouched" \
                                                        || fail "T7 sync wrote through the symlink"
 grep -q "DIRTY.*$TARGET" <<<"$out" && pass "T7 the symlink is refused by name" \
                                    || fail "T7 no refusal for the symlink" "$out"
@@ -149,11 +157,11 @@ echo "=== T8 — a symlinked scv/ directory skips the whole template pass ==="
 P="$WORK/t8"; mkdir -p "$P" "$WORK/shared-scv"
 ( cd "$P" && git init -q . && git config user.email t@e && git config user.name t )
 ( cd "$WORK" && cp -R "$(dirname "$(mk_project t8seed)")/t8seed/scv/." "$WORK/shared-scv/" )
-printf 'SHARED TEAM CONTENT\n' >> "$WORK/shared-scv/PROMOTE.md"
+printf 'CANARY-SHARED-9f3a\n' >> "$WORK/shared-scv/PROMOTE.md"
 ln -s "$WORK/shared-scv" "$P/scv"
 ( cd "$P" && git add -A >/dev/null 2>&1 && git commit -qm seed >/dev/null 2>&1 )
 out="$(bash "$SYNC" --project-dir "$P" 2>&1)"
-grep -q 'SHARED TEAM CONTENT' "$WORK/shared-scv/PROMOTE.md" && pass "T8 the shared tree is untouched" \
+grep -q 'CANARY-SHARED-9f3a' "$WORK/shared-scv/PROMOTE.md" && pass "T8 the shared tree is untouched" \
                                                             || fail "T8 sync wrote into the symlinked directory"
 grep -q "WARN.*symlinked directory" <<<"$out" && pass "T8 the skip is reported once" \
                                               || fail "T8 no WARN for the symlinked scv/" "$out"
@@ -165,7 +173,7 @@ echo "=== T9 — a refusal keeps the version stamp where it was ==="
 P="$(mk_project t9)"
 # perl -pi, not sed -i — BSD sed treats the expression as a backup suffix.
 perl -pi -e 's|<!-- STANDARD:VERSION -->[^<]*<!-- /STANDARD:VERSION -->|<!-- STANDARD:VERSION -->2.0.0<!-- /STANDARD:VERSION -->|' "$P/scv/SCV.md"
-( cd "$P" && git commit -qam stale && printf '\nuncommitted work\n' >> "$TARGET" )
+( cd "$P" && git commit -qam stale && printf '\nCANARY-DIRTY-9f3a\n' >> "$TARGET" )
 out="$(bash "$SYNC" --project-dir "$P" 2>&1)"
 stamp="$(sed -n 's/.*<!-- STANDARD:VERSION -->\(.*\)<!-- \/STANDARD:VERSION -->.*/\1/p' "$P/scv/SCV.md" | head -1)"
 [[ "$stamp" == "2.0.0" ]] && pass "T9 the stamp did not advance past the refusal" \
@@ -180,10 +188,10 @@ grep -q "STAMP.*SCV.md" <<<"$out" && pass "T9 the stamp write is reported, not s
 
 echo "=== T10 — assume-unchanged does not fool the refusal ==="
 P="$(mk_project t10)"
-( cd "$P" && printf '\nLOCAL-ONLY CONFIG\n' >> "$TARGET" \
+( cd "$P" && printf '\nCANARY-ASSUME-9f3a\n' >> "$TARGET" \
   && git update-index --assume-unchanged "$TARGET" )
 out="$(bash "$SYNC" --project-dir "$P" 2>&1)"
-grep -q 'LOCAL-ONLY CONFIG' "$P/$TARGET" && pass "T10 assume-unchanged content survived" \
+grep -q 'CANARY-ASSUME-9f3a' "$P/$TARGET" && pass "T10 assume-unchanged content survived" \
                                          || fail "T10 sync trusted git status and destroyed assume-unchanged content"
 
 echo
