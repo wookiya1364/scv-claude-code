@@ -9,10 +9,32 @@
 
 set -uo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-GUARD="$ROOT/core/template/hooks/guard.sh"
-CONTRACT="$ROOT/core/contracts/guard.md"
-ACTIONS_JSON="$ROOT/core/actions.json"
+# This file ships in two layouts and must find its subject in both. In the
+# Core repository it sits at core/tests/, two levels below the repo root, and
+# the payload is core/. A wrapper projects it to repo-root tests/, one level
+# down, with the payload vendored at vendor/scv-core/core/. The old
+# "two levels up, then core/" arithmetic was right for exactly one of those —
+# on the wrapper it resolved to the PARENT of the repository and 13 cases
+# failed there, unseen, because no wrapper CI ran this file. Search the
+# plausible (root, payload) pairs and take the one where the guard exists.
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="" CORE=""
+for up in "$HERE/.." "$HERE/../.."; do
+  for sub in core vendor/scv-core/core plugins/scv/vendor/scv-core/core; do
+    if [[ -f "$up/$sub/template/hooks/guard.sh" ]]; then
+      ROOT="$(cd "$up" && pwd)"
+      CORE="$(cd "$up/$sub" && pwd)"
+      break 2
+    fi
+  done
+done
+if [[ -z "$CORE" ]]; then
+  echo "test-guard: could not locate the guard payload from $HERE" >&2
+  exit 1
+fi
+GUARD="$CORE/template/hooks/guard.sh"
+CONTRACT="$CORE/contracts/guard.md"
+ACTIONS_JSON="$CORE/actions.json"
 
 PASS=0; FAIL=0
 pass() { echo "  ✓ $1"; PASS=$((PASS+1)); }
@@ -137,9 +159,29 @@ out="$(printf 'not json at all' | env SCV_GUARD_MODE=gate-write bash "$GUARD" 2>
 out="$(printf '' | env SCV_GUARD_MODE=gate-write bash "$GUARD" 2>/dev/null)"
 [[ -z "$out" ]] && pass "T15 empty input fails open" || fail "T15 denied on empty input"
 
-P="$(mk_project g)"                                                          # T15 unwritable state
-out="$(run "$P" gate-write "$(payload "$P" s1 "README.md")" SCV_GUARD_STATE=/proc/nope)"
-[[ -z "$out" ]] && pass "T15 an unusable receipt store fails open" || fail "T15 denied on unusable state dir"
+# T15 — an unusable receipt store fails CLOSED, and says so. The old case here
+# asserted the opposite ("fails open") against README.md — a file the exempt
+# list allows regardless of receipts, so it passed no matter what the guard
+# did, and the wrong claim survived into the contract. The target must be
+# non-exempt or this case judges nothing; the sanity check below enforces that.
+T15_TARGET="src/x.ts"
+case "$T15_TARGET" in
+  *.md|.gitignore|.gitattributes|LICENSE) fail "T15 self-check: target is exempt — the case would be vacuous" ;;
+esac
+P="$(mk_project g)"
+out="$(env SCV_GUARD_STATE=/proc/nope SCV_GUARD_MODE=gate-write \
+  bash "$GUARD" <<<"$(payload "$P" s1 "$T15_TARGET")" 2>/dev/null)"
+denied "$out" && pass "T15 an unusable receipt store fails closed" \
+              || fail "T15 a broken store allowed a non-exempt write"
+grep -q "receipt store" <<<"$out" && grep -q "SCV_GUARD_STATE" <<<"$out" \
+  && pass "T15 the deny reason names the store, not the workflow" \
+  || fail "T15 the deny reason does not explain the broken store" "$out"
+# Minting into the broken store is best-effort but no longer silent.
+merr="$(printf '{"cwd":"%s","session_id":"s1","tool_input":{"skill":"promote"}}' "$P" \
+  | env SCV_GUARD_STATE=/proc/nope SCV_GUARD_MODE=mint bash "$GUARD" 2>&1 >/dev/null)"
+grep -q "receipt store" <<<"$merr" \
+  && pass "T15 a failed mint warns on stderr" \
+  || fail "T15 a failed mint is silent" "$merr"
 
 P="$(mk_project h)"                                                          # opt-out
 out="$(run "$P" gate-write "$(payload "$P" s1 "src/x.ts")" SCV_GUARD=off)"
@@ -148,6 +190,28 @@ out="$(run "$P" gate-write "$(payload "$P" s1 "src/x.ts")" SCV_GUARD_RULE_B=off)
 [[ -z "$out" ]] && pass "SCV_GUARD_RULE_B=off keeps Rule A only" || fail "Rule B ran while disabled"
 out="$(run "$P" gate-write "$(payload "$P" s1 "scv/promote/z/PLAN.md")" SCV_GUARD_RULE_B=off)"
 denied "$out" && pass "Rule A survives SCV_GUARD_RULE_B=off" || fail "Rule A was disabled with Rule B"
+
+echo "=== T29 — SCV_GUARD_SCRIPTS accepts a colon-separated list ==="
+# One directory was not enough in the field: an adapter's own scripts live
+# outside the vendored core/scripts, and with a single fixed string the
+# adapter-owned actions could never mint. Each entry keeps the fixed-string
+# match; the regression half asserts the second entry actually mints, because
+# on the old single-value guard the whole list is one string nothing contains.
+P="$(mk_project multi)"
+mkdir -p "$WORK/dirA" "$WORK/dirB"
+bashpay() { printf '{"cwd":"%s","session_id":"%s","tool_name":"Bash","tool_input":{"command":"bash %s/run.sh"}}' "$1" "$2" "$3"; }
+out="$(run "$P" gate-bash "$(bashpay "$P" m1 "$WORK/dirA")" SCV_GUARD_SCRIPTS="$WORK/dirA:$WORK/dirB")"
+ls "$P/state" 2>/dev/null | grep -q "^m1-" && pass "T29 the first listed directory mints" \
+                                           || fail "T29 the first listed directory did not mint"
+out="$(run "$P" gate-bash "$(bashpay "$P" m2 "$WORK/dirB")" SCV_GUARD_SCRIPTS="$WORK/dirA:$WORK/dirB")"
+ls "$P/state" 2>/dev/null | grep -q "^m2-" && pass "T29 the second listed directory mints" \
+                                           || fail "T29 the second listed directory did not mint (single-string regression)"
+out="$(run "$P" gate-bash "$(bashpay "$P" m3 "$WORK/dirC")" SCV_GUARD_SCRIPTS="$WORK/dirA:$WORK/dirB")"
+ls "$P/state" 2>/dev/null | grep -q "^m3-" && fail "T29 an unlisted directory minted" \
+                                           || pass "T29 an unlisted directory does not mint"
+out="$(run "$P" gate-bash "$(bashpay "$P" m4 "$WORK/dirA")" SCV_GUARD_SCRIPTS="$WORK/dirA")"
+ls "$P/state" 2>/dev/null | grep -q "^m4-" && pass "T29 the single-value form still mints (compatibility)" \
+                                           || fail "T29 the single-value form broke"
 
 echo "=== patch-style payloads (no file_path field) ==="
 
@@ -212,14 +276,87 @@ else
 fi
 
 echo "=== T21 — the guard and the CI gate agree on exemptions ==="
-GATE_PLAN="$ROOT/scv/promote/20260812-wookiya1364-ci-provenance-gate/PLAN.md"
-if [[ -f "$GATE_PLAN" ]]; then
-  for e in '\*\.md' '\.gitignore' '\.gitattributes' 'LICENSE'; do
-    grep -qE "$e" "$GATE_PLAN" || fail "T21 the CI gate plan does not list $e"
-  done
-  pass "T21 the CI gate lists the same exempt classes"
+# Compared against the two SCRIPTS, not against a plan document. The first
+# version of this case keyed on a promote-folder PLAN.md, which the workflow
+# later archived — the condition went permanently false and the case reported
+# a green skip forever. Both scripts ship in the payload, so the comparison
+# has no precondition and always runs.
+GATE="$CORE/scripts/check-provenance.sh"
+if [[ ! -f "$GATE" ]]; then
+  fail "T21 check-provenance.sh is missing from the payload"
 else
-  pass "T21 (skip) the CI gate plan is not in this tree"
+  for e in '\*\.md' '\.gitignore' '\.gitattributes' 'LICENSE'; do
+    grep -qE -- "$e" "$GUARD" || fail "T21 the guard does not exempt $e"
+    grep -qE -- "$e" "$GATE"  || fail "T21 the CI gate does not exempt $e"
+  done
+  pass "T21 the guard and the CI gate carry the same exempt classes"
+fi
+
+echo "=== T31 — a hostile path cannot corrupt the deny JSON ==="
+# The deny reason embeds the payload's own file path. A control character in
+# it would make the output unparseable — and an unparseable hook decision is
+# no decision, which is an allow. The attacker names the file, so the guard
+# must sanitize.
+P="$(mk_project ctl)"
+evil="$(printf 'src/x\\u0001b.ts')"
+out="$(printf '{"cwd":"%s","session_id":"s1","tool_name":"Write","tool_input":{"file_path":"src/x\\u0001b.ts"}}' "$P" \
+  | env SCV_GUARD_STATE="$P/state" SCV_GUARD_MODE=gate-write bash "$GUARD" 2>/dev/null)"
+if command -v jq >/dev/null 2>&1; then
+  printf '%s' "$out" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
+    && pass "T31 the deny survives a control character as valid JSON" \
+    || fail "T31 a control character broke the deny output" "$out"
+else
+  denied "$out" && pass "T31 (no jq) the deny fired" || fail "T31 no deny" "$out"
+fi
+
+echo "=== T32 — malformed SCV_GUARD_SCRIPTS entries are dropped, not matched ==="
+# A whitespace-only entry is a fixed string every command contains; a relative
+# fragment is nearly as broad. Either would turn the mint hook into
+# mint-everything, which unlocks Rule A for free.
+P="$(mk_project malformed)"
+out="$(run "$P" gate-bash "$(printf '{"cwd":"%s","session_id":"w1","tool_name":"Bash","tool_input":{"command":"echo hello"}}' "$P")" SCV_GUARD_SCRIPTS="$WORK/dirA: :$WORK/dirB")"
+ls "$P/state" 2>/dev/null | grep -q "^w1-" && fail "T32 a whitespace entry minted on an arbitrary command" \
+                                           || pass "T32 a whitespace-only entry does not mint"
+out="$(run "$P" gate-bash "$(printf '{"cwd":"%s","session_id":"w2","tool_name":"Bash","tool_input":{"command":"echo scripts"}}' "$P")" SCV_GUARD_SCRIPTS="scripts")"
+ls "$P/state" 2>/dev/null | grep -q "^w2-" && fail "T32 a relative entry minted on an arbitrary command" \
+                                           || pass "T32 a relative entry does not mint"
+out="$(run "$P" gate-bash "$(bashpay "$P" w3 "$WORK/dirA")" SCV_GUARD_SCRIPTS=" $WORK/dirA : $WORK/dirB ")"
+ls "$P/state" 2>/dev/null | grep -q "^w3-" && pass "T32 surrounding whitespace is trimmed, the real entry mints" \
+                                           || fail "T32 a hand-wrapped list stopped minting"
+
+echo "=== T33 — an unwritable receipt FILE gets the same honest reason ==="
+P="$(mk_project rcpt)"
+mkdir -p "$P/state"
+# Recreate the receipt name the guard derives: <session>-<project-key>.
+printf '{"cwd":"%s","session_id":"s1","tool_input":{"skill":"promote"}}' "$P" \
+  | env SCV_GUARD_STATE="$P/state" SCV_GUARD_MODE=mint bash "$GUARD" >/dev/null 2>&1
+rf="$(ls "$P/state" | head -1)"
+if [[ -n "$rf" ]]; then
+  : > "$P/state/$rf"; chmod 444 "$P/state/$rf"
+  out="$(run "$P" gate-write "$(payload "$P" s1 "src/x.ts")")"
+  grep -q "receipt store" <<<"$out" && pass "T33 the deny names the store when only the FILE is unwritable" \
+                                    || fail "T33 the unwritable-file shape got the misleading workflow reason" "$out"
+  chmod 644 "$P/state/$rf"
+else
+  fail "T33 could not derive the receipt path"
+fi
+
+if [[ -z "${SCV_TESTGUARD_INNER:-}" ]]; then
+  echo "=== T30 — this suite passes from a wrapper-projected layout ==="
+  # A wrapper projects this file to repo-root tests/ with the payload vendored
+  # at vendor/scv-core/core/. Rebuild that shape and replay the whole suite in
+  # it — the one arrangement where the old root arithmetic failed 13 cases,
+  # invisibly, because no wrapper CI ran the file. The env guard stops the
+  # inner copy from recursing again.
+  WRAP="$WORK/wrap"
+  mkdir -p "$WRAP/tests" "$WRAP/vendor/scv-core"
+  cp -R "$CORE" "$WRAP/vendor/scv-core/core"
+  cp "${BASH_SOURCE[0]}" "$WRAP/tests/test-guard.sh"
+  if SCV_TESTGUARD_INNER=1 bash "$WRAP/tests/test-guard.sh" >/dev/null 2>&1; then
+    pass "T30 the wrapper layout (tests/ + vendor/scv-core/core) passes"
+  else
+    fail "T30 the wrapper-projected copy fails — root resolution regressed"
+  fi
 fi
 
 echo

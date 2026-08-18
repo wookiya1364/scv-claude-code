@@ -17,15 +17,25 @@
 #                                  or the agent could exempt itself in one line)
 #   SCV_GUARD_STATE     <dir>      where receipts live; defaults under the temp dir
 #   SCV_GUARD_ACTIONS   <regex>    action ids the host may report (mint mode)
-#   SCV_GUARD_SCRIPTS   <dir>      action scripts; a shell call into it mints
+#   SCV_GUARD_SCRIPTS   <dirs>     action-script directories, colon-separated;
+#                                  a shell call into any of them mints
 #   SCV_GUARD_EXEMPT    <paths>    colon-separated extra exempt paths (host config)
 #   SCV_GUARD_RULE_B    off        keep Rule A only
 #
-# Failure policy: open. Any internal problem allows the action and prints one line
-# to stderr. The host already proceeds when a hook is missing or times out, so an
-# adversary deletes this file rather than corrupting it — closing on internal error
-# buys almost nothing, while one bug here would deny every write in every project.
-# Only an explicit rule match denies.
+# Failure policy: open on two inputs, and only those two — an empty payload, and no
+# JSON reader on the machine. Both print one line to stderr and allow. The host
+# already proceeds when a hook is missing or times out, so an adversary deletes this
+# file rather than corrupting it; closing on unreadable input buys almost nothing,
+# while one bug here would deny every write in every project.
+#
+# The receipt store is the exception and it fails CLOSED — loudly. mint() stays
+# best-effort (a broken store must not turn the mint hook into a denial), but a
+# mint that cannot record prints one stderr line naming the store, and a gate
+# that denies because the store is unusable names the store path and
+# SCV_GUARD_STATE in its reason instead of telling the user to run an action —
+# running one mints into the same broken store and cannot help. Closed is
+# deliberate: a shell tool can chmod the store, and failing open there would
+# let one command switch the guard off. Full account in core/contracts/guard.md.
 
 set -uo pipefail
 
@@ -104,11 +114,36 @@ else
 fi
 RECEIPT="$STATE_DIR/${SESSION}-${PROJECT_KEY}"
 
+# Minting stays best-effort — a broken store must not turn the mint hook into
+# a denial — but it is no longer silent. Silence was the bug: with nothing
+# recorded, has_receipt stays false for the whole session, both rules refuse
+# everything, and the deny message used to say "run an action", which mints
+# into the same broken store and cannot help.
 mint() {
-  mkdir -p "$STATE_DIR" 2>/dev/null || return 0
-  printf '%s\n' "$1" >> "$RECEIPT" 2>/dev/null || true
+  if ! mkdir -p "$STATE_DIR" 2>/dev/null; then
+    notice "receipt store $STATE_DIR cannot be created — no receipt is being recorded (point SCV_GUARD_STATE at a writable directory)"
+    return 0
+  fi
+  { printf '%s\n' "$1" >> "$RECEIPT"; } 2>/dev/null \
+    || notice "receipt store $RECEIPT is not writable — no receipt is being recorded (point SCV_GUARD_STATE at a writable directory)"
 }
 has_receipt() { [[ -s "$RECEIPT" ]]; }
+store_usable() {
+  mkdir -p "$STATE_DIR" 2>/dev/null || return 1
+  [[ -w "$STATE_DIR" ]] || return 1
+  # The directory can be fine while the receipt file itself is not — that
+  # shape is just as unusable, and deserves the same honest deny reason.
+  [[ ! -e "$RECEIPT" || -w "$RECEIPT" ]]
+}
+
+# Why a broken store fails CLOSED: the receipt's absence is what denies, and a
+# shell tool can chmod the store — failing open here would let one command
+# switch the guard off. The price of closing is paid in candor instead: the
+# deny reason below names the store, not the workflow.
+STORE_DENY_SUFFIX=""
+store_deny_reason() {
+  printf 'SCV guard: the receipt store at %s cannot be written, so no action can record itself and every guarded write is refused. This is a machine problem, not a workflow one — fix the directory permissions or point SCV_GUARD_STATE at a writable path.' "$STATE_DIR"
+}
 
 ACTIONS_RE="${SCV_GUARD_ACTIONS:-help|status|promote|work|codegen|deck|update|regression|report|sync|install-deps|workspace|handoff|set-models|routine}"
 
@@ -169,11 +204,15 @@ is_exempt() {
 }
 
 deny() {
-  # Collapse to one line, then escape only backslash and quote. Building the JSON
-  # by hand keeps this dependency-free; the reasons are fixed strings from this
-  # file, never user input.
+  # Collapse to one line, strip every remaining control character, then escape
+  # backslash and quote. Building the JSON by hand keeps this dependency-free —
+  # but the reason is NOT a fixed string: it embeds the payload's own path and
+  # environment-derived values, and a raw control character in either would
+  # make this output unparseable, which the host treats as no decision at all.
+  # An attacker who can name a file can name it with a control character, so
+  # the stripping is load-bearing, not cosmetic.
   local msg
-  msg="$(printf '%s' "$1" | tr '\n' ' ' | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')"
+  msg="$(printf '%s' "$1" | tr '\n' ' ' | LC_ALL=C tr -d '\000-\037' | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')"
   printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}\n' "$msg"
   exit 0
 }
@@ -184,10 +223,30 @@ PLAN_FILES='PLAN.md TESTS.md FEATURE_ARCHITECTURE.md'
 if [[ "$MODE" == "gate-bash" ]]; then
   cmd="$(field '.tool_input.command')"
   [[ -n "$cmd" ]] || allow
-  scripts_dir="${SCV_GUARD_SCRIPTS:-}"
-  if [[ -n "$scripts_dir" ]] && printf '%s' "$cmd" | grep -qF -- "$scripts_dir"; then
-    mint "script"
-    allow
+  # Colon-separated list; each entry keeps the original fixed-string match.
+  # One directory was not enough in the field: an adapter's own action scripts
+  # live outside the vendored core/scripts, and with a single value the
+  # adapter-owned actions could never mint (the contract requires that they
+  # can). A fixed string per entry stays deliberate — no globs, no regex, no
+  # escaping surface.
+  scripts_dirs="${SCV_GUARD_SCRIPTS:-}"
+  if [[ -n "$scripts_dirs" ]]; then
+    IFS=':' read -r -a _scv_mint_dirs <<< "$scripts_dirs"
+    for _scv_dir in "${_scv_mint_dirs[@]}"; do
+      # Trim, then require an absolute path. A whitespace-only entry (one
+      # stray space in a hand-written list) is a fixed string every command
+      # contains — it would mint on anything. A relative entry is a fragment
+      # with the same problem. Absolute paths also mean a path that itself
+      # contains ':' splits into pieces this filter drops, instead of into
+      # loose substrings that match broadly.
+      _scv_dir="${_scv_dir#"${_scv_dir%%[![:space:]]*}"}"
+      _scv_dir="${_scv_dir%"${_scv_dir##*[![:space:]]}"}"
+      [[ "$_scv_dir" == /* ]] || continue
+      if printf '%s' "$cmd" | grep -qF -- "$_scv_dir"; then
+        mint "script"
+        allow
+      fi
+    done
   fi
   # A patch delivered through a shell tool still names its target.
   :
@@ -206,12 +265,14 @@ while IFS= read -r raw; do
   [[ "$abs" == "$SCV_ROOT/promote/"* ]] || continue
   [[ -e "$abs" ]] && continue
   has_receipt && continue
+  store_usable || deny "$(store_deny_reason)"
   deny "SCV guard: ${base} may not be created by hand. Run the promote action first — it scaffolds this file, consumes the raw material, and records where the plan came from. A hand-written plan folder looks identical but has no provenance."
 done < <(targets)
 
 # ---------- Rule B: writing outside the workflow tree needs a receipt -------
 [[ "${SCV_GUARD_RULE_B:-on}" == "off" ]] && allow
 has_receipt && allow
+store_usable || STORE_DENY_SUFFIX="broken-store"
 
 while IFS= read -r raw; do
   [[ -n "$raw" ]] || continue
@@ -220,6 +281,7 @@ while IFS= read -r raw; do
   [[ "$abs" == "$PROJECT_ROOT"/* ]] || continue      # outside the tree: not ours
   rel="${abs#$PROJECT_ROOT/}"
   is_exempt "$rel" && continue
+  [[ -n "$STORE_DENY_SUFFIX" ]] && deny "$(store_deny_reason)"
   deny "SCV guard: no SCV action has run in this session, so this edit to ${rel} is not accounted for. Run the work action on a plan, or declare a fast-path change, and this write proceeds. Any SCV action clears the block for the session."
 done < <(targets)
 
