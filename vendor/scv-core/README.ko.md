@@ -12,9 +12,9 @@ Core 릴리스를 고정하고, 검증된 호스트 프로필을 반영한 뒤 �
 
 | 계약 | 버전 | 의미 |
 |---|---:|---|
-| SCV Core | `0.24.0` | 공통 동작과 릴리스 페이로드 |
+| SCV Core | `0.27.0` | 공통 동작과 릴리스 페이로드 |
 | Core API | `1` | 래퍼와 코어의 통합 계약 |
-| Template | `2.0.0` | hydrate되는 프로젝트 템플릿 스키마 |
+| Template | `2.1.0` | hydrate되는 프로젝트 템플릿 스키마 |
 
 설치 가능한 플러그인은 다음 저장소에 있습니다.
 
@@ -64,6 +64,31 @@ authoritative로 선택하고 legacy source 전체를 건너뜁니다. 따라서
 migration하며, preflight 뒤 생긴 collision은 여전히 fail-closed입니다.
 wrapper swap 뒤 제거될 수 있는 기존 vendor 복구는 반드시 strict 모드를
 유지해야 합니다.
+
+Core는 이 워크플로가 지켜지는지 확인하는 장치도 함께 배포합니다. workspace
+guard는 `PreToolUse` 훅으로 동작하며 두 가지를 거부합니다. 계획 파일을 새로
+만드는 것과, 워크플로 디렉터리 밖에 쓰는 것입니다. 이번 세션에서 호스트가 SCV
+액션이 실행 중이라고 알린 적이 있으면 예외입니다. 그 호스트 이벤트는 모델이
+위조할 수 없는 유일한 신호이므로 guard는 여기에만 의존합니다. guard는 빈
+payload와 JSON 리더가 없는 기계, 이 둘에서만 fail-open 해서 모든 프로젝트의
+쓰기를 막는 사태를 피합니다. 반대로 영수증 저장소를 쓸 수 없을 때는 닫히는
+쪽으로 실패합니다. SCV를 도입하지 않은 프로젝트에서는 아무 일도 하지 않습니다. 등록은 래퍼의 몫입니다. 래퍼가 훅
+항목마다 `SCV_GUARD_MODE`를 전달하므로 스크립트 자체는 호스트를 언급하지
+않습니다. 규칙은 [guard 계약](core/contracts/guard.md)에 있습니다.
+
+훅이 볼 수 없는 부분은 병합 시점의 게이트 두 개가 담당합니다.
+`core/scripts/check-provenance.sh`는 코드를 바꾸면서
+`scv/archive/<slug>/PLAN.md`에 보관된 계획을 추가하지 않은 PR을 거부합니다.
+문서와 워크플로 디렉터리만 바뀐 diff는 코드 변경으로 보지 않습니다.
+`core/scripts/check-vendor-provenance.sh`는 sync 봇이 아닌 브랜치에서 래퍼의
+`vendor/scv-core/`를 다시 쓴 PR을 거부합니다. 봇은 게시된 릴리스 아티팩트를
+받아 원본 해시와 구체화된 해시를 함께 기록하지만, 손으로 복사하면 그때 작업
+트리에 있던 내용이 그대로 기록됩니다. 두 게이트 모두 `stage`, `main`으로 가는
+릴리스 체인과 봇의 `chore/core-*` 브랜치는 예외로 두고, PR 제목에
+`[no-plan: <이유>]`와 `[manual-vendor: <이유>]`로 예외를 선언할 수 있습니다.
+이유는 필수이며, 이유 없는 marker는 거부합니다. Core 자체 CI는 provenance
+게이트를 실행하고, vendor 게이트는 vendor된 Core를 가진 래퍼 저장소를 위해
+배포됩니다.
 
 자세한 경계는 [아키텍처](docs/architecture.md)와
 [래퍼 통합](docs/wrapper-integration.md)을 참고하세요.
