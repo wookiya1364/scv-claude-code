@@ -170,20 +170,92 @@ echo "Project dir: $(cd "$PROJECT_DIR" && pwd)"
 [[ $DRY_RUN -eq 1 ]] && echo "(dry-run mode — no files modified)"
 echo
 
-TS=$(date +%Y%m%d-%H%M%S)
-BACKUP_DIR="$PROJECT_DIR/.scv-backup/$TS"
-BACKUPS_CREATED=0
 CHANGES=()
 
-backup_file() {
+# No backups. This script used to copy every file it changed into
+# .scv-backup/<timestamp>/ — an untracked snapshot directory that its own
+# retired-docs pass below already contradicted ("git history is the recovery
+# path"). One file held two answers to "how do I get the old content back",
+# and the copies were gitignored, so they piled up invisibly.
+#
+# The honest rule replaces it: a file git can restore may be replaced, and a
+# file git cannot restore is refused by name. Tracked-and-modified, staged,
+# untracked, and gitignored all refuse — so does every differing file in a
+# project that is not a git work tree, because there the old content would
+# have nowhere to survive. `--force <file>` overrides, same as for preserve.
+#
+# One deliberate exception: the retired-docs pass below deletes its seven
+# files unconditionally. That is a recorded user decision, and it is not a
+# hole this rule forgot — the sync protocol requires the interactive
+# migration to offer moving their content into DECISIONS.md BEFORE this
+# script runs, and the automatic refresh never reaches a pre-2.x project at
+# all. The version gate on that pass is what keeps the exception narrow.
+GIT_WORKTREE=0
+if git -C "$PROJECT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  GIT_WORKTREE=1
+fi
+
+# is_dirty asks one question: can git give back the bytes this script is about
+# to destroy? It answers by comparing the worktree CONTENT against HEAD — not
+# by reading `git status`. Status lies in exactly the cases that matter: a
+# symlinked path reports clean while cp would write through the link into a
+# file git never stored, and `update-index --assume-unchanged` reports clean
+# while the local content exists only on disk. Content against HEAD has no
+# such blind spots: untracked, ignored, and assume-unchanged all simply fail
+# to match, and land on the refuse side.
+#
+# The comparison neutralizes the STANDARD:VERSION / SYNCED_AT stamp spans,
+# because sync itself maintains those — without this, the stamp write from one
+# refresh makes the file read as dirty on the next, and two payload bumps in a
+# row deadlock on sync's own footprints.
+#
+# Sets DIRTY_KIND so the report can say the right thing: "modified" (a commit
+# exists to diff against) vs "unrestorable" (git holds no copy at all).
+DIRTY_KIND=""
+is_dirty() {
   local f="$1"
-  [[ $DRY_RUN -eq 1 ]] && return 0
-  [[ ! -f "$f" ]] && return 0
-  local rel="${f#$PROJECT_DIR/}"
-  local backup_path="$BACKUP_DIR/$rel"
-  mkdir -p "$(dirname "$backup_path")"
-  cp "$f" "$backup_path"
-  BACKUPS_CREATED=$((BACKUPS_CREATED + 1))
+  DIRTY_KIND="unrestorable"
+  [[ -L "$f" ]] && return 0                       # writes would go through the link
+  [[ $GIT_WORKTREE -eq 1 ]] || return 0
+  local rel="${f#"$PROJECT_DIR"/}"
+  local head_blob
+  if ! head_blob="$(git -C "$PROJECT_DIR" rev-parse -q --verify "HEAD:$rel" 2>/dev/null)"; then
+    return 0                                      # never committed → nothing to restore from
+  fi
+  if git -C "$PROJECT_DIR" cat-file blob "$head_blob" 2>/dev/null | _stamp_neutral \
+       | cmp -s - <(_stamp_neutral < "$f"); then
+    return 1                                      # worktree == HEAD (stamps aside) → replace freely
+  fi
+  DIRTY_KIND="modified"
+  return 0
+}
+
+# Version/date stamps are maintained by the stamping block at the end of this
+# script, not by the merge — so for equality questions they are noise.
+# A pure stdin→stdout filter, deliberately taking no filename: GNU sed treats
+# "-" as stdin while BSD sed opens a file named "-", so a filename argument is
+# a portability trap. Callers redirect.
+_stamp_neutral() {
+  sed -e 's|<!-- STANDARD:VERSION -->.*<!-- /STANDARD:VERSION -->|@STAMP@|' \
+      -e 's|<!-- STANDARD:SYNCED_AT -->.*<!-- /STANDARD:SYNCED_AT -->|@STAMP@|'
+}
+
+# refuse_if_dirty <dst> <display> — returns 0 (and records the refusal) when
+# the write must not happen. Reported in dry-run too: it is a prediction.
+REFUSALS=0
+refuse_if_dirty() {
+  local dst="$1" display="$2"
+  is_forced "$display" && return 1
+  is_dirty "$dst" || return 1
+  REFUSALS=$((REFUSALS + 1))
+  if [[ -L "$dst" ]]; then
+    CHANGES+=("DIRTY     $display  (symlink — content not touched; sync never writes through a link)")
+  elif [[ "$DIRTY_KIND" == "modified" ]]; then
+    CHANGES+=("DIRTY     $display  (uncommitted changes — content not touched; commit or discard them and re-run sync, or --force '$display')")
+  else
+    CHANGES+=("DIRTY     $display  (git holds no copy to restore from — content not touched; commit it first, or --force '$display')")
+  fi
+  return 0
 }
 
 is_forced() {
@@ -255,7 +327,26 @@ process_template_file() {
     display="$rel_dir/$bn"
   fi
 
+  # A symlinked scv/ directory routes every write into a tree this script does
+  # not own — the retired-doc pass already fails closed on it, and the template
+  # pass must too. One WARN, then nothing.
+  if [[ -L "$PROJECT_DIR/scv" ]]; then
+    if [[ ${SCV_LINK_WARNED:-0} -eq 0 ]]; then
+      CHANGES+=("WARN      scv/  (symlinked directory — template refresh skipped; resolve the link and re-run sync)")
+      SCV_LINK_WARNED=1
+    fi
+    return 0
+  fi
+
   mkdir -p "$dst_dir"
+
+  # A dangling symlink fails the -f test and would read as NEW — and cp would
+  # then create a file at the link's target, outside anything git tracks here.
+  if [[ -L "$dst" ]]; then
+    REFUSALS=$((REFUSALS + 1))
+    CHANGES+=("DIRTY     $display  (symlink — content not touched; sync never writes through a link)")
+    return 0
+  fi
 
   if [[ ! -f "$dst" ]]; then
     CHANGES+=("NEW       $display")
@@ -280,9 +371,9 @@ process_template_file() {
 
   case "$policy" in
     overwrite)
+      refuse_if_dirty "$dst" "$display" && return 0
       CHANGES+=("OVERWRITE $display")
       if [[ $DRY_RUN -eq 0 ]]; then
-        backup_file "$dst"
         cp "$tmpl" "$dst"
       fi
       ;;
@@ -290,7 +381,6 @@ process_template_file() {
       if is_forced "$display"; then
         CHANGES+=("FORCED    $display  (preserve overridden)")
         if [[ $DRY_RUN -eq 0 ]]; then
-          backup_file "$dst"
           cp "$tmpl" "$dst"
         fi
       else
@@ -298,9 +388,26 @@ process_template_file() {
       fi
       ;;
     merge-on-markers)
+      # "Differs from the template" is the wrong question for a merge file:
+      # hydrate stamps version/date markers into the copy, so an untouched
+      # project differs from the raw template forever — and right after
+      # hydrate the file is also still untracked, which read as DIRTY and
+      # drowned a project's very first sync in refusals. Ask the real
+      # question: would the merge change this file? Simulate it, neutralize
+      # the stamp spans, and compare.
+      local sim; sim="$(mktemp)"
+      cp "$dst" "$sim"
+      apply_merge_on_markers "$tmpl" "$sim"
+      if cmp -s <(_stamp_neutral < "$sim") <(_stamp_neutral < "$dst"); then
+        rm -f "$sim"
+        return 0
+      fi
+      rm -f "$sim"
+      # The merge keeps PROJECT:LOCAL blocks but loses any local edit outside
+      # them, so the same refusal applies to the whole file.
+      refuse_if_dirty "$dst" "$display" && return 0
       CHANGES+=("MERGE     $display  (PROJECT:LOCAL preserved)")
       if [[ $DRY_RUN -eq 0 ]]; then
-        backup_file "$dst"
         apply_merge_on_markers "$tmpl" "$dst"
       fi
       ;;
@@ -379,7 +486,28 @@ fi
 
 # Stamp scv/SCV.md version markers (root instruction files stay untouched).
 # Marker names kept as STANDARD:* for backward compatibility.
-if [[ $DRY_RUN -eq 0 && -f "$PROJECT_DIR/scv/SCV.md" ]]; then
+#
+# Only when NOTHING was refused. The stamp is the automatic refresh's gate:
+# advancing it while a DIRTY file kept the old template would mark the
+# migration complete when it is not — the refusal would never be retried, the
+# stale file would stay stale forever, and every report would read healthy. A
+# refused run leaves the stamp alone so the gap stays open and the next action
+# tries again. The stamp write itself also respects the refusal rule: a dirty
+# or symlinked SCV.md is not written at all, because "content not touched"
+# must stay true for the marker spans too.
+# Deliberately NOT gated on is_dirty: right after this run's own merge, the
+# file is uncommitted by sync's doing, and refusing to stamp then would leave
+# the gap open forever on a perfectly clean project. REFUSALS covers the case
+# that matters — a user-dirty SCV.md was refused above, so REFUSALS is nonzero
+# and the stamp stays put. The write is recorded in the report: the spans are
+# SCV-maintained metadata, and anything a user parked inside them is replaced,
+# so "(none)" must never be the whole story.
+if [[ $DRY_RUN -eq 0 && $REFUSALS -eq 0 && -f "$PROJECT_DIR/scv/SCV.md" \
+      && ! -L "$PROJECT_DIR/scv/SCV.md" && ! -L "$PROJECT_DIR/scv" ]]; then
+  CURRENT_STAMP="$(extract_simple_marker "$PROJECT_DIR/scv/SCV.md" "<!-- STANDARD:VERSION -->" "<!-- /STANDARD:VERSION -->" 2>/dev/null | tr -d '[:space:]' || true)"
+  if [[ "$CURRENT_STAMP" != "$REMOTE_VERSION" ]]; then
+    CHANGES+=("STAMP     scv/SCV.md  (template version ${CURRENT_STAMP:-unset} → $REMOTE_VERSION)")
+  fi
   replace_simple_marker "$PROJECT_DIR/scv/SCV.md" \
     "<!-- STANDARD:VERSION -->" "<!-- /STANDARD:VERSION -->" "$REMOTE_VERSION"
   replace_simple_marker "$PROJECT_DIR/scv/SCV.md" \
@@ -393,11 +521,6 @@ else
   for c in "${CHANGES[@]}"; do
     echo "  $c"
   done
-fi
-
-if [[ $DRY_RUN -eq 0 && $BACKUPS_CREATED -gt 0 ]]; then
-  echo
-  echo "Backups: $BACKUPS_CREATED file(s) saved to $BACKUP_DIR"
 fi
 
 if [[ $DRY_RUN -eq 1 ]]; then

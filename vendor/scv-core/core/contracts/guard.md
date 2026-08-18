@@ -47,7 +47,7 @@ LICENSE
 ```
 
 This list is duplicated by the CI provenance gate on purpose, and
-`tests/test-guard-consistency.sh` asserts the two agree. If they diverge, the
+`core/tests/test-guard.sh` (T21) asserts the two agree. If they diverge, the
 product states two different definitions of "a code change".
 
 `<host_config>` is the host's own settings file (for example a runtime config
@@ -86,6 +86,19 @@ Two of these (`update`, `set-models`) have `entrypoint: null` in
 `core/actions.json` — Core ships no executable for them. On a host that mints from
 a script invocation, they mint from the wrapper adapter's own scripts instead, so
 an adapter script directory must be part of the mint allowlist.
+`SCV_GUARD_SCRIPTS` accepts a colon-separated list of directories for exactly
+this reason — the vendored Core scripts and the adapter's own scripts are two
+places, and with a single value the adapter-owned actions could never mint.
+Each entry keeps the fixed-string match; the list adds no globs and no regex.
+Entries must be absolute paths — anything else (including whitespace fragments
+from a hand-wrapped list) is dropped rather than matched, because a relative
+fragment is a substring almost every command contains.
+
+The match itself is a substring test on the command text: a command that
+merely NAMES a listed directory mints, without executing anything from it.
+That is a known and accepted limit — the guard closes the accidental path,
+and an adapter adding a directory to the list should know it is also handing
+the model a phrase that unlocks the session.
 
 Narrowing this set was tried and rejected. With only `{work, codegen}` minting,
 five protocol-instructed writes are denied while an action is legitimately
@@ -112,7 +125,7 @@ write, or the guard blocks the action it exists to protect. Verified by hand on
 | Protocol | First mint | Guarded write before it? |
 |---|---|---|
 | codegen | 47 | no |
-| deck | 71 | no |
+| deck | 75 | no |
 | handoff | 62 | no — its writes target a temp dir, outside the working tree |
 | help | 64 (`env-set.sh`) | no — the `.env` write *is* the first script call |
 | install-deps | 36 | no |
@@ -139,7 +152,7 @@ excuse cannot outlive the text it excuses. `tests/test-guard-consistency.sh`
 fails when an anchor no longer matches.
 
 ```guard:exceptions
-core/protocols/deck.md:119 — forbids hand-editing generated output; the opposite of a sanction
+core/protocols/deck.md:136 — forbids hand-editing generated output; the opposite of a sanction
 core/integrations/loop-runner.md:6 — the subject is the user writing their own loop prompt, not the agent authoring a plan
 core/template/scv/raw/README.md:110 — forbids hand-creating a plan folder and says why
 core/protocols/promote.md:43 — forbids moving raw originals by hand
@@ -149,15 +162,35 @@ core/protocols/promote.md:840 — about mockup colour values, unrelated to workf
 
 ## Failure behavior
 
-Fail **open** on internal error: unreadable input, a missing state directory, an
-unparseable payload. Print one line to stderr and allow. Fail **closed** only on
-an explicit rule match.
+Two inputs fail **open**, and only those two. An empty payload — nothing arrived
+on stdin, so there is no write to judge. No JSON reader on the machine — with
+neither `jq` nor `python3` the guard cannot see a path at all. Both print one line
+to stderr and allow.
 
-This is deliberate and it is not a strength trade worth reversing. The hosts
-already proceed when a hook script is missing or times out, so an adversary
-deletes the script rather than corrupting its logic — closing on internal error
-buys almost nothing against that, while a single guard bug would deny every write
-in every project at once. Make the failure loud, not fatal.
+A payload that arrives but does not parse also allows, by a different route and
+without the stderr line: no target path can be read out of it, so neither rule
+finds anything to match.
+
+Failing open on unreadable input is deliberate and it is not a strength trade
+worth reversing. The hosts already proceed when a hook script is missing or times
+out, so an adversary deletes the script rather than corrupting its logic — closing
+on unreadable input buys almost nothing against that, while a single guard bug
+would deny every write in every project at once. Make the failure loud, not fatal.
+
+**An unusable receipt store fails closed — and says so.** This is the exception
+to everything above. Closing is deliberate: the receipt's absence is what
+denies, and a shell tool can chmod the store, so failing open here would let one
+command switch the guard off. The closed posture belongs to the two write
+rules — gate-bash still allows a command that calls into a listed script
+directory, receipt or not, because bricking the very actions that mint would
+leave no way out. What used to be wrong was the silence. `mint` was
+best-effort and mute, `has_receipt` stayed false for the whole session, both
+rules refused everything, and the deny message said "run an action" — which
+mints into the same broken store and cannot help. Now the failure is loud at
+both ends: a mint that cannot record prints one stderr line naming the store,
+and a gate that denies because the store is unusable swaps its reason for one
+that names the store path and points at `SCV_GUARD_STATE`, instead of blaming
+the workflow.
 
 The guard is inert where SCV is not adopted: resolve the workflow root by walking
 up from the payload's working directory, and allow immediately when there is
