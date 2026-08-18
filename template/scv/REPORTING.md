@@ -12,7 +12,7 @@ merge_policy: merge-on-markers
 
 # REPORTING — Collab tool reporting convention
 
-> This document is closer to **configuration**. the host agent confirms the user's collab tool and channels through dialogue, then records them in the `PROJECT:LOCAL` block.
+> This document is closer to **configuration**. SCV confirms the user's collab tool and channels through dialogue, then records them in the `PROJECT:LOCAL` block.
 
 ## How to elicit (order of questions)
 

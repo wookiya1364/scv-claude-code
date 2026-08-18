@@ -20,7 +20,7 @@ merge_policy: overwrite
 ## 1. One-page summary
 
 ```
-Drop into scv/raw/ → action:promote (the host agent refines via dialogue)
+Drop into scv/raw/ → action:promote (refines via dialogue)
                   → scv/promote/<YYYYMMDD>-<author>-<slug>/
                       ├── PLAN.md    (required)
                       ├── TESTS.md   (required)
@@ -39,7 +39,7 @@ Drop into scv/raw/ → action:promote (the host agent refines via dialogue)
 action:help "I want to add a refund button to checkout"
 ```
 
-This enters **conversation mode** — the host agent refines your idea with you (asking goal / scope / acceptance questions), persists every turn to `scv/conversations/<timestamp>-<slug>.md` (committed, redaction-filtered — v0.22.0+), and offers to draft `PLAN.md + TESTS.md` when there's enough information. You can:
+This enters **conversation mode** — SCV refines your idea with you (asking goal / scope / acceptance questions), persists every turn to `scv/conversations/<timestamp>-<slug>.md` (committed, redaction-filtered — v0.22.0+), and offers to draft `PLAN.md + TESTS.md` when there's enough information. You can:
 
 - **Quit anytime** — the conversation file is saved turn-by-turn. Run `action:help "<continue idea>"` later to resume.
 - **Promote without `scv/raw/`** — choice [1] in the conversation's "ready?" prompt creates the plan directly. Conversation stays in `scv/conversations/` (committed).
@@ -299,8 +299,8 @@ a better path when it finds one. (Legacy PLANs titled `## Steps` remain valid �
 | `refs` | — | Array of external references (Jira / Linear / Confluence / PR, etc.). See spec below |
 | `supersedes` | — | Array of **past slugs** this plan retires (supersedes). `action:regression` permanently skips those archived TESTS. See §8b |
 | `supersedes_scenarios` | — | **Scenario-level** retirement. Array of `<slug>:T<n>` strings, e.g., `["20260115-sspark-auth-v1:T2"]` |
-| `epic` | — | When splitting a large user request into multiple features, group them under the same epic slug (count is content-driven — the host agent proposes + user adjusts). `action:status` shows epic progress; `action:work`'s PR auto-creation uses the epic branch as base. See §8d |
-| `kind` | — | `feature` (default) / `refactor` (epic-closing integration cleanup) / `retirement` (pure removal — §8c). Used by the host agent for epic flow / refactor guidance |
+| `epic` | — | When splitting a large user request into multiple features, group them under the same epic slug (count is content-driven — SCV proposes + user adjusts). `action:status` shows epic progress; `action:work`'s PR auto-creation uses the epic branch as base. See §8d |
+| `kind` | — | `feature` (default) / `refactor` (epic-closing integration cleanup) / `retirement` (pure removal — §8c). Used by SCV for epic flow / refactor guidance |
 | `lang` | — | (v0.7.3+) The resolved language for this promote's content + diagrams + commit/PR text. Set by `action:promote` Step 0 — auto-resolved from `settings.json language` and `.env SCV_LANG`, or via user confirmation when those mismatch. Read by `action:work` Step 9d and `pr-helper.sh` for full localization (PR title, body labels like `## Summary` / `## 요약` / `## 概要`, footer `🗂 Archived` / `🗂 보관됨` / `🗂 アーカイブ済み`). Values: `english` / `korean` / `japanese` / free-form. Empty / unknown → English fallback. |
 | `scope` | — | (v0.11.0+) Optional file-path glob array this plan is allowed to touch. Used by `action:codegen` Step 7 as a guard — Edit/Write outside these globs emits a warning (does not block). If omitted, the natural scope from PLAN.md Suggested path (legacy: Steps) applies (current `action:work` behavior, unchanged). Example: `["src/auth/**", "tests/auth/**"]`. |
 | `invariants` | — | (v0.11.0+) Optional string array of *existing behaviors this plan must NOT break*. Used by `action:codegen` Step 7 as a per-iteration self-check (LLM re-reads each item after every Green iteration; user confirmation if unsure). Targets T5 logic-skip — the cheat pattern where a focused change silently omits an unrelated invariant. Capture only what's easy to violate; not a general regression list. Example: `["기존 결제 한도 체크 유지", "음수 환불 금지"]`. `action:work` does not enforce this field. |
@@ -580,7 +580,7 @@ flowchart TB
 - `action:work` does NOT load files outside this section by default (token guard).
 - The user's explicit instruction (e.g., "also read ARCH.md when implementing") triggers extra loading.
 
-### When to split (the host agent's judgment criteria)
+### When to split (SCV's judgment criteria)
 
 | Signal | Suggestion |
 |---|---|
@@ -590,7 +590,7 @@ flowchart TB
 | Migration steps > 5 | → `MIGRATION.md` |
 | Test scenarios > 15 | → split under `tests/` |
 
-If the user explicitly says **"split it"**, ignore the criteria and split. If **"don't split"**, the host agent stops proposing splits.
+If the user explicitly says **"split it"**, ignore the criteria and split. If **"don't split"**, SCV stops proposing splits.
 
 ---
 
@@ -643,7 +643,7 @@ This plan was archived on 2026-04-25.
 |---|---|
 | Tests passed + user explicit ("archive it") | Auto mv |
 | Tests passed + user pre-declared allow ("auto-archive when tests pass") | Auto mv + report |
-| Tests passed + no user direction | the host agent asks "archive now?" and waits for answer |
+| Tests passed + no user direction | SCV asks "archive now?" and waits for answer |
 | Tests failed | Archive forbidden, return to fix loop |
 
 ---
@@ -655,7 +655,7 @@ An archived plan's TESTS.md **must never be modified**. Instead, declare "this f
 | Path | Mechanism | When to use |
 |---|---|---|
 | **Pre-declaration** | New PLAN.md frontmatter has `supersedes: [<old-slug>, ...]` or `supersedes_scenarios: ["<slug>:T<n>", ...]` | When you know what you're replacing at authoring time |
-| **Auto-propagation** | When A is archived via `action:work`, the host agent fires user confirmation (default Yes) "mark B as obsolete?" — on approval, modifies B's PLAN.md frontmatter only | Default path triggered when supersedes is declared |
+| **Auto-propagation** | When A is archived via `action:work`, SCV fires user confirmation (default Yes) "mark B as obsolete?" — on approval, modifies B's PLAN.md frontmatter only | Default path triggered when supersedes is declared |
 | **Runtime triage** | On `action:regression` failure, fire 3-way user confirmation: regression (fix code) / obsolete (mark now) / flaky (retry) | When supersede declaration was missed, or when env changes force deprecation |
 
 ### What `obsolete` means — terminology
@@ -730,7 +730,7 @@ When `action:work` archives this retirement plan, Step 9c will guide marking `pa
 
 Receiving a user's large request in a single promote folder produces **chaos and abrupt change**. SCV analyzes raw material in the `action:promote` step and proposes a split when "this is sized for multiple features" (auto-split forbidden — always confirm with user).
 
-**Split count is not fixed.** the host agent proposes an appropriate count (e.g., 2, 4, 8) and candidate slugs based on the actual content / topic diversity of the raw, and the user does the final adjustment. The §8e example below is split into 7, but **that's just one example, not a recommended standard**.
+**Split count is not fixed.** SCV proposes an appropriate count (e.g., 2, 4, 8) and candidate slugs based on the actual content / topic diversity of the raw, and the user does the final adjustment. The §8e example below is split into 7, but **that's just one example, not a recommended standard**.
 
 Split features are grouped under the same **`epic: <epic-slug>`** frontmatter.
 
