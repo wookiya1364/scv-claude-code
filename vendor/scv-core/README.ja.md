@@ -12,9 +12,9 @@ DeckUI、アセット、共通回帰テストをこのリポジトリで管理�
 
 | 契約 | バージョン | 意味 |
 |---|---:|---|
-| SCV Core | `0.24.0` | 共通動作とリリースペイロード |
+| SCV Core | `0.27.0` | 共通動作とリリースペイロード |
 | Core API | `1` | ラッパーと Core の統合契約 |
-| Template | `2.0.0` | hydrate されるプロジェクトテンプレートのスキーマ |
+| Template | `2.1.0` | hydrate されるプロジェクトテンプレートのスキーマ |
 
 インストール可能なプラグイン:
 
@@ -64,6 +64,33 @@ authoritative とし、legacy source 全体を skip します。同一または�
 preflight 後に発生した collision は引き続き fail-closed です。wrapper
 swap 後に削除され得る既存 vendor の recovery は、必ず strict mode の
 まま実行します。
+
+Core は、このワークフローが守られているかを確かめる仕組みも同梱します。
+workspace guard は `PreToolUse` フックとして動き、二つを拒否します。計画
+ファイルの新規作成と、ワークフローディレクトリ外への書き込みです。このセッション
+中にホストが「SCV アクションが実行中」と報告していれば例外です。そのホスト
+イベントはモデルが偽造できない唯一の信号なので、guard はそれだけを根拠にします。
+guard が fail-open するのは、payload が空のときと JSON リーダーが無い機械の二つ
+だけで、すべてのプロジェクトの書き込みを止める事態を避けます。逆にレシート置き場
+が書けないときは閉じる側に倒れます。SCV を導入していないプロジェクトでは何も
+しません。登録はラッパー
+の仕事です。ラッパーがフック項目ごとに `SCV_GUARD_MODE` を渡すため、スクリプト
+自体はホストを名指ししません。規則は [guard 契約](core/contracts/guard.md) に
+あります。
+
+フックからは見えない部分は、マージ時の二つのゲートが受け持ちます。
+`core/scripts/check-provenance.sh` は、コードを変更しながら
+`scv/archive/<slug>/PLAN.md` に保管された計画を追加していない PR を拒否します。
+文書とワークフローディレクトリだけの diff はコード変更とみなしません。
+`core/scripts/check-vendor-provenance.sh` は、sync bot 以外のブランチで
+ラッパーの `vendor/scv-core/` を書き換えた PR を拒否します。bot は公開済みの
+リリース成果物を解決して正本ハッシュと具体化後ハッシュの両方を記録しますが、
+手作業のコピーはそのときの作業ツリーの内容をそのまま記録します。どちらのゲート
+も `stage`・`main` へのリリースチェーンと bot の `chore/core-*` ブランチを除外
+し、PR タイトルで `[no-plan: <理由>]`、`[manual-vendor: <理由>]` として例外を
+宣言できます。理由は必須で、理由のない marker は拒否します。Core 自身の CI は
+provenance ゲートを実行し、vendor ゲートは vendor された Core を持つラッパーの
+リポジトリ向けに同梱されます。
 
 詳細は [Architecture](docs/architecture.md) と
 [Wrapper integration](docs/wrapper-integration.md) を参照してください。

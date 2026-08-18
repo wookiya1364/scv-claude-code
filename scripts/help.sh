@@ -25,6 +25,12 @@ PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # Multi-repo workspace awareness (no-op / silent for single repos).
 # shellcheck source=lib/workspace.sh
 source "$SCRIPT_DIR/lib/workspace.sh"
+# shellcheck source=lib/scvroot.sh
+source "$SCRIPT_DIR/lib/scvroot.sh"
+# Help is usually the first action a session runs, so it is the first honest
+# chance to close a template-version gap (see scv_autosync's header). It does
+# not use scv_init_paths, hence the explicit call.
+scv_autosync "$(scv_root_dir)"
 # shellcheck source=lib/host-profile.sh
 source "$SCRIPT_DIR/lib/host-profile.sh"
 
