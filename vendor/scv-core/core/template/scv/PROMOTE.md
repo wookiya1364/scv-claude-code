@@ -460,6 +460,14 @@ assert these same user-facing features, so the PR video shows what the user aske
 
 - [ ] **Every user-stated feature/behavior is a detailed TESTS scenario** (the floor above — this = the PR's shipped features)
 - [ ] **How to run** is written as a clear command (`bash` / `npm` / `pnpm` / etc.)
+- [ ] **How to run stays true after archiving.** The regression action replays it
+      from the archive forever, so it may depend only on tree CONTENT — never on
+      commit state. Concretely: no `git diff ... HEAD` scope assertions (true only
+      in the uncommitted working tree, permanently false once merged), no
+      references to files the PR does not ship, and no re-run of the whole test
+      suite inside one slug (CI already runs it; N slugs × full suite is what made
+      the regression pass take ten minutes). Four archived plans broke this and
+      stayed red, unseen, for a release cycle.
 - [ ] **Pass criterion** for each scenario is stated as an observable form
 - [ ] **Pass criteria** block contains the "overall done declaration condition"
 
