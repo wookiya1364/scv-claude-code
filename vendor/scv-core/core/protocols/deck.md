@@ -22,8 +22,12 @@ markdown travels with the output** (the rendering and the source always agree).
 - **`--slides` — presentation.** The DeckUI on-screen slide deck (Vite+React single-file
   build, heavier). Use when you want to present rather than read.
 
-Mermaid diagrams render from a CDN and **auto-fall back to the diagram's source text**
-when offline / on a closed network — the doc never shows an empty box.
+In the **document**, mermaid diagrams are baked in as inline SVG after the build — a
+local headless Chrome draws them — so the file opens fully rendered with no network.
+That bake is best-effort. When it can't run, the document keeps a CDN loader that
+**auto-falls back to the diagram's source text** offline: never an empty box, but a
+drawn diagram only where there is network. `--slides` bundles mermaid into the build
+and needs neither.
 
 **Division of labor (deterministic + LLM-assist):**
 - The **transform is deterministic** (`scripts/deck.sh` → `DeckUI/scripts/deckdoc/transform.mjs`, remark-based). It never invents content: every rendered value comes from the source md.
@@ -59,7 +63,7 @@ summaries, and explanations of what went wrong.
 
 ## Step 0 — Resolve the input markdown
 
-`"${SCV_ARGS[@]}"` is a path to a markdown file. If empty:
+`"${SCV_ARGS[@]}"` is a path to a markdown file, or to a `scv/promote|archive/<slug>/` folder — a folder combines PLAN + FEATURE_ARCHITECTURE + TESTS into one document, and is a document-only input (`--slides` takes a single file). If empty:
 - Use `Glob` to find likely docs (`docs/**/*.md`, `**/PRD*.md`, `**/기획*.md`, or a `scv/promote/<slug>/PLAN.md`).
 - If several, ask the user which one. If none, tell the user to pass a path: `/scv:deck docs/prd.md`.
 
@@ -104,23 +108,36 @@ Parse `BIG_PICTURE:` + `MODE_HINT:` (and the `DOCS_CONTEXT` / `GRAPHIFY_GRAPH` /
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/deck.sh" "${SCV_ARGS[@]}" --lang "<LANG_RESOLVED>"
 ```
 
-This produces the **document** by default. If the user asked for a slide
-presentation, append `--slides`. Other flags: `--mermaid none` (skip the CDN
-script, always render mermaid as source text), `--no-source` (drop the raw-markdown
-section), `--out <path>`.
+This produces the **document** by default (`--doc` says so explicitly). If the user
+asked for a slide presentation, append `--slides`. Other flags: `--mermaid none` (skip
+the CDN script, always render mermaid as source text), `--no-source` (drop the
+raw-markdown section), `--no-static` (skip the inline-SVG bake and ship the CDN loader
+instead — `SCV_DECK_STATIC=0` in the environment does the same), `--out <path>`.
 
 Parse the emitted lines:
 - `DECK_SLUG:` — the deck id.
 - `LINT: <n> warning(s)` + each `  ⚠ ...` — missing canonical sections.
 - `DECK_HTML:` — absolute path to the built self-contained HTML.
+- `STATIC_MERMAID: embedded diagrams=<n> → <path>` — the bake worked; that deck draws
+  its diagrams offline. Document builds only, and only while mermaid is on.
+- `STATIC_MERMAID: skipped (kept CDN render + text fallback)` — on **stderr**, with the
+  reason on the line before it: no Chrome, the CDN unreachable, a diagram that failed
+  to draw, or simply no diagrams in the doc. The HTML is left exactly as built.
 
 If the helper errors (missing Node/pnpm), relay it and suggest `/scv:install-deps` (Node + pnpm are `/scv:deck`-only deps). The **document** path needs only a slim ~7MB install; `--slides` additionally builds the full DeckUI. Do not auto-install globally.
 
 ## Step 2 — Report + quality coaching
 
 1. Tell the user it's built and **where**: `DECK_HTML`. One-line how-to-open (`open <path>` / double-click) and that it prints to PDF from the browser. The raw markdown travels with it in an always-on **side panel** (toggle button or the `S` key) — a slug-folder combine shows one tab per file (PLAN.md / FEATURE_ARCHITECTURE.md / TESTS.md). Printing swaps the panel for a plain paginated appendix.
-2. If `LINT` > 0, surface the warnings plainly. These are the sections a professional 기획서 usually has but this doc lacks (비목표 / 성공지표 / 인수기준 / 예외처리, etc.).
-3. **Offer** (by asking the user, default: just report) to help draft the missing sections **into the source markdown** — then the user re-runs `/scv:deck`. Never write invented specifics; propose structure + `<TODO>` placeholders and let the user fill real values.
+2. When the bake was meant to run — a document build with mermaid on — and no
+   `STATIC_MERMAID: embedded` line came back, **say so**. Silence here is how a deck
+   ships depending on a CDN nobody noticed. Tell the user the diagrams load at view
+   time, so a reader without network sees the diagram's source text instead, and pass
+   on the reason. Missing browser → install Chrome/Chromium, or point `SCV_CHROME` at
+   one, and re-run. A doc with no diagrams needs no fix. `--slides`, `--mermaid none`
+   and `--no-static` opt out of the bake, so nothing is expected there.
+3. If `LINT` > 0, surface the warnings plainly. These are the sections a professional 기획서 usually has but this doc lacks (비목표 / 성공지표 / 인수기준 / 예외처리, etc.).
+4. **Offer** (by asking the user, default: just report) to help draft the missing sections **into the source markdown** — then the user re-runs `/scv:deck`. Never write invented specifics; propose structure + `<TODO>` placeholders and let the user fill real values.
 
 ## Never
 - Never invent content that isn't in the source markdown (the rendering and the carried-along source must agree).

@@ -12,6 +12,16 @@ inside the block.
 
 Run sync. A direct sync invocation authorizes a preview, not immediate writes.
 
+Most template refreshes no longer arrive through this action: every action
+that runs a Core script compares the project's stamped template version with
+the payload's on start (`update` and `set-models` are adapter-owned and carry
+no Core script, so they are the two that do not) and, for a 2.x project,
+closes the gap automatically (one stderr line reports it;
+`SCV_AUTOSYNC=off` in the process environment opts out). What remains for this
+action is the by-hand re-run — after fixing a `DIRTY` refusal, forcing a
+specific file — and the interactive pre-2.x migration below, which the
+automatic refresh deliberately skips because of the retirement deletions.
+
 ## Language preference
 
 Resolve the user's preferred language with this priority, then use it for any user-facing summary or warnings you print:
@@ -49,7 +59,10 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/sync.sh" --project-dir "$(pwd)" --dry-run "$
 ```
 
 Summarize every `NEW`, `MIGRATE`, `MERGE`, `OVERWRITE`, `FORCED`, `SKIP`,
-`DELETED`, and `WARN` entry. If a legacy index is the only state index, call
+`DELETED`, `DIRTY`, `STAMP`, `UNKNOWN`, and `WARN` entry. A `DIRTY` line names
+a file sync refused to touch and says why — relay the reason verbatim, and if
+the user wants the template version anyway, `--force <file>` is the deliberate
+override. If a legacy index is the only state index, call
 out that the shared `scv/SCV.md` will be seeded while the legacy file remains
 intact. Ask for one explicit confirmation before applying. If the user
 declines, stop after the preview.
@@ -87,7 +100,7 @@ Semantics:
 - Files with `merge_policy: merge-on-markers` (incl. scv/SCV.md, scv/REPORTING.md) → template replaces file, but existing frontmatter `status`, the `PROJECT:LOCAL` block, and the `SCV:WORKSPACE` block are restored from the local copy
 - `scv/promote/*.md` → never touched
 - Retired standard docs (the seven listed in Step 0) → deleted, **no backup**; symlinks are left in place with a `WARN`
-- All modified files are backed up to `.scv-backup/<timestamp>/` before changes (deletions are exempt — user decision)
+- No backups are taken. A file with uncommitted changes (or any differing file when the project is not a git work tree) is **refused and named** as `DIRTY` — git history is the recovery path for everything sync overwrites, and `--force <file>` overrides a refusal deliberately
 
 The above is **Step 1 — template re-sync**. After it finishes (or is skipped), proceed to Step 2 below.
 

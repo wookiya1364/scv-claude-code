@@ -13,6 +13,13 @@ set -uo pipefail
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # shellcheck source=lib/workspace.sh
 source "$SCRIPT_DIR/lib/workspace.sh"   # also sources lib/merge.sh
+# shellcheck source=lib/scvroot.sh
+source "$SCRIPT_DIR/lib/scvroot.sh"
+# Every action start closes a template-version gap when one exists (see
+# scv_autosync's header). This helper does not use scv_init_paths, hence the
+# explicit call.
+scv_autosync "$(scv_root_dir)"
+
 
 die() { echo "✖ $*" >&2; exit 1; }
 
