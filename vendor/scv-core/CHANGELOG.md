@@ -2,6 +2,43 @@
 
 All notable changes to SCV Core are documented here.
 
+## [0.30.0] - 2026-08-19
+
+### .env.example.scv 자동 최신화 — root 불가침의 명명된 예외
+
+"root 는 user-owned, sync 는 손대지 않는다"는 원칙 때문에, 옛날에 hydrate 한
+프로젝트는 새 `.env` 옵션의 문서 블록을 영영 받지 못했다. 0.29.0 의
+SCV_EFFORT_MODE 가 공백을 구체화했다 — unset 은 auto 라 동작은 무해하지만,
+사용자가 `cp .env.example.scv .env` 하라고 안내받는 바로 그 파일에서 ask/off
+모드의 존재를 발견할 수 없다.
+
+예외는 이 파일 하나다. hydrate 가 루트에 심은 파일이니 SCV 소유로 재분류하고,
+기존 장치에 그대로 태웠다 — basename 정책 한 줄(overwrite)과
+process_template_file 호출 하나가 새 코드의 전부다. HEAD 가 복원 못 하는
+수정은 DIRTY 로 거부(--force 만 오버라이드), 부재 시 재생성(삭제가 조용한
+opt-out 이 되지 않도록), scv/ 심볼링크면 패스 전체와 함께 스킵, 거부 시
+스탬프 미전진으로 다음 액션이 재시도한다. `.env` 자체는 절대 쓰지 않는다.
+TEMPLATE_VERSION 2.1.0 → 2.2.0 이 마이그레이션 트리거 — 기존 프로젝트는
+다음 액션 시작 시 autosync 로 자동 수령하며 별도 명령이 없다.
+신규 스위트 test-sync-env-example.sh 10 시나리오 23 단언 (Red 13 → Green).
+
+### 회귀 러너의 autosync 가드 누수 — 시나리오는 깨끗한 환경에서 돈다
+
+위 계획의 아카이브 직전 누적 회귀가 잡아낸 러너 자신의 결함. 러너는 시작할 때
+재진입 방지 표시(SCV_AUTOSYNC_RUNNING=1)를 export 하는데, 그 표시가 러너가
+실행하는 모든 시나리오에 상속됐다 — autosync 훅 자체를 검증하는 아카이브
+계약(sync-autopilot)이 러너 안에서만 10/11 적색, 깨끗한 환경에서는 21/21.
+오염 환경 주입으로 10/11 이 정확히 재현됐다.
+
+수정은 실행 지점 하나: run_scenario_clean 이 자식 환경에서 그 표시만 지운다
+(env -u). 러너 프로세스 자신의 표시는 유지되어 재진입 방지가 살아 있고,
+사용자가 export 한 env(SCV_AUTOSYNC=off 포함)는 그대로 통과한다. 스위트와
+scvroot.sh 는 무수정 — 스위트가 호출자의 누수를 방어하면 다음 호출자의 같은
+버그를 가리기 때문이며, 이 맹점은 계획의 Risk 로 남겼다. 검증 함정 하나도
+기록됐다: 러너 자체를 고치는 플랜의 누적 회귀는 repo 의 runner 로 돌려야
+한다 — 플러그인 캐시 runner 는 배포본이라 수정이 실릴 수 없다.
+신규 스위트 test-regression-env.sh 6 시나리오 9 단언, 누적 회귀 11/11 복원.
+
 ## [0.29.0] - 2026-08-18
 
 ### effort governor — 작업 무게에 맞춰 알아서 돈다
