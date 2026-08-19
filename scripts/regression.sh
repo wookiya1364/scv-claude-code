@@ -267,6 +267,20 @@ read_test_command() {
 # GNU coreutils on macOS. Python is already an optional SCV runtime dependency;
 # if no timeout-capable runner exists, execute directly instead of making every
 # regression fail with command-not-found.
+# run_scenario_clean <cmd> — spawn one scenario in a CLEAN environment: this
+# runner's own scv_autosync marked the process tree "already checked"
+# (SCV_AUTOSYNC_RUNNING=1, via scv_init_paths), and a child scenario
+# inheriting that mark sees the very hook it may be testing no-op itself —
+# the archived autosync contract read 10/11 red inside the runner while
+# passing 21/21 outside. Only the runner's own mark is dropped; everything
+# the user exported (SCV_AUTOSYNC=off included) passes through untouched,
+# and the mark stays set in THIS process so the runner's helpers still
+# check once. Callers may prefix SCV_SKIPPED_SCENARIOS=... — the same
+# temp-export mechanism run_with_timeout already relies on.
+run_scenario_clean() {
+  run_with_timeout "$TIMEOUT" env -u SCV_AUTOSYNC_RUNNING bash -c "$1"
+}
+
 run_with_timeout() {
   local seconds="$1"
   shift
@@ -452,9 +466,9 @@ main() {
     local before_ts; before_ts=$(date +%s)
     if [[ -n "$skipped_T_for_slug" ]]; then
       SCV_SKIPPED_SCENARIOS="$skipped_T_for_slug" \
-        run_with_timeout "$TIMEOUT" bash -c "$cmd" >"$out_file" 2>&1 || rc=$?
+        run_scenario_clean "$cmd" >"$out_file" 2>&1 || rc=$?
     else
-      run_with_timeout "$TIMEOUT" bash -c "$cmd" >"$out_file" 2>&1 || rc=$?
+      run_scenario_clean "$cmd" >"$out_file" 2>&1 || rc=$?
     fi
     local after_ts; after_ts=$(date +%s)
     local dur=$((after_ts - before_ts))
