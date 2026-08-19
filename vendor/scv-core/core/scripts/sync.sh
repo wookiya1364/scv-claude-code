@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 # Sync SCV template into an existing project, honoring frontmatter merge_policy.
 #
-# Template layout (SCV owns only scv/; root is user-owned and never touched):
+# Template layout (SCV owns only scv/; the root is user-owned and never
+# touched — with ONE named exception, .env.example.scv, which hydrate lays
+# down at the root and therefore SCV owns):
 #   template/scv/SCV.md             → project scv/SCV.md   (merge-on-markers)
 #   template/scv/*.md                  → project scv/*.md
 #   template/scv/promote/*             → project scv/promote/    (preserved)
 #   template/scv/archive/*             → project scv/archive/    (preserved)
 #   template/scv/raw/*                 → project scv/raw/        (preserved)
+#   template/.env.example.scv          → project .env.example.scv (overwrite)
 #
 # Rules:
 #   - overwrite          Replace file wholesale
@@ -360,10 +363,15 @@ process_template_file() {
   policy=$(yaml_get "$tmpl" "merge_policy")
   [[ -z "$policy" ]] && policy="preserve"
 
-  # SCV.md always uses merge-on-markers (no frontmatter).
-  if [[ "$bn" == "SCV.md" ]]; then
-    policy="merge-on-markers"
-  fi
+  # Files that carry no frontmatter get their policy by basename: SCV.md is
+  # markdown but its spec is baked into this script, and .env.example.scv is
+  # an env file with nowhere to declare one. Overwrite on the latter is what
+  # makes an old copy learn about new options; the dirty refusal above still
+  # protects an edit git cannot give back.
+  case "$bn" in
+    SCV.md)           policy="merge-on-markers" ;;
+    .env.example.scv) policy="overwrite" ;;
+  esac
 
   if cmp -s "$tmpl" "$dst"; then
     return
@@ -445,6 +453,20 @@ fi
 # routine templates (template/scv/routines/examples/) never leave core.
 if [[ -f "$TEMPLATE_DIR/scv/routines/README.md" ]]; then
   process_template_file "$TEMPLATE_DIR/scv/routines/README.md" "scv/routines"
+fi
+
+# Root .env.example.scv — the one named exception to "root is user-owned"
+# (v0.30.0+). hydrate lays this file down at the project root, so a project
+# hydrated before a new .env option shipped (SCV_EFFORT_MODE, v0.29.0) never
+# learns the option exists: the option's silent default keeps working, but the
+# user cannot discover the other modes in the file they are told to copy from.
+# The exception rides the machinery above unchanged — overwrite policy, dirty
+# refusal against HEAD, --force override, and the symlinked-scv/ skip inside
+# process_template_file. A missing file is recreated (NEW): deleting the file
+# must not become a quiet opt-out, or the discovery gap this closes reopens.
+# The actual .env never appears here — sync reads it at most, never writes it.
+if [[ -f "$TEMPLATE_DIR/.env.example.scv" ]]; then
+  process_template_file "$TEMPLATE_DIR/.env.example.scv" ""
 fi
 
 # Retired standard docs (TEMPLATE_VERSION 2.0.0) — deleted from existing
