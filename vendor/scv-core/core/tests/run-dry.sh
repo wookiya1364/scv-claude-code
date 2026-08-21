@@ -3671,6 +3671,63 @@ for stub in set-models update; do
     && fail "plain-language: adapter stub $stub.md should not carry the rule" \
     || pass "plain-language: adapter stub $stub.md excluded"
 done
+# v0.31.0 — the rule is an answer shape, not style coaching: fixed anchors, the
+# section sits right after the language section, the old coaching body is gone,
+# and help's conversation loop carries the per-turn rhythm.
+for a in "SCV_PLAIN_LANGUAGE=off" "1–2 sentences" "one example" \
+         "No code values before the user asks" "stay exact, after the plain summary" \
+         "Bad:" "Good:" "SCV_PLAIN_MAX_SENTENCES"; do
+  miss=$(printf '%s\n' "$PLAIN_TARGETS" | while read -r f; do grep -qF -- "$a" "$f" || echo "$f"; done)
+  [[ -z "$miss" ]] && pass "plain-language: anchor [$a] in every protocol" \
+    || fail "plain-language: anchor [$a] missing in: $(echo $miss)"
+done
+mispos=$(printf '%s\n' "$PLAIN_TARGETS" | while read -r f; do
+  nxt=$(awk '/^## Language preference/{f=1;next} f&&/^## /{print;exit}' "$f")
+  [[ "$nxt" == "## Plain language first" ]] || echo "$f"
+done)
+[[ -z "$mispos" ]] && pass "plain-language: section sits right after Language preference" \
+  || fail "plain-language: section misplaced in: $(echo $mispos)"
+if grep -lF "Detail is not owed up front" "$PROTOCOL_ROOT"/*.md >/dev/null 2>&1; then
+  fail "plain-language: old coaching body still present"
+else
+  pass "plain-language: old coaching body replaced by the answer shape"
+fi
+assert_contains "$PROTOCOL_ROOT/help.md" "one question per turn"
+
+echo
+echo "=== [15q] v0.31.0 — plain-language switch: .env example, SCV.md template, version, routine ==="
+PL_TPL="$(dirname "$PROTOCOL_ROOT")/template"
+grep -q "^# SCV_PLAIN_LANGUAGE=on" "$PL_TPL/.env.example.scv" \
+  && pass "plain-language: .env.example.scv documents SCV_PLAIN_LANGUAGE (default on)" \
+  || fail "plain-language: .env.example.scv lacks the SCV_PLAIN_LANGUAGE block"
+grep -q "^# SCV_PLAIN_MAX_SENTENCES=2" "$PL_TPL/.env.example.scv" \
+  && pass "plain-language: .env.example.scv documents SCV_PLAIN_MAX_SENTENCES (default 2)" \
+  || fail "plain-language: .env.example.scv lacks the SCV_PLAIN_MAX_SENTENCES line"
+assert_contains "$PL_TPL/scv/SCV.md" "SCV_PLAIN_MAX_SENTENCES"
+assert_contains "$PL_TPL/scv/SCV.md" "## How SCV talks to you"
+assert_contains "$PL_TPL/scv/SCV.md" "SCV_PLAIN_LANGUAGE"
+assert_contains "$PL_TPL/scv/SCV.md" "1–2 sentences"
+# The root copy exists only in the scv-core checkout and the exported payload;
+# a wrapper that materializes the payload at its own root has no parent copy
+# (a wrapper's core-sync validation ran this section there and failed
+# on 0.31.0). Compare when both exist, otherwise record the single-copy layout.
+PL_ROOT_TV="$(dirname "$PROTOCOL_ROOT")/../TEMPLATE_VERSION"
+if [[ -f "$PL_ROOT_TV" ]]; then
+  [[ "$(tr -d '[:space:]' < "$(dirname "$PROTOCOL_ROOT")/TEMPLATE_VERSION")" == "$(tr -d '[:space:]' < "$PL_ROOT_TV")" ]] \
+    && pass "plain-language: core/TEMPLATE_VERSION and root TEMPLATE_VERSION agree" \
+    || fail "plain-language: TEMPLATE_VERSION files disagree"
+else
+  pass "plain-language: single-copy payload layout — no root TEMPLATE_VERSION to compare"
+fi
+PL_RT="$PL_TPL/scv/routines/examples/plain-language-audit.md"
+[[ -f "$PL_RT" ]] && pass "plain-language: example routine plain-language-audit.md exists" \
+  || fail "plain-language: example routine missing"
+for k in "^name: plain-language-audit" "^cadence:" "^guardrails:" "^exit:" "^report:"; do
+  grep -q "$k" "$PL_RT" && pass "plain-language: routine key $k" || fail "plain-language: routine key missing $k"
+done
+grep -qF "9종" "$PL_TPL/scv/routines/README.md" \
+  && pass "plain-language: routines README counts 9 built-in examples" \
+  || fail "plain-language: routines README example count not updated"
 
 echo
 echo "=== [16] v0.22.0 — decision record points in 3 protocols (Scenario 7) ==="

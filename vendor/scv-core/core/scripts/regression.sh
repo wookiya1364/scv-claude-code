@@ -278,7 +278,14 @@ read_test_command() {
 # check once. Callers may prefix SCV_SKIPPED_SCENARIOS=... — the same
 # temp-export mechanism run_with_timeout already relies on.
 run_scenario_clean() {
-  run_with_timeout "$TIMEOUT" env -u SCV_AUTOSYNC_RUNNING bash -c "$1"
+  # The runner's own marks, and nothing else: the autosync re-entry guard plus
+  # the five path marks scv_init_paths exports (SCV_DIR RAW_DIR STATE_FILE
+  # PROMOTE_DIR ARCHIVE_DIR). Inherited, those make a scenario's temp-project
+  # helpers resolve THIS repo's scv/ — an archived contract that runs run-dry
+  # died inside the runner only (plain-answers-enforcement T6, 0.31.0).
+  run_with_timeout "$TIMEOUT" env -u SCV_AUTOSYNC_RUNNING \
+    -u SCV_DIR -u RAW_DIR -u STATE_FILE -u PROMOTE_DIR -u ARCHIVE_DIR \
+    bash -c "$1"
 }
 
 run_with_timeout() {

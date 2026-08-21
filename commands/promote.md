@@ -93,21 +93,30 @@ When the source includes a conversation file, also include the conversation's `s
 
 ## Plain language first
 
-Say it the short way first. A reader who understands the short version can ask
-for more; a reader lost in the long version asks for nothing.
+Skip this section only when the project `.env` sets `SCV_PLAIN_LANGUAGE=off`
+(absent or any other value = on).
 
-- One idea per sentence. If a sentence needs a comma to join two clauses, it is
-  usually two sentences.
-- Use the plain name, not the category name. "the file that records decisions"
-  lands faster than "the decision persistence layer".
-- Lead with what happens to the user, then why it happens.
-- A comparison to something ordinary is worth more than a precise description
-  the reader cannot picture. Use one when it gets there faster.
-- Define a term of art in the same breath you first use it, or drop the term.
-- Detail is not owed up front. Offer it, and give it when asked.
+Answer shape — every time you explain something to the user:
 
-This governs everything the user reads: questions, plans, progress reports,
-summaries, and explanations of what went wrong.
+1. First, 1–2 sentences. Lead with what the user gets.
+   The cap is 2 unless the project `.env` sets `SCV_PLAIN_MAX_SENTENCES=<n>`
+   (a positive integer) — then up to n.
+2. Then one example — from the user's situation, or an everyday comparison.
+3. No code values before the user asks: file paths, variable names, version
+   numbers, setting values. Use the plain name instead ("the settings file",
+   "last week's plan").
+4. Detail comes after, and only when wanted. Offer it in one line.
+
+Identifiers the user needs to act on — the next command to run, a file that
+was created — stay exact, after the plain summary.
+
+Bad: "The block landed in `.env.example.scv:154-161` and the stamp advanced
+2.1.0 → 2.2.0."
+Good: "Your settings example file is up to date. For example, the new 'effort'
+setting now shows there. Want the exact lines?"
+
+This governs everything the user reads: answers, questions, plans, progress
+reports, summaries, and explanations of what went wrong.
 
 ## Protocol
 
