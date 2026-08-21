@@ -2,6 +2,66 @@
 
 All notable changes to SCV Core are documented here.
 
+## [0.31.1] - 2026-08-21
+
+### run-dry 배치 가드 — 래퍼 투영에서도 TEMPLATE_VERSION 검사가 돈다
+
+0.31.0 의 run-dry [15q] 가 core/TEMPLATE_VERSION 과 루트 복사본을 비교했는데,
+Claude 래퍼는 페이로드를 자기 루트에 투영해 run-dry 를 돌리므로 부모 복사본이
+없다 — 래퍼의 core-sync 검증이 그 한 줄로 실패해 0.31.0 봇 PR 이 열리지 않았다
+(Codex 래퍼는 vendor/ 아래에서 돌려 통과). 루트 복사본이 있을 때만 비교하고 없으면
+단일 복사본 배치로 통과한다. 교훈: Core 의 테스트는 저장소 배치가 아니라 페이로드
+배치를 전제해야 한다(래퍼가 그대로 돌린다). 가드: 부모에 TEMPLATE_VERSION 없는
+복사본 배치에서 run-dry FAIL 0.
+
+## [0.31.0] - 2026-08-21
+
+### 쉬운 말 2단계 — 답의 모양, 매 턴 전달, .env 스위치
+
+0812 의 "쉬운 말 먼저" 규칙은 문체 조언이라 지켜지지 않았다 — 답의 모양을
+정하지 않았고, `/scv:*` 명령 안에만 있어 일반 대화에는 한 줄도 전달되지
+않았으며, 어겨도 검사가 없었다. 세 가지를 한 번에 고친다.
+
+- 13개 프로토콜의 `## Plain language first` 본문을 **답의 모양**으로 교체
+  (제목 유지 — 누적 회귀 T4 호환, 13곳 바이트 동일): 먼저 1–2문장 → 예시
+  하나 → 묻기 전 코드값 금지 → 자세한 건 원할 때. 사용자가 행동에 필요한
+  식별자(다음 명령·생성 파일)는 요약 뒤에 그대로. 좋은 답/나쁜 답 예시 한 쌍
+  포함. help 대화 모드는 매 턴 "짧은 답 → 예시 → 질문 하나"(one question per
+  turn).
+- `core/template/hooks/on-user-prompt.sh` 가 SCV 프로젝트에서 매 턴 답의 모양
+  요약(5줄)을 stdout 으로 낸다 — Claude Code·Codex 모두 이 이벤트의 stdout 을
+  모델 컨텍스트에 넣는다(공식 문서 확인, 2026-08-21). 기록(journal)·비차단
+  보장은 그대로, 요약은 journal 에 쓰지 않는다. 등록은 래퍼 소유(§6): Claude
+  Code 래퍼는 이미 등록돼 Core 반영만으로 켜지고, Codex 래퍼는
+  `UserPromptSubmit` 등록이 따라붙는다.
+- `.env` `SCV_PLAIN_LANGUAGE` 스위치 — 없음/`on`/그 밖의 값 = 켜짐, `off`
+  (대소문자 무관)만 꺼짐. 꺼지면 훅은 침묵하고 프로토콜 절은 첫 줄 규칙으로
+  스스로 비켜선다. `.env.example.scv` 에 기본 on 으로 문서화. 템플릿
+  `scv/SCV.md` 에 "How SCV talks to you" 절. 예시 루틴 `plain-language-audit`
+  추가(내장 예시 8 → 9). TEMPLATE_VERSION 2.2.0 → 2.3.0 — 기존 프로젝트는 다음
+  액션 때 autosync 로 자동 수령.
+- 가드: run-dry [15p]/[15q] (앵커 7종·위치·옛 문구 부재·help 매 턴·템플릿·
+  버전 일치·루틴), test-journal [6p] (훅 on/off/OFF/따옴표/이상값/미적용/journal
+  오염 없음/비차단), test-routines (새 예시 lint). 어블레이션 재측정:
+  promote 241/919 (26.2%), work 222/678 (32.7%).
+- 문장 수 스위치 — `.env` `SCV_PLAIN_MAX_SENTENCES=<n>`(양의 정수)이 있으면
+  "먼저 1–2문장"의 상한이 n 이 된다. 없음/이상값은 2, `SCV_PLAIN_LANGUAGE=off`
+  가 우선. 13개 프로토콜 본문에 한 문장(제목·앵커·동일성 유지), 훅 요약은
+  숫자를 치환해 찍는다(`1` 은 "one sentence"). `.env.example.scv`·`SCV.md` 한
+  줄씩, TEMPLATE_VERSION 은 2.3.0 그대로(미출시 판, 같은 릴리스). 가드:
+  run-dry 앵커, test-journal [6p] 값별(4·1·abc·0·-3·2.5·빈값·off 우선).
+- 한계(그대로): 모델이 실제로 쉽게 말하는지 자동 보장하는 테스트는 없다 —
+  archive 직전 사람 판정 3건으로 닫는다(TESTS T7).
+
+### 회귀 러너의 경로 표시 누수 — 시나리오는 자기 scv 경로를 본다
+
+위 계획의 보관 계약이 누적 회귀에서 처음 돌며 드러낸 러너 결함. 러너가 시작할
+때 export 하는 경로 표시(SCV_DIR·RAW_DIR·STATE_FILE·PROMOTE_DIR·ARCHIVE_DIR)가
+자식 시나리오에 상속돼, 임시 프로젝트 안의 헬퍼가 이 저장소의 scv/ 를 봤다
+(run-dry [19] 이 러너 안에서만 실패, 단독 972/972). 0818 의 SCV_AUTOSYNC_RUNNING
+누수와 같은 자리에서 같은 방식으로 — run_scenario_clean 이 자기 표시 5개를 더
+빼고 시나리오를 돌린다. 사용자 env 는 그대로. test-regression-env T5 추가.
+
 ## [0.30.0] - 2026-08-19
 
 ### .env.example.scv 자동 최신화 — root 불가침의 명명된 예외
