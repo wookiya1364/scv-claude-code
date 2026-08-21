@@ -325,7 +325,7 @@ v0.20.0 から、共通ワークフローの動作はチェックサムで検証
 を参照してください。
 
 Wrapper と Core は独立してリリースします。この Claude アダプター release
-は `0.31.1` で、これが担いでいる Core pin は
+は `0.32.0` で、これが担いでいる Core pin は
 `vendor/scv-core/VERSION` と `core.lock` に記録されます。Core sync が更新するのは、そのチェックサム付き
 pin と生成 projection のみで、wrapper の `VERSION`、plugin manifest、
 marketplace version は変更しません。
