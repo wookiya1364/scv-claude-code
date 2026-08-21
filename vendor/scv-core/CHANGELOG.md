@@ -2,6 +2,19 @@
 
 All notable changes to SCV Core are documented here.
 
+## [0.31.2] - 2026-08-21
+
+### 기록 훅의 바이트 자르기가 한글을 반으로 — journal 은 항상 온전한 UTF-8
+
+on-stop.sh 가 답변 꼬리를 tail -c 4000(바이트)으로 잘라 한글·일본어·이모지 한
+글자 중간에서 끊겼고, 일지 첫머리의 깨진 바이트 하나가 편집기에서 파일 전체를
+"다 깨진" 것처럼 보이게 했다(실제 프로젝트 실측 59KB 중 1곳). 캡 뒤 반쪽
+시퀀스를 떨어낸다 — iconv -c(바이트를 버리면 exit 1 이므로 출력으로 판단), 없으면
+python3, 둘 다 없으면 원문. test-journal [6u]: 긴 한글 답변 → 일지 유효 UTF-8 +
+꼬리 생존. 정리는 POSIX 도구만으로(head/tail/od 로 선두 연속 바이트 제거) 하고
+iconv -c 는 있을 때만 두 번째 패스 — macOS(BSD) iconv 는 깨진 입력에 아무것도
+내놓지 않아 첫 구현이 그쪽 CI 에서 실패했다.
+
 ## [0.31.1] - 2026-08-21
 
 ### run-dry 배치 가드 — 래퍼 투영에서도 TEMPLATE_VERSION 검사가 돈다
