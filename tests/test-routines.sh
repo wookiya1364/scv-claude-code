@@ -157,10 +157,10 @@ echo "── [4] unknown routine — error + available list, exit 1 ──"
   out_has "dead-code" "$OUT" "unknown routine: lists defined routines"
 )
 
-echo "── [5] built-in templates — 4 SCV + 3 codebase, frontmatter lint ──"
+echo "── [5] built-in templates — 4 SCV + 3 codebase + 1 plain-language, frontmatter lint ──"
 
 for t in regression-runner outdated-verifier promote-staleness archive-integrity \
-         dead-code abstraction-police useless-tests; do
+         dead-code abstraction-police useless-tests plain-language-audit; do
   f="$EXAMPLES_DIR/$t.md"
   if [[ ! -f "$f" ]]; then
     fail "template missing: $t.md"

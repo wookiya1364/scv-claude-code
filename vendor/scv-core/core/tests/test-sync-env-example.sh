@@ -201,6 +201,15 @@ grep -q 'CANARY-ENVOLD-9f3a' "$P/$TARGET" && pass "T10 a pre-2.x legacy keeps it
 grep -q "predate\|pre-2\|interactive migration" <<<"$err" && pass "T10 the legacy pointer message is shown" \
                                                           || fail "T10 no pointer message for the legacy" "$err"
 
+# T11 — the documented option surface grows with the template (v0.31.0):
+# a project that hydrates today must find the plain-language switch in the
+# example file, and a refreshed project must receive it.
+grep -q '^# SCV_PLAIN_LANGUAGE=on' "$TMPL" && pass "T11 the template documents SCV_PLAIN_LANGUAGE (default on)" \
+                                           || fail "T11 the template lacks the SCV_PLAIN_LANGUAGE block"
+P="$(mk_project t11)"
+grep -q '^# SCV_PLAIN_LANGUAGE=on' "$P/$TARGET" && pass "T11 a fresh hydrate carries the switch" \
+                                                || fail "T11 hydrate output lacks the switch"
+
 echo
 echo "  passed: $PASS  failed: $FAIL"
 [[ $FAIL -eq 0 ]] || exit 1
