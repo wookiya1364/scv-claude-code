@@ -28,6 +28,24 @@
   > This project uses SCV — see `scv/SCV.md` for workflow details.
   ```
 
+## How SCV talks to you
+
+SCV answers in a fixed shape, so an answer is easy to read before it is
+complete: first 1–2 sentences that say what you get, then one example, no code
+values (paths, variable names, versions, settings) before you ask, and detail
+only when you want it. Identifiers you need to act on — the next command, a
+created file — stay exact, after the plain summary.
+
+- The rule lives in every SCV action, and a per-turn hook reminds the host
+  agent of it in SCV projects, commands or not.
+- Switch: `.env` `SCV_PLAIN_LANGUAGE` — absent or `on` keeps it (default);
+  `off` turns both the rule and the reminder off. `.env` is usually local, so
+  each teammate can choose.
+- Cap: `.env` `SCV_PLAIN_MAX_SENTENCES=<n>` raises the first-answer sentence
+  cap from 2 to n (positive integer; anything else means 2).
+- Hosts without that hook: add the pointer line from the section above to your
+  project-root instruction file, so casual conversation reads this file too.
+
 ## Workflow documents
 
 All SCV documents live under the `scv/` directory.
