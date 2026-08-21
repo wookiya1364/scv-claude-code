@@ -102,6 +102,14 @@ out="$(run_runner "$P")"
 grep -q 'FAILED_SLUGS: 0' <<<"$out" && pass "T1 the scenario ran without SCV_AUTOSYNC_RUNNING" \
                                     || fail "T1 the runner's mark leaked into the scenario" "$out"
 
+echo "=== T5 — the runner's path marks never reach a scenario (0.31.0) ==="
+P="$(mk_project t5)"
+mk_fake_slug "$P" "20260821-tester-path-probe" \
+  '[[ -z "${SCV_DIR:-}${RAW_DIR:-}${STATE_FILE:-}${PROMOTE_DIR:-}${ARCHIVE_DIR:-}" ]]'
+out="$(run_runner "$P")"
+grep -q 'FAILED_SLUGS: 0' <<<"$out" && pass "T5 the scenario ran without SCV_DIR/RAW_DIR/STATE_FILE/PROMOTE_DIR/ARCHIVE_DIR" \
+                                    || fail "T5 a runner path mark leaked into the scenario" "$out"
+
 echo "=== T2 — the user's own environment still passes through ==="
 P="$(mk_project t2)"
 mk_fake_slug "$P" "20260819-tester-user-env" \
