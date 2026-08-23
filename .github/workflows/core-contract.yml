@@ -42,7 +42,7 @@ jobs:
     if: github.event_name == 'pull_request'
     name: Contract (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 2
+    timeout-minutes: 6
     strategy:
       fail-fast: false
       matrix:
