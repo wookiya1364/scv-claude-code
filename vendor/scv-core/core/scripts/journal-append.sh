@@ -31,6 +31,13 @@ fi
 #   --author       file attribution override; default resolves via
 #                  lib/author.sh (git config user.name → GIT_AUTHOR_NAME →
 #                  USER → unknown), slugged for the filename.
+#   --mark KIND    mark this turn as meaningful: plan | blocker | pivot.
+#                  (decision entries index themselves — see scripts/decisions-append.sh.)
+#                  Its byte position is recorded in scv/INDEX.tsv so it can
+#                  be read back without scanning the journal. Unknown kinds are
+#                  ignored — the journal write itself never fails on this.
+#   --key NAME     the name you will look it up by (defaults to the mark kind).
+#                  The newest record for a key wins.
 #   --redact-only  print the redacted text to stdout and exit WITHOUT writing
 #                  any file. Used by protocols (e.g. /scv:help conversation
 #                  persistence) that write their own files but must route the
@@ -49,6 +56,8 @@ source "$SCRIPT_DIR/lib/author.sh"
 SPEAKER="user"
 AUTHOR=""
 REDACT_ONLY=0
+MARK=""
+KEY=""
 TEXT_ARGS=()
 
 while [[ $# -gt 0 ]]; do
@@ -60,6 +69,12 @@ while [[ $# -gt 0 ]]; do
       [[ $# -ge 2 && -n "${2:-}" ]] || { echo "✖ --author requires NAME" >&2; exit 2; }
       AUTHOR="$2"; shift 2 ;;
     --redact-only) REDACT_ONLY=1; shift ;;
+    --mark)
+      [[ $# -ge 2 && -n "${2:-}" ]] || { echo "✖ --mark requires KIND" >&2; exit 2; }
+      MARK="$2"; shift 2 ;;
+    --key)
+      [[ $# -ge 2 && -n "${2:-}" ]] || { echo "✖ --key requires NAME" >&2; exit 2; }
+      KEY="$2"; shift 2 ;;
     -h|--help) sed -n '12,40p' "$0"; exit 0 ;;
     --) shift; TEXT_ARGS+=("$@"); break ;;
     *) TEXT_ARGS+=("$1"); shift ;;
@@ -136,9 +151,49 @@ if [[ ! -f "$FILE" ]]; then
   } > "$FILE"
 fi
 
+# 쓰기 직전 크기가 이 항목의 시작 위치다. 재고 나서 쓴다 — 순서가 바뀌면
+# 오프셋이 한 항목만큼 어긋난다.
+OFFSET_BEFORE=0
+[[ -f "$FILE" ]] && OFFSET_BEFORE="$(wc -c < "$FILE" 2>/dev/null | tr -d '[:space:]')"
+[[ "$OFFSET_BEFORE" =~ ^[0-9]+$ ]] || OFFSET_BEFORE=0
+
 {
   printf '\n### [%s] %s\n\n' "$NOW" "$SPEAKER"
   printf '%s\n' "$REDACTED_TEXT"
 } >> "$FILE"
+
+# 표시가 붙었으면 위치를 색인에 적는다.
+#
+# 색인은 편의지 필수가 아니다 — 여기서 무엇이 잘못돼도 저널 기록은 이미 끝났고
+# 이 스크립트는 성공으로 끝난다.
+if [[ -n "$MARK" ]]; then
+  _idx_lib="$SCRIPT_DIR/lib/record-index.sh"
+  if [[ -f "$_idx_lib" ]]; then
+    # shellcheck source=lib/record-index.sh
+    source "$_idx_lib" 2>/dev/null || true
+  fi
+  if declare -F record_index_entry >/dev/null 2>&1; then
+    OFFSET_AFTER="$(wc -c < "$FILE" 2>/dev/null | tr -d '[:space:]')"
+    if [[ "$OFFSET_AFTER" =~ ^[0-9]+$ ]] && (( OFFSET_AFTER > OFFSET_BEFORE )); then
+      LENGTH=$(( OFFSET_AFTER - OFFSET_BEFORE ))
+      # 요약은 본문 첫 줄. 이미 redaction 을 거친 텍스트에서 뽑는다 —
+      # 원문에서 뽑으면 비밀값이 색인으로 샌다.
+      SUMMARY="$(printf '%s' "$REDACTED_TEXT" | head -n 1 | cut -c1-120)"
+      RECORD="$(record_index_entry "$MARK" "${KEY:-$MARK}" "$FILE" \
+                  "$OFFSET_BEFORE" "$LENGTH" "$NOW" "$SUMMARY")"
+      if [[ -n "$RECORD" ]]; then
+        INDEX_FILE="${SCV_DIR:-scv}/INDEX.tsv"
+        if [[ ! -L "$INDEX_FILE" ]]; then
+          # $(...) 가 끝 줄바꿈을 지우므로 여기서 다시 붙인다. 안 붙이면 레코드가
+          # 이어붙어 색인 전체를 못 읽는다.
+          printf '%s\n' "$RECORD" >> "$INDEX_FILE" 2>/dev/null || true
+          echo "JOURNAL_MARK: ${MARK} key=${KEY:-$MARK} at ${OFFSET_BEFORE}+${LENGTH}"
+        fi
+      else
+        echo "scv: unknown journal mark [$MARK] — the turn was journaled, but not indexed." >&2
+      fi
+    fi
+  fi
+fi
 
 echo "JOURNAL_FILE: $FILE"
