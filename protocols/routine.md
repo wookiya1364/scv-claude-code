@@ -16,7 +16,7 @@ You — Claude Code — execute **one maintenance routine** defined as a single 
 
 Resolve the user's preferred language with this priority, then use it for ALL user-facing output (summaries, findings, reminders):
 
-1. Project `.env` — `SCV_LANG` (set by `/scv:help`'s first-time setup).
+1. `scv/scv_settings.json` — `SCV_LANG` (set by `/scv:help`'s first-time setup).
 2. Auto-detect from the user's most recent message language.
 3. Default to English.
 
@@ -31,13 +31,13 @@ Technical identifiers stay as-is: file paths, frontmatter keys (`name`, `cadence
 
 ## Plain language first
 
-Skip this section only when the project `.env` sets `SCV_PLAIN_LANGUAGE=off`
+Skip this section only when `scv/scv_settings.json` sets `SCV_PLAIN_LANGUAGE=off`
 (absent or any other value = on).
 
 Answer shape — every time you explain something to the user:
 
 1. First, 1–2 sentences. Lead with what the user gets.
-   The cap is 2 unless the project `.env` sets `SCV_PLAIN_MAX_SENTENCES=<n>`
+   The cap is 2 unless `scv/scv_settings.json` sets `SCV_PLAIN_MAX_SENTENCES=<n>`
    (a positive integer) — then up to n.
 2. Then one example — from the user's situation, or an everyday comparison.
 3. No code values before the user asks: file paths, variable names, version
@@ -48,7 +48,7 @@ Answer shape — every time you explain something to the user:
 Identifiers the user needs to act on — the next command to run, a file that
 was created — stay exact, after the plain summary.
 
-Bad: "The block landed in `.env.example.scv:154-161` and the stamp advanced
+Bad: "The block landed in `scv_settings.example.json:154-161` and the stamp advanced
 2.1.0 → 2.2.0."
 Good: "Your settings example file is up to date. For example, the new 'effort'
 setting now shows there. Want the exact lines?"
@@ -98,7 +98,7 @@ When a report is due, use the `/scv:report` format:
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/report.sh" "routine:<name>" <passed|failed|info> --summary "<1–3 line result summary>"
 ```
 
-If no notifier is configured (`.env` `NOTIFIER_PROVIDER` unset), give the user the same 1–3 line summary in the conversation instead — do not fail the run over a missing notifier.
+If no notifier is configured (`scv/scv_settings.json` `NOTIFIER_PROVIDER` unset), give the user the same 1–3 line summary in the conversation instead — do not fail the run over a missing notifier.
 
 ## Step 4 — Host scheduling examples (guidance ONLY — never execute)
 
