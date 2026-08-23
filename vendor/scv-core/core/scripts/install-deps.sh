@@ -86,7 +86,7 @@ TIER[python3]=optional
 declare -A PURPOSE
 PURPOSE[git]="git operations (core)"
 PURPOSE[gh]="GitHub PR auto-create (SCV_PR_PLATFORM=github)"
-PURPOSE[glab]="GitLab MR auth (preferred over GITLAB_TOKEN .env)"
+PURPOSE[glab]="GitLab MR auth (preferred over a stored GITLAB_TOKEN)"
 PURPOSE[curl]="GitLab MR + Slack/Discord HTTP"
 PURPOSE[jq]="JSON parsing for GitLab MR + Notifier"
 PURPOSE[ffmpeg]="PR video → GIF inline preview"

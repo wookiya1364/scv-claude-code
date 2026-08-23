@@ -91,16 +91,16 @@ This is the whole difference between the sanctioned exception and the failure mo
 
 ### Team override — `SCV_FAST_PATH_LINE_THRESHOLD`
 
-The 5-line ceiling is a default, not dogma. Teams shipping mostly to mature codebases can raise it; teams in security-sensitive domains can lower it. Set in the project's `.env`:
+The 5-line ceiling is a default, not dogma. Teams shipping mostly to mature codebases can raise it; teams in security-sensitive domains can lower it. Set in `scv/scv_settings.json`:
 
 ```bash
-# .env
+// scv/scv_settings.json
 SCV_FAST_PATH_LINE_THRESHOLD=3   # stricter — only ≤3 lines qualify
 # or
 SCV_FAST_PATH_LINE_THRESHOLD=10  # looser — ≤10 lines OK if other 4 criteria still hold
 ```
 
-Locking the threshold per team in `.env` removes the per-PR negotiation ("is this 6-line change really fast-path-able?"). When unset, default is 5. The single-function/block rule is **not** overridable — multi-function changes always take the formal loop regardless of line count.
+Locking the threshold per team in the settings file removes the per-PR negotiation ("is this 6-line change really fast-path-able?"). When unset, default is 5. The single-function/block rule is **not** overridable — multi-function changes always take the formal loop regardless of line count.
 
 ### Fast-path examples
 
@@ -147,6 +147,57 @@ The default principle of this guide is **"when in doubt, formal promote loop"**.
 **Why include author by default**: avoids slug collisions across team members. `action:promote` automatically prefixes date + author when proposing a slug.
 
 ---
+
+## 2.5. 순수부와 효과부 — 기능을 쪼개는 규칙
+
+기능은 **순수함수와 파이프의 조합**으로 만든다. 파일을 만지고 명령을 실행하는 일은
+바깥의 얇은 층이 맡는다. 계약 전문은 `core/contracts/purity.md`.
+
+세 가지가 한 뿌리에서 나온다.
+
+1. **변경의 영향을 독립적으로 판단할 수 있다.** 함수가 입력만 보고 출력만 내면,
+   고쳤을 때 무엇이 달라지는지 그 함수만 보면 된다.
+2. **작업 단위가 작아진다.** 한 번에 만들 것이 "문자열 넷 → 문자열 하나" 면
+   설계할 것이 거의 없다.
+3. **완료를 사람이나 모델이 판정하지 않는다.** 고정 입력에 고정 출력이면 테스트가
+   결정적이다. "잘 된 것 같다" 가 낄 자리가 없다.
+
+**목표는 판단을 없애는 것이 아니라, 판단을 검증에서 빼는 것이다.** 무엇을 어떻게
+쪼갤지는 여전히 사람이나 모델이 정한다. 그 결과가 맞는지는 기계가 본다.
+
+### 계획에 무엇을 적나
+
+`PLAN.md` 는 **어떤 함수가 어느 층인지** 밝힌다. 이름·층·입출력을 한 줄씩이면 된다.
+
+```
+settings_resolve      @pure           네 후보 → 하나          우선순위가 여기에만 있다
+settings_lookup_json  @deterministic  JSON 텍스트 + 키 → 값   디스크를 안 만진다
+settings_get          효과            파일을 읽어 위 둘에 넘긴다
+```
+
+코드에는 함수 바로 위에 표식을 적는다 — `# @pure` 또는 `# @deterministic`.
+`core/scripts/check-purity.sh` 가 그것을 찾아 검사한다.
+
+### 테스트에 무엇을 넣나
+
+- **순수부의 전수 검사.** 입력 조합이 유한하면 표본이 아니라 전부를 본다.
+  조합이 열여섯 가지면 열여섯 가지를 다 본다.
+- **반복 가능성.** 같은 입력을 여러 번 넣어 같은 출력이 나오는지. 이것이 깨지면
+  나머지 검사가 전부 의미를 잃는다.
+- **순수성 검사.** `bash core/scripts/check-purity.sh` 가 통과하는지.
+- **판정은 문자열 비교.** `OK [T1] 16/16` 처럼 찍히거나 안 찍히거나여야 한다.
+
+### 효과층에도 지킬 것이 있다
+
+- **비결정성을 주입받는다.** 시각과 무작위는 함수 안에서 읽지 말고 밖에서 받는다.
+- **실패해도 죽지 않는다.** 없거나 깨져 있으면 기본값으로 계속 간다.
+- **조용히 실패하지 않는다.** 못 한 일이 있으면 무엇이 왜 안 됐는지 말한다.
+  다만 정상일 때는 아무 말도 하지 않는다 — 매번 떠들면 금방 무시하게 된다.
+
+### 이 규칙이 적용되지 않는 곳
+
+문서만 바꾸는 계획, 설정값 하나 바꾸는 계획에는 순수부가 없을 수 있다. 그때는
+계획에 그렇게 적으면 된다 — 없는 것을 지어내지 않는다.
 
 ## 3. Two required files + free extension
 
@@ -301,7 +352,7 @@ a better path when it finds one. (Legacy PLANs titled `## Steps` remain valid �
 | `supersedes_scenarios` | — | **Scenario-level** retirement. Array of `<slug>:T<n>` strings, e.g., `["20260115-sspark-auth-v1:T2"]` |
 | `epic` | — | When splitting a large user request into multiple features, group them under the same epic slug (count is content-driven — SCV proposes + user adjusts). `action:status` shows epic progress; `action:work`'s PR auto-creation uses the epic branch as base. See §8d |
 | `kind` | — | `feature` (default) / `refactor` (epic-closing integration cleanup) / `retirement` (pure removal — §8c). Used by SCV for epic flow / refactor guidance |
-| `lang` | — | (v0.7.3+) The resolved language for this promote's content + diagrams + commit/PR text. Set by `action:promote` Step 0 — auto-resolved from `settings.json language` and `.env SCV_LANG`, or via user confirmation when those mismatch. Read by `action:work` Step 9d and `pr-helper.sh` for full localization (PR title, body labels like `## Summary` / `## 요약` / `## 概要`, footer `🗂 Archived` / `🗂 보관됨` / `🗂 アーカイブ済み`). Values: `english` / `korean` / `japanese` / free-form. Empty / unknown → English fallback. |
+| `lang` | — | (v0.7.3+) The resolved language for this promote's content + diagrams + commit/PR text. Set by `action:promote` Step 0 — auto-resolved from `settings.json language` and `scv/scv_settings.json SCV_LANG`, or via user confirmation when those mismatch. Read by `action:work` Step 9d and `pr-helper.sh` for full localization (PR title, body labels like `## Summary` / `## 요약` / `## 概要`, footer `🗂 Archived` / `🗂 보관됨` / `🗂 アーカイブ済み`). Values: `english` / `korean` / `japanese` / free-form. Empty / unknown → English fallback. |
 | `scope` | — | (v0.11.0+) Optional file-path glob array this plan is allowed to touch. Used by `action:codegen` Step 7 as a guard — Edit/Write outside these globs emits a warning (does not block). If omitted, the natural scope from PLAN.md Suggested path (legacy: Steps) applies (current `action:work` behavior, unchanged). Example: `["src/auth/**", "tests/auth/**"]`. |
 | `invariants` | — | (v0.11.0+) Optional string array of *existing behaviors this plan must NOT break*. Used by `action:codegen` Step 7 as a per-iteration self-check (LLM re-reads each item after every Green iteration; user confirmation if unsure). Targets T5 logic-skip — the cheat pattern where a focused change silently omits an unrelated invariant. Capture only what's easy to violate; not a general regression list. Example: `["기존 결제 한도 체크 유지", "음수 환불 금지"]`. `action:work` does not enforce this field. |
 | `parallel_groups` | — | (v0.22.0+) Optional array of arrays of `## Suggested path` step numbers — each inner array is a group of mutually independent steps a subagent-capable host MAY run concurrently (groups run in declaration order; each TESTS scenario is still verified independently — see `action:work` Step 5d, `action:regression` allows the analogous slug-level fan-out). Absent field, or a host without parallel capability → behavior identical to sequential execution. Example: `[[1, 2], [3]]`. |
@@ -313,7 +364,7 @@ Instead of hard-coding vendor-specific frontmatter keys, use a **typed array** t
 ```yaml
 refs:
   - type: jira          # Free-form type string (jira / linear / asana / notion / confluence / pr / slack-thread / ...)
-    id: PAY-1234        # Ticket ID — `.env`'s <TYPE>_BASE_URL infers URL
+    id: PAY-1234        # Ticket ID — the settings file's <TYPE>_BASE_URL infers URL
   - type: jira
     id: PAY-1235        # Multiple of the same type are fine
   - type: confluence
@@ -326,12 +377,12 @@ refs:
 
 - **No constraints between array elements** — multiple of the same `type`, any order.
 - Each element can have **`id` only, `url` only, or both**.
-  - `id` only with no `url` → infer URL by combining with `.env`'s `<TYPE>_BASE_URL` (if unset, just show ID).
+  - `id` only with no `url` → infer URL by combining with the settings file's `<TYPE>_BASE_URL` (if unset, just show ID).
   - `url` present → use as-is.
 - `type` is free-form. SCV provides rendering hints for known types; unknown types pass through as plain links.
 - **On archive, `refs:` is preserved verbatim in `ARCHIVED_AT.md`** (audit trail).
 
-**`.env` base URL configuration example:**
+**Base URL configuration example:**
 
 ```bash
 JIRA_BASE_URL=https://company.atlassian.net

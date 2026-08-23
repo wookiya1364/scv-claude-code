@@ -25,19 +25,19 @@ check — the script resolves the mode itself.
 
 ## Language preference
 
-Resolve the user's preferred language from `.env` `SCV_LANG`, then the latest
+Resolve the user's preferred language from `scv/scv_settings.json` `SCV_LANG`, then the latest
 user message, then English. Use it for all user-facing prose. Keep technical
 identifiers as-is (`repo_id`, `handoff_id`, skill invocations, paths).
 
 ## Plain language first
 
-Skip this section only when the project `.env` sets `SCV_PLAIN_LANGUAGE=off`
+Skip this section only when `scv/scv_settings.json` sets `SCV_PLAIN_LANGUAGE=off`
 (absent or any other value = on).
 
 Answer shape — every time you explain something to the user:
 
 1. First, 1–2 sentences. Lead with what the user gets.
-   The cap is 2 unless the project `.env` sets `SCV_PLAIN_MAX_SENTENCES=<n>`
+   The cap is 2 unless `scv/scv_settings.json` sets `SCV_PLAIN_MAX_SENTENCES=<n>`
    (a positive integer) — then up to n.
 2. Then one example — from the user's situation, or an everyday comparison.
 3. No code values before the user asks: file paths, variable names, version
@@ -48,7 +48,7 @@ Answer shape — every time you explain something to the user:
 Identifiers the user needs to act on — the next command to run, a file that
 was created — stay exact, after the plain summary.
 
-Bad: "The block landed in `.env.example.scv:154-161` and the stamp advanced
+Bad: "The block landed in `scv_settings.example.json:154-161` and the stamp advanced
 2.1.0 → 2.2.0."
 Good: "Your settings example file is up to date. For example, the new 'effort'
 setting now shows there. Want the exact lines?"
@@ -91,7 +91,7 @@ reports, summaries, and explanations of what went wrong.
    ```
 
    Never push without that explicit consent (no standing license from a prior push).
-   On a successful push, if a notifier is configured (`.env` `NOTIFIER_PROVIDER` =
+   On a successful push, if a notifier is configured (`scv/scv_settings.json` `NOTIFIER_PROVIDER` =
    slack|discord, with a channel), SCV best-effort pings the team channel so the
    other repo's owner knows to pull. No notifier configured → silent no-op.
 

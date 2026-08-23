@@ -174,7 +174,13 @@ eq "no scv/: exit 0" "0" "$RC"
 echo "── [6p] plain-language reminder on stdout (v0.31.0+) ──"
 
 # The hook's stdout reaches the model every turn. In a hydrated project it
-# prints the answer-shape reminder unless .env says SCV_PLAIN_LANGUAGE=off;
+# 설정은 이제 scv/ 아래 파일에 있다 — 프로젝트 루트의 .env 는 읽히지 않는다.
+write_settings() {  # <프로젝트> <JSON>
+  mkdir -p "$1/scv"
+  printf '%s\n' "$2" > "$1/scv/scv_settings.json"
+}
+
+# prints the answer-shape reminder unless the settings file says SCV_PLAIN_LANGUAGE=off;
 # the reminder never enters the journal and never changes the exit code.
 PL="$WORK/plainproj"; mkdir -p "$PL/scv"
 run_pl() { (cd "$1" && printf '{"prompt":"hello"}' | env "${GIT_ISOLATE[@]}" GIT_AUTHOR_NAME="Hook User" bash "$HOOK_PROMPT"); }
@@ -185,26 +191,26 @@ grep -qF "SCV_PLAIN_LANGUAGE" <<<"$OUT" && ok "reminder names the off switch" ||
 [[ "$(grep -c . <<<"$OUT")" -le 12 ]] && ok "reminder stays within 12 lines" || fail "reminder longer than 12 lines"
 [[ -d "$PL/scv/journal" ]] && ok "reminder path still journals the prompt" || fail "reminder path skipped journaling"
 grep -rqF "1–2 sentences" "$PL/scv/journal" && fail "reminder leaked into the journal" || ok "reminder never enters the journal"
-printf 'SCV_PLAIN_LANGUAGE=off\n' > "$PL/.env"
+write_settings "$PL" '{"SCV_PLAIN_LANGUAGE": "off"}'
 [[ -z "$(run_pl "$PL")" ]] && ok "off: silent" || fail "off: still printed"
-printf 'SCV_PLAIN_LANGUAGE=OFF\n' > "$PL/.env"
+write_settings "$PL" '{"SCV_PLAIN_LANGUAGE": "OFF"}'
 [[ -z "$(run_pl "$PL")" ]] && ok "OFF (any case): silent" || fail "OFF: still printed"
-printf 'SCV_PLAIN_LANGUAGE="off"\n' > "$PL/.env"
+write_settings "$PL" '{"SCV_PLAIN_LANGUAGE": "off"}'
 [[ -z "$(run_pl "$PL")" ]] && ok "quoted off: silent" || fail "quoted off: still printed"
-printf 'SCV_PLAIN_LANGUAGE=maybe\n' > "$PL/.env"
+write_settings "$PL" '{"SCV_PLAIN_LANGUAGE": "maybe"}'
 grep -qF "1–2 sentences" <<<"$(run_pl "$PL")" && ok "unknown value = on" || fail "unknown value silenced the reminder"
-printf 'OTHER=1\nSCV_PLAIN_LANGUAGE=off\n' > "$PL/.env"
+write_settings "$PL" '{"OTHER": "1", "SCV_PLAIN_LANGUAGE": "off"}'
 [[ -z "$(run_pl "$PL")" ]] && ok "off on a later line: silent" || fail "off on a later line: still printed"
 # sentence cap (v0.31.0+): positive integer → rendered; anything else → 2; off wins
-printf 'SCV_PLAIN_MAX_SENTENCES=4\n' > "$PL/.env"
+write_settings "$PL" '{"SCV_PLAIN_MAX_SENTENCES": "4"}'
 grep -qF "1–4 sentences" <<<"$(run_pl "$PL")" && ok "cap 4 → 1–4 sentences" || fail "cap 4 not rendered"
-printf 'SCV_PLAIN_MAX_SENTENCES=1\n' > "$PL/.env"
+write_settings "$PL" '{"SCV_PLAIN_MAX_SENTENCES": "1"}'
 grep -qF "one sentence" <<<"$(run_pl "$PL")" && ok "cap 1 → one sentence" || fail "cap 1 not rendered"
 for bad in abc 0 -3 2.5 ""; do
-  printf 'SCV_PLAIN_MAX_SENTENCES=%s\n' "$bad" > "$PL/.env"
+  write_settings "$PL" "{\"SCV_PLAIN_MAX_SENTENCES\": \"$bad\"}"
   grep -qF "1–2 sentences" <<<"$(run_pl "$PL")" && ok "cap [$bad] → default 2" || fail "cap [$bad] did not fall back to 2"
 done
-printf 'SCV_PLAIN_LANGUAGE=off\nSCV_PLAIN_MAX_SENTENCES=4\n' > "$PL/.env"
+write_settings "$PL" '{"SCV_PLAIN_LANGUAGE": "off", "SCV_PLAIN_MAX_SENTENCES": "4"}'
 [[ -z "$(run_pl "$PL")" ]] && ok "off wins over a cap" || fail "cap printed despite off"
 rm -f "$PL/.env"
 [[ -z "$(cd "$NOSCV" && printf '{"prompt":"hi"}' | bash "$HOOK_PROMPT")" ]] && ok "no scv/: no reminder" || fail "reminder printed outside an SCV project"

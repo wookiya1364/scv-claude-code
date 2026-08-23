@@ -43,6 +43,21 @@ if [[ -f "$ROOT/core/host-profile.env" ]]; then
   PROFILE_ID="$(sed -n 's/^SCV_HOST_ID=//p' "$ROOT/core/host-profile.env" | head -1)"
 fi
 
+# 템플릿 지문을 다시 계산해 배포본에 싣는다.
+#
+# 자동 갱신은 이 값으로 판단한다 — 번호가 그대로여도 템플릿 내용이 바뀌었으면
+# 지문이 달라지므로 반드시 갱신된다. 번호 올리는 것을 잊어서 생기던 어긋남이
+# 여기서 구조적으로 사라진다.
+#
+# 매니페스트 해싱보다 반드시 먼저 해야 TEMPLATE_DIGEST 자신도 해시 목록에 들어간다.
+# 이 파일은 core/template/ 바깥에 있으므로 자기 값에 영향을 주지 않는다.
+TEMPLATE_DIGEST=""
+if [[ -f "$ROOT/core/scripts/compute-template-digest.sh" ]]; then
+  bash "$ROOT/core/scripts/compute-template-digest.sh" \
+    --template-dir "$ROOT/core/template" > "$ROOT/core/TEMPLATE_DIGEST"
+  TEMPLATE_DIGEST="$(tr -d '[:space:]' < "$ROOT/core/TEMPLATE_DIGEST")"
+fi
+
 SUMS_TMP="$(mktemp)"
 MANIFEST_TMP="$(mktemp)"
 trap 'rm -f "$SUMS_TMP" "$MANIFEST_TMP"' EXIT
@@ -72,6 +87,7 @@ done > "$SUMS_TMP"
   printf '  "version": "%s",\n' "$VERSION"
   printf '  "core_api": %s,\n' "$CORE_API"
   printf '  "template_version": "%s",\n' "$TEMPLATE_VERSION"
+  printf '  "template_digest": "%s",\n' "$TEMPLATE_DIGEST"
   printf '  "source_repository": "%s",\n' "$SOURCE_REPOSITORY"
   printf '  "source_commit": "%s",\n' "$SOURCE_COMMIT"
   printf '  "profile_id": "%s",\n' "$PROFILE_ID"

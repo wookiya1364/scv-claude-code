@@ -37,21 +37,21 @@ and needs neither.
 
 Resolve the user's preferred language with this priority, then pass it to `deck.sh` as `--lang <LANG_RESOLVED>` in Step 1 — it selects the deck's UI chrome (buttons, headings, lint messages; never the user's own PLAN.md/TESTS.md/screen-mockup content, which always renders verbatim):
 
-1. Project `.env` — `SCV_LANG` (set by `/scv:help`'s first-time setup).
+1. `scv/scv_settings.json` — `SCV_LANG` (set by `/scv:help`'s first-time setup).
 2. Auto-detect from the user's most recent message language.
 3. Default to English.
 
-`LANG_RESOLVED` values: `english` (default) / `korean` / `japanese`; anything else falls back to English (same rule `deck.sh`/`doc.mjs` apply if `--lang` is omitted and `.env SCV_LANG` is unset).
+`LANG_RESOLVED` values: `english` (default) / `korean` / `japanese`; anything else falls back to English (same rule `deck.sh`/`doc.mjs` apply if `--lang` is omitted and `scv/scv_settings.json SCV_LANG` is unset).
 
 ## Plain language first
 
-Skip this section only when the project `.env` sets `SCV_PLAIN_LANGUAGE=off`
+Skip this section only when `scv/scv_settings.json` sets `SCV_PLAIN_LANGUAGE=off`
 (absent or any other value = on).
 
 Answer shape — every time you explain something to the user:
 
 1. First, 1–2 sentences. Lead with what the user gets.
-   The cap is 2 unless the project `.env` sets `SCV_PLAIN_MAX_SENTENCES=<n>`
+   The cap is 2 unless `scv/scv_settings.json` sets `SCV_PLAIN_MAX_SENTENCES=<n>`
    (a positive integer) — then up to n.
 2. Then one example — from the user's situation, or an everyday comparison.
 3. No code values before the user asks: file paths, variable names, version
@@ -62,7 +62,7 @@ Answer shape — every time you explain something to the user:
 Identifiers the user needs to act on — the next command to run, a file that
 was created — stay exact, after the plain summary.
 
-Bad: "The block landed in `.env.example.scv:154-161` and the stamp advanced
+Bad: "The block landed in `scv_settings.example.json:154-161` and the stamp advanced
 2.1.0 → 2.2.0."
 Good: "Your settings example file is up to date. For example, the new 'effort'
 setting now shows there. Want the exact lines?"
