@@ -45,6 +45,8 @@ source "$SCRIPT_DIR/lib/pr-platform.sh"
 
 # shellcheck source=lib/scvroot.sh
 source "$SCRIPT_DIR/lib/scvroot.sh"
+# shellcheck source=lib/attachment-scope.sh
+source "$SCRIPT_DIR/lib/attachment-scope.sh"
 # Load project .env so SCV_ATTACHMENTS_* vars are visible
 env_load 2>/dev/null || true
 
@@ -70,12 +72,15 @@ Options:
                    no git/gh operations. Useful for previewing.
   --no-push        Skip `git push` (commit only). Body printed.
   --no-create      Skip `gh pr create` (commit + push, no PR). Body printed.
+  --no-rerun       Do not re-run the plan's `## How to run` when no artifact of
+                   this slug is found under test-results/ (scope=slug only).
 EOF
 }
 
 DRY_RUN=0
 NO_PUSH=0
 NO_CREATE=0
+NO_RERUN=0
 SLUG=""
 SCV_TARGET=""            # optional leading module dir (monorepo), e.g. FE
 
@@ -84,6 +89,7 @@ while [[ $# -gt 0 ]]; do
     --dry-run)   DRY_RUN=1; shift ;;
     --no-push)   NO_PUSH=1; shift ;;
     --no-create) NO_CREATE=1; shift ;;
+    --no-rerun)  NO_RERUN=1; shift ;;
     -h|--help)   usage; exit 0 ;;
     -*)          echo "Unknown flag: $1" >&2; exit 1 ;;
     *)
@@ -188,24 +194,58 @@ case "$LANG_PREF" in
     ;;
 esac
 
-# ---- collect screenshots from test-results/ ----
-SCREENSHOTS=()
-if [[ -d "$TEST_RESULTS_DIR" ]]; then
-  while IFS= read -r f; do
-    [[ -f "$f" ]] && SCREENSHOTS+=("$f")
-  done < <(find "$TEST_RESULTS_DIR" -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' \) 2>/dev/null | LC_ALL=C sort)
-fi
-
-# ---- collect videos from test-results/ (SCV's standard video folder) ----
+# ---- collect screenshots + videos from test-results/ (SCV's standard folder) ----
 # SCV's standard E2E framework is Playwright (Step 5b). Playwright's default
 # output folder is test-results/. Other frameworks (Cypress, etc.) work too
 # as long as their videos land here — Cypress users redirect via the
 # `videosFolder` option in cypress.config. See work.md Step 5b for full stance.
+#
+# Scope (v0.32.0+, lib/attachment-scope.sh): by default only files whose path
+# contains THIS slug are attached — Playwright keeps only the last run in
+# test-results/, and after an accumulated regression that run is someone
+# else's feature. SCV_ATTACHMENTS_SCOPE=all restores the old everything-here
+# behaviour. When scope=slug finds nothing, the plan's own `## How to run` is
+# re-run once to produce this slug's evidence (skip with --no-rerun; never in
+# --dry-run); still nothing → one notice, no attachments.
+ATTACHMENTS_SCOPE="$(attachment_scope_mode)"
+SCREENSHOTS=()
 VIDEOS=()
-if [[ -d "$TEST_RESULTS_DIR" ]]; then
+collect_attachments() {
+  SCREENSHOTS=(); VIDEOS=()
+  [[ -d "$TEST_RESULTS_DIR" ]] || return 0
+  local f
+  while IFS= read -r f; do
+    [[ -f "$f" ]] && SCREENSHOTS+=("$f")
+  done < <(find "$TEST_RESULTS_DIR" -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' \) 2>/dev/null \
+           | LC_ALL=C sort | { if [[ "$ATTACHMENTS_SCOPE" == "slug" ]]; then attachment_scope_filter "$SLUG_NAME"; else cat; fi; })
   while IFS= read -r f; do
     [[ -f "$f" ]] && VIDEOS+=("$f")
-  done < <(find "$TEST_RESULTS_DIR" -type f \( -iname '*.webm' -o -iname '*.mp4' \) 2>/dev/null | LC_ALL=C sort)
+  done < <(find "$TEST_RESULTS_DIR" -type f \( -iname '*.webm' -o -iname '*.mp4' \) 2>/dev/null \
+           | LC_ALL=C sort | { if [[ "$ATTACHMENTS_SCOPE" == "slug" ]]; then attachment_scope_filter "$SLUG_NAME"; else cat; fi; })
+}
+collect_attachments
+if [[ "$ATTACHMENTS_SCOPE" == "slug" && ${#SCREENSHOTS[@]} -eq 0 && ${#VIDEOS[@]} -eq 0 ]]; then
+  if [[ $DRY_RUN -eq 0 && $NO_RERUN -eq 0 && -f "$TESTS_FILE" ]]; then
+    RERUN_CMD="$(attachment_scope_read_test_command "$TESTS_FILE" || true)"
+    if [[ -n "${RERUN_CMD//[[:space:]]/}" ]]; then
+      echo "attachments: no test-results file for '$SLUG_NAME' — re-running the plan's '## How to run' once to produce this slug's evidence" >&2
+      RERUN_TIMEOUT="${SCV_ATTACHMENTS_RERUN_TIMEOUT:-600}"
+      if command -v timeout >/dev/null 2>&1; then
+        timeout "$RERUN_TIMEOUT" bash -c "$RERUN_CMD" >/dev/null 2>&1 || echo "attachments: re-run exited non-zero — continuing without it" >&2
+      else
+        bash -c "$RERUN_CMD" >/dev/null 2>&1 || echo "attachments: re-run exited non-zero — continuing without it" >&2
+      fi
+      collect_attachments
+    fi
+  fi
+  if [[ ${#SCREENSHOTS[@]} -eq 0 && ${#VIDEOS[@]} -eq 0 ]]; then
+    echo "attachments: nothing under $TEST_RESULTS_DIR belongs to '$SLUG_NAME' (SCV_ATTACHMENTS_SCOPE=slug) — the PR gets no evidence attached; set SCV_ATTACHMENTS_SCOPE=all to attach everything" >&2
+  fi
+fi
+if [[ $DRY_RUN -eq 1 ]]; then
+  echo "ATTACHMENTS_SCOPE: $ATTACHMENTS_SCOPE"
+  echo "ATTACHMENTS_FILES: $(( ${#SCREENSHOTS[@]} + ${#VIDEOS[@]} ))"
+  for f in "${SCREENSHOTS[@]}" "${VIDEOS[@]}"; do echo "  $f"; done
 fi
 
 # ---- generate GIFs from videos (if ffmpeg available) ----

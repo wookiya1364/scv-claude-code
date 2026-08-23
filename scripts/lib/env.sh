@@ -2,23 +2,36 @@
 # Environment loading and validation utilities.
 
 env_load() {
-  # Load .env from current working directory (project root) if present.
-  # Values with spaces should be quoted in .env.
+  # SCV 설정을 프로세스 환경으로 불러온다. 호출부 열 곳이 그다음 ${VAR} 로 읽는다 —
+  # 변수 이름도 의미도 바꾸지 않는다. 바뀌는 것은 값이 어디서 오느냐뿐이다.
   #
-  # A user .env may reference unset vars (e.g. DATABASE_URL=...${DB_USER}...) or
-  # hold a $-containing secret. Sourcing it while a caller has `set -u` (nounset)
-  # active would ABORT the whole script — and a `|| true` on the caller does NOT
-  # catch a nounset abort. So relax nounset only around the source, then restore.
-  if [[ -f "./.env" ]]; then
-    local _u_was_set=0
-    [[ -o nounset ]] && _u_was_set=1
-    set -a
-    set +u
-    # shellcheck disable=SC1091
-    source "./.env"
-    set +a
-    (( _u_was_set )) && set -u
+  # 저장소가 둘이면 섞지 않는다. 새 설정 파일이 하나라도 있으면 그쪽만 본다 —
+  # 두 곳을 합치면 "이 값이 어디서 왔지" 가 다시 시작된다. 그것이 이 이사를
+  # 하는 이유였다.
+  local _lib_dir
+  _lib_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" 2>/dev/null && pwd )" || _lib_dir=""
+  if [[ -n "$_lib_dir" && -f "$_lib_dir/settings.sh" ]]; then
+    # shellcheck source=settings.sh
+    source "$_lib_dir/settings.sh"
   fi
+
+  local _plain="${SCV_SETTINGS_FILE:-scv/scv_settings.json}"
+  local _secret="${SCV_SETTINGS_SECRET_FILE:-scv/scv_settings.secret.json}"
+
+  if [[ ! -f "$_plain" && ! -f "$_secret" ]]; then
+    # 이사가 안 됐다. .env 는 읽지 않는다 — 그것이 이 이사의 목적이었다.
+    # 다만 조용히 기본값으로 떨어뜨리지도 않는다. 한 액션에 한 번 알린다.
+    _settings_warn_unmigrated || true
+    return 0
+  fi
+
+  local _key _val
+  for _key in $SCV_PLAIN_KEYS $SCV_SECRET_KEYS; do
+    _val="$(settings_get "$_key")"
+    [[ -n "$_val" ]] || continue
+    export "$_key=$_val"
+  done
+  return 0
 }
 
 env_require() {
