@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fast maintainer-updater smoke for the two-minute CI contract.
+# Fast maintainer-updater smoke for the bounded CI contract (six minutes).
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
