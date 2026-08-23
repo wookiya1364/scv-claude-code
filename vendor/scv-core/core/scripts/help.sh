@@ -27,6 +27,8 @@ PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 source "$SCRIPT_DIR/lib/workspace.sh"
 # shellcheck source=lib/scvroot.sh
 source "$SCRIPT_DIR/lib/scvroot.sh"
+# shellcheck source=lib/settings.sh
+source "$SCRIPT_DIR/lib/settings.sh"
 # Help is usually the first action a session runs, so it is the first honest
 # chance to close a template-version gap (see scv_autosync's header). It does
 # not use scv_init_paths, hence the explicit call.
@@ -165,7 +167,7 @@ Core idea (S·C·V)
 
 Workflow
   ① hydrate         → copy the empty template into the project
-  ② .env setup      → NOTIFIER_PROVIDER=slack|discord, tokens/channels
+  ② settings setup  → scv/scv_settings.json + .secret.json (provider, tokens)
   ③ scv/raw/        → drop existing material (notes, sketches, PDFs) — optional
   ④ /scv:promote    → raw → scv/promote/<YYYYMMDD>-<author>-<slug>/ (PLAN + TESTS)
   ⑤ /scv:work       → implement · test · move to archive on pass
@@ -265,28 +267,38 @@ else
   echo "  [✗] hydrate not done ($SCV_INDEX_PATH / scv/PROMOTE.md missing)"
 fi
 
-# .env check
-if [[ -f ".env" ]]; then
-  if grep -q "^NOTIFIER_PROVIDER=" .env 2>/dev/null; then
-    prov=$(grep "^NOTIFIER_PROVIDER=" .env | head -1 | cut -d= -f2)
+# 설정 확인. 값은 settings_get 으로만 읽는다 — 직접 파일을 뒤지지 않는다.
+SETTINGS_FILE="${SCV_SETTINGS_FILE:-scv/scv_settings.json}"
+SECRET_FILE="${SCV_SETTINGS_SECRET_FILE:-scv/scv_settings.secret.json}"
+
+if [[ -f "$SETTINGS_FILE" || -f "$SECRET_FILE" ]]; then
+  prov="$(settings_get NOTIFIER_PROVIDER 2>/dev/null)"
+  if [[ -n "$prov" ]]; then
     token_ok=0
     case "$prov" in
-      slack)   grep -q "^SLACK_BOT_TOKEN=xoxb-" .env 2>/dev/null && token_ok=1 ;;
-      discord) grep -q "^DISCORD_BOT_TOKEN=.\+" .env 2>/dev/null && ! grep -q "^DISCORD_BOT_TOKEN=REPLACE" .env && token_ok=1 ;;
+      slack)
+        [[ "$(settings_get SLACK_BOT_TOKEN 2>/dev/null)" == xoxb-* ]] && token_ok=1 ;;
+      discord)
+        dtok="$(settings_get DISCORD_BOT_TOKEN 2>/dev/null)"
+        [[ -n "$dtok" && "$dtok" != REPLACE* ]] && token_ok=1 ;;
     esac
     if [[ $token_ok -eq 1 ]]; then
       ENV_SET=1
-      echo "  [✓] .env configured (NOTIFIER_PROVIDER=$prov, token present)"
+      echo "  [✓] settings configured (NOTIFIER_PROVIDER=$prov, token present)"
     else
-      echo "  [△] .env present but token unset (NOTIFIER_PROVIDER=$prov)"
+      echo "  [△] settings present but token unset (NOTIFIER_PROVIDER=$prov) — put it in $SECRET_FILE"
     fi
   else
-    echo "  [△] .env present but NOTIFIER_PROVIDER missing"
+    echo "  [△] settings present but NOTIFIER_PROVIDER missing in $SETTINGS_FILE"
   fi
-elif [[ -f ".env.example.scv" ]]; then
-  echo "  [✗] .env missing — run 'cp .env.example.scv .env' (or 'cat .env.example.scv >> .env' to append) and fill in values"
+elif [[ -f ".env" ]]; then
+  # 이사하지 않은 프로젝트. .env 는 더 이상 읽히지 않으므로 지금 기본값으로 돌고 있다.
+  echo "  [✗] settings not migrated — .env is NO LONGER read; SCV is on defaults"
+  echo "        run once: bash \"\$CLAUDE_PLUGIN_ROOT/scripts/settings-migrate.sh\""
+elif [[ -f "scv/scv_settings.example.json" ]]; then
+  echo "  [✗] $SETTINGS_FILE missing — copy scv/scv_settings.example.json and fill it in"
 else
-  echo "  [✗] .env.example.scv also missing (hydrate required)"
+  echo "  [✗] settings example also missing (hydrate required)"
 fi
 
 # --- Dependency check (v0.5.1+) ----------------------------------------------
@@ -317,7 +329,7 @@ _scv_check_dep() {
 
 _scv_check_dep git     required    "git operations (core)"
 _scv_check_dep gh      recommended "GitHub PR auto-create (SCV_PR_PLATFORM=github)"
-_scv_check_dep glab    recommended "GitLab MR auth (preferred over GITLAB_TOKEN .env)"
+_scv_check_dep glab    recommended "GitLab MR auth (preferred over a stored GITLAB_TOKEN)"
 _scv_check_dep curl    recommended "GitLab MR + Slack/Discord HTTP"
 _scv_check_dep jq      recommended "JSON parsing for GitLab MR + Notifier"
 _scv_check_dep ffmpeg  optional    "PR video → GIF inline preview"
@@ -437,10 +449,11 @@ elif [[ $HYDRATED -eq 0 ]]; then
 EOF
 elif [[ $ENV_SET -eq 0 ]]; then
   cat <<'EOF'
-  Configure .env. The SCV Notifier variables live in `.env.example.scv`.
+  Configure settings. Copy `scv/scv_settings.example.json` and fill it in.
 
-  1. If no .env yet:    cp .env.example.scv .env
-     If .env exists:    cat .env.example.scv >> .env   (append SCV vars only)
+  1. cp scv/scv_settings.example.json scv/scv_settings.json
+     Tokens and channel IDs go in scv/scv_settings.secret.json (git-ignored).
+     Coming from .env? run: bash <core>/scripts/settings-migrate.sh
   2. Set NOTIFIER_PROVIDER (slack or discord)
   3. Fill in the matching Bot token and SLACK_CHANNEL_ID_* (or DISCORD_*)
   4. Run /scv:help again
