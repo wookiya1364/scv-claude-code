@@ -2,14 +2,13 @@
 # Sync SCV template into an existing project, honoring frontmatter merge_policy.
 #
 # Template layout (SCV owns only scv/; the root is user-owned and never
-# touched — with ONE named exception, .env.example.scv, which hydrate lays
+# touched. Settings live under scv/, so the root has no SCV-owned file.
 # down at the root and therefore SCV owns):
 #   template/scv/SCV.md             → project scv/SCV.md   (merge-on-markers)
 #   template/scv/*.md                  → project scv/*.md
 #   template/scv/promote/*             → project scv/promote/    (preserved)
 #   template/scv/archive/*             → project scv/archive/    (preserved)
 #   template/scv/raw/*                 → project scv/raw/        (preserved)
-#   template/.env.example.scv          → project .env.example.scv (overwrite)
 #
 # Rules:
 #   - overwrite          Replace file wholesale
@@ -165,6 +164,12 @@ if [[ -n "$JOIN_ROOT" ]]; then
 fi
 
 REMOTE_VERSION=$(tr -d '[:space:]' < "$STANDARD_ROOT/TEMPLATE_VERSION")
+# 템플릿 내용의 지문. 자동 갱신은 번호가 아니라 이 값으로 판단하고, 동기화가 끝나면
+# 이 값을 프로젝트 인덱스에 찍는다. 배포본에 없으면(구형 배포본) 빈 값으로 두고,
+# 판단 쪽이 예전처럼 번호로만 보게 한다.
+REMOTE_DIGEST=""
+[[ -f "$STANDARD_ROOT/TEMPLATE_DIGEST" ]] \
+  && REMOTE_DIGEST=$(tr -d '[:space:]' < "$STANDARD_ROOT/TEMPLATE_DIGEST")
 LOCAL_VERSION=$(extract_simple_marker "$LOCAL_STATE_INDEX" "<!-- STANDARD:VERSION -->" "<!-- /STANDARD:VERSION -->" 2>/dev/null | tr -d '[:space:]' || true)
 [[ -z "$LOCAL_VERSION" ]] && LOCAL_VERSION="unknown"
 
@@ -240,7 +245,8 @@ is_dirty() {
 # a portability trap. Callers redirect.
 _stamp_neutral() {
   sed -e 's|<!-- STANDARD:VERSION -->.*<!-- /STANDARD:VERSION -->|@STAMP@|' \
-      -e 's|<!-- STANDARD:SYNCED_AT -->.*<!-- /STANDARD:SYNCED_AT -->|@STAMP@|'
+      -e 's|<!-- STANDARD:SYNCED_AT -->.*<!-- /STANDARD:SYNCED_AT -->|@STAMP@|' \
+      -e 's|<!-- STANDARD:DIGEST -->.*<!-- /STANDARD:DIGEST -->|@STAMP@|'
 }
 
 # refuse_if_dirty <dst> <display> — returns 0 (and records the refusal) when
@@ -364,13 +370,12 @@ process_template_file() {
   [[ -z "$policy" ]] && policy="preserve"
 
   # Files that carry no frontmatter get their policy by basename: SCV.md is
-  # markdown but its spec is baked into this script, and .env.example.scv is
+  # markdown but its spec is baked into this script, and the example settings are
   # an env file with nowhere to declare one. Overwrite on the latter is what
   # makes an old copy learn about new options; the dirty refusal above still
   # protects an edit git cannot give back.
   case "$bn" in
     SCV.md)           policy="merge-on-markers" ;;
-    .env.example.scv) policy="overwrite" ;;
   esac
 
   if cmp -s "$tmpl" "$dst"; then
@@ -455,19 +460,6 @@ if [[ -f "$TEMPLATE_DIR/scv/routines/README.md" ]]; then
   process_template_file "$TEMPLATE_DIR/scv/routines/README.md" "scv/routines"
 fi
 
-# Root .env.example.scv — the one named exception to "root is user-owned"
-# (v0.30.0+). hydrate lays this file down at the project root, so a project
-# hydrated before a new .env option shipped (SCV_EFFORT_MODE, v0.29.0) never
-# learns the option exists: the option's silent default keeps working, but the
-# user cannot discover the other modes in the file they are told to copy from.
-# The exception rides the machinery above unchanged — overwrite policy, dirty
-# refusal against HEAD, --force override, and the symlinked-scv/ skip inside
-# process_template_file. A missing file is recreated (NEW): deleting the file
-# must not become a quiet opt-out, or the discovery gap this closes reopens.
-# The actual .env never appears here — sync reads it at most, never writes it.
-if [[ -f "$TEMPLATE_DIR/.env.example.scv" ]]; then
-  process_template_file "$TEMPLATE_DIR/.env.example.scv" ""
-fi
 
 # Retired standard docs (TEMPLATE_VERSION 2.0.0) — deleted from existing
 # projects, deliberately WITHOUT backup (user decision; git history is the
@@ -534,6 +526,26 @@ if [[ $DRY_RUN -eq 0 && $REFUSALS -eq 0 && -f "$PROJECT_DIR/scv/SCV.md" \
     "<!-- STANDARD:VERSION -->" "<!-- /STANDARD:VERSION -->" "$REMOTE_VERSION"
   replace_simple_marker "$PROJECT_DIR/scv/SCV.md" \
     "<!-- STANDARD:SYNCED_AT -->" "<!-- /STANDARD:SYNCED_AT -->" "$(date +%Y-%m-%d)"
+  # 지문은 배포본이 실제로 들고 있을 때만 찍는다. 구형 배포본이 빈 값을 찍어
+  # 프로젝트의 멀쩡한 지문을 지우면, 다음 갱신이 "지문 없음" 으로 오인한다.
+  if [[ -n "$REMOTE_DIGEST" ]]; then
+    CURRENT_DIGEST="$(extract_simple_marker "$PROJECT_DIR/scv/SCV.md" "<!-- STANDARD:DIGEST -->" "<!-- /STANDARD:DIGEST -->" 2>/dev/null | tr -d '[:space:]' || true)"
+    if [[ "$CURRENT_DIGEST" != "$REMOTE_DIGEST" ]]; then
+      CHANGES+=("STAMP     scv/SCV.md  (template digest ${CURRENT_DIGEST:-unset} → ${REMOTE_DIGEST:0:12}…)")
+    fi
+    replace_simple_marker "$PROJECT_DIR/scv/SCV.md" \
+      "<!-- STANDARD:DIGEST -->" "<!-- /STANDARD:DIGEST -->" "$REMOTE_DIGEST"
+  fi
+fi
+
+# 새로 생긴 설정 키를 프로젝트 설정에 더한다. 사용자가 이미 정한 값은 절대
+# 바꾸지 않는다 — 업데이트할 때마다 설정이 되돌아가면 곤란하다. 설정 파일이
+# 아직 없으면 아무것도 하지 않는다.
+if [[ $DRY_RUN -eq 0 && -f "$STANDARD_ROOT/scripts/settings-merge.sh" ]]; then
+  MERGE_OUT="$(bash "$STANDARD_ROOT/scripts/settings-merge.sh" --project-dir "$PROJECT_DIR" 2>&1 || true)"
+  if printf '%s' "$MERGE_OUT" | grep -q '^added '; then
+    CHANGES+=("SETTINGS  $(printf '%s' "$MERGE_OUT" | head -n 1)")
+  fi
 fi
 
 echo "Changes:"

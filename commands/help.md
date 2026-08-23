@@ -42,13 +42,13 @@ No new skill invocation — same `/scv:help` entry, classified by your wording.
 
 Decide which language to use for ALL output below (descriptions, headings, question text, summaries). Apply this priority:
 
-1. **Project `.env` — `SCV_LANG`** (the SCV plugin's own setting, written by the first-time setup below). If present, use that.
+1. **`scv/scv_settings.json` — `SCV_LANG`** (the SCV plugin's own setting, written by the first-time setup below). If present, use that.
 2. **Auto-detect from the user's most recent message.** If they wrote in a recognizable language, use it.
 3. **Default to English.**
 
 Technical identifiers (file paths, skill invocation names, frontmatter keys, env var names like `SCV_LANG`) always stay as-is — never translate them.
 
-### First-time language setup (only when `.env` `SCV_LANG` is unset)
+### First-time language setup (only when `scv/scv_settings.json` `SCV_LANG` is unset)
 
 Ask this question exactly once:
 
@@ -67,19 +67,19 @@ Ask one question (default: option [1] English):
 ```
 
 After the user picks:
-- [1] English → store `SCV_LANG=english` in project `.env`
+- [1] English → store `SCV_LANG=english` in `scv/scv_settings.json`
 - [2] Korean → store `SCV_LANG=korean`
 - [3] Japanese → store `SCV_LANG=japanese`
 - [4] Other → ask a follow-up free-text question ("Which language? e.g., spanish, french, german") and store the lowercase value as `SCV_LANG=<value>`.
 
-Write it with the Core script, which creates `.env` when absent and leaves every
+Write it with the Core script, which creates the settings file when absent and leaves every
 unrelated line byte for byte:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/env-set.sh" SCV_LANG=<value>
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/settings-set.sh" SCV_LANG=<value>
 ```
 
-Do not hand-edit `.env` for this. The script is what makes the write legible to
+Do not hand-edit the settings file for this. The script is what makes the write legible to
 the workspace guard — and this question is asked before any other helper runs, so
 an editor-tool write here would be the first thing a fresh project ever attempts.
 
@@ -87,13 +87,13 @@ From this point on, use the chosen language for all user-facing output in this a
 
 ## Plain language first
 
-Skip this section only when the project `.env` sets `SCV_PLAIN_LANGUAGE=off`
+Skip this section only when `scv/scv_settings.json` sets `SCV_PLAIN_LANGUAGE=off`
 (absent or any other value = on).
 
 Answer shape — every time you explain something to the user:
 
 1. First, 1–2 sentences. Lead with what the user gets.
-   The cap is 2 unless the project `.env` sets `SCV_PLAIN_MAX_SENTENCES=<n>`
+   The cap is 2 unless `scv/scv_settings.json` sets `SCV_PLAIN_MAX_SENTENCES=<n>`
    (a positive integer) — then up to n.
 2. Then one example — from the user's situation, or an everyday comparison.
 3. No code values before the user asks: file paths, variable names, version
@@ -104,7 +104,7 @@ Answer shape — every time you explain something to the user:
 Identifiers the user needs to act on — the next command to run, a file that
 was created — stay exact, after the plain summary.
 
-Bad: "The block landed in `.env.example.scv:154-161` and the stamp advanced
+Bad: "The block landed in `scv_settings.example.json:154-161` and the stamp advanced
 2.1.0 → 2.2.0."
 Good: "Your settings example file is up to date. For example, the new 'effort'
 setting now shows there. Want the exact lines?"

@@ -241,7 +241,7 @@ _pr_gitlab_token() {
 
   echo "ERROR: no GitLab token available. Either:" >&2
   echo "  1. Run 'glab auth login' (recommended — token stored in OS keyring)" >&2
-  echo "  2. Or set GITLAB_TOKEN in .env (Personal Access Token; scope: api + write_repository)" >&2
+  echo "  2. Or: bash <core>/scripts/settings-set.sh GITLAB_TOKEN=<PAT>  (scope: api + write_repository; lands in the git-ignored secret file)" >&2
   return 1
 }
 

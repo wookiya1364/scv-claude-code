@@ -76,6 +76,16 @@ echo " SCV Status — $PROJECT_PWD"
 echo "──────────────────────────────────────────────────────────────────────"
 echo ""
 
+# ---------- [0] 템플릿 어긋남 — 어긋났을 때만 보인다 ----------
+# 자동 갱신이 스스로 닫는 경우는 여기 오기 전에 이미 닫혔다. 그래서 이 줄이
+# 나온다는 것은 자동으로는 못 닫는 상태라는 뜻이다. 멀쩡하면 한 줄도 안 늘어난다.
+DRIFT="$(scv_template_drift "$SCV_DIR" 2>/dev/null || true)"
+if [[ -n "$DRIFT" ]]; then
+  echo "[template]"
+  printf '%s\n' "$DRIFT"
+  echo ""
+fi
+
 # ---------- [1] raw diff ----------
 
 echo "[scv/raw — changes since last index]"

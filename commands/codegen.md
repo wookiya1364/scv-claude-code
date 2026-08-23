@@ -35,20 +35,20 @@ You — Claude Code — drive a promote plan **TDD-first**: TESTS.md is the *inp
 
 ## Language preference
 
-Identical to `/scv:work`: resolve from project `.env` `SCV_LANG` →
+Identical to `/scv:work`: resolve from project `scv/scv_settings.json` `SCV_LANG` →
 auto-detect from the user's latest message → English. Technical identifiers
 (skill invocation names, frontmatter keys, env var names, SCV terms like
 `promote`/`archive`) stay as-is in every language.
 
 ## Plain language first
 
-Skip this section only when the project `.env` sets `SCV_PLAIN_LANGUAGE=off`
+Skip this section only when `scv/scv_settings.json` sets `SCV_PLAIN_LANGUAGE=off`
 (absent or any other value = on).
 
 Answer shape — every time you explain something to the user:
 
 1. First, 1–2 sentences. Lead with what the user gets.
-   The cap is 2 unless the project `.env` sets `SCV_PLAIN_MAX_SENTENCES=<n>`
+   The cap is 2 unless `scv/scv_settings.json` sets `SCV_PLAIN_MAX_SENTENCES=<n>`
    (a positive integer) — then up to n.
 2. Then one example — from the user's situation, or an everyday comparison.
 3. No code values before the user asks: file paths, variable names, version
@@ -59,7 +59,7 @@ Answer shape — every time you explain something to the user:
 Identifiers the user needs to act on — the next command to run, a file that
 was created — stay exact, after the plain summary.
 
-Bad: "The block landed in `.env.example.scv:154-161` and the stamp advanced
+Bad: "The block landed in `scv_settings.example.json:154-161` and the stamp advanced
 2.1.0 → 2.2.0."
 Good: "Your settings example file is up to date. For example, the new 'effort'
 setting now shows there. Want the exact lines?"
@@ -103,7 +103,7 @@ See `references/protocols/work.md` Steps 1–5b for full detail. This command fo
 ### Step 5e — Effort governor (v0.29.0+)
 
 Identical contract to `/scv:work` Step 5e, applied before the Red–Green loop
-begins. Read `.env` `SCV_EFFORT_MODE` (unset means `auto`; `off` skips this
+begins. Read `SCV_EFFORT_MODE` (unset means `auto`; `off` skips this
 step entirely with no classifier call and no output), then judge:
 
 ```bash
