@@ -86,7 +86,7 @@ fi
 
 echo "→ Copying template to $TARGET"
 # `cp -R -p` is supported by both BSD and GNU implementations. dotglob makes
-# `*` include dotfiles (.env.example.scv, .gitignore.fragment).
+# `*` include dotfiles (.gitignore.fragment).
 # template/hooks/ is deliberately EXCLUDED: host hook templates are
 # wrapper-installed (registration is host-owned — see docs/wrapper-integration.md
 # §"Hook seam"), never seeded into user projects.
@@ -133,13 +133,22 @@ fi
 # (Project-root instruction files are user-owned; SCV never touches them.)
 VERSION=$(tr -d '[:space:]' < "$STANDARD_ROOT/TEMPLATE_VERSION")
 TODAY=$(date +%Y-%m-%d)
+# 템플릿 지문. 처음 설치할 때 찍어 두면 그 프로젝트는 첫 명령부터 정상 경로를 탄다
+# (찍지 않으면 "지문 없음" 으로 보여 한 번 헛도는 갱신이 돈다).
+DIGEST=""
+[[ -f "$STANDARD_ROOT/TEMPLATE_DIGEST" ]] \
+  && DIGEST=$(tr -d '[:space:]' < "$STANDARD_ROOT/TEMPLATE_DIGEST")
 
 if [[ -f "$TARGET/scv/SCV.md" ]]; then
   replace_simple_marker "$TARGET/scv/SCV.md" \
     "<!-- STANDARD:VERSION -->" "<!-- /STANDARD:VERSION -->" "$VERSION"
   replace_simple_marker "$TARGET/scv/SCV.md" \
     "<!-- STANDARD:SYNCED_AT -->" "<!-- /STANDARD:SYNCED_AT -->" "$TODAY"
-  echo "  scv/SCV.md stamped: version=$VERSION synced_at=$TODAY"
+  if [[ -n "$DIGEST" ]]; then
+    replace_simple_marker "$TARGET/scv/SCV.md" \
+      "<!-- STANDARD:DIGEST -->" "<!-- /STANDARD:DIGEST -->" "$DIGEST"
+  fi
+  echo "  scv/SCV.md stamped: version=$VERSION synced_at=$TODAY digest=${DIGEST:0:12}${DIGEST:+…}"
 fi
 
 # --root: promote this repo to the workspace umbrella by creating scv/WORKSPACE.yaml.

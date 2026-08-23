@@ -101,9 +101,9 @@ PLAN.md(Guardrails / Exit criteria 포함)와 TESTS.md 가 없으면 먼저
 
 ---
 
-## 환경 변수 (.env)
+## 설정 (scv/scv_settings.json)
 
-프로젝트 `.env` 에 반드시 포함:
+프로젝트 설정에 반드시 포함:
 
 ```bash
 # 공통
@@ -123,7 +123,7 @@ DISCORD_CHANNEL_ID_PHASE_COMPLETE=...
 DISCORD_CHANNEL_ID_E2E_FAILURE=...
 ```
 
-실제 값은 `.env.example` 을 참고해서 채우고, `.env` 는 절대 커밋하지 않는다.
+실제 값은 `scv/scv_settings.example.json` 을 참고해서 채운다. 토큰·채널 ID 는 `scv/scv_settings.secret.json` 에 두며 그 파일은 커밋되지 않는다.
 
 ---
 
