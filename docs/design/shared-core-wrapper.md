@@ -148,7 +148,9 @@ is the single source of merge-gating checks.
 
 Normal pull requests run the same fast contract, shell, state-adapter, and
 shared regression smoke on Ubuntu and macOS. Each automatic job has a hard
-two-minute execution limit. When updater or atomic-swap paths change on the
+six-minute execution limit — macOS runs this suite at roughly twice Ubuntu's
+pace, so the cap has to clear the slower lane with room to spare or a clock
+starts looking like a regression. When updater or atomic-swap paths change on the
 entry PR into `develop`, Ubuntu additionally runs one representative
 source-mode dry-run and late live-swap rollback smoke. Promotion PRs from
 `develop` to `stage` and `stage` to `main` remain smoke-only, and merge pushes
