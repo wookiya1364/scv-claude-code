@@ -38,10 +38,10 @@ created file — stay exact, after the plain summary.
 
 - The rule lives in every SCV action, and a per-turn hook reminds the host
   agent of it in SCV projects, commands or not.
-- Switch: `.env` `SCV_PLAIN_LANGUAGE` — absent or `on` keeps it (default);
-  `off` turns both the rule and the reminder off. `.env` is usually local, so
+- Switch: `scv/scv_settings.json` `SCV_PLAIN_LANGUAGE` — absent or `on` keeps it (default);
+  `off` turns both the rule and the reminder off. `scv/scv_settings.json` is committed, so
   each teammate can choose.
-- Cap: `.env` `SCV_PLAIN_MAX_SENTENCES=<n>` raises the first-answer sentence
+- Cap: `scv/scv_settings.json` `SCV_PLAIN_MAX_SENTENCES=<n>` raises the first-answer sentence
   cap from 2 to n (positive integer; anything else means 2).
 - Hosts without that hook: add the pointer line from the section above to your
   project-root instruction file, so casual conversation reads this file too.
@@ -77,11 +77,75 @@ project-root/
 │   └── raw/                      # Free-input space (notes, sketches, PDFs, recordings)
 │       ├── README.md
 │       └── stale/                # Consumed docs — moved here by action:promote; ref_docs records which slugs used each
-├── .env, .env.example, .gitignore
+├── .gitignore  (scv/scv_settings.json holds SCV settings)
 └── (project-specific code: src/, packages/, apps/, etc.)
 ```
 
 **The big picture**: drop material into `scv/raw/` → `action:promote` refines it into `scv/promote/<slug>/` → `action:work <slug>` implements + tests → on pass, moves to `scv/archive/`.
+
+## Settings
+
+SCV settings live in two files under `scv/`, and nowhere else. The project's
+`.env` is **not read** — that is the point of the split: your app's variables and
+SCV's settings stopped sharing one file.
+
+| File | What goes in it | Committed? |
+|---|---|---|
+| `scv/scv_settings.json` | language, notifier provider, PR platform, attachment and GIF options — 23 keys | yes |
+| `scv/scv_settings.secret.json` | bot tokens, repo tokens, channel IDs — 13 keys | **no** (git-ignored) |
+
+Start from `scv/scv_settings.example.json`. Nothing breaks without a settings
+file — SCV runs on defaults.
+
+**Always write settings through the script.** It puts each key in the right file
+on its own, so a token cannot land in the committed one by accident:
+
+```bash
+bash "<core>/scripts/settings-set.sh" SCV_LANG=korean
+bash "<core>/scripts/settings-set.sh" SLACK_BOT_TOKEN=xoxb-...   # → secret file
+```
+
+**Coming from `.env`?** Run this once. It copies only the keys SCV knows, splits
+secrets out, and **does not touch your `.env`**:
+
+```bash
+bash "<core>/scripts/settings-migrate.sh"
+```
+
+Until you do, SCV runs on defaults and says so once per action.
+
+**Updates never overwrite your values.** When SCV ships a new setting, sync adds
+only the missing key. A value you set — or deliberately left empty — stays as it is.
+
+## Journal — mark what matters, read it back cheaply
+
+Every turn lands in `scv/journal/`. That file only grows, so finding an old
+decision by reading it costs you the whole file — and the context that goes
+with it.
+
+Mark the turns that matter as you write them, and read them back by name:
+
+```bash
+# writing — the mark and the name are chosen by whoever writes, not guessed later
+bash "<core>/scripts/journal-append.sh" --mark decision --key retry-policy "…"
+
+# reading — the journal itself is never scanned
+bash "<core>/scripts/journal-read.sh" --list            # what is marked
+bash "<core>/scripts/journal-read.sh" --key retry-policy
+```
+
+Four marks: `decision` (a direction was set), `plan` (a plan was made or
+archived), `blocker` (something was stuck, and why), `pivot` (something was
+dropped or changed). Anything else is ignored — the journal write still happens,
+and it says so.
+
+The index (`scv/journal/INDEX.tsv`) stores each marked turn's byte position, so
+reading one costs that entry, not the file. Same name twice? The newest wins.
+
+**Nothing depends on it.** No index, a broken index, an unknown mark — the
+journal write goes through either way. And if someone edits the journal file
+directly, the read says the position no longer lines up instead of handing you
+the wrong text.
 
 ## Work procedure
 
@@ -120,4 +184,5 @@ workspace:
 
 - Template version: <!-- STANDARD:VERSION -->2.0.0<!-- /STANDARD:VERSION -->
 - Last sync: <!-- STANDARD:SYNCED_AT -->UNSET<!-- /STANDARD:SYNCED_AT -->
-- Collab tool: `.env`'s `NOTIFIER_PROVIDER` (slack | discord)
+- Template digest: <!-- STANDARD:DIGEST -->UNSET<!-- /STANDARD:DIGEST -->
+- Collab tool: `scv/scv_settings.json`'s `NOTIFIER_PROVIDER` (slack | discord)

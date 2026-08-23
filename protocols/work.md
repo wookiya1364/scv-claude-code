@@ -17,13 +17,13 @@ You — Claude Code — drive a promote plan to completion: **read PLAN.md + TES
 
 Resolve the user's preferred language with this priority, then use it for ALL user-facing output (question text, status messages, summaries, the non-Playwright notice in Step 5b, etc.):
 
-1. Project `.env` — `SCV_LANG` (set by `/scv:help`'s first-time setup).
+1. `scv/scv_settings.json` — `SCV_LANG` (set by `/scv:help`'s first-time setup).
 2. Auto-detect from the user's most recent message language.
 3. Default to English.
 
 Technical identifiers stay as-is in every language: file paths, skill invocation names (`/scv:work`), frontmatter keys (`status`, `kind`, `epic`, `supersedes`), env var names (`SCV_LANG`, `SCV_ATTACHMENTS_*`), and SCV terms (`promote`, `archive`, `orphan branch`, `epic`).
 
-If `.env` `SCV_LANG` is unset, you may suggest the user run `/scv:help` once to lock the preference (don't block the current task on it — fall back to auto-detect / English for now).
+If `scv/scv_settings.json` `SCV_LANG` is unset, you may suggest the user run `/scv:help` once to lock the preference (don't block the current task on it — fall back to auto-detect / English for now).
 <!-- /SCV:GUIDANCE -->
 
 **Non-negotiable rules:**
@@ -48,13 +48,13 @@ Parse the header (`MODE:`, `SCV_DIR:`, `TARGET_SLUG:`, `PLAN_FILE:`, `TESTS_FILE
 
 ## Plain language first
 
-Skip this section only when the project `.env` sets `SCV_PLAIN_LANGUAGE=off`
+Skip this section only when `scv/scv_settings.json` sets `SCV_PLAIN_LANGUAGE=off`
 (absent or any other value = on).
 
 Answer shape — every time you explain something to the user:
 
 1. First, 1–2 sentences. Lead with what the user gets.
-   The cap is 2 unless the project `.env` sets `SCV_PLAIN_MAX_SENTENCES=<n>`
+   The cap is 2 unless `scv/scv_settings.json` sets `SCV_PLAIN_MAX_SENTENCES=<n>`
    (a positive integer) — then up to n.
 2. Then one example — from the user's situation, or an everyday comparison.
 3. No code values before the user asks: file paths, variable names, version
@@ -65,7 +65,7 @@ Answer shape — every time you explain something to the user:
 Identifiers the user needs to act on — the next command to run, a file that
 was created — stay exact, after the plain summary.
 
-Bad: "The block landed in `.env.example.scv:154-161` and the stamp advanced
+Bad: "The block landed in `scv_settings.example.json:154-161` and the stamp advanced
 2.1.0 → 2.2.0."
 Good: "Your settings example file is up to date. For example, the new 'effort'
 setting now shows there. Want the exact lines?"
@@ -238,7 +238,7 @@ What this step controls is HOW the work runs — whether heavy stages fan out,
 and how much reasoning delegated stages request — so a light plan stays cheap
 even under a maximal session posture, with zero user intervention.
 
-Read the mode from `.env` `SCV_EFFORT_MODE` (unset means `auto`). When `off`,
+Read the mode from `scv/scv_settings.json` `SCV_EFFORT_MODE` (unset means `auto`). When `off`,
 skip this entire step: do not run the classifier, print nothing, execute
 exactly as the protocol did before this step existed.
 
@@ -557,7 +557,7 @@ Condition: archive actually happened in Step 9b.
 
 #### Step 9d-prep — Video retention period (one-time)
 
-When `/scv:work` is creating its first PR and `.env` does not have `SCV_ATTACHMENTS_RETENTION_DAYS`, ask the user one concise question (and never again):
+When `/scv:work` is creating its first PR and the settings do not have `SCV_ATTACHMENTS_RETENTION_DAYS`, ask the user one concise question (and never again):
 
 <!-- SCV:GUIDANCE -->
 ```
@@ -583,10 +583,10 @@ options:
 ```
 <!-- /SCV:GUIDANCE -->
 
-After the answer, record it with the Core script (which creates `.env` when
-absent). Do not hand-edit `.env`:
+After the answer, record it with the Core script (which creates the settings file when
+absent). Do not hand-edit the settings file:
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/env-set.sh" SCV_ATTACHMENTS_RETENTION_DAYS=<N>
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/settings-set.sh" SCV_ATTACHMENTS_RETENTION_DAYS=<N>
 ```
 `<N>` is a day count, or `never` to keep attachments indefinitely.
 
@@ -647,6 +647,14 @@ options:
 ```
 bash ${CLAUDE_PLUGIN_ROOT}/scripts/pr-helper.sh [<SCV_DIR>] <slug>
 ```
+
+**Attachment scope (v0.32.0+).** The helper attaches only test-results files
+whose path contains this slug — Playwright keeps just the last run there, and
+after the Step 9a regression that run is usually another feature's. When it
+finds none, it re-runs this plan's `## How to run` once to produce this slug's
+evidence (pass `--no-rerun` to skip), and with still nothing it says so and
+attaches no evidence rather than someone else's. `scv/scv_settings.json`
+`SCV_ATTACHMENTS_SCOPE=all` restores the everything-in-test-results behaviour.
 
 The helper reads `archive/<slug>/PLAN.md`'s `epic:` / `kind:` to determine the base branch and performs commit + push + gh pr create. The last line of the output should be `PR created: <URL>` — report that URL to the user.
 

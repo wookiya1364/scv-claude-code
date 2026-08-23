@@ -55,8 +55,8 @@ under a dotted host directory). It is host configuration, not project code, and
 its keys are negotiated with the user at runtime, so no fixed script can write it
 generically.
 
-`.env` is deliberately **not** exempt. A project's `.env` is arbitrary content
-worth watching; the sanctioned writes go through `scripts/env-set.sh`, which is a
+The settings files are deliberately **not** exempt. A project's settings file is content
+worth watching; the sanctioned writes go through `scripts/settings-set.sh`, which is a
 shell invocation and therefore never reaches an editor-tool rule at all.
 
 ## Receipt-minting actions
@@ -127,7 +127,7 @@ write, or the guard blocks the action it exists to protect. Verified by hand on
 | codegen | 47 | no |
 | deck | 75 | no |
 | handoff | 62 | no — its writes target a temp dir, outside the working tree |
-| help | 64 (`env-set.sh`) | no — the `.env` write *is* the first script call |
+| help | 64 (`settings-set.sh`) | no — the settings write *is* the first script call |
 | install-deps | 36 | no |
 | promote | 12 | no |
 | regression | 45 | no |
@@ -142,7 +142,7 @@ write, or the guard blocks the action it exists to protect. Verified by hand on
 
 `help` was the one real ordering hole: its language setting was written before
 any script ran, so on a mint-from-script host the first interaction in a fresh
-project had no receipt yet. Routing it through `scripts/env-set.sh` closed it, and
+project had no receipt yet. Routing it through `scripts/settings-set.sh` closed it, and
 the fix is self-reinforcing — the write and the mint are now the same call.
 
 ## Sanctioned exceptions
@@ -156,7 +156,7 @@ core/protocols/deck.md:145 — forbids hand-editing generated output; the opposi
 core/integrations/loop-runner.md:6 — the subject is the user writing their own loop prompt, not the agent authoring a plan
 core/template/scv/raw/README.md:110 — forbids hand-creating a plan folder and says why
 core/protocols/promote.md:43 — forbids moving raw originals by hand
-core/protocols/promote.md:110 — forbids hand-editing .env; routes the write to a script instead
+core/protocols/promote.md:110 — forbids hand-editing the settings file; routes the write to a script instead
 core/protocols/promote.md:849 — about mockup colour values, unrelated to workflow artefacts
 ```
 

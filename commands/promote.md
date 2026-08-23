@@ -53,13 +53,13 @@ After the work is archived, mark it `done` the same way.
 
 Resolve the user's preferred language with this priority, then use it for ALL user-facing output (question text, status messages, summaries):
 
-1. Project `.env` — `SCV_LANG` (set by `/scv:help`'s first-time setup).
+1. `scv/scv_settings.json` — `SCV_LANG` (set by `/scv:help`'s first-time setup).
 2. Auto-detect from the user's most recent message language.
 3. Default to English.
 
 Technical identifiers stay as-is: file paths, skill invocation names,
 frontmatter keys (`status`, `kind`, `epic`, `supersedes`), env var names, and
-SCV terms (`promote`, `archive`, `orphan branch`, `epic`). If `.env`
+SCV terms (`promote`, `archive`, `orphan branch`, `epic`). If the settings file
 `SCV_LANG` is unset, suggest `/scv:help` once to lock the preference; do not
 block the current task.
 <!-- /SCV:GUIDANCE -->
@@ -93,13 +93,13 @@ When the source includes a conversation file, also include the conversation's `s
 
 ## Plain language first
 
-Skip this section only when the project `.env` sets `SCV_PLAIN_LANGUAGE=off`
+Skip this section only when `scv/scv_settings.json` sets `SCV_PLAIN_LANGUAGE=off`
 (absent or any other value = on).
 
 Answer shape — every time you explain something to the user:
 
 1. First, 1–2 sentences. Lead with what the user gets.
-   The cap is 2 unless the project `.env` sets `SCV_PLAIN_MAX_SENTENCES=<n>`
+   The cap is 2 unless `scv/scv_settings.json` sets `SCV_PLAIN_MAX_SENTENCES=<n>`
    (a positive integer) — then up to n.
 2. Then one example — from the user's situation, or an everyday comparison.
 3. No code values before the user asks: file paths, variable names, version
@@ -110,7 +110,7 @@ Answer shape — every time you explain something to the user:
 Identifiers the user needs to act on — the next command to run, a file that
 was created — stay exact, after the plain summary.
 
-Bad: "The block landed in `.env.example.scv:154-161` and the stamp advanced
+Bad: "The block landed in `scv_settings.example.json:154-161` and the stamp advanced
 2.1.0 → 2.2.0."
 Good: "Your settings example file is up to date. For example, the new 'effort'
 setting now shows there. Want the exact lines?"
@@ -125,21 +125,21 @@ reports, summaries, and explanations of what went wrong.
 Write PLAN.md, TESTS.md, FEATURE_ARCHITECTURE.md, Mermaid labels, commit
 messages, and PR text in one resolved language:
 
-1. Use `.env` `SCV_PROMOTE_LANG` when present.
-2. Otherwise use `.env` `SCV_LANG`.
+1. Use `scv/scv_settings.json` `SCV_PROMOTE_LANG` when present.
+2. Otherwise use `scv/scv_settings.json` `SCV_LANG`.
 3. Otherwise detect the user's latest message language.
 4. Fall back to English.
 
 When the user explicitly requests a different language for promoted artifacts,
 use it for this promote. Ask whether to persist it as `SCV_PROMOTE_LANG`; do not
 write the cache without approval. On approval, write it with the Core script —
-never by hand-editing `.env`:
+never by hand-editing the settings file:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/env-set.sh" SCV_PROMOTE_LANG=<value>
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/settings-set.sh" SCV_PROMOTE_LANG=<value>
 ```
 
-The script updates `.env` portably and is what makes it preserve every other
+The script updates the settings file portably and is what makes it preserve every other
 setting — every unrelated line survives byte for byte, including values holding
 `$` or spaces. `--unset SCV_PROMOTE_LANG` clears the cache so the question is
 asked again.
@@ -266,7 +266,7 @@ After user picks:
 Show this preamble (one short text line, in the user's preferred language) only when **both** of the following hold:
 
 - Step 2.1's "Detected refs" came up empty (no URLs in raw or `/scv:promote` argument).
-- The project's `.env` has at least one of `JIRA_BASE_URL` / `LINEAR_BASE_URL` / `CONFLUENCE_BASE_URL` / etc. set (signal: this team uses external trackers).
+- The project's settings have at least one of `JIRA_BASE_URL` / `LINEAR_BASE_URL` / `CONFLUENCE_BASE_URL` / etc. set (signal: this team uses external trackers).
 
 Suggested wording (English):
 
@@ -328,7 +328,7 @@ After collecting answers, scan **all** of the user's free-text responses for URL
 | `*.notion.so/*` | `notion` | (use full URL) |
 | any other URL | `link` | (use full URL) |
 
-**`.env` BASE_URL inference**: if the project's `.env` defines `<TYPE>_BASE_URL` and the URL matches that base, prefer storing only `id:` (the URL is inferred at display time). Otherwise store `url:` directly. Both `id` and `url` together is also valid.
+**BASE_URL inference**: if the project's settings define `<TYPE>_BASE_URL` and the URL matches that base, prefer storing only `id:` (the URL is inferred at display time). Otherwise store `url:` directly. Both `id` and `url` together is also valid.
 
 Merge these dialog-extracted refs with Step 2.1's deliberate-source refs. Dedupe by URL/id.
 

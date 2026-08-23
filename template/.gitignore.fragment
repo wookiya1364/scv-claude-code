@@ -5,6 +5,11 @@
 .env
 .env.local
 
+# v0.32.0+ — SCV 설정은 scv/scv_settings.json 에 있습니다 (커밋됩니다).
+# 비밀값은 아래 파일에만 두세요. 이 줄이 유일한 방어선입니다 —
+# 파일 이름이 무엇을 막아주지는 않습니다.
+scv/scv_settings.secret.json
+
 # state-index 마이그레이션 격리 + 0.28.0 이전 sync 백업 잔재
 .scv-backup/
 

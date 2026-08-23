@@ -2,6 +2,76 @@
 
 All notable changes to SCV Core are documented here.
 
+## [0.32.0] - 2026-08-23
+
+### 설정이 scv/scv_settings.json 으로 — .env 는 더 이상 읽지 않는다
+
+프로젝트 루트 `.env` 는 앱이 원래 쓰던 파일이라 SCV 값과 섞여 오해가 잦았고,
+읽는 방법도 자리마다 달랐다. 설정을 `scv/scv_settings.json`(커밋, 23개)과
+`scv/scv_settings.secret.json`(무시, 토큰·채널 ID 13개)으로 가른다.
+
+`.env` 는 읽지 않는다 — 되돌아가기 경로를 두면 "이 값이 어디서 왔지" 가 그대로
+남는다. 다만 조용히 기본값으로 떨어뜨리지도 않는다: `.env` 에 SCV 키가 남아
+있으면 한 액션에 한 번 알리고 `settings-migrate.sh` 를 안내한다. 이사 절차는
+`.env` 를 **지우지 않고** SCV 가 아는 키만 옮긴다.
+
+**업데이트가 사용자 설정을 바꾸지 않는다.** `settings-merge.sh` 는 없는 키만
+더한다 — 사용자가 정한 값도, 일부러 비운 값도, SCV 가 모르는 키도 그대로다.
+
+`settings-set.sh` 가 `env-set.sh` 를 대신한다. 키가 비밀이면 무시되는 파일로
+자동으로 가므로, 실수로 토큰을 커밋하는 경로가 없다. `.env.example.scv` 는 제거.
+
+### 템플릿 갱신을 번호가 아니라 내용으로도 판단한다
+
+SCV 버전은 올렸는데 프로젝트의 워크플로 문서가 그대로 남는 일이 잦았다 —
+자동 갱신이 번호로만 판단해서, 템플릿 파일을 바꾸고 `TEMPLATE_VERSION` 을 안
+올리면 그 변경이 어느 프로젝트에도 도달하지 않았다.
+
+템플릿 트리의 지문을 배포본에 싣고 자동 갱신이 그 값도 본다. **지문은 번호를
+대체하지 않고 더한다** — 번호가 다르면 지문이 같아도 갱신하는 기존 경로는
+그대로다. 되돌림 방지(배포본이 더 오래되면 갱신 안 함)도 유지된다.
+
+조용하던 경로 셋을 없앴다: 자동 갱신 꺼둠 / 배포본 파일 누락 / 번호가 빈 값.
+`status` 에 `[template]` 절이 생기는데, **어긋났을 때만** 나온다.
+
+### 순수부와 효과부 — 계약과 검사
+
+`core/contracts/purity.md` 가 세 층을 정의한다. `@pure`(외부 명령조차 안 부름) ·
+`@deterministic`(결정적 도구는 허용, 디스크·시각·무작위·네트워크는 금지) · 효과층.
+`check-purity.sh` 가 표식을 찾아 검사하고 CI 관문이 그것을 돌린다.
+
+`--self-test` 로 검사기 자신이 도는지 본다 — 통과만 하고 아무것도 안 보는
+검사기는 없느니만 못하다. 실제로 첫 구현의 구멍(결정적 층에서 파일 읽기를 놓침)이
+그것으로 잡혔다.
+
+### 저널 색인 — 표시된 것만, 훑지 않고 읽는다
+
+저널은 모든 턴을 쌓으므로 지난 결정을 찾으려면 파일 전체를 읽어야 했다.
+`journal-append.sh --mark decision --key <이름>` 으로 표시하면 바이트 위치가
+색인에 남고, `journal-read.sh --key <이름>` 이 그 구간만 읽는다. 실측으로
+저널 870바이트 중 126바이트.
+
+색인은 편의지 필수가 아니다 — 없거나 깨져 있거나 알 수 없는 표시를 줘도 저널
+기록은 그대로 되고 exit 0 이다. 저널이 직접 편집되면 위치가 어긋났다고 알린다.
+
+### PR·보고 첨부는 이번 슬러그 것만 — SCV_ATTACHMENTS_SCOPE (기본 slug)
+
+PR 과 Slack/Discord 보고에 붙던 영상·스크린샷은 테스트 결과 폴더의 "마지막 실행"
+전체였다 — archive 직전 누적 회귀를 돌리면 남의 기능 영상이 올라갔다. 기본을
+이번 슬러그의 것만(경로에 슬러그 포함)으로 바꾸고, `scv/scv_settings.json` 의
+`SCV_ATTACHMENTS_SCOPE=all` 로만 옛 동작. 공통 로직은 `lib/attachment-scope.sh`.
+
+- pr-helper: 슬러그 범위 수집. 0건이면 그 계획의 `## How to run` 을 한 번 재실행해
+  이번 영상을 만든다(`--no-rerun` 로 끔, `--dry-run` 에서는 안 함; 타임아웃
+  `SCV_ATTACHMENTS_RERUN_TIMEOUT` 기본 600초). 그래도 0건이면 한 줄 알리고 첨부 없음.
+  `--dry-run` 은 `ATTACHMENTS_SCOPE:` / `ATTACHMENTS_FILES:` 줄을 찍는다.
+- report: `--slug <slug>`. 없으면 진행 중 계획이 딱 하나일 때 그 슬러그, 아니면
+  전부(옛 동작)+stderr 알림. collect-artifacts 가 슬러그 파일 중 최신 하나를 고른다.
+- 프로토콜 work.md Step 9d / report.md 한 단락, `.env.example.scv` 블록,
+  `core/tests/test-attachments-scope.sh`.
+- 덤으로 고친 것: collect-artifacts 의 `emit` 이 빈 슬롯(스크린샷 없음)에서 `set -e`
+  로 스크립트를 중단시켜 영상을 내지 못하던 잠복 결함 — 이제 빈 슬롯은 그냥 건너뛴다.
+
 ## [0.31.2] - 2026-08-21
 
 ### 기록 훅의 바이트 자르기가 한글을 반으로 — journal 은 항상 온전한 UTF-8
