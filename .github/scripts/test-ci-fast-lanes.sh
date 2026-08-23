@@ -42,7 +42,7 @@ require(
 require(
     "name: Contract (${{ matrix.os }})" in contract
     and "os: [ubuntu-latest, macos-latest]" in contract
-    and "timeout-minutes: 2" in contract,
+    and "timeout-minutes: 6" in contract,
     "PR smoke retains Ubuntu and macOS portability checks",
 )
 require(
@@ -69,20 +69,34 @@ require(
     == 1,
     "automatic CI uses one representative atomic updater smoke",
 )
-# The two-minute cap exists so automatic CI gives fast feedback. promote.yml is
-# not CI: it is a manually triggered orchestrator whose whole job is waiting for
-# other workflows' checks, so a two-minute cap would guarantee failure. It stays
-# out of this rule and is capped separately below.
+# The cap exists so automatic CI gives fast feedback AND so no job can hang
+# forever. promote.yml is not CI: it is a manually triggered orchestrator whose
+# whole job is waiting for other workflows' checks, so a short cap would
+# guarantee failure. It stays out of this rule and is capped separately below.
+#
+# Six minutes, not two. The cap was two until 2026-08-24, when it started
+# failing the macOS lane on jobs whose suite had already reported PASS 981 /
+# FAIL 0 — the job was killed after the work finished. Measured at the time:
+#
+#   ubuntu-latest   42s   49s   53s      (35-44% of a two-minute budget)
+#   macos-latest    82s   98s  106s      (68-88%)  — and 121s, 135s when killed
+#
+# macOS runners are consistently ~2x Ubuntu here, so a two-minute cap left the
+# slower lane with no headroom at all: any growth in the vendored core's suite
+# tipped it over, and the failure looked like a real regression instead of a
+# clock. Six is ~3x the observed macOS median, which absorbs normal growth while
+# still bounding a genuinely hung job. Raise it again if the median moves, but
+# keep every automatic job bounded — that is the part that matters.
 AUTOMATIC_CI = {
     name: text for name, text in workflows.items() if name != "promote.yml"
 }
 require(
     all(
         text.count("\n    runs-on:")
-        == text.count("\n    timeout-minutes: 2")
+        == text.count("\n    timeout-minutes: 6")
         for text in AUTOMATIC_CI.values()
     ),
-    "every automatic CI job has a hard two-minute execution limit",
+    "every automatic CI job has a hard six-minute execution limit",
 )
 require(
     "workflow_dispatch:" in workflows["promote.yml"]
