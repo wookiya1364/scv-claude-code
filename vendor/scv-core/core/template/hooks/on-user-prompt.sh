@@ -29,13 +29,25 @@ set -u
 # SCV_PLAIN_LANGUAGE absent / on / anything else = on; only off (any case) = off.
 # Read the one line with sed — never source .env (secrets, nounset). The text
 # goes to stdout only; it is never written into the journal.
-_scv_plain="$(sed -n 's/^SCV_PLAIN_LANGUAGE=[[:space:]]*//p' .env 2>/dev/null | head -n1 \
-  | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]' || true)"
+# 값은 settings 라이브러리로 읽는다 — 설정을 읽는 입구는 하나다. 라이브러리를
+# 못 찾으면 예전 방식으로 떨어진다: 이 훅은 어떤 경우에도 세션을 막지 않는다.
+_scv_settings_lib="${SCV_CORE_ROOT:-$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.." 2>/dev/null && pwd )}/scripts/lib/settings.sh"
+if [[ -f "$_scv_settings_lib" ]]; then
+  # shellcheck disable=SC1090
+  source "$_scv_settings_lib" 2>/dev/null || true
+fi
+_scv_read() {  # <KEY> — 라이브러리가 없으면 기본값으로 간다.
+  # .env 로 되돌아가지 않는다: 설정은 scv/ 아래 두 파일에만 있다. 옛 파일을 몰래
+  # 읽으면 "이 값이 어디서 왔지" 가 그대로 남는다.
+  declare -F settings_get >/dev/null 2>&1 || return 0
+  settings_get "$1" 2>/dev/null || true
+}
+
+_scv_plain="$(_scv_read SCV_PLAIN_LANGUAGE | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]' || true)"
 if [[ "${_scv_plain:-on}" != "off" ]]; then
   # Sentence cap (v0.31.0+): .env SCV_PLAIN_MAX_SENTENCES=<n>, positive integer
   # only — absent or anything else means 2. Rendered into the first rule.
-  _scv_cap="$(sed -n 's/^SCV_PLAIN_MAX_SENTENCES=[[:space:]]*//p' .env 2>/dev/null | head -n1 \
-    | tr -d '"[:space:]' | tr -d "'" || true)"
+  _scv_cap="$(_scv_read SCV_PLAIN_MAX_SENTENCES | tr -d '"[:space:]' | tr -d "'" || true)"
   [[ "$_scv_cap" =~ ^[1-9][0-9]*$ ]] || _scv_cap=2
   if [[ "$_scv_cap" == "1" ]]; then _scv_first="one sentence"; else _scv_first="1–${_scv_cap} sentences"; fi
   cat <<PLAIN
@@ -43,7 +55,7 @@ if [[ "${_scv_plain:-on}" != "off" ]]; then
 the user gets; (2) then one example; (3) no code values (paths, variable names,
 versions, settings) before the user asks — use plain names; (4) detail after,
 only when wanted. Identifiers the user needs to act on stay exact, after the
-plain summary. Switches: .env SCV_PLAIN_LANGUAGE=off (silence),
+plain summary. Switches: scv/scv_settings.json SCV_PLAIN_LANGUAGE=off (silence),
 SCV_PLAIN_MAX_SENTENCES=<n> (sentence cap, default 2).
 PLAIN
 fi

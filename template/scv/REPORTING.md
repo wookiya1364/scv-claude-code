@@ -30,7 +30,7 @@ merge_policy: merge-on-markers
 - [ ] `NOTIFIER_PROVIDER` decided (slack | discord)
 - [ ] Bot token issued and bot invited to channels
 - [ ] At least `phase-complete` and `e2e-failure` channel IDs captured
-- [ ] Tokens and channel IDs filled in `.env`
+- [ ] Tokens and channel IDs filled in `scv/scv_settings.secret.json` (git-ignored)
 - [ ] `action:report` dry-run succeeded once
 - [ ] User confirmation
 
@@ -72,7 +72,7 @@ Substituted by `render-template.sh`:
 
 | Variable | Source |
 |---|---|
-| `{project}` | `.env` `PROJECT_NAME` |
+| `{project}` | `scv/scv_settings.json` `PROJECT_NAME` |
 | `{phase}` · `{status}` | Command arguments |
 | `{git_short}` | `git rev-parse --short HEAD` |
 | `{attempt}` · `{summary}` | Command arguments |
@@ -89,7 +89,7 @@ Substituted by `render-template.sh`:
 
 **Bot name**: <TODO>
 
-**Channel ID mapping** (actual values go in `.env`; here is for reference):
+**Channel ID mapping** (actual values go in `scv/scv_settings.secret.json`; here is for reference):
 
 | Event | Channel name | Channel ID |
 |---|---|---|
