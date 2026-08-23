@@ -23,7 +23,7 @@ permissions:
 jobs:
   propose:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 6
     env:
       GH_TOKEN: ${{ secrets.SCV_CORE_SYNC_TOKEN || github.token }}
     steps:
