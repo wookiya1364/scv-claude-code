@@ -118,6 +118,37 @@ err="$(call "$P" SCV_AUTOSYNC_RUNNING=1)"
 [[ "$(stamp_of "$P/scv/SCV.md")" == "2.0.0" ]] && pass "T5 the recursion guard is honored" \
                                                || fail "T5 re-entry ran anyway"
 
+echo "=== T5s — every skip says WHY; a healthy project stays silent ==="
+# 조용히 안 되는 것이 진짜 문제였다. 갱신이 필요한데 못 했으면 반드시 말하고,
+# 필요 없으면 아무 말도 하지 않는다.
+SP="$(mk_project silentskip)"
+
+# (1) 자동 갱신을 껐고 실제로 어긋나 있다 → 알린다
+set_stamp "$SP/scv/SCV.md" "2.0.0"; ( cd "$SP" && git commit -qam stale )
+err="$(call "$SP" SCV_AUTOSYNC=off)"
+grep -q "OUT OF DATE" <<<"$err" && pass "T5s off + out of date is announced" \
+                                || fail "T5s the opt-out hid a real gap" "$err"
+[[ "$(stamp_of "$SP/scv/SCV.md")" == "2.0.0" ]] && pass "T5s off still changed nothing" \
+                                                || fail "T5s off wrote anyway"
+
+# (2) 어긋남이 없으면 껐든 켰든 조용하다 — 매 액션마다 떠들면 금방 무시하게 된다
+err="$(call "$SP")"                      # 먼저 맞춘다
+err="$(call "$SP" SCV_AUTOSYNC=off)"
+[[ -z "$err" ]] && pass "T5s a healthy project is silent even when off" \
+                || fail "T5s noise on a healthy project" "$err"
+
+# (3) 배포본이 불완전하면 이름을 대고 말한다 — 예전에는 조용히 넘어갔다
+BROKEN="$WORK/brokenpayload"
+mkdir -p "$BROKEN/scripts/lib"
+cp "$CORE/scripts/lib/scvroot.sh" "$CORE/scripts/lib/template-digest.sh" "$BROKEN/scripts/lib/"
+err="$( cd "$SP" && bash -c '
+    set -uo pipefail
+    source "'"$BROKEN"'/scripts/lib/scvroot.sh"
+    scv_autosync "$(scv_root_dir)"
+  ' 2>&1 >/dev/null )"
+grep -q "payload is incomplete" <<<"$err" && pass "T5s an incomplete payload is named, not skipped" \
+                                          || fail "T5s the broken payload went silent" "$err"
+
 echo "=== T5e — a NEWER project stamp is never refreshed backward ==="
 # A teammate updates the plugin first; this session still holds the old
 # payload. Refreshing "to" the old version would have two machines silently
