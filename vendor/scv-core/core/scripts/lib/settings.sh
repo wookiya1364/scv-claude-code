@@ -219,18 +219,28 @@ _settings_env_has_scv_keys() {
   return 1
 }
 
-# _settings_warn_unmigrated — 이사가 안 됐으면 한 번만 알린다.
+# _settings_warn_unmigrated — .env 에 SCV 값이 **설정 파일과 다르게** 남아 있으면 한 번 알린다.
 #
-# 값을 조용히 기본값으로 떨어뜨리면, 사용자는 알림이 안 가거나 언어가 바뀐 뒤에야
-# 알아챈다. 조용한 실패는 안 된다. 한 액션에 한 번만 찍는다.
+# 0.34.0 부터 설정 파일은 액션 시작 때 자동으로 생기고 .env 값도 그때 옮겨진다.
+# 그러니 "파일이 없다" 는 알림 사유가 아니다. 사유는 하나 — 사람이 나중에 .env 를
+# 고쳤는데 SCV 는 설정 파일을 읽어 그 변경이 닿지 않는 경우. 값이 같으면 조용하다.
 _settings_warn_unmigrated() {
   [[ -z "${SCV_SETTINGS_UNMIGRATED_WARNED:-}" ]] || return 0
-  _settings_env_has_scv_keys || return 0
+  local file="${SCV_SETTINGS_ENV_FILE:-.env}" key envv cur plain_json secret_json differing=""
+  [[ -f "$file" ]] || return 0
+  plain_json="$(_settings_slurp "$SCV_SETTINGS_FILE")"
+  secret_json="$(_settings_slurp "$SCV_SETTINGS_SECRET_FILE")"
+  for key in $SCV_PLAIN_KEYS $SCV_SECRET_KEYS; do
+    grep -qE "^[[:space:]]*${key}=" "$file" 2>/dev/null || continue
+    envv="$(_settings_from_env_file "$key" "$file")"
+    if settings_is_secret "$key"; then cur="$(settings_lookup_json "$secret_json" "$key")"
+    else cur="$(settings_lookup_json "$plain_json" "$key")"; fi
+    [[ "$envv" == "$cur" ]] || differing="$differing $key"
+  done
+  [[ -n "$differing" ]] || return 0
   export SCV_SETTINGS_UNMIGRATED_WARNED=1
-  echo "scv: SCV settings now live in $SCV_SETTINGS_FILE — your .env is NO LONGER read." >&2
-  echo "     .env still holds SCV keys, so SCV is running on DEFAULTS right now." >&2
-  echo "     Move them once:  bash \"\$CLAUDE_PLUGIN_ROOT/scripts/settings-migrate.sh\"" >&2
-  echo "     (your .env is not modified; secrets go to $SCV_SETTINGS_SECRET_FILE, which is git-ignored)" >&2
+  echo "scv: .env holds SCV values that differ from $SCV_SETTINGS_FILE (${differing# }) — .env is NO LONGER read; the settings file is what SCV uses." >&2
+  echo "     Edit the settings file (or: bash \"\$CLAUDE_PLUGIN_ROOT/scripts/settings-set.sh\" KEY=VALUE) and remove the SCV lines from .env." >&2
 }
 
 # settings_get <key> [default]
@@ -253,9 +263,8 @@ settings_get() {
   plain_json="$(_settings_slurp "$SCV_SETTINGS_FILE")"
   secret_json="$(_settings_slurp "$SCV_SETTINGS_SECRET_FILE")"
 
-  if [[ -z "$plain_json" && -z "$secret_json" ]]; then
-    _settings_warn_unmigrated
-  else
+  _settings_warn_unmigrated
+  if [[ -n "$plain_json" || -n "$secret_json" ]]; then
     from_secret="$(settings_lookup_json "$secret_json" "$key")"
     if settings_is_secret "$key"; then
       # 비밀 키가 일반 파일에 있으면 읽지 않는다. 값은 절대 찍지 않는다 —
@@ -276,4 +285,121 @@ settings_get() {
 # 값이 있으면 0, 없으면 1. 진단 화면처럼 "설정됐는지" 만 궁금한 자리에 쓴다.
 settings_has() {
   [[ -n "$(settings_get "${1:-}")" ]]
+}
+
+# ---------------------------------------------------------------- 효과: 파일을 보장한다
+# settings_defaults_json — 배포본의 기본값+설명 JSON(예시 파일) 본문. 없으면 빈 문자열.
+settings_defaults_json() {
+  local lib_dir; lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  _settings_slurp "$lib_dir/../../template/scv/scv_settings.example.json"
+}
+
+# _settings_json_strip_underscore <json> — `_` 로 시작하는 키(설명)를 뺀 JSON.
+# 있는 파일에 병합할 때 쓴다: 사용자가 설명 키를 지웠으면 다시 넣지 않는다.
+_settings_json_strip_underscore() {
+  local json="${1:-}"
+  [[ -n "$json" ]] || { printf '{}'; return 0; }
+  if command -v jq >/dev/null 2>&1; then
+    printf '%s' "$json" | jq 'if type=="object" then with_entries(select(.key | startswith("_") | not)) else . end' 2>/dev/null || printf '%s' "$json"
+  elif command -v python3 >/dev/null 2>&1; then
+    printf '%s' "$json" | python3 -c 'import json,sys
+try: d=json.load(sys.stdin)
+except Exception: sys.exit(0)
+print(json.dumps({k:v for k,v in d.items() if not k.startswith("_")}, indent=2, ensure_ascii=False) if isinstance(d,dict) else json.dumps(d))' 2>/dev/null || printf '%s' "$json"
+  else
+    printf '%s' "$json"
+  fi
+}
+
+# _settings_env_overlay <keys> [env_file] — .env 에 값이 있는 키만 {"K":"V"} 로.
+# 이사 전용 파서(_settings_from_env_file)만 쓴다 — .env 는 source 하지 않는다.
+_settings_env_overlay() {
+  local keys="${1:-}" file="${2:-.env}" key val first=1
+  printf '{'
+  [[ -f "$file" ]] && for key in $keys; do
+    val="$(_settings_from_env_file "$key" "$file")"
+    [[ -n "$val" ]] || continue
+    [[ $first -eq 1 ]] || printf ','
+    printf '"%s":"%s"' "$key" "$(printf '%s' "$val" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')"
+    first=0
+  done
+  printf '}'
+}
+
+# _settings_write_json <target> <json> — 유효한 JSON 일 때만 원자적으로 쓴다. 심볼릭 링크 거부.
+_settings_write_json() {
+  local target="$1" json="$2" tmp
+  [[ -L "$target" ]] && { echo "scv: $target is a symlink — not writing through it" >&2; return 1; }
+  mkdir -p "$(dirname "$target")" 2>/dev/null || true
+  tmp="${target}.tmp.$$"
+  printf '%s\n' "$json" > "$tmp" || { rm -f "$tmp"; return 1; }
+  if command -v jq >/dev/null 2>&1; then jq -e . "$tmp" >/dev/null 2>&1 || { rm -f "$tmp"; return 1; }
+  elif command -v python3 >/dev/null 2>&1; then python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$tmp" >/dev/null 2>&1 || { rm -f "$tmp"; return 1; }
+  fi
+  mv "$tmp" "$target"
+}
+
+# _settings_secret_ignored — 비밀 파일이 git 에서 무시되는지. 무시 줄이 없으면
+# hydrate 가 하듯 .gitignore 에 한 줄 더한 뒤 다시 확인한다. git 이 아니면 1.
+_settings_secret_ignored() {
+  local rel="${SCV_SETTINGS_SECRET_FILE:-scv/scv_settings.secret.json}"
+  git rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 1
+  git check-ignore -q "$rel" 2>/dev/null && return 0
+  if [[ ! -L .gitignore ]] && ! grep -qxF "$rel" .gitignore 2>/dev/null; then
+    { [[ -f .gitignore ]] && [[ -n "$(tail -c1 .gitignore 2>/dev/null)" ]] && echo; echo "# --- appended by scv settings-ensure (secrets must never be committed) ---"; echo "$rel"; } >> .gitignore 2>/dev/null || return 1
+  fi
+  git check-ignore -q "$rel" 2>/dev/null
+}
+
+# settings_ensure [project_dir]
+#
+# 설정 파일이 항상 있게 한다 — 액션 시작마다 부른다.
+#   없으면: 공개 키 전부 = 기본값(+ 설명), .env 에 있는 값 우선  → 만든다
+#   있으면: 없는 키만 더한다 (사용자 값 불변, `_` 설명 키는 재추가 안 함)
+#   비밀 파일: 없고 git 이 무시한다고 확인될 때만 만든다 (비밀 키 전부 빈 값 + .env 값)
+# 출력은 바뀐 것이 있을 때 한 줄. hydrate 되지 않은 폴더(PROMOTE.md 없음)는 건드리지 않는다.
+settings_ensure() {
+  local proj="${1:-.}" scv_sub="${SCV_DIR_NAME:-scv}"
+  [[ -d "$proj/$scv_sub" ]] || return 0   # hydrate 여부는 호출부(autosync)가 본다; 직접 부르면 scv/ 만 있으면 된다
+  local defaults; defaults="$(settings_defaults_json)"
+  [[ -n "$defaults" ]] || return 0
+  ( cd "$proj" || exit 0
+    local plain="${SCV_SETTINGS_FILE:-scv/scv_settings.json}" secret="${SCV_SETTINGS_SECRET_FILE:-scv/scv_settings.secret.json}"
+    local merged user_json overlay n_env
+    if [[ ! -f "$plain" ]]; then
+      overlay="$(_settings_env_overlay "$SCV_PLAIN_KEYS" .env)"
+      merged="$(settings_merge_defaults "$overlay" "$defaults")"
+      n_env="$(printf '%s' "$overlay" | grep -o '":"' | wc -l | tr -d ' ')"
+      if _settings_write_json "$plain" "$merged"; then
+        echo "scv: settings file created — $plain (every SCV key with its default; $n_env value(s) taken from .env; _doc explains each key)" >&2
+      fi
+    elif [[ ! -L "$plain" ]]; then
+      user_json="$(_settings_slurp "$plain")"
+      merged="$(settings_merge_defaults "$user_json" "$(_settings_json_strip_underscore "$defaults")")"
+      if [[ -n "$merged" && "$(printf '%s' "$merged" | tr -d '[:space:]')" != "$(printf '%s' "$user_json" | tr -d '[:space:]')" ]]; then
+        # 키 수가 늘었을 때만 쓴다 — 형식만 다른 재정렬은 사용자 파일을 건드릴 이유가 아니다
+        local before after
+        before="$(printf '%s' "$user_json" | grep -o '"[A-Za-z_][A-Za-z0-9_]*"[[:space:]]*:' | wc -l | tr -d ' ')"
+        after="$(printf '%s' "$merged" | grep -o '"[A-Za-z_][A-Za-z0-9_]*"[[:space:]]*:' | wc -l | tr -d ' ')"
+        if [[ "$after" -gt "$before" ]] && _settings_write_json "$plain" "$merged"; then
+          echo "scv: settings file gained $((after - before)) new key(s) — $plain (your values untouched)" >&2
+        fi
+      fi
+    fi
+    if [[ ! -f "$secret" ]]; then
+      if _settings_secret_ignored; then
+        local sdefaults; sdefaults="$(_settings_slurp "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../template/scv/scv_settings.secret.example.json")"
+        overlay="$(_settings_env_overlay "$SCV_SECRET_KEYS" .env)"
+        merged="$(settings_merge_defaults "$overlay" "$sdefaults")"
+        if _settings_write_json "$secret" "$merged"; then
+          chmod 600 "$secret" 2>/dev/null || true
+          echo "scv: secret settings file created — $secret (git-ignored; tokens and channel IDs go here)" >&2
+        fi
+      else
+        [[ -n "${SCV_SETTINGS_SECRET_NOTICED:-}" ]] || echo "scv: $secret not created — git does not ignore it here (no git repo, or .gitignore could not be extended); add 'scv/scv_settings.secret.json' to .gitignore and re-run an action" >&2
+        export SCV_SETTINGS_SECRET_NOTICED=1
+      fi
+    fi
+  )
+  return 0
 }

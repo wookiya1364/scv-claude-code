@@ -291,14 +291,10 @@ if [[ -f "$SETTINGS_FILE" || -f "$SECRET_FILE" ]]; then
   else
     echo "  [△] settings present but NOTIFIER_PROVIDER missing in $SETTINGS_FILE"
   fi
-elif [[ -f ".env" ]]; then
-  # 이사하지 않은 프로젝트. .env 는 더 이상 읽히지 않으므로 지금 기본값으로 돌고 있다.
-  echo "  [✗] settings not migrated — .env is NO LONGER read; SCV is on defaults"
-  echo "        run once: bash \"\$CLAUDE_PLUGIN_ROOT/scripts/settings-migrate.sh\""
-elif [[ -f "scv/scv_settings.example.json" ]]; then
-  echo "  [✗] $SETTINGS_FILE missing — copy scv/scv_settings.example.json and fill it in"
 else
-  echo "  [✗] settings example also missing (hydrate required)"
+  # 0.34.0: 액션 시작 때 자동으로 생기므로 여기 오면 hydrate 가 안 됐거나 쓰기가 막힌 것이다.
+  echo "  [✗] $SETTINGS_FILE missing — it is created automatically when an action starts;"
+  echo "        if it keeps missing, run once: bash \"\$CLAUDE_PLUGIN_ROOT/scripts/settings-ensure.sh\""
 fi
 
 # --- Dependency check (v0.5.1+) ----------------------------------------------

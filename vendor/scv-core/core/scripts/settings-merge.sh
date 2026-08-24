@@ -42,7 +42,7 @@ fi
 [[ -L "$TARGET" ]] && { echo "✖ $TARGET is a symlink — refusing to write through it." >&2; exit 1; }
 
 USER_JSON="$(cat "$TARGET" 2>/dev/null || true)"
-DEFAULTS_JSON="$(cat "$DEFAULTS_FILE" 2>/dev/null || true)"
+DEFAULTS_JSON="$(_settings_json_strip_underscore "$(cat "$DEFAULTS_FILE" 2>/dev/null || true)")"  # 설명 키(_)는 사용자가 지웠으면 다시 넣지 않는다
 MERGED="$(settings_merge_defaults "$USER_JSON" "$DEFAULTS_JSON")"
 
 # 병합이 실패했거나 결과가 이상하면 손대지 않는다. 설정을 잃느니 그대로가 낫다.
