@@ -30,61 +30,29 @@ while [[ $# -gt 0 ]]; do
 done
 
 cd "$PROJECT_DIR" || { echo "✖ cannot enter $PROJECT_DIR" >&2; exit 1; }
-
-ENV_FILE=".env"
-PLAIN="scv/scv_settings.json"
-SECRET="scv/scv_settings.secret.json"
-
-if [[ ! -f "$ENV_FILE" ]]; then
-  echo "no .env here — nothing to migrate."
-  exit 0
-fi
-if [[ -f "$PLAIN" || -f "$SECRET" ]]; then
-  echo "settings files already exist — nothing was changed."
-  echo "  (delete them first if you really want to re-run this)"
-  exit 0
-fi
 [[ -d scv ]] || { echo "✖ no scv/ directory — hydrate the project first." >&2; exit 1; }
-
-json_escape() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\t/\\t/g'; }
-
-emit() {  # <키 목록> — 있는 값만 JSON 객체로
-  local keys="$1" key val first=1
-  printf '{\n'
-  for key in $keys; do
-    val="$(_settings_from_env_file "$key" "$ENV_FILE")"
-    [[ -n "$val" ]] || continue
-    [[ $first -eq 1 ]] || printf ',\n'
-    printf '  "%s": "%s"' "$key" "$(json_escape "$val")"
-    first=0
-  done
-  [[ $first -eq 1 ]] || printf '\n'
-  printf '}\n'
-}
-
-PLAIN_JSON="$(emit "$SCV_PLAIN_KEYS")"
-SECRET_JSON="$(emit "$SCV_SECRET_KEYS")"
-
-count_of() { printf '%s' "$1" | grep -c '^  "' || true; }
-PN="$(count_of "$PLAIN_JSON")"; SN="$(count_of "$SECRET_JSON")"
-
+PLAIN="${SCV_SETTINGS_FILE:-scv/scv_settings.json}"
+SECRET="${SCV_SETTINGS_SECRET_FILE:-scv/scv_settings.secret.json}"
+# 0.34.0: 이 스크립트는 settings_ensure 의 별칭이다 — 액션 시작 때 자동으로 도는 것과
+# 같은 일을 한다. .env 가 없어도 파일을 만들고(전체 키 + 기본값), 있으면 그 값을
+# 옮기며, 두 번 돌려도 같다. 원본 .env 는 지우지 않는다.
 if [[ $DRY_RUN -eq 1 ]]; then
+  PN="$(printf '%s' "$(_settings_env_overlay "$SCV_PLAIN_KEYS" .env)" | grep -o '":"' | wc -l | tr -d ' ')"
+  SN="$(printf '%s' "$(_settings_env_overlay "$SCV_SECRET_KEYS" .env)" | grep -o '":"' | wc -l | tr -d ' ')"
   echo "(dry-run — nothing written)"
-  echo "  $PLAIN   ← $PN setting(s)"
-  echo "  $SECRET  ← $SN secret(s)"
+  [[ -f "$PLAIN" ]]  && echo "  $PLAIN   exists — only missing keys would be added" || echo "  $PLAIN   ← every SCV key with defaults, $PN value(s) from .env"
+  [[ -f "$SECRET" ]] && echo "  $SECRET  exists — untouched" || echo "  $SECRET  ← every secret key (empty), $SN value(s) from .env (only if git ignores it)"
   exit 0
 fi
-
-printf '%s' "$PLAIN_JSON"  > "$PLAIN"
-printf '%s' "$SECRET_JSON" > "$SECRET"
-chmod 600 "$SECRET" 2>/dev/null || true
-
-echo "migrated:"
-echo "  $PLAIN   ← $PN setting(s)   (committed)"
-echo "  $SECRET  ← $SN secret(s)    (git-ignored)"
-echo "  $ENV_FILE was NOT touched — remove the SCV lines yourself once you are happy."
-
-if ! git check-ignore -q "$SECRET" 2>/dev/null; then
-  echo "" >&2
-  echo "⚠ $SECRET is NOT ignored by git yet — add it to .gitignore before committing." >&2
+had_plain=0; [[ -f "$PLAIN" ]] && had_plain=1
+settings_ensure . 2>/dev/null
+if [[ $had_plain -eq 1 ]]; then
+  echo "settings files already exist — nothing was changed except newly added keys, if any."
+else
+  PN="$(printf '%s' "$(_settings_env_overlay "$SCV_PLAIN_KEYS" .env)" | grep -o '":"' | wc -l | tr -d ' ')"
+  echo "migrated:"
+  echo "  $PLAIN   ← every SCV key with its default; $PN value(s) from .env   (committed)"
+  if [[ -f "$SECRET" ]]; then echo "  $SECRET  ← every secret key; values from .env if any    (git-ignored)"
+  else echo "  $SECRET  NOT created — git does not ignore it here; add 'scv/scv_settings.secret.json' to .gitignore and re-run" >&2; fi
+  [[ -f .env ]] && echo "  .env was NOT touched — remove the SCV lines yourself once you are happy."
 fi
