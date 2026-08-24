@@ -16,7 +16,7 @@ fi
 #   regression.sh [<slug-prefix>]
 #                 [--tag <x>] [--include-promote] [--include-obsolete]
 #                 [--only <slug>] [--skip <slug>] [--ci] [--quiet]
-#                 [--json <path>] [--timeout <sec>]
+#                 [--json <path>] [--timeout <sec>] [--no-memo]
 #
 # Exit codes:
 #   0  all passed (or nothing to run)
@@ -48,6 +48,7 @@ CI_MODE=0
 QUIET=0
 JSON_PATH=""
 TIMEOUT=300
+MEMO=1                 # suite-gate memoization (v0.34.0): identical whole-suite calls run once per run
 ONLY_LIST=()
 SKIP_LIST=()
 
@@ -67,6 +68,7 @@ while [[ $# -gt 0 ]]; do
     --quiet)             QUIET=1; shift ;;
     --json)              JSON_PATH="$2"; shift 2 ;;
     --timeout)           TIMEOUT="$2"; shift 2 ;;
+    --no-memo)           MEMO=0; shift ;;
     -h|--help)           usage; exit 0 ;;
     -*)                  echo "Unknown flag: $1" >&2; exit 1 ;;
     *)
@@ -277,6 +279,67 @@ read_test_command() {
 # and the mark stays set in THIS process so the runner's helpers still
 # check once. Callers may prefix SCV_SKIPPED_SCENARIOS=... — the same
 # temp-export mechanism run_with_timeout already relies on.
+# ---- suite-gate memoization (v0.34.0) ----
+# 22 of 28 archived contracts end with "run the whole suite" — the same three
+# commands, byte for byte, repeated per slug. Within ONE run their verdict cannot
+# differ, so each distinct gate command runs once and later blocks reuse its
+# exit code. Only these exact invocations are memoized; everything else in a
+# block runs as written, so a contract's own assertions are never skipped.
+#   bash core/tests/run-dry.sh            (any redirection / || fail after it)
+#   bash tests/run.sh
+#   for t in core/tests/test-*.sh; do bash "$t" ... ; done   (the loop as a unit)
+# --no-memo (or SCV_REGRESSION_MEMO=off) restores per-slug execution.
+declare -A MEMO_RC=()
+MEMO_HITS=0
+MEMO_GATES=0
+memo_gate_run() {  # memo_gate_run <key> <command> — run once (in THIS shell, so the cache persists); count reuse
+  local key="$1" cmd="$2"
+  if [[ -z "${MEMO_RC[$key]+x}" ]]; then
+    local rc=0
+    run_with_timeout "$TIMEOUT" env -u SCV_AUTOSYNC_RUNNING \
+      -u SCV_DIR -u RAW_DIR -u STATE_FILE -u PROMOTE_DIR -u ARCHIVE_DIR \
+      bash -c "$cmd" >/dev/null 2>&1 || rc=$?
+    MEMO_RC[$key]=$rc
+    MEMO_GATES=$((MEMO_GATES+1))
+    [[ $QUIET -eq 0 ]] && echo "  ↺ suite gate [$key] ran once (exit $rc) — later contracts reuse it"
+  else
+    MEMO_HITS=$((MEMO_HITS+1))
+  fi
+  return 0
+}
+# memo_prepare_block <block> — runs (once) every gate the block mentions. Must be
+# called in the main shell: a command substitution would fork and lose the cache.
+memo_prepare_block() {
+  local line
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" =~ ^[[:space:]]*for[[:space:]]+t[[:space:]]+in[[:space:]]+core/tests/test-\*\.sh\;[[:space:]]*do[[:space:]]+bash[[:space:]]+\"\$t\".*done[[:space:]]*$ ]]; then
+      memo_gate_run core-tests 'for t in core/tests/test-*.sh; do bash "$t" >/dev/null 2>&1 || exit 1; done'
+    elif [[ "$line" =~ ^[[:space:]]*bash[[:space:]]+core/tests/run-dry\.sh([[:space:]].*)?$ ]]; then
+      memo_gate_run run-dry 'bash core/tests/run-dry.sh'
+    elif [[ "$line" =~ ^[[:space:]]*bash[[:space:]]+tests/run\.sh([[:space:]].*)?$ ]]; then
+      memo_gate_run tests-run 'bash tests/run.sh'
+    fi
+  done <<< "$1"
+}
+memo_rewrite_block() {  # stdin: block → stdout: block with memoized gates replaced by their cached exit
+  local line rc tail
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" =~ ^([[:space:]]*)for[[:space:]]+t[[:space:]]+in[[:space:]]+core/tests/test-\*\.sh\;[[:space:]]*do[[:space:]]+bash[[:space:]]+\"\$t\"(.*)done[[:space:]]*$ ]]; then
+      rc="${MEMO_RC[core-tests]:-}"
+      if [[ -n "$rc" ]]; then
+        tail="${BASH_REMATCH[2]}"; tail="${tail%%;*}"
+        printf '%s( exit %s )%s\n' "${BASH_REMATCH[1]}" "$rc" "${tail//\$t/core/tests}"; continue
+      fi
+    elif [[ "$line" =~ ^([[:space:]]*)bash[[:space:]]+core/tests/run-dry\.sh([[:space:]].*)?$ ]]; then
+      rc="${MEMO_RC[run-dry]:-}"
+      if [[ -n "$rc" ]]; then printf '%s( exit %s )%s\n' "${BASH_REMATCH[1]}" "$rc" "${BASH_REMATCH[2]}"; continue; fi
+    elif [[ "$line" =~ ^([[:space:]]*)bash[[:space:]]+tests/run\.sh([[:space:]].*)?$ ]]; then
+      rc="${MEMO_RC[tests-run]:-}"
+      if [[ -n "$rc" ]]; then printf '%s( exit %s )%s\n' "${BASH_REMATCH[1]}" "$rc" "${BASH_REMATCH[2]}"; continue; fi
+    fi
+    printf '%s\n' "$line"
+  done
+}
 run_scenario_clean() {
   # The runner's own marks, and nothing else: the autosync re-entry guard plus
   # the five path marks scv_init_paths exports (SCV_DIR RAW_DIR STATE_FILE
@@ -471,6 +534,10 @@ main() {
     local out_file; out_file=$(mktemp)
     local rc=0
     local before_ts; before_ts=$(date +%s)
+    if [[ $MEMO -eq 1 && "${SCV_REGRESSION_MEMO:-on}" != "off" ]]; then
+      memo_prepare_block "$cmd"
+      cmd="$(printf '%s\n' "$cmd" | memo_rewrite_block)"
+    fi
     if [[ -n "$skipped_T_for_slug" ]]; then
       SCV_SKIPPED_SCENARIOS="$skipped_T_for_slug" \
         run_scenario_clean "$cmd" >"$out_file" 2>&1 || rc=$?
@@ -506,6 +573,7 @@ main() {
   echo ""
   echo "=== summary ==="
   echo "EXECUTED_SLUGS: $executed"
+  echo "MEMOIZED_GATES: $MEMO_GATES (reused $MEMO_HITS time(s))"
   echo "PASSED_SLUGS: $passed"
   echo "FAILED_SLUGS: $failed"
   if [[ $failed -gt 0 ]]; then

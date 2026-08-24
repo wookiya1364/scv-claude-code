@@ -111,9 +111,20 @@ assert_file "$EXIST_APP/scv/scv_settings.secret.example.json"
 grep -qF "NOTIFIER_PROVIDER" "$EXIST_APP/scv/scv_settings.example.json" \
   && pass "hydrate: settings example created under scv/" \
   || fail "hydrate: settings example missing SCV keys"
-[[ ! -f "$EXIST_APP/scv/scv_settings.json" ]] \
-  && pass "hydrate does NOT create the real settings file (it is user data)" \
-  || fail "hydrate created scv/scv_settings.json — that hides the migration notice"
+# v0.34.0 — hydrate seeds the REAL settings file: every key with its default,
+# so a new project can see what is configurable without copying an example.
+[[ -f "$EXIST_APP/scv/scv_settings.json" ]] \
+  && pass "hydrate creates the real settings file (every key, defaults, _doc)" \
+  || fail "hydrate did not create scv/scv_settings.json"
+grep -qF '"_doc"' "$EXIST_APP/scv/scv_settings.json" \
+  && pass "hydrate: settings file carries _doc descriptions" \
+  || fail "hydrate: settings file lacks _doc"
+grep -qF '"SCV_ATTACHMENTS_SCOPE": "slug"' "$EXIST_APP/scv/scv_settings.json" \
+  && pass "hydrate: settings file carries real defaults" \
+  || fail "hydrate: settings file lacks the attachments-scope default"
+grep -qF '"SCV_LANG": ""' "$EXIST_APP/scv/scv_settings.json" \
+  && pass "hydrate: auto-detect keys stay empty" \
+  || fail "hydrate: SCV_LANG was given a value — language auto-detect would break"
 # SCV env file must NOT reference the legacy /standard-report command name
 grep -qF "/standard-report" "$EXIST_APP/scv/scv_settings.example.json" \
   && fail "settings example still references legacy /standard-report" \

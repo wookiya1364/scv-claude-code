@@ -129,6 +129,13 @@ if [[ -f "$TARGET/.gitignore.fragment" ]]; then
   fi
 fi
 
+# 0.34.0 — seed the REAL settings files, not just the examples: every SCV key
+# with its default (+ values found in an existing .env), and the secret file
+# only when git ignores it (the fragment above just made sure of that).
+# shellcheck source=lib/settings.sh
+source "$SCRIPT_DIR/lib/settings.sh"
+settings_ensure "$TARGET" 2>&1 | sed 's/^scv: /  /' || true
+
 # Stamp scv/SCV.md with current SCV version + sync date
 # (Project-root instruction files are user-owned; SCV never touches them.)
 VERSION=$(tr -d '[:space:]' < "$STANDARD_ROOT/TEMPLATE_VERSION")
