@@ -212,3 +212,13 @@ Do not auto-add tags to existing PLANs. The user owns the tag taxonomy.
 - Ask the user for confirmation in `--ci` mode.
 - Bundle multiple failures into a single question.
 - Auto-mark an undeclared failure as obsolete without the user's answer.
+
+## Suite-gate memoization (v0.34.0+)
+
+Most archived contracts end by running the whole suite. Within one run those
+calls cannot disagree, so the runner executes each of the three exact gate
+invocations (`bash core/tests/run-dry.sh`, `bash tests/run.sh`, the
+`for t in core/tests/test-*.sh` loop) once and lets later contracts reuse the
+exit code — a contract's own assertions still run every time. The summary line
+`MEMOIZED_GATES:` says how many gates ran and how often they were reused.
+Pass `--no-memo` (or set `SCV_REGRESSION_MEMO=off`) to run every gate per slug.
