@@ -202,6 +202,19 @@ scv_autosync() {
     *) echo "scv: template $local_v predates 2.0 — run the sync action once for the interactive migration." >&2
        return 0 ;;
   esac
+  # 0.34.0 — settings files are guaranteed here, once per action, for every 2.x
+  # project (the same place the template refresh is allowed to write; a legacy
+  # pre-2.0 index above stays read-only, and SCV_AUTOSYNC=off keeps SCV's hands
+  # off the project entirely): created with every key + defaults (+ .env
+  # values) when absent, topped up with new keys when present.
+  if (( ! muted )); then
+    local _scv_lib_dir; _scv_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [[ -f "$_scv_lib_dir/settings.sh" ]]; then
+      # shellcheck source=settings.sh
+      source "$_scv_lib_dir/settings.sh"
+      settings_ensure "$(dirname "$root")" || true
+    fi
+  fi
 
   # 판단은 순수 함수 한 번이다. 규칙은 세 줄 —
   #   1. 배포본이 프로젝트보다 오래된 번호면 절대 되돌리지 않는다. 없애면 두 대의
