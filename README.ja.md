@@ -49,7 +49,7 @@ Drop materials → Claude refines them with you → implementation runs the test
 
 ## クイックスタート <a id="quick-start"></a>
 
-> **もうコマンドを覚える必要すらありません (v0.35.0+)。**
+> **もうコマンドを覚える必要すらありません (v0.35.1+)。**
 > SCV は会話に自ら加わります: プロジェクトの話を普通にすれば、help アクションが
 > 適切なモード(診断 · アイデアの具体化 · 過去の検索)を選んで進めます。
 > `/scv:help` は明示的な入口として残り、`scv/scv_settings.json` の
@@ -328,7 +328,7 @@ v0.20.0 から、共通ワークフローの動作はチェックサムで検証
 を参照してください。
 
 Wrapper と Core は独立してリリースします。この Claude アダプター release
-は `0.35.0` で、これが担いでいる Core pin は
+は `0.35.1` で、これが担いでいる Core pin は
 `vendor/scv-core/VERSION` と `core.lock` に記録されます。Core sync が更新するのは、そのチェックサム付き
 pin と生成 projection のみで、wrapper の `VERSION`、plugin manifest、
 marketplace version は変更しません。
@@ -353,7 +353,7 @@ scv-core `docs/wrapper-integration.md` §6 "Hook seam"。
 
 `on-user-prompt.sh` は stdout に 2 つのブロックも出力します — やさしい言葉の
 答えの形リマインダー (v0.31.0+, `SCV_PLAIN_LANGUAGE`) と常時介入ルーティング
-ブロック (v0.35.0+, `SCV_ALWAYS_ON`)。Claude Code がこの stdout を毎ターン
+ブロック (v0.35.1+, `SCV_ALWAYS_ON`)。Claude Code がこの stdout を毎ターン
 モデルコンテキストへ載せるため、コマンドなしでも SCV が自由会話に加われます。
 
 同じ `hooks/hooks.json` は、唯一の*ブロックする*フックも登録します —
