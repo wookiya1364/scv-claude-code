@@ -325,7 +325,13 @@ Update `PLAN.md` frontmatter `status:` as you progress:
 
 ### Step 7 — Run TESTS
 
-Execute the command(s) from the TESTS.md run section via the `Bash` tool. Capture output. Evaluate against pass criteria.
+Execute the command(s) from the TESTS.md run section via the `Bash` tool — through the evidence-recording wrapper (v0.35.0+), so the files this run produces are credited to this plan:
+
+```
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/run-plan-tests.sh --slug <slug> --tests <TESTS_FILE>
+```
+
+The wrapper runs the `## How to run` block unchanged (same output, same exit code) and additionally writes a run manifest — the attachment step later prefers it over path/name matching, which breaks when the E2E runner truncates result folder names. Capture output. Evaluate against pass criteria.
 
 - All scenarios pass + criteria met → proceed to Step 8.
 - Any scenario fails → loop back to Step 6 to fix. **Do not archive.** Set frontmatter `status:` back to `in_progress`.
@@ -663,13 +669,16 @@ options:
 bash ${CLAUDE_PLUGIN_ROOT}/scripts/pr-helper.sh [<SCV_DIR>] <slug>
 ```
 
-**Attachment scope (v0.32.0+).** The helper attaches only test-results files
-whose path contains this slug — Playwright keeps just the last run there, and
-after the Step 9a regression that run is usually another feature's. When it
-finds none, it re-runs this plan's `## How to run` once to produce this slug's
-evidence (pass `--no-rerun` to skip), and with still nothing it says so and
-attaches no evidence rather than someone else's. `scv/scv_settings.json`
-`SCV_ATTACHMENTS_SCOPE=all` restores the everything-in-test-results behaviour.
+**Attachment scope (v0.32.0+; run manifest v0.35.0+).** The helper attaches
+this plan's evidence only, in priority order: the run manifest written by
+`run-plan-tests.sh` (Step 7) — immune to result folder-name truncation — then
+paths containing this slug (fallback), then a one-line notice and no
+attachments rather than someone else's. When it finds none it re-runs this
+plan's `## How to run` once through the wrapper (pass `--no-rerun` to skip),
+so even truncated names attach after the re-run. A head branch that already
+has an open PR/MR is updated (`PR updated: <URL>`) instead of getting a
+duplicate. `scv/scv_settings.json` `SCV_ATTACHMENTS_SCOPE=all` restores the
+everything-in-test-results behaviour.
 
 The helper reads `archive/<slug>/PLAN.md`'s `epic:` / `kind:` to determine the base branch and performs commit + push + gh pr create. The last line of the output should be `PR created: <URL>` — report that URL to the user.
 

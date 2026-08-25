@@ -7,6 +7,7 @@
     "SCV_PROMOTE_LANG": "계획서(PLAN/TESTS)·커밋·PR 문장의 언어. 비우면 SCV_LANG 을 따름.",
     "SCV_PLAIN_LANGUAGE": "쉬운 말 규칙(답의 모양)과 매 턴 안내: on(기본) | off. off 만 끕니다.",
     "SCV_PLAIN_MAX_SENTENCES": "첫 답의 문장 수 상한. 양의 정수, 기본 2 (3–4 가 실용).",
+    "SCV_ALWAYS_ON": "일반 대화도 SCV 로: on(기본, 매 메시지를 help 라우팅) | off(명령을 칠 때만).",
     "NOTIFIER_PROVIDER": "팀 보고 채널: slack | discord. 비우면 보고 기능 꺼짐. 토큰·채널 ID 는 비밀 파일에.",
     "NOTIFIER_DRY_RUN": "1 이면 보고를 보내지 않고 내용만 찍음. 기본 0.",
     "NOTIFIER_RETRY_MAX": "보고 전송·첨부 업로드 재시도 횟수. 기본 3.",
@@ -36,6 +37,7 @@
   "SCV_PROMOTE_LANG": "",
   "SCV_PLAIN_LANGUAGE": "on",
   "SCV_PLAIN_MAX_SENTENCES": "2",
+  "SCV_ALWAYS_ON": "on",
 
   "NOTIFIER_PROVIDER": "",
   "NOTIFIER_DRY_RUN": "0",
