@@ -12,9 +12,9 @@ Current versions:
 
 | Contract | Version | Meaning |
 |---|---:|---|
-| SCV Core | `0.27.0` | Shared behavior and release payload |
+| SCV Core | `0.35.0` | Shared behavior and release payload |
 | Core API | `1` | Wrapper/core integration contract |
-| Template | `2.1.0` | Hydrated project-template schema |
+| Template | `2.3.0` | Hydrated project-template schema |
 
 The installable plugins live in:
 
@@ -36,6 +36,13 @@ Core owns 13 of the 15 SCV actions. `update` and `set-models` are deliberately
 adapter-owned because installation and model selection depend on the host.
 Canonical protocols use `action:<name>` and `{{SCV_ARGS}}`; wrapper syntax and
 argument transport are supplied only through a validated host profile.
+
+Commands are no longer the only entrance (0.35.0+): a per-turn hook routes free
+conversation through the help action unless the project's settings file says
+`SCV_ALWAYS_ON=off`, and the same hook carries the plain-language answer-shape
+reminder (0.31.0+). Project settings live in `scv/scv_settings.json` (+ a
+git-ignored secret file), created automatically with every key documented
+(0.34.0+); the project `.env` is not read.
 
 The shared state index is always `scv/SCV.md`. During the transition from older
 wrappers, readers may fall back to `CLAUDE.md` or `CODEX.md` only when
