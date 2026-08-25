@@ -83,6 +83,17 @@ pr_update_body() {
   esac
 }
 
+# 같은 head 브랜치로 이미 열린 PR/MR 을 찾는다. 출력: "<number> <url>" 한 줄,
+# 없거나 조회 실패면 출력 없음 (호출자는 빈 값 = 기존 create 경로로 간다).
+pr_find_open() {
+  local head="$1"
+  local platform; platform=$(_pr_resolve_platform)
+  case "$platform" in
+    github) _pr_github_find_open "$head" ;;
+    gitlab) _pr_gitlab_find_open "$head" ;;
+  esac
+}
+
 pr_get_owner_repo() {
   local platform; platform=$(_pr_resolve_platform)
   case "$platform" in
@@ -171,6 +182,13 @@ _pr_github_update_body() {
   # `gh pr edit` returns exit 1 due to GraphQL Projects (classic) deprecation
   # warning even when body update succeeds. Use `gh api PATCH` directly.
   gh api -X PATCH "repos/${owner_repo}/pulls/${pr_number}" -F body=@"$body_file" --silent
+}
+
+_pr_github_find_open() {
+  local head="$1"
+  command -v gh >/dev/null 2>&1 || return 0
+  gh pr list --head "$head" --state open --json number,url \
+    --jq '.[0] | select(.) | "\(.number) \(.url)"' 2>/dev/null || true
 }
 
 # ============================================================================
@@ -318,4 +336,18 @@ _pr_gitlab_update_body() {
     echo "ERROR: GitLab MR body update failed (HTTP $http_code)" >&2
     return 1
   fi
+}
+
+_pr_gitlab_find_open() {
+  local head="$1"
+  command -v jq >/dev/null 2>&1 || return 0
+  command -v curl >/dev/null 2>&1 || return 0
+  local host project token
+  host=$(_pr_gitlab_host)
+  project=$(_pr_gitlab_project_path 2>/dev/null) || return 0
+  token=$(_pr_gitlab_token 2>/dev/null) || return 0
+  curl -sS \
+    -H "PRIVATE-TOKEN: $token" \
+    "${host}/api/v4/projects/${project}/merge_requests?source_branch=${head}&state=opened" 2>/dev/null \
+    | jq -r '.[0] | select(.) | "\(.iid) \(.web_url)"' 2>/dev/null || true
 }
