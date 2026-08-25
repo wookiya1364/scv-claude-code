@@ -199,6 +199,15 @@ If `video:` is `'retain-on-failure'` or `'retry-with-video'`: these record **not
 
 This flow runs **once per project** in practice — after the config is `'on'` (or the user declines), it stays put.
 
+**Pace the evidence for humans (v0.36.0+).** A viewer needs ~2 seconds to
+register each screen change — a flow with N meaningful transitions must yield a
+video of at least 2×N seconds. The per-slug spec holds after every meaningful
+transition (e.g. `await page.waitForTimeout(2000)` after a navigation or a
+click that changes the screen). These holds are part of the spec — never strip
+them to speed a run up. `pr-helper` warns when an attached video is shorter
+than `SCV_EVIDENCE_MIN_SECONDS` (settings, default 4) — a warning, never a
+block.
+
 ##### Non-Playwright notice (Cypress / Puppeteer / others)
 
 <!-- SCV:GUIDANCE -->
@@ -678,7 +687,9 @@ plan's `## How to run` once through the wrapper (pass `--no-rerun` to skip),
 so even truncated names attach after the re-run. A head branch that already
 has an open PR/MR is updated (`PR updated: <URL>`) instead of getting a
 duplicate. `scv/scv_settings.json` `SCV_ATTACHMENTS_SCOPE=all` restores the
-everything-in-test-results behaviour.
+everything-in-test-results behaviour. When a notifier is configured
+(`NOTIFIER_PROVIDER`), the same evidence is also posted to the team channel —
+success included (v0.36.0+; `SCV_PR_NOTIFY=off` turns that off).
 
 The helper reads `archive/<slug>/PLAN.md`'s `epic:` / `kind:` to determine the base branch and performs commit + push + gh pr create. The last line of the output should be `PR created: <URL>` — report that URL to the user.
 
