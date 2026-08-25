@@ -213,7 +213,26 @@ VIDEOS=()
 collect_attachments() {
   SCREENSHOTS=(); VIDEOS=()
   [[ -d "$TEST_RESULTS_DIR" ]] || return 0
-  local f
+  # 실행 기록(run manifest, lib/run-manifest.sh)이 1순위 — 결과 폴더명이 잘려
+  # 슬러그가 경로에 없어도 붙는다. 이름 매칭은 기록이 없을 때의 폴백이다.
+  # shellcheck source=lib/run-manifest.sh
+  source "$SCRIPT_DIR/lib/run-manifest.sh"
+  local f manifest=""
+  if [[ "$ATTACHMENTS_SCOPE" == "slug" ]]; then
+    manifest="$(run_manifest_read "$SLUG_NAME" "$TEST_RESULTS_DIR")"
+  fi
+  if [[ -n "$manifest" ]]; then
+    local ext
+    while IFS= read -r f; do
+      [[ -n "$f" && -f "$f" ]] || continue
+      ext="$(printf '%s' "${f##*.}" | tr '[:upper:]' '[:lower:]')"
+      case "$ext" in
+        png|jpg|jpeg) SCREENSHOTS+=("$f") ;;
+        webm|mp4)     VIDEOS+=("$f") ;;
+      esac
+    done <<< "$manifest"
+    return 0
+  fi
   while IFS= read -r f; do
     [[ -f "$f" ]] && SCREENSHOTS+=("$f")
   done < <(find "$TEST_RESULTS_DIR" -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' \) 2>/dev/null \
@@ -230,11 +249,11 @@ if [[ "$ATTACHMENTS_SCOPE" == "slug" && ${#SCREENSHOTS[@]} -eq 0 && ${#VIDEOS[@]
     if [[ -n "${RERUN_CMD//[[:space:]]/}" ]]; then
       echo "attachments: no test-results file for '$SLUG_NAME' — re-running the plan's '## How to run' once to produce this slug's evidence" >&2
       RERUN_TIMEOUT="${SCV_ATTACHMENTS_RERUN_TIMEOUT:-600}"
-      if command -v timeout >/dev/null 2>&1; then
-        timeout "$RERUN_TIMEOUT" bash -c "$RERUN_CMD" >/dev/null 2>&1 || echo "attachments: re-run exited non-zero — continuing without it" >&2
-      else
-        bash -c "$RERUN_CMD" >/dev/null 2>&1 || echo "attachments: re-run exited non-zero — continuing without it" >&2
-      fi
+      # run-plan-tests.sh 를 거치면 재실행이 실행 기록(run manifest)을 남긴다 —
+      # 결과 폴더명이 잘려도 재실행 후에는 반드시 이 슬러그 소속으로 잡힌다.
+      TEST_RESULTS_DIR="$TEST_RESULTS_DIR" bash "$SCRIPT_DIR/run-plan-tests.sh" \
+        --slug "$SLUG_NAME" --tests "$TESTS_FILE" --timeout "$RERUN_TIMEOUT" >/dev/null 2>&1 \
+        || echo "attachments: re-run exited non-zero — continuing without it" >&2
       collect_attachments
     fi
   fi
@@ -584,7 +603,16 @@ if [[ $NO_CREATE -eq 0 ]]; then
   TITLE_PREFIX="feat"
   [[ "$KIND" == "refactor" ]] && TITLE_PREFIX="refactor"
   [[ "$KIND" == "retirement" ]] && TITLE_PREFIX="chore"
-  if PR_URL=$(pr_create "$TITLE_PREFIX: $TITLE" "$TMP_BODY" "$BASE_BRANCH" "$CURRENT_BRANCH" 2>&1); then
+  # 같은 브랜치에 이미 열린 PR/MR 이 있으면 새로 만들지 않고 그 PR 을 갱신한다
+  # — 증적 사후 보정 등으로 재호출해도 PR 이 늘지 않는다.
+  EXISTING_PR="$(pr_find_open "$CURRENT_BRANCH" 2>/dev/null || true)"
+  if [[ -n "$EXISTING_PR" ]]; then
+    PR_URL="${EXISTING_PR#* }"
+    _EXISTING_NUMBER="${EXISTING_PR%% *}"
+    pr_update_body "$_EXISTING_NUMBER" "$TMP_BODY" 2>/dev/null \
+      || echo "WARN: existing PR found but body update failed — body left unchanged" >&2
+    echo "PR updated: $PR_URL"
+  elif PR_URL=$(pr_create "$TITLE_PREFIX: $TITLE" "$TMP_BODY" "$BASE_BRANCH" "$CURRENT_BRANCH" 2>&1); then
     echo "PR created: $PR_URL"
   else
     echo "ERROR: PR creation failed:" >&2
