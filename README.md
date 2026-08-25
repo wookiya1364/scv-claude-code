@@ -324,7 +324,7 @@ before the normal `develop → stage → main` promotion. See
 [`docs/design/shared-core-wrapper.md`](docs/design/shared-core-wrapper.md).
 
 Wrapper and Core releases are intentionally independent. This Claude adapter
-release is `0.34.1`; the Core pin it carries is recorded in
+release is `0.35.0`; the Core pin it carries is recorded in
 `vendor/scv-core/VERSION` and `core.lock`. Core sync updates that checksummed
 pin and generated projection, but never rewrites the wrapper `VERSION`, plugin
 manifest, or marketplace version.

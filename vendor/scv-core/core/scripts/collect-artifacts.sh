@@ -29,20 +29,50 @@ if [[ "$SCOPE_MODE" == "slug" ]]; then
   fi
 fi
 
+# 실행 기록(run manifest, lib/run-manifest.sh)이 있으면 그것이 1순위 — 결과
+# 폴더명이 잘려 슬러그가 경로에 없어도 붙는다. 이름 매칭은 기록이 없을 때의
+# 폴백이다.
+MANIFEST_LIST=""
+if [[ "$SCOPE_MODE" == "slug" && -n "$SCOPE_SLUG" ]]; then
+  # shellcheck source=lib/run-manifest.sh
+  source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/run-manifest.sh"
+  MANIFEST_LIST="$(run_manifest_read "$SCOPE_SLUG" "$TR")"
+fi
+
 # Find the most recent matching file (by mtime).
 # BSD (macOS) and GNU (Linux) compatible — `find -printf` is GNU-only,
 # so we hand the list to `ls -t` which sorts by mtime on both.
 _latest() {
-  # Usage: _latest <pattern_args...>
+  # Usage: _latest <pattern_args...> — 실행 기록이 있으면 기록에서, 없으면
+  # 이름 매칭으로 고른다 (둘 다 최신 파일 1개).
   local matches
-  # shellcheck disable=SC2068
-  matches=$(find "$TR" -maxdepth 6 -type f \( $@ \) 2>/dev/null | attachment_scope_filter "$SCOPE_SLUG")
+  if [[ -n "$MANIFEST_LIST" ]]; then
+    local line a keep
+    matches=""
+    while IFS= read -r line; do
+      [[ -n "$line" && -f "$line" ]] || continue
+      keep=0
+      for a in "$@"; do
+        case "$a" in \*.*) case "${line##*/}" in $a) keep=1 ;; esac ;; esac
+      done
+      [[ $keep -eq 1 ]] && matches+="$line"$'\n'
+    done <<< "$MANIFEST_LIST"
+    matches="${matches%$'\n'}"
+  else
+    # shellcheck disable=SC2068
+    matches=$(find "$TR" -maxdepth 6 -type f \( $@ \) 2>/dev/null | attachment_scope_filter "$SCOPE_SLUG")
+  fi
   [[ -z "$matches" ]] && return 0
   printf '%s\n' "$matches" | tr '\n' '\0' | xargs -0 ls -t 2>/dev/null | head -n 1
 }
 
 SCREENSHOT=$(_latest -name "*.png")
 VIDEO=$(_latest -name "*.webm" -o -name "*.mp4")
+
+# 0건이면 침묵하지 않는다 — 한 줄로 알리고 재실행 경로를 제시한다.
+if [[ "$SCOPE_MODE" == "slug" && -n "$SCOPE_SLUG" && -z "$MANIFEST_LIST" && -z "$SCREENSHOT" && -z "$VIDEO" ]]; then
+  echo "attachments: nothing under $TR belongs to '$SCOPE_SLUG' (SCV_ATTACHMENTS_SCOPE=slug) — no evidence attached; run-plan-tests.sh --slug '$SCOPE_SLUG' records this plan's evidence, or set SCV_ATTACHMENTS_SCOPE=all" >&2
+fi
 
 emit() {
   local f="$1"
