@@ -23,7 +23,7 @@ Drop materials → Claude refines them with you → implementation runs the test
 <a href="https://github.com/wookiya1364/scv-claude-code/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/wookiya1364/scv-claude-code?label=release&color=blue&cacheSeconds=300" /></a>
 <img alt="License" src="https://img.shields.io/badge/license-MIT-green" />
 <img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude%20Code-plugin-D97757" />
-<img alt="Regression" src="https://img.shields.io/badge/tests-951_PASS-brightgreen" />
+<img alt="Regression" src="https://img.shields.io/badge/tests-980_PASS-brightgreen" />
 <img alt="i18n" src="https://img.shields.io/badge/i18n-EN_·_KO_·_JA-purple" />
 </p>
 
@@ -49,8 +49,11 @@ Drop materials → Claude refines them with you → implementation runs the test
 
 ## クイックスタート <a id="quick-start"></a>
 
-> **覚えるべきコマンドは `/scv:help` ひとつだけ。**
-> プロジェクトの状態を診断し、次に何をすべきか教えてくれます。覚えるフラグなし、先に読むドキュメントなし — プラグインがステップごとに案内します。
+> **もうコマンドを覚える必要すらありません (v0.35.0+)。**
+> SCV は会話に自ら加わります: プロジェクトの話を普通にすれば、help アクションが
+> 適切なモード(診断 · アイデアの具体化 · 過去の検索)を選んで進めます。
+> `/scv:help` は明示的な入口として残り、`scv/scv_settings.json` の
+> `SCV_ALWAYS_ON=off` でコマンド専用の動作に戻せます。
 
 ```bash
 # Claude Code セッション内で:
@@ -59,12 +62,12 @@ Drop materials → Claude refines them with you → implementation runs the test
 /plugin marketplace add https://github.com/wookiya1364/scv-claude-code
 /plugin install scv@scv-claude-code
 
-# 2. ここから先は /scv:help が引き継ぎます。
+# 2. 普通に話しかけるだけ — 明示的には /scv:help。
 #    初回実行時に hydrate も一度確認して自動で進めます。
 /scv:help
 ```
 
-これだけです。**覚えるコマンドは `/scv:help` 一つ** — プロジェクトを診断し、次に使うコマンドへ案内します。開始行を選んでください:
+これだけです。**普通に話しかけるだけ** — 明示的に始めたい場合は開始行を選んでください:
 
 | 状況 | コマンド |
 |---|---|
@@ -225,7 +228,7 @@ archive 時にそれを `scv/DECISIONS.md` へ残します。
 ### effort governor がこのホストでどう対応するか (Core 0.29.0+)
 
 SCV は実装前に計画の実行バンドを判定します(`effort-class.sh`、バックテストを
-通過した 3 規則。`.env` の `SCV_EFFORT_MODE=auto|ask|off`、既定は `auto`)。
+通過した 3 規則。`scv/scv_settings.json` の `SCV_EFFORT_MODE=auto|ask|off`、既定は `auto`)。
 セッションの effort 設定には触れません — governor が変えるのは実行の形です。
 このホストでのバンド×段階の対応:
 
@@ -348,6 +351,11 @@ redaction フィルター (password/token/secret/api-key 値、`Bearer` トー�
 `scv/journal/` への直接書き込み禁止、blocking フック登録禁止。契約:
 scv-core `docs/wrapper-integration.md` §6 "Hook seam"。
 
+`on-user-prompt.sh` は stdout に 2 つのブロックも出力します — やさしい言葉の
+答えの形リマインダー (v0.31.0+, `SCV_PLAIN_LANGUAGE`) と常時介入ルーティング
+ブロック (v0.35.0+, `SCV_ALWAYS_ON`)。Claude Code がこの stdout を毎ターン
+モデルコンテキストへ載せるため、コマンドなしでも SCV が自由会話に加われます。
+
 同じ `hooks/hooks.json` は、唯一の*ブロックする*フックも登録します —
 `PreToolUse` の[ワークスペースガード](#workspace-guard) (v0.25.0+)。Core は
 スクリプトを host-neutral のまま提供し、どのホストイベントをどのモードに
@@ -443,12 +451,13 @@ my-project/
 │   ├── readpath.json   # raw 変更スナップショット (自動管理)
 │   ├── promote/        # アクティブな計画 (YYYYMMDD-author-slug フォルダ)
 │   ├── archive/        # 完了した計画 (/scv:work が移動)
-│   └── raw/            # 自由投入スペース
-├── .env.example.scv    # SCV 専用 Notifier 変数テンプレート
+│   ├── raw/            # 自由投入スペース
+│   ├── scv_settings.json         # SCV 設定 (自動生成 · 全キー説明つき · コミットされる)
+│   └── scv_settings.secret.json  # トークン・チャンネル ID (git-ignore; ignore が保証されるときだけ生成)
 └── .gitignore          # SCV ルール append; 既存保持
 ```
 
-**Non-destructive**: ルート `CLAUDE.md` / `.env.example` はそのまま保持。SCV は `scv/` のみ作成、`.env.example.scv` を別途追加 + 既存 `.gitignore` に append。
+**Non-destructive**: ルート `CLAUDE.md` / `.env` / `.env.example` はそのまま保持 — SCV は `.env` を読みも書きもしません (0.32.0+)。`scv/` を作成し、既存 `.gitignore` に append するだけです。
 
 **2 種類の記録、2 種類の方針 (v0.23.0+)**。`scv/conversations/` には計画になった `/scv:help` の対話が入り、コミットされます — 計画の根拠は計画と一緒にあるべきだからです。`scv/journal/` は違います。フックが**すべて**のプロンプトを記録します、何にもならなかったものまで。それをリポジトリに入れてよいかは誰が読めるかに依存するため、hydrate は `scv/journal/` を gitignore し、選択を委ねます。共有するなら `.gitignore` からその行を削除してください — ただし何が蓄積されたかを先に確認してください、redaction はヒューリスティックです。一度コミットすると ignore を戻しても追跡は外れません (`git rm --cached` が必要で、過去のコミットには内容が残ります)。
 
@@ -462,27 +471,26 @@ PLAN.md frontmatter の vendor-agnostic な `refs:` 配列。`/scv:promote` が�
 - `/scv:promote "...URL..."` 呼び出し引数
 - dialog 回答中の URL (自動 parse)
 
-`.env` に `JIRA_BASE_URL` / `LINEAR_BASE_URL` / `CONFLUENCE_BASE_URL` を設定すると PLAN.md は `id: PAY-1234` のみ保存 (URL 表示時に推論)。未設定なら full URL 保存。`template/.env.example.scv` 参照。
+`scv/scv_settings.json` に `JIRA_BASE_URL` / `LINEAR_BASE_URL` / `CONFLUENCE_BASE_URL` を設定すると PLAN.md は `id: PAY-1234` のみ保存 (URL 表示時に推論)。未設定なら full URL 保存。設定できるキーはファイル内の `_doc` にすべて説明があります。
 
-### 通知ツール設定 (.env) — 任意
+### 通知ツール設定 (設定ファイル) — 任意
+
+設定は `scv/scv_settings.json` (コミットされる) と
+`scv/scv_settings.secret.json` (git-ignore) の 2 ファイルで、全キーが説明つきで
+自動生成されます (0.34.0+)。スクリプト経由で書けばキーが正しいファイルへ
+自動的に振り分けられ、トークンがコミットされる側に入ることはありません:
 
 ```bash
-cp .env.example.scv .env
-$EDITOR .env
-```
-
-Slack:
-```bash
-NOTIFIER_PROVIDER=slack
-SLACK_BOT_TOKEN=xoxb-...
-SLACK_CHANNEL_ID=C0XXXXX0
-SLACK_CHANNEL_ID_PHASE_COMPLETE=C0XXXXX1
-SLACK_CHANNEL_ID_E2E_FAILURE=C0XXXXX2
+CORE="$HOME/.claude/plugins/cache/scv-claude-code/scv/<version>/vendor/scv-core/core"
+bash "$CORE/scripts/settings-set.sh" NOTIFIER_PROVIDER=slack
+bash "$CORE/scripts/settings-set.sh" SLACK_BOT_TOKEN=xoxb-...     # → secret ファイル
+bash "$CORE/scripts/settings-set.sh" SLACK_CHANNEL_ID=C0XXXXX0    # → secret ファイル
 ```
 
 Discord: `NOTIFIER_PROVIDER=discord` + `DISCORD_BOT_TOKEN` + `DISCORD_CHANNEL_ID_*`。
 
-既存 `.env` がある場合: `cat .env.example.scv >> .env`。`.env` は絶対に git にコミット禁止。
+`.env` を使っていた場合は `settings-migrate.sh` を一度 — SCV のキーだけをコピーし
+secret を分離します。`.env` には触れません (SCV はもう読みません)。
 
 ### `demo/` (リポジトリ専用 — プラグイン本体とは別)
 
