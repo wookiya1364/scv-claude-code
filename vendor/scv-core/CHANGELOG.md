@@ -2,6 +2,33 @@
 
 All notable changes to SCV Core are documented here.
 
+## [0.36.0] - 2026-08-25
+
+### PR 을 만들면 증적이 Slack 에도 간다 — 성공이어도
+
+CI 는 실패만 증적(정책), pr-helper 는 PR 본문에만 첨부 — 성공 slug 증적을
+채널에 올리는 주체가 없었다 (ai_tm_center 실측: 세션이 수동으로 때움).
+
+- pr-helper 가 PR 생성/갱신 성공 직후, 알림 채널이 설정된 프로젝트에서 PR
+  링크와 같은 증적 목록(실행 기록 1순위)을 게시한다 — Slack/Discord 어댑터·
+  `NOTIFIER_DRY_RUN` 재사용, 스크린샷은 저장소로 이동된 사본을 따라간다.
+- 최선 노력: 어떤 실패도 PR 을 막지 않는다(경고 한 줄). provider 미설정이면
+  무동작. 새 키 `SCV_PR_NOTIFY`(기본 on, off 만 끔).
+- 프로젝트 봇이 만든 PR 스레드 정밀 부착은 프로젝트 워크플로 몫(합의) —
+  SCV 는 채널 게시까지.
+
+### 증적 영상은 사람 속도로 — 전환당 2초, 짧으면 경고
+
+slug 영상이 기계 속도로 지나가 사람이 인지하지 못한다(전환당 ~2초 필요,
+전환 N번 → 영상 ≥2N초).
+
+- 스펙 규칙(work.md Step 5b·codegen.md): 의미 있는 전환 뒤 ≥2초 유지, 유지
+  시간은 스펙의 일부 — Green 을 빠르게 하려고 제거 금지.
+- 기계 검사(`lib/evidence.sh`): 첨부 영상이 `SCV_EVIDENCE_MIN_SECONDS`(기본
+  4, 새 키)보다 짧으면 pr-helper 가 경고 — 경고만, ffprobe 없으면 건너뜀.
+- 공개 키 27 → 29 (`SCV_PR_NOTIFY`·`SCV_EVIDENCE_MIN_SECONDS`), 템플릿 지문
+  갱신. 테스트: `test-pr-notify.sh`(15) · `test-evidence-pacing.sh`(14).
+
 ## [0.35.2] - 2026-08-25
 
 ### 문서 뼈대를 다시 세우다 — README 전면 재구성

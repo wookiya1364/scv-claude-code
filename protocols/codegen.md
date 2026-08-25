@@ -53,6 +53,7 @@ reports, summaries, and explanations of what went wrong.
 - **Never modify the body of TESTS.md** during codegen — the test is the spec. If TESTS appear under-specified, stop and ask the user to revise TESTS first; do not infer requirements from PLAN.md alone.
 - **Never modify the body of an archived TESTS.md.** Obsolete marking is done only via 3 frontmatter fields on that archived folder's PLAN.md (`status: obsolete`, `obsoleted_at`, `obsoleted_by`).
 - **The test file the plan's `## How to run` executes is part of the spec too** — including a per-slug E2E spec (e.g. `e2e/<slug>.spec.ts`). Never weaken, delete, or narrow its assertions to force a case Green; if it is genuinely wrong, stop and revise it via dialogue with the user (same rule as TESTS.md, even though the spec is editable code).
+- **Evidence-pacing holds are part of the spec too (v0.36.0+)** — the ≥2s holds after each meaningful screen transition (work.md Step 5b) exist so a human can follow the recorded video. Never remove them to speed a run up.
 - Never delete or move files outside the scope of this plan.
 - Never archive without explicit user approval (reached only via `/scv:work` Step 9b after Step 8 here).
 - **Iteration budget: 3 attempts per failing case.** On exhaustion, stop and surface to the user — do not silently abandon a case.
