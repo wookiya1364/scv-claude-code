@@ -60,6 +60,27 @@ SCV_PLAIN_MAX_SENTENCES=<n> (sentence cap, default 2).
 PLAIN
 fi
 
+# Always-on routing (v0.35.0+). Without the command, hosts treat the skill
+# description's "use whenever…" as advice and mostly ignore it — so free
+# conversation never reaches SCV. This block is the switch the user asked for:
+# unless the settings file says SCV_ALWAYS_ON=off (only off turns it off, any
+# case), every free-conversation turn is routed through the help action's Mode
+# decision. A turn that already carries an SCV action protocol is never
+# hijacked. Same non-blocking guarantee: stdout only, never fails the session.
+_scv_always="$(_scv_read SCV_ALWAYS_ON | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]' || true)"
+if [[ "${_scv_always:-on}" != "off" ]]; then
+  cat <<'ALWAYS'
+[SCV always-on] SCV_ALWAYS_ON is on (default): treat this message as SCV
+input, not free conversation. If this turn already loaded an SCV action
+protocol (help/promote/work/…), continue that protocol and ignore this notice.
+Otherwise route the message through the SCV help action — invoke it the way
+this host invokes SCV actions (e.g. the scv help command) with the message as
+its argument, run its state probe, and follow its Mode decision (A diagnosis /
+B conversation / B' archive search) for the reply. Turn off:
+scv/scv_settings.json SCV_ALWAYS_ON=off.
+ALWAYS
+fi
+
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" 2>/dev/null && pwd )" || exit 0
 JOURNAL_APPEND="${SCV_CORE_ROOT:-$SCRIPT_DIR/../..}/scripts/journal-append.sh"
 [[ -f "$JOURNAL_APPEND" ]] || exit 0
