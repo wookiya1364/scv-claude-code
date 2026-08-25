@@ -49,7 +49,7 @@ Drop materials → Claude refines them with you → implementation runs the test
 
 ## Quick Start
 
-> **You don't even need to memorize a command (v0.35.0+).**
+> **You don't even need to memorize a command (v0.35.1+).**
 > SCV joins the conversation by itself: talk about your project in plain language
 > and the help action picks the right mode — diagnose, refine an idea into a plan,
 > or search past work. `/scv:help` stays as the explicit entry;
@@ -328,7 +328,7 @@ before the normal `develop → stage → main` promotion. See
 [`docs/design/shared-core-wrapper.md`](docs/design/shared-core-wrapper.md).
 
 Wrapper and Core releases are intentionally independent. This Claude adapter
-release is `0.35.0`; the Core pin it carries is recorded in
+release is `0.35.1`; the Core pin it carries is recorded in
 `vendor/scv-core/VERSION` and `core.lock`. Core sync updates that checksummed
 pin and generated projection, but never rewrites the wrapper `VERSION`, plugin
 manifest, or marketplace version.
@@ -348,7 +348,7 @@ Both commands export `SCV_CORE_ROOT` (the materialized core) and run with the
 project root as cwd; on a project without `scv/` they exit `0` and write
 nothing. `on-user-prompt.sh` also prints to stdout — the plain-language
 answer-shape reminder (v0.31.0+, `SCV_PLAIN_LANGUAGE`) and the always-on
-routing block (v0.35.0+, `SCV_ALWAYS_ON`) — which Claude Code adds to the
+routing block (v0.35.1+, `SCV_ALWAYS_ON`) — which Claude Code adds to the
 model context on every turn; that is what lets SCV join free conversation
 without a command. All journal writes route through Core's `journal-append.sh`, whose
 redaction filter (password/token/secret/api-key values, `Bearer` tokens,
