@@ -2,6 +2,52 @@
 
 All notable changes to SCV Core are documented here.
 
+## [0.35.0] - 2026-08-25
+
+### 첨부는 실행 기록을 따른다 — 이름이 잘려도, PR 은 하나만
+
+ai_tm_center 실사용에서 PR 증적이 빈손으로 나갔다: Playwright 가 결과 폴더
+이름을 길이 제한으로 잘라(`…-readiness-inspection-refine` → `…-readi-<해시>`)
+슬러그 전체 이름 매칭이 0건이 됐고, report 경로는 0건을 무경고로 삼켰으며,
+사후 보정하려던 pr-helper 재호출은 PR 을 하나 더 만들려 했다.
+
+이름으로 소속을 알아맞히는 구조가 원인이다. 테스트를 돌린 그 순간에는
+"이 실행 = 이 계획" 을 확실히 안다 — 그때 기록한다.
+
+- **실행 기록(run manifest)**: `lib/run-manifest.sh` 신설 —
+  `test-results/.scv/<slug>.manifest` 에 그 실행이 만든 파일 목록을 기록.
+  결과 폴더 안에 두므로 테스트 러너가 결과를 비우면 기록도 함께 사라진다
+  (낡은 기록이 없는 파일을 가리키는 일이 없다).
+- **실행 래퍼**: `run-plan-tests.sh` 신설 — `--slug` + (`--tests TESTS.md`
+  또는 `-- <cmd>`) 로 계획의 테스트를 돌리고 기록을 남긴다. 종료코드는 그대로,
+  실패해도 기록한다(실패 증적도 증적). work/codegen 프로토콜이 이 래퍼로
+  실행하도록 안내.
+- **첨부 우선순위**: 기록 → 이름 부분일치(폴백) → 0건이면 **한 줄 알림**
+  (기존 report 경로는 무경고 침묵이었다). pr-helper 의 재실행도 래퍼를 거쳐
+  기록을 남기므로, 잘린 이름이어도 재실행 후에는 반드시 붙는다.
+- **PR 중복 방지**: `pr_find_open` 신설 — 같은 브랜치에 열린 PR/MR 이 있으면
+  `gh pr create` 대신 본문 갱신(`PR updated: <URL>`). 증적 보정을 위해
+  pr-helper 를 다시 돌려도 PR 이 늘지 않는다.
+
+새 설정 키 없음, 템플릿 변경 없음. 기존 계약(scope=all, 슬러그 자동 인식,
+`--no-rerun`, dry-run 출력 형식) 불변 — `test-attachments-scope.sh` 그대로
+green. 테스트: `core/tests/test-run-manifest.sh` (T1–T5, 18 케이스).
+
+### 일반 대화에도 SCV 가 끼어든다 — SCV_ALWAYS_ON (기본 on)
+
+`scv:help` 를 쳐야만 SCV 가 움직였다. 명령 없는 일반 대화는 스킬 설명의
+"이런 상황이면 써라" 권고에 기대는데, 호스트 모델이 대부분 무시한다 (실측).
+
+- 새 설정 키 `SCV_ALWAYS_ON` (on/off, **기본 on** — off 만 끈다, 쉬운말
+  스위치와 같은 규칙). 켜져 있으면 매 턴 훅(on-user-prompt.sh)이 "이 메시지를
+  help 액션으로 라우팅하라"는 지시를 stdout 으로 싣는다 — 일반 대화도
+  Mode A/B/B' 판정부터 시작한다. 이미 액션 프로토콜이 실린 턴은 가로채지
+  않는다.
+- 한계(사용자와 공유됨): 매 턴 강한 지시를 싣는 방식이라 사실상 항상 따르지만
+  코드 레벨 차단은 아니다 — 호스트 구조상 가능한 최대치.
+- 공개 키 26 → 27 (등록부·예시 `_doc`·기본값 동반), 템플릿 지문 갱신.
+  테스트: `core/tests/test-always-on.sh` (T1–T5).
+
 ## [0.34.1] - 2026-08-24
 
 ### 래퍼 전파를 막던 빈 줄 하나

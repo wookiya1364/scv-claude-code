@@ -104,7 +104,7 @@ Record judged band, used band, and promotions in the archive `--reason`.
 
 Before any code change, run TESTS in the current state to verify all relevant cases **fail**. This is the safety gate of TDD-first codegen.
 
-Execute the run command(s) from TESTS.md's `## How to run` section via `Bash`. Capture output and evaluate against `## Pass criteria`.
+Execute the run command(s) from TESTS.md's `## How to run` section via `Bash` — through `run-plan-tests.sh --slug <slug> --tests <TESTS_FILE>` (v0.35.0+), which records the files the run produces so evidence attaches even when the E2E runner truncates result folder names. Capture output and evaluate against `## Pass criteria`.
 
 Outcome handling:
 
