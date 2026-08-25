@@ -49,7 +49,7 @@ Drop materials → Claude refines them with you → implementation runs the test
 
 ## 빠른 시작 <a id="quick-start"></a>
 
-> **이제 명령어를 외울 필요도 없습니다 (v0.35.0+).**
+> **이제 명령어를 외울 필요도 없습니다 (v0.35.1+).**
 > SCV 가 대화에 스스로 끼어듭니다: 프로젝트 얘기를 그냥 하면 help 액션이 알맞은
 > 모드(진단 · 아이디어 다듬기 · 과거 검색)를 골라 진행합니다. `/scv:help` 는
 > 명시적 입구로 그대로 남고, `scv/scv_settings.json` 의 `SCV_ALWAYS_ON=off` 가
@@ -328,7 +328,7 @@ v0.20.0부터 공통 워크플로 동작은 체크섬으로 검증하고 버전�
 참고하세요.
 
 Wrapper와 Core는 서로 독립적으로 릴리스합니다. 이 Claude 어댑터 release는
-`0.35.0`이고, 이 릴리스가 물고 있는 Core pin은 `vendor/scv-core/VERSION`과
+`0.35.1`이고, 이 릴리스가 물고 있는 Core pin은 `vendor/scv-core/VERSION`과
 `core.lock`에 기록됩니다. Core sync는 그 체크섬 pin과 생성 projection만 갱신하며 wrapper
 `VERSION`, plugin manifest, marketplace version은 변경하지 않습니다.
 
@@ -349,7 +349,7 @@ Wrapper와 Core는 서로 독립적으로 릴리스합니다. 이 Claude 어댑�
 등록 금지. 계약: scv-core `docs/wrapper-integration.md` §6 "Hook seam".
 
 `on-user-prompt.sh` 는 stdout 으로 두 블록도 출력합니다 — 쉬운말 답 모양 알림
-(v0.31.0+, `SCV_PLAIN_LANGUAGE`)과 항상 끼어들기 라우팅 블록 (v0.35.0+,
+(v0.31.0+, `SCV_PLAIN_LANGUAGE`)과 항상 끼어들기 라우팅 블록 (v0.35.1+,
 `SCV_ALWAYS_ON`). Claude Code 가 이 stdout 을 매 턴 모델 컨텍스트에 싣기 때문에,
 명령 없이도 SCV 가 일반 대화에 끼어들 수 있습니다.
 
