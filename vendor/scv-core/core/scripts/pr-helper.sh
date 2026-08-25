@@ -261,6 +261,11 @@ if [[ "$ATTACHMENTS_SCOPE" == "slug" && ${#SCREENSHOTS[@]} -eq 0 && ${#VIDEOS[@]
     echo "attachments: nothing under $TEST_RESULTS_DIR belongs to '$SLUG_NAME' (SCV_ATTACHMENTS_SCOPE=slug) — the PR gets no evidence attached; set SCV_ATTACHMENTS_SCOPE=all to attach everything" >&2
   fi
 fi
+# 증적 영상이 사람 인지 속도보다 짧으면 경고 (v0.36.0, warn-only — 진행은 그대로)
+# shellcheck source=lib/evidence.sh
+source "$SCRIPT_DIR/lib/evidence.sh"
+for _v in ${VIDEOS[@]+"${VIDEOS[@]}"}; do evidence_warn_short "$_v"; done
+
 if [[ $DRY_RUN -eq 1 ]]; then
   echo "ATTACHMENTS_SCOPE: $ATTACHMENTS_SCOPE"
   echo "ATTACHMENTS_FILES: $(( ${#SCREENSHOTS[@]} + ${#VIDEOS[@]} ))"
@@ -586,6 +591,51 @@ if [[ ${#SCREENSHOTS[@]} -gt 0 ]]; then
   fi
 fi
 
+# ---- notify (v0.36.0): PR 증적은 Slack/Discord 에도 간다 — 성공이어도 ----
+# CI 는 실패만 증적, PR 본문 첨부는 채널에 닿지 않는다 — 알림 채널이 설정된
+# 프로젝트에서는 같은 증적 목록을 게시한다. 최선 노력: 어떤 실패도 PR 을
+# 막지 않는다 (경고 한 줄, 계속).
+_pr_notify_evidence() {
+  local sw provider adapter channel title body thread f n=0
+  sw="$(printf '%s' "${SCV_PR_NOTIFY:-on}" | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]')"
+  [[ "${sw:-on}" == "off" ]] && return 0
+  provider="${NOTIFIER_PROVIDER:-}"
+  [[ -n "$provider" ]] || return 0
+  adapter="$SCRIPT_DIR/notifiers/${provider}.sh"
+  [[ -f "$adapter" ]] || { echo "pr-notify: unknown provider '$provider' — continuing" >&2; return 0; }
+  # shellcheck source=notifiers/common.sh
+  source "$SCRIPT_DIR/notifiers/common.sh"
+  # shellcheck source=/dev/null
+  source "$adapter"
+  if ! notifier_validate_env >/dev/null 2>&1; then
+    echo "pr-notify: notifier env incomplete — continuing without the channel post" >&2
+    return 0
+  fi
+  channel="$(notifier_resolve_channel phase-complete 2>/dev/null)" \
+    || { echo "pr-notify: no channel for phase-complete — continuing" >&2; return 0; }
+  echo "pr-notify: posting PR evidence to $provider (channel $channel)" >&2
+  title="📎 PR evidence — $SLUG_NAME"
+  body="$PR_URL"$'\n'"$TITLE"
+  thread="$(notifier_post_message "$channel" "$title" "$body")" \
+    || { echo "pr-notify: post failed — continuing" >&2; return 0; }
+  for f in ${SCREENSHOTS[@]+"${SCREENSHOTS[@]}"} ${VIDEOS[@]+"${VIDEOS[@]}"}; do
+    # 스크린샷은 PR 본문용으로 저장소 안(DEST_ARTIFACTS_DIR)으로 mv 된 뒤다 —
+    # 원래 경로가 비어 있으면 이동된 사본을 올린다.
+    if [[ ! -f "$f" && -n "${DEST_ARTIFACTS_DIR:-}" && -f "$DEST_ARTIFACTS_DIR/$(basename "$f")" ]]; then
+      f="$DEST_ARTIFACTS_DIR/$(basename "$f")"
+    fi
+    [[ -f "$f" ]] || continue
+    echo "pr-notify: upload $(basename "$f")" >&2
+    if notifier_upload_file "$channel" "$f" "$thread" >/dev/null 2>&1; then
+      n=$((n+1))
+    else
+      echo "pr-notify: upload failed: $(basename "$f") — continuing" >&2
+    fi
+  done
+  echo "pr-notify: done ($n file(s))" >&2
+  return 0
+}
+
 # ---- create PR ----
 if [[ $NO_CREATE -eq 0 ]]; then
   if ! command -v gh >/dev/null 2>&1; then
@@ -620,6 +670,8 @@ if [[ $NO_CREATE -eq 0 ]]; then
     echo "PR body saved at: $TMP_BODY"
     exit 1
   fi
+
+  _pr_notify_evidence || true
 
   # ---- Phase 2: upload videos + edit PR body to replace placeholder ----
   if [[ ${#VIDEOS[@]} -gt 0 ]]; then
