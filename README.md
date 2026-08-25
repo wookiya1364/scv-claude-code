@@ -23,7 +23,7 @@ Drop materials → Claude refines them with you → implementation runs the test
 <a href="https://github.com/wookiya1364/scv-claude-code/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/wookiya1364/scv-claude-code?label=release&color=blue&cacheSeconds=300" /></a>
 <img alt="License" src="https://img.shields.io/badge/license-MIT-green" />
 <img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude%20Code-plugin-D97757" />
-<img alt="Regression" src="https://img.shields.io/badge/tests-951_PASS-brightgreen" />
+<img alt="Regression" src="https://img.shields.io/badge/tests-980_PASS-brightgreen" />
 <img alt="i18n" src="https://img.shields.io/badge/i18n-EN_·_KO_·_JA-purple" />
 </p>
 
@@ -49,8 +49,11 @@ Drop materials → Claude refines them with you → implementation runs the test
 
 ## Quick Start
 
-> **The only command you need to remember is `/scv:help`.**
-> It diagnoses your project's state and tells you what to do next. No flags to memorize, no docs to read first — the plugin walks you through every step.
+> **You don't even need to memorize a command (v0.35.1+).**
+> SCV joins the conversation by itself: talk about your project in plain language
+> and the help action picks the right mode — diagnose, refine an idea into a plan,
+> or search past work. `/scv:help` stays as the explicit entry;
+> `SCV_ALWAYS_ON=off` in `scv/scv_settings.json` restores command-only behavior.
 
 ```bash
 # In any Claude Code session:
@@ -59,12 +62,12 @@ Drop materials → Claude refines them with you → implementation runs the test
 /plugin marketplace add https://github.com/wookiya1364/scv-claude-code
 /plugin install scv@scv-claude-code
 
-# 2. /scv:help takes over from here.
+# 2. Just start talking — or run /scv:help explicitly.
 #    On first run it offers to hydrate this project (one click).
 /scv:help
 ```
 
-That's it. **You only need to remember `/scv:help`** — it diagnoses your project and routes to the right command. Pick a starting line:
+That's it. **Just talk to it** — or pick an explicit starting line:
 
 | Situation | Command |
 |---|---|
@@ -227,9 +230,10 @@ Contract:
 ### How the effort governor maps to this host (Core 0.29.0+)
 
 SCV judges each plan's execution band before implementing (`effort-class.sh`,
-three backtested rules; `SCV_EFFORT_MODE=auto|ask|off` in `.env`, default
-`auto`). Your session effort setting is never touched — the governor shapes
-HOW the work runs. On this host the band-by-stage grid lands as:
+three backtested rules; `SCV_EFFORT_MODE=auto|ask|off` in
+`scv/scv_settings.json`, default `auto`). Your session effort setting is never
+touched — the governor shapes HOW the work runs. On this host the
+band-by-stage grid lands as:
 
 | stage | standard | heavy | orchestration |
 |---|---|---|---|
@@ -324,7 +328,7 @@ before the normal `develop → stage → main` promotion. See
 [`docs/design/shared-core-wrapper.md`](docs/design/shared-core-wrapper.md).
 
 Wrapper and Core releases are intentionally independent. This Claude adapter
-release is `0.35.0`; the Core pin it carries is recorded in
+release is `0.35.1`; the Core pin it carries is recorded in
 `vendor/scv-core/VERSION` and `core.lock`. Core sync updates that checksummed
 pin and generated projection, but never rewrites the wrapper `VERSION`, plugin
 manifest, or marketplace version.
@@ -342,7 +346,11 @@ adapter's job, done by the plugin's `hooks/hooks.json`:
 
 Both commands export `SCV_CORE_ROOT` (the materialized core) and run with the
 project root as cwd; on a project without `scv/` they exit `0` and write
-nothing. All journal writes route through Core's `journal-append.sh`, whose
+nothing. `on-user-prompt.sh` also prints to stdout — the plain-language
+answer-shape reminder (v0.31.0+, `SCV_PLAIN_LANGUAGE`) and the always-on
+routing block (v0.35.1+, `SCV_ALWAYS_ON`) — which Claude Code adds to the
+model context on every turn; that is what lets SCV join free conversation
+without a command. All journal writes route through Core's `journal-append.sh`, whose
 redaction filter (password/token/secret/api-key values, `Bearer` tokens,
 `AKIA…` keys → `[REDACTED]`) runs before anything hits disk — never write to
 `scv/journal/` directly, and never register these as blocking hooks. Contract:
@@ -446,12 +454,13 @@ my-project/
 │   ├── readpath.json   # raw change snapshot (auto-managed)
 │   ├── promote/        # Active plans (YYYYMMDD-author-slug folders)
 │   ├── archive/        # Completed plans (moved by /scv:work)
-│   └── raw/            # Free-input space
-├── .env.example.scv    # SCV's notifier env template (your existing .env.example is untouched)
+│   ├── raw/            # Free-input space
+│   ├── scv_settings.json         # SCV settings (auto-created, all keys documented, committed)
+│   └── scv_settings.secret.json  # tokens & channel IDs (git-ignored; created only when ignore is guaranteed)
 └── .gitignore          # SCV rules appended; existing .gitignore preserved
 ```
 
-**Non-destructive**: existing root `CLAUDE.md` / `.env.example` stay intact. SCV creates `scv/` + separate `.env.example.scv` + appends to existing `.gitignore`.
+**Non-destructive**: existing root `CLAUDE.md` / `.env` / `.env.example` stay intact — SCV never reads or writes your `.env` (0.32.0+). SCV creates `scv/` and appends to the existing `.gitignore`.
 
 **Two records, two policies (v0.23.0+)**. `scv/conversations/` holds the `/scv:help` dialogs that turned into plans — those are committed, because the reasoning behind a plan belongs with the plan. `scv/journal/` is different: the hooks feed it *every* prompt, including the ones that never became anything. Whether that belongs in your repository depends on who can read it, so hydrate gitignores `scv/journal/` and leaves the choice to you. To share it, delete that line from `.gitignore` — but look at what has accumulated first, because redaction is a heuristic. Once committed, restoring the ignore rule does not untrack the files (`git rm --cached` does, and past commits keep the content).
 
@@ -465,27 +474,27 @@ PLAN.md frontmatter has a vendor-agnostic `refs:` array. `/scv:promote` auto-det
 - `/scv:promote "...URL..."` invocation argument
 - Dialog answers (paste URLs while answering — auto-parsed)
 
-In `.env`, set `JIRA_BASE_URL` / `LINEAR_BASE_URL` / `CONFLUENCE_BASE_URL` so PLAN.md stores just `id: PAY-1234` (URL inferred at display). Without these, full URLs stored. See `template/.env.example.scv`.
+In `scv/scv_settings.json`, set `JIRA_BASE_URL` / `LINEAR_BASE_URL` / `CONFLUENCE_BASE_URL` so PLAN.md stores just `id: PAY-1234` (URL inferred at display). Without these, full URLs stored. Every settable key is documented in the file's own `_doc` block.
 
-### Notifier Setup (.env) — Optional
+### Notifier Setup (settings files) — Optional
+
+Settings live in `scv/scv_settings.json` (committed) and
+`scv/scv_settings.secret.json` (git-ignored); both are created automatically
+with every key documented (0.34.0+). Write through the script — it routes each
+key to the right file, so a token cannot land in the committed one:
 
 ```bash
-cp .env.example.scv .env
-$EDITOR .env
-```
-
-Slack:
-```bash
-NOTIFIER_PROVIDER=slack
-SLACK_BOT_TOKEN=xoxb-...
-SLACK_CHANNEL_ID=C0XXXXX0
-SLACK_CHANNEL_ID_PHASE_COMPLETE=C0XXXXX1
-SLACK_CHANNEL_ID_E2E_FAILURE=C0XXXXX2
+CORE="$HOME/.claude/plugins/cache/scv-claude-code/scv/<version>/vendor/scv-core/core"
+bash "$CORE/scripts/settings-set.sh" NOTIFIER_PROVIDER=slack
+bash "$CORE/scripts/settings-set.sh" SLACK_BOT_TOKEN=xoxb-...     # → secret file
+bash "$CORE/scripts/settings-set.sh" SLACK_CHANNEL_ID=C0XXXXX0    # → secret file
 ```
 
 Discord: `NOTIFIER_PROVIDER=discord` + `DISCORD_BOT_TOKEN` + `DISCORD_CHANNEL_ID_*`.
 
-If you already have `.env`: `cat .env.example.scv >> .env`. Never commit `.env`.
+Coming from `.env`? Run `settings-migrate.sh` once — it copies only the SCV
+keys, splits secrets out, and never touches your `.env` (which SCV no longer
+reads).
 
 ### `demo/` (Repo-only — not part of the plugin)
 

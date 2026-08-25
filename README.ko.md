@@ -23,7 +23,7 @@ Drop materials → Claude refines them with you → implementation runs the test
 <a href="https://github.com/wookiya1364/scv-claude-code/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/wookiya1364/scv-claude-code?label=release&color=blue&cacheSeconds=300" /></a>
 <img alt="License" src="https://img.shields.io/badge/license-MIT-green" />
 <img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude%20Code-plugin-D97757" />
-<img alt="Regression" src="https://img.shields.io/badge/tests-951_PASS-brightgreen" />
+<img alt="Regression" src="https://img.shields.io/badge/tests-980_PASS-brightgreen" />
 <img alt="i18n" src="https://img.shields.io/badge/i18n-EN_·_KO_·_JA-purple" />
 </p>
 
@@ -49,8 +49,11 @@ Drop materials → Claude refines them with you → implementation runs the test
 
 ## 빠른 시작 <a id="quick-start"></a>
 
-> **외울 명령어는 `/scv:help` 하나뿐입니다.**
-> 프로젝트 상태를 진단하고 다음에 뭘 해야 할지 알려줍니다. 플래그 외울 필요 없고, 먼저 읽을 문서도 없습니다 — 플러그인이 단계마다 알려줍니다.
+> **이제 명령어를 외울 필요도 없습니다 (v0.35.1+).**
+> SCV 가 대화에 스스로 끼어듭니다: 프로젝트 얘기를 그냥 하면 help 액션이 알맞은
+> 모드(진단 · 아이디어 다듬기 · 과거 검색)를 골라 진행합니다. `/scv:help` 는
+> 명시적 입구로 그대로 남고, `scv/scv_settings.json` 의 `SCV_ALWAYS_ON=off` 가
+> 명령 전용 동작으로 되돌립니다.
 
 ```bash
 # Claude Code 세션에서:
@@ -59,12 +62,12 @@ Drop materials → Claude refines them with you → implementation runs the test
 /plugin marketplace add https://github.com/wookiya1364/scv-claude-code
 /plugin install scv@scv-claude-code
 
-# 2. /scv:help 가 여기서부터 안내합니다.
+# 2. 그냥 말을 걸면 됩니다 — 명시적으로는 /scv:help.
 #    첫 실행 시 hydrate 도 한 번 묻고 자동 진행합니다.
 /scv:help
 ```
 
-이게 다입니다. **외울 명령은 `/scv:help` 하나** — 프로젝트를 진단하고 다음에 쓸 명령으로 안내합니다. 시작 줄을 고르세요:
+이게 다입니다. **그냥 말을 걸면 됩니다** — 명시적으로 시작하고 싶다면 시작 줄을 고르세요:
 
 | 상황 | 명령 |
 |---|---|
@@ -223,7 +226,7 @@ payload 가 비었을 때, 그리고 그 기계에 JSON 리더가 없을 때. �
 ### effort governor 가 이 호스트에서 매핑되는 방식 (Core 0.29.0+)
 
 SCV 는 구현 전에 계획의 실행 밴드를 판정합니다(`effort-class.sh`, 백테스트 통과
-3규칙; `.env` 의 `SCV_EFFORT_MODE=auto|ask|off`, 기본 `auto`). 세션 effort 설정은
+3규칙; `scv/scv_settings.json` 의 `SCV_EFFORT_MODE=auto|ask|off`, 기본 `auto`). 세션 effort 설정은
 건드리지 않습니다 — 거버너가 조절하는 것은 실행 방식입니다. 이 호스트의
 밴드×단계 격자:
 
@@ -325,7 +328,7 @@ v0.20.0부터 공통 워크플로 동작은 체크섬으로 검증하고 버전�
 참고하세요.
 
 Wrapper와 Core는 서로 독립적으로 릴리스합니다. 이 Claude 어댑터 release는
-`0.35.0`이고, 이 릴리스가 물고 있는 Core pin은 `vendor/scv-core/VERSION`과
+`0.35.1`이고, 이 릴리스가 물고 있는 Core pin은 `vendor/scv-core/VERSION`과
 `core.lock`에 기록됩니다. Core sync는 그 체크섬 pin과 생성 projection만 갱신하며 wrapper
 `VERSION`, plugin manifest, marketplace version은 변경하지 않습니다.
 
@@ -344,6 +347,11 @@ Wrapper와 Core는 서로 독립적으로 릴리스합니다. 이 Claude 어댑�
 (password/token/secret/api-key 값, `Bearer` 토큰, `AKIA…` 키 → `[REDACTED]`)
 가 디스크 기록 전에 실행됩니다 — `scv/journal/` 직접 쓰기 금지, blocking 훅
 등록 금지. 계약: scv-core `docs/wrapper-integration.md` §6 "Hook seam".
+
+`on-user-prompt.sh` 는 stdout 으로 두 블록도 출력합니다 — 쉬운말 답 모양 알림
+(v0.31.0+, `SCV_PLAIN_LANGUAGE`)과 항상 끼어들기 라우팅 블록 (v0.35.1+,
+`SCV_ALWAYS_ON`). Claude Code 가 이 stdout 을 매 턴 모델 컨텍스트에 싣기 때문에,
+명령 없이도 SCV 가 일반 대화에 끼어들 수 있습니다.
 
 같은 `hooks/hooks.json` 이 유일하게 *차단하는* 훅도 등록합니다 — `PreToolUse`
 [작업 공간 가드](#workspace-guard) (v0.25.0+). Core 는 이 스크립트를 host-neutral
@@ -439,12 +447,13 @@ my-project/
 │   ├── readpath.json   # raw 변경 스냅샷 (자동 관리)
 │   ├── promote/        # 활성 계획 (YYYYMMDD-author-slug 폴더)
 │   ├── archive/        # 완료 계획 (/scv:work 가 이동)
-│   └── raw/            # 자유 투입 공간
-├── .env.example.scv    # SCV 전용 Notifier 변수 템플릿
+│   ├── raw/            # 자유 투입 공간
+│   ├── scv_settings.json         # SCV 설정 (자동 생성 · 전체 키 설명 포함 · 커밋됨)
+│   └── scv_settings.secret.json  # 토큰·채널 ID (git 무시; 무시가 보장될 때만 생성)
 └── .gitignore          # SCV 규칙 append; 기존 보존
 ```
 
-**Non-destructive**: 루트 `CLAUDE.md` / `.env.example` 그대로 보존. SCV 는 `scv/` 만 만들고, `.env.example.scv` 별도 추가 + 기존 `.gitignore` 에 append.
+**Non-destructive**: 루트 `CLAUDE.md` / `.env` / `.env.example` 그대로 보존 — SCV 는 `.env` 를 읽지도 쓰지도 않습니다 (0.32.0+). `scv/` 를 만들고 기존 `.gitignore` 에 append 만 합니다.
 
 **두 가지 기록, 두 가지 정책 (v0.23.0+)**. `scv/conversations/` 에는 계획이 된 `/scv:help` 대화가 담기고 커밋됩니다 — 계획의 근거는 계획과 함께 있어야 하니까요. `scv/journal/` 은 다릅니다. 훅이 **모든** 프롬프트를 받아씁니다, 아무것도 되지 않은 것까지요. 그게 저장소에 들어가도 되는지는 누가 읽을 수 있느냐에 달렸으므로, hydrate 는 `scv/journal/` 을 gitignore 하고 선택을 남깁니다. 공유하려면 `.gitignore` 에서 그 줄을 지우세요 — 다만 지금까지 뭐가 쌓였는지 먼저 보세요, redaction 은 휴리스틱입니다. 한 번 커밋한 뒤에는 ignore 규칙을 되돌려도 추적이 끊기지 않습니다 (`git rm --cached` 가 필요하고, 과거 커밋에는 내용이 남습니다).
 
@@ -458,27 +467,25 @@ PLAN.md frontmatter 의 vendor-agnostic `refs:` 배열. `/scv:promote` 가 다�
 - `/scv:promote "...URL..."` 호출 인자
 - dialog 답변 안의 URL (자동 파싱)
 
-`.env` 에 `JIRA_BASE_URL` / `LINEAR_BASE_URL` / `CONFLUENCE_BASE_URL` 박으면 PLAN.md 가 `id: PAY-1234` 만 저장 (URL 표시 시점에 추론). 미설정 시 full URL 저장. `template/.env.example.scv` 참조.
+`scv/scv_settings.json` 에 `JIRA_BASE_URL` / `LINEAR_BASE_URL` / `CONFLUENCE_BASE_URL` 을 넣으면 PLAN.md 가 `id: PAY-1234` 만 저장 (URL 표시 시점에 추론). 미설정 시 full URL 저장. 설정 가능한 키는 파일 안 `_doc` 에 전부 설명되어 있습니다.
 
-### 협업툴 설정 (.env) — 선택 사항
+### 협업툴 설정 (설정 파일) — 선택 사항
+
+설정은 `scv/scv_settings.json`(커밋)과 `scv/scv_settings.secret.json`(git 무시)
+두 파일이며, 모든 키가 설명과 함께 자동 생성됩니다 (0.34.0+). 스크립트로 쓰면
+키가 알맞은 파일로 저절로 갈라져, 토큰이 커밋되는 파일에 들어갈 수 없습니다:
 
 ```bash
-cp .env.example.scv .env
-$EDITOR .env
-```
-
-Slack:
-```bash
-NOTIFIER_PROVIDER=slack
-SLACK_BOT_TOKEN=xoxb-...
-SLACK_CHANNEL_ID=C0XXXXX0
-SLACK_CHANNEL_ID_PHASE_COMPLETE=C0XXXXX1
-SLACK_CHANNEL_ID_E2E_FAILURE=C0XXXXX2
+CORE="$HOME/.claude/plugins/cache/scv-claude-code/scv/<version>/vendor/scv-core/core"
+bash "$CORE/scripts/settings-set.sh" NOTIFIER_PROVIDER=slack
+bash "$CORE/scripts/settings-set.sh" SLACK_BOT_TOKEN=xoxb-...     # → 비밀 파일
+bash "$CORE/scripts/settings-set.sh" SLACK_CHANNEL_ID=C0XXXXX0    # → 비밀 파일
 ```
 
 Discord: `NOTIFIER_PROVIDER=discord` + `DISCORD_BOT_TOKEN` + `DISCORD_CHANNEL_ID_*`.
 
-기존 `.env` 있다면: `cat .env.example.scv >> .env`. `.env` 는 절대 git commit 금지.
+`.env` 를 쓰고 있었다면 `settings-migrate.sh` 를 한 번 — SCV 키만 복사하고
+비밀을 갈라내며, `.env` 는 건드리지 않습니다 (SCV 는 더 이상 읽지 않습니다).
 
 ### `demo/` (저장소 전용 — 플러그인 본체와 별개)
 

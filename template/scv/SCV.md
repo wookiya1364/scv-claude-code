@@ -43,6 +43,12 @@ created file — stay exact, after the plain summary.
   each teammate can choose.
 - Cap: `scv/scv_settings.json` `SCV_PLAIN_MAX_SENTENCES=<n>` raises the first-answer sentence
   cap from 2 to n (positive integer; anything else means 2).
+- **You don't have to type commands to reach SCV (0.35.0+).** With
+  `SCV_ALWAYS_ON` absent or `on` (default), the same per-turn hook routes free
+  conversation through the help action — a plain message gets the same Mode
+  decision (diagnosis / conversation / archive search) as an explicit command.
+  `off` limits SCV to explicit commands. A turn already running an SCV action
+  is never hijacked.
 - Hosts without that hook: add the pointer line from the section above to your
   project-root instruction file, so casual conversation reads this file too.
 
@@ -91,11 +97,14 @@ SCV's settings stopped sharing one file.
 
 | File | What goes in it | Committed? |
 |---|---|---|
-| `scv/scv_settings.json` | language, notifier provider, PR platform, attachment and GIF options — 23 keys | yes |
+| `scv/scv_settings.json` | language, plain-language / always-on switches, notifier provider, PR platform, attachment and GIF options — 27 keys | yes |
 | `scv/scv_settings.secret.json` | bot tokens, repo tokens, channel IDs — 13 keys | **no** (git-ignored) |
 
-Start from `scv/scv_settings.example.json`. Nothing breaks without a settings
-file — SCV runs on defaults.
+**The file creates itself (0.34.0+).** When an action starts and the file is
+missing, SCV writes it with every key present — real defaults filled in and a
+`_doc` description per key, so you can see what is settable by opening the
+file. The secret file is created only where its git-ignore is guaranteed.
+Nothing breaks without a settings file — SCV runs on defaults.
 
 **Always write settings through the script.** It puts each key in the right file
 on its own, so a token cannot land in the committed one by accident:
@@ -112,7 +121,7 @@ secrets out, and **does not touch your `.env`**:
 bash "<core>/scripts/settings-migrate.sh"
 ```
 
-Until you do, SCV runs on defaults and says so once per action.
+SCV warns once only when a `.env` SCV value differs from the settings file.
 
 **Updates never overwrite your values.** When SCV ships a new setting, sync adds
 only the missing key. A value you set — or deliberately left empty — stays as it is.
