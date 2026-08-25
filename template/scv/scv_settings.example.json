@@ -11,6 +11,7 @@
     "NOTIFIER_PROVIDER": "팀 보고 채널: slack | discord. 비우면 보고 기능 꺼짐. 토큰·채널 ID 는 비밀 파일에.",
     "NOTIFIER_DRY_RUN": "1 이면 보고를 보내지 않고 내용만 찍음. 기본 0.",
     "NOTIFIER_RETRY_MAX": "보고 전송·첨부 업로드 재시도 횟수. 기본 3.",
+    "SCV_PR_NOTIFY": "PR 생성/갱신 후 slug 증적(성공 포함)을 알림 채널에도 게시: on(기본) | off. NOTIFIER_PROVIDER 설정 시에만 동작.",
     "SCV_PR_PLATFORM": "PR/MR 플랫폼: github | gitlab. 비우면 원격 주소로 감지.",
     "GITLAB_HOST": "GitLab 주소 (gitlab 일 때). 기본 https://gitlab.com.",
     "SCV_ATTACHMENTS_BACKEND": "PR 영상 저장 방식: git-orphan (기본). s3/r2 는 예정.",
@@ -19,6 +20,7 @@
     "SCV_ATTACHMENTS_SCOPE": "PR·보고에 붙일 테스트 결과: slug(기본, 이번 계획 것만) | all(전부).",
     "SCV_ATTACHMENTS_SLUG": "보고 명령이 쓸 슬러그를 고정. 비우면 --slug 또는 진행 중 계획 1개로 추론.",
     "SCV_ATTACHMENTS_RERUN_TIMEOUT": "이번 슬러그 영상이 없어 테스트를 재실행할 때의 제한(초). 기본 600.",
+    "SCV_EVIDENCE_MIN_SECONDS": "증적 영상 최소 길이(초). 이보다 짧으면 경고 — 사람은 화면 전환당 ~2초가 필요. 기본 4.",
     "SCV_GIF_FPS": "PR 미리보기 GIF 초당 프레임. 기본 10.",
     "SCV_GIF_MAX_SECONDS": "GIF 로 만들 최대 길이(초). 기본 60.",
     "SCV_GIF_WIDTH": "GIF 가로 픽셀. 기본 480.",
@@ -42,6 +44,7 @@
   "NOTIFIER_PROVIDER": "",
   "NOTIFIER_DRY_RUN": "0",
   "NOTIFIER_RETRY_MAX": "3",
+  "SCV_PR_NOTIFY": "on",
 
   "SCV_PR_PLATFORM": "",
   "GITLAB_HOST": "https://gitlab.com",
@@ -52,6 +55,7 @@
   "SCV_ATTACHMENTS_SCOPE": "slug",
   "SCV_ATTACHMENTS_SLUG": "",
   "SCV_ATTACHMENTS_RERUN_TIMEOUT": "600",
+  "SCV_EVIDENCE_MIN_SECONDS": "4",
 
   "SCV_GIF_FPS": "10",
   "SCV_GIF_MAX_SECONDS": "60",
