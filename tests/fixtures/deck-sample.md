@@ -46,6 +46,25 @@ flowchart LR
 2. 리뷰 반영
 3. 배포
 
+## 순수함수 · 파이프라인 (Pure functions & pipeline)
+
+```
+flow(
+  normalizeInput,   // 원문 → 정규화된 값
+  validateInput,    // 정규화된 값 → 검증 결과
+  buildCommand,     // 검증 결과 → 명령
+)
+```
+
+| # | 단계 | 받는 값 → 돌려주는 값 | 순수/부수효과 |
+|---|---|---|---|
+| 1 | normalizeInput | 원문 → 정규화된 값 | 순수 |
+| 2 | validateInput | 정규화된 값 → 검증 결과 | 순수 |
+| 3 | buildCommand | 검증 결과 → 명령 | 순수 |
+
+- 부수효과 위치: 파이프라인 입구(원문 읽기)와 출구(명령 실행)에만 둔다.
+- 재사용: normalizeInput 은 기존 입력 정규화 단계를 그대로 쓴다.
+
 ## 세부 계획
 
 - 상위 항목

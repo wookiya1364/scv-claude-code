@@ -329,6 +329,15 @@ Follow `PLAN.md`'s `Suggested path` (legacy PLANs: `Steps`) as the default route
 **Implementation principles** — Core defaults. A plan's Guardrails override them
 whenever the two disagree:
 
+- **Pure functions composed into a pipeline — this one does not bend.** Each step takes
+  its input as arguments and returns its output, with no hidden reads or writes, and the
+  steps are composed left to right (es-toolkit's `flow` is the reference shape:
+  `flow(normalize, validate, buildCommand)`). Side effects — DB, network, clock,
+  randomness — live in thin adapters at the pipeline's ends, never in the middle. This
+  is what makes a step reusable instead of rebuilt, and what makes a feature cheap to
+  A/B test: swap one step, keep the rest. Implement the plan's
+  `## 순수함수 · 파이프라인` section as written; if the plan lacks it, say so and ask
+  rather than inventing a shape.
 - Search the existing codebase first; extend or reuse what is there. Do not add a
   parallel way of doing something that already has one.
 - Choose the simplest implementation that fully satisfies the current requirement.

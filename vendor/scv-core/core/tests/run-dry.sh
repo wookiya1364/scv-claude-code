@@ -2731,11 +2731,15 @@ assert_contains "$PROMOTE_CMD" "Anti-patterns to avoid (diagram 2)"
 assert_contains "$PROMOTE_CMD" "Drawing every node from"
 assert_contains "$PROMOTE_CMD" "Inventing community names"
 
-# Step 6.4 — screen mockups (new sub-step) → self-review renumbered to Step 6.5
-assert_contains "$PROMOTE_CMD" "Step 6.4 — Screen mockups (optional, UI plans only)"
-assert_contains "$PROMOTE_CMD" '```screen` fenced JSON block'
-assert_contains "$PROMOTE_CMD" "generate wireframe mockups"
-assert_contains "$PROMOTE_CMD" "skip mockups"
+# Step 6.4 — the numbered screen spec. Was an OPTIONAL, UI-only mockup step until
+# 20260826-numbered-spec-deck made the spec material REQUIRED for every plan (FE and
+# BE alike), so the old "optional / skip mockups" wording is gone on purpose. What is
+# asserted now is the replacement contract, not a looser version of the old one.
+assert_contains "$PROMOTE_CMD" "번호식 화면설계서 (numbered screen spec) — REQUIRED material"
+assert_contains "$PROMOTE_CMD" '```screen` fenced block per screen'
+assert_contains "$PROMOTE_CMD" "Missing material warns; it never blocks"
+assert_contains "$PROMOTE_CMD" "Markers are assigned for you"
+assert_contains "$PROMOTE_CMD" "which screen calls this, at the top"
 assert_contains "$PROMOTE_CMD" '"nav": { "items"'
 assert_contains "$PROMOTE_CMD" '| `table` | `{ type:"table"'
 assert_contains "$PROMOTE_CMD" "Faithfulness (non-negotiable, same rule as the diagrams)"

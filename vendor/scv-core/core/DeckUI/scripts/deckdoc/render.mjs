@@ -117,6 +117,7 @@ const arr = (x) => (Array.isArray(x) ? x : []);
 // leak into an unescaped class attribute. hasOwnProperty confines the lookup to our own keys.
 const safeTone = (t) => (Object.prototype.hasOwnProperty.call(BADGE_TONE, t) ? BADGE_TONE[t] : BADGE_TONE.muted);
 const MAX_WF_DEPTH = 40; // guards runaway/adversarial card-in-card nesting from overflowing the stack
+const MAX_WF_MARKER_LEN = 4; // a marker is ①/A/12 — anything longer is prose that would swamp the picture
 
 // ---- project-token override (screen mockup "theme" field) ----
 // 1순위(프로젝트 실제 토큰) / 2순위(scv 자체 스킨) 판별: scv 자체 스킨이 기본이고, 사용자가
@@ -186,7 +187,27 @@ function renderCell(c) {
   return "";
 }
 
+// A component's optional `marker` → the badge pinned to it on the mockup, so the
+// prose can hang off the number instead of crowding the picture (the 화면설계서
+// convention). Numeric markers name components, letters name actions — two
+// visually distinct series, exactly as the reference spec sheets separate the
+// "Function Description" list from the "Button Description" one.
+// Absent/invalid marker → "" → the component renders exactly as it always has.
+function markerBadgeOf(m) {
+  const s = m == null ? "" : String(m).trim();
+  if (!s || s.length > MAX_WF_MARKER_LEN) return "";
+  const kind = /^\d+$/.test(s) ? "wf-marker-fn" : "wf-marker-action";
+  return `<span class="wf-marker ${kind}">${esc(s)}</span>`;
+}
+
 function renderComponent(c, depth, t) {
+  const inner = renderComponentInner(c, depth, t);
+  if (!inner) return inner;
+  const badge = markerBadgeOf(c && c.marker);
+  return badge ? `<div class="wf-marked">${badge}<div class="wf-marked-body">${inner}</div></div>` : inner;
+}
+
+function renderComponentInner(c, depth, t) {
   depth = depth || 0;
   if (!c || !c.type) return "";
   if (depth > MAX_WF_DEPTH) return `<p class="wf-text">${esc(t("nestedTooDeep"))}</p>`;
@@ -235,25 +256,180 @@ function renderComponent(c, depth, t) {
   }
 }
 
+// One "번호별 상세" group — the list that hangs off the picture's markers. Only
+// what the author wrote is rendered: a marker with no entry here simply has no
+// entry (the deck never invents the description it could not read).
+function renderSpecGroup(items, cls, kind, label) {
+  const list = arr(items).filter((x) => x && typeof x === "object");
+  if (!list.length) return "";
+  const rows = list
+    .map((it) => {
+      const m = it.marker == null ? "" : String(it.marker).trim();
+      const badge = m && m.length <= MAX_WF_MARKER_LEN ? `<span class="wf-spec-badge">${esc(m)}</span>` : "";
+      const notes = arr(it.notes)
+        .filter((n) => n != null && String(n).trim())
+        .map((n) => `<li>${esc(n)}</li>`)
+        .join("");
+      // `step` ties this numbered item to a step of the plan's pipeline, so the plan,
+      // the picture and the code read as one chain instead of three parallel documents.
+      const step = it.step == null ? "" : String(it.step).trim();
+      const stepTag = step ? `<span class="wf-spec-step">${esc(step)}</span>` : "";
+      const name = it.title || stepTag ? `<div class="wf-spec-name">${esc(it.title || "")}${stepTag}</div>` : "";
+      const body = notes ? `<ul class="wf-spec-notes">${notes}</ul>` : "";
+      return `<div class="wf-spec-item ${kind}">${badge}<div class="wf-spec-body">${name}${body}</div></div>`;
+    })
+    .join("");
+  return `<div class="wf-spec-group ${cls}"><div class="wf-spec-title">${esc(label)}</div>${rows}</div>`;
+}
+
+// The validation table the reference spec sheets carry under the mockup. It exists
+// because one condition often belongs to SEVERAL numbers — an email-format rule fires
+// on the input AND gates the submit button — and prose scattered across per-number
+// entries makes that impossible to trace. One row, the numbers it touches, and where
+// the user actually sees the message.
+// Shared table primitive: header row + body rows, first column narrow (it holds the
+// marker). Both the FE validation table and the BE failure/response table are this —
+// one component, different column names, so a backend spec is not a second format to
+// learn.
+function renderMarkerTable(title, columns, rows) {
+  if (!rows.length) return "";
+  const head = columns.map((c) => `<th>${esc(c)}</th>`).join("");
+  const body = rows
+    .map(
+      (r) =>
+        `<tr>${r
+          .map((cell, i) => `<td${i === 0 ? ' class="wf-vt-marker"' : ""}>${esc(cell == null ? "" : cell)}</td>`)
+          .join("")}</tr>`,
+    )
+    .join("");
+  return (
+    `<div class="wf-validations"><div class="wf-sub-title">${esc(title)}</div>` +
+    `<table class="wf-vtable"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`
+  );
+}
+
+// Two accepted shapes. The array form is the FE default — fixed columns, named fields.
+// The object form is fully general (own title, own columns, plain rows), which is what
+// lets a BE spec put 조건 / 응답 / 본문 / 기록 in the same table component instead of
+// burying every failure in the prose beside it.
+function renderValidations(items, t) {
+  if (items && !Array.isArray(items) && typeof items === "object") {
+    const columns = arr(items.columns).map((c) => (c == null ? "" : String(c)));
+    const rows = arr(items.rows)
+      .filter((r) => Array.isArray(r))
+      .map((r) => r.slice(0, columns.length || r.length));
+    if (!columns.length || !rows.length) return "";
+    return renderMarkerTable(items.title || t("validationTableLabel"), columns, rows);
+  }
+  const list = arr(items).filter((x) => x && typeof x === "object");
+  if (!list.length) return "";
+  const columns = [t("vcolMarker"), t("vcolWhen"), t("vcolCondition"), t("vcolMessage"), t("vcolShownAs")];
+  const rows = list.map((v) => [v.marker, v.when, v.condition, v.message, v.shownAs]);
+  return renderMarkerTable(t("validationTableLabel"), columns, rows);
+}
+
+// Which screen calls this backend piece. A BE spec without it forces the implementer to
+// guess where the endpoint is used — the one thing the FE sheet next door already knows.
+// Rendered ABOVE the picture, because "who calls me" is the first question, not the last.
+function renderScreenRefs(items, t) {
+  const list = arr(items).filter((x) => x && typeof x === "object");
+  if (!list.length) return "";
+  const columns = [t("scolCalls"), t("scolPage"), t("scolElement"), t("scolWhen")];
+  const rows = list.map((s) => [
+    s.calls,
+    [s.name, s.pageCode].filter((x) => x != null && String(x).trim()).join(" · "),
+    s.element,
+    s.when,
+  ]);
+  return renderMarkerTable(t("screenRefsLabel"), columns, rows);
+}
+
+// Component state variants — the reference sheet's left column (기본 / 포커스 / 입력 /
+// 가림 / Valid / Invalid). Rendered as a strip under the main frame rather than a third
+// column: a third column would squeeze the picture, which is the one thing this whole
+// format exists to protect.
+function renderStates(items, t, title) {
+  const list = arr(items).filter((x) => x && typeof x === "object");
+  if (!list.length) return "";
+  const cells = list
+    .map((s) => {
+      const m = s.marker == null ? "" : String(s.marker).trim();
+      const badge = m && m.length <= MAX_WF_MARKER_LEN ? `<span class="wf-state-marker">${esc(m)}</span>` : "";
+      const inner = arr(s.body)
+        .map((x) => renderComponent(x, 1, t))
+        .join("");
+      return (
+        `<div class="wf-state"><div class="wf-state-label">${badge}${esc(s.label == null ? "" : s.label)}</div>` +
+        `<div class="wf-state-frame">${inner}</div></div>`
+      );
+    })
+    .join("");
+  // The strip is FE's "component states" and BE's "table schemas" — same component, the
+  // title says which. That sameness is the point: 영역이 달라도 기본 골자는 같다.
+  return `<div class="wf-states"><div class="wf-sub-title">${esc(title || t("statesLabel"))}</div><div class="wf-states-row">${cells}</div></div>`;
+}
+
 function renderScreen(b, t) {
+  // PATH / PAGE CODE bar — the spec sheet's identity strip. Gated on pageCode so a
+  // legacy mockup (title only) keeps its browser-chrome look, byte for byte.
+  const pageCode = b.pageCode == null ? "" : String(b.pageCode).trim();
+  const pagebar = pageCode
+    ? `<div class="wf-pagebar"><span class="wf-pagebar-key">${esc(t("pagePathLabel"))}</span>` +
+      `<span class="wf-pagebar-name">${esc(b.title == null ? "" : b.title)}</span>` +
+      `<span class="wf-pagebar-key">${esc(t("pageCodeLabel"))}</span>` +
+      `<span class="wf-pagebar-code">${esc(pageCode)}</span></div>`
+    : "";
   const nav =
     b.nav && typeof b.nav === "object"
       ? `<div class="wf-nav">${arr(b.nav.items)
           .map((it) => `<span class="wf-nav-item${it === b.nav.active ? " active" : ""}">${esc(it)}</span>`)
           .join("")}</div>`
       : "";
-  const body = arr(b.body)
-    .map((x) => renderComponent(x, 0, t))
+  // A plan with no screen (BE) puts a diagram in the big-picture slot instead of a
+  // wireframe body — same frame, same markers, same sidebar. That sameness IS the
+  // requirement: 영역이 달라도 기본 골자는 같다.
+  // One diagram or several. A backend spec usually needs two: the structure (who talks
+  // to whom) AND the order (what happens first). Drawing the order is what lets the
+  // detail panel stop narrating "→ 그다음 →" in prose.
+  const diagrams = (Array.isArray(b.diagram) ? b.diagram : [b.diagram])
+    .map((d) => (typeof d === "string" ? { code: d } : d))
+    .filter((d) => d && typeof d === "object" && typeof d.code === "string" && d.code.trim());
+  const diagram = diagrams
+    .map(
+      (d) =>
+        `${d.label ? `<div class="wf-diagram-label">${esc(d.label)}</div>` : ""}<pre class="mermaid">${esc(d.code)}</pre>`,
+    )
     .join("");
+  const body =
+    diagram ||
+    arr(b.body)
+      .map((x) => renderComponent(x, 0, t))
+      .join("");
   // theme absent (the common case — no project tokens told to us) → identical to before,
   // zero behavior change. theme present → inline style overrides just the validated keys.
   // The title becomes browser chrome inside the frame rather than a caption above
   // it — the reference's ScreenFrame. The label already exists in the authored
   // JSON, so this is the one reference primitive that ports whole.
-  const chrome = b.title
-    ? `<div class="wf-chrome"><span class="wf-dot wf-dot-r"></span><span class="wf-dot wf-dot-y"></span><span class="wf-dot wf-dot-g"></span><span class="wf-url">${esc(b.title)}</span></div>`
-    : "";
-  return `<div class="wf-screen"${themeStyleOf(b.theme)}><div class="wf-frame">${chrome}${nav}<div class="wf-body">${body}</div></div></div>`;
+  // With a pagebar the title is already shown there — don't say it twice.
+  const chrome =
+    b.title && !pagebar
+      ? `<div class="wf-chrome"><span class="wf-dot wf-dot-r"></span><span class="wf-dot wf-dot-y"></span><span class="wf-dot wf-dot-g"></span><span class="wf-url">${esc(b.title)}</span></div>`
+      : "";
+  // States and the validation table belong to the PICTURE, not the detail panel: they
+  // describe what the drawing shows, so they stay in its column, under the frame.
+  const states = renderStates(b.states, t, b.statesTitle);
+  const validations = renderValidations(b.validations, t);
+  const screenRefs = renderScreenRefs(b.screenRefs, t);
+  const screen =
+    `<div class="wf-screen"${themeStyleOf(b.theme)}>${pagebar}${screenRefs}<div class="wf-frame">${chrome}${nav}` +
+    `<div class="wf-body">${body}</div></div>${states}${validations}</div>`;
+  const spec =
+    renderSpecGroup(b.functions, "wf-spec-functions", "wf-spec-item-fn", t("specFunctionsLabel")) +
+    renderSpecGroup(b.actions, "wf-spec-actions", "wf-spec-item-act", t("specActionsLabel"));
+  // No detail written → no sidebar, no wrapper: the legacy markup is untouched.
+  if (!spec) return screen;
+  const wide = diagram ? " wf-speclayout-diagram" : "";
+  return `<div class="wf-speclayout${wide}">${screen}<div class="wf-spec">${spec}</div></div>`;
 }
 
 const CSS = `
@@ -304,7 +480,12 @@ const CSS = `
   --on-warn:#241a06;             /*  8.72:1 on the --warn plate */
 }
 *{box-sizing:border-box}
-html,body{height:100%}
+/* One scroll region, and only one. The app shell owns the scrolling; the document
+   behind it must never scroll too. Without this the page picks up a second scrollbar
+   whenever the shell ends up a few pixels taller than the viewport (100svh vs 100%
+   rounding is enough), and the reader gets two bars with no way to tell which one the
+   wheel will move. Print restores normal flow below. */
+html,body{height:100%;overflow:hidden;overscroll-behavior:none}
 html{scroll-behavior:smooth}
 body{margin:0;font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR",sans-serif;color:var(--fg);background:var(--bg)}
 /* Controls do not inherit the document font — a UA default applies unless asked.
@@ -474,6 +655,87 @@ pre.mermaid.mermaid-fallback::before{content:"\\29c9 \\b2e4\\c774\\c5b4\\adf8\\b
   --wf-warn:#e0ab48; --wf-warn-bg:rgba(224,171,72,.15);
   --wf-radius:10px; --wf-radius-pill:999px;
 }
+/* 번호식 화면설계서 — the picture keeps the stage, the prose stands beside it.
+   Sidebar sits right of the picture on a wide screen and DROPS BELOW under 900px,
+   because squeezing the drawing to fit a column is exactly the regression that made
+   an earlier deck's diagram render at 0.483 scale (16px type → 7.7px). */
+.wf-speclayout{display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,360px);gap:16px;align-items:start;margin:1em 0}
+.wf-speclayout > .wf-screen{margin:0;min-width:0}
+/* A spec sheet is a FIGURE, not prose: the 840px reading measure that suits paragraphs
+   starves the drawing and crams the detail list against it. Take the full glass, same
+   as a standalone diagram does — the picture gets the room, the detail panel sits at
+   the right edge. */
+@supports (width:100cqw){
+  .wf-speclayout{
+    --bleed:calc(100cqw - 32px);
+    width:var(--bleed);
+    max-width:var(--bleed);
+    margin-inline:calc((100% - var(--bleed)) / 2);
+  }
+}
+/* A diagram needs more room than a wireframe; with the bleed a full-size flowchart
+   fits beside the panel on a wide screen. Below that it stacks rather than shrink —
+   squeezing an 800px flowchart into a narrow column renders 16px labels at ~8px, the
+   regression that made an earlier deck unreadable. */
+@media (max-width:1200px){
+  .wf-speclayout-diagram{grid-template-columns:minmax(0,1fr)}
+  .wf-speclayout-diagram > .wf-spec{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;align-items:start}
+}
+/* Undo the full-bleed above: that rule widens a STANDALONE diagram to the reading
+   glass, which inside a spec frame just bursts the frame (the picture then gets
+   cropped by wf-frame's overflow:hidden). In here the frame is the glass. */
+/* Keep the diagram card's own surface. Making it transparent put mermaid's
+   light-assuming palette (#eaeaea fills, #666 text) straight onto the dark frame, and a
+   sequence diagram's message text became unreadable — the deck draws diagrams on their
+   own card for exactly this reason (see the note above pre.mermaid). */
+.wf-screen pre.mermaid{margin:0;margin-inline:0;width:auto;max-width:100%;padding:10px;overflow-x:auto}
+.wf-screen pre.mermaid svg{min-width:0;max-width:100%;height:auto}
+@media (max-width:900px){.wf-speclayout,.wf-speclayout-diagram{grid-template-columns:minmax(0,1fr)}}
+@media print{.wf-speclayout,.wf-speclayout-diagram{grid-template-columns:minmax(0,1fr);break-inside:avoid}}
+/* Grid, not flex-wrap: in a narrow column the name TRUNCATES instead of shoving
+   PAGE CODE onto its own half-empty row (the identity strip must read as one line). */
+.wf-pagebar{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:stretch;margin-bottom:8px;border:1px solid var(--border-strong);border-radius:8px;overflow:hidden;font-size:12.5px}
+.wf-pagebar-key{padding:6px 10px;background:var(--surface-3);color:var(--muted-foreground);font-weight:700;font-size:11px;letter-spacing:.04em;white-space:nowrap;display:flex;align-items:center}
+.wf-pagebar-name{min-width:0;padding:6px 10px;background:var(--surface-2);color:var(--foreground);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center}
+.wf-pagebar-code{padding:6px 10px;background:var(--surface-2);color:var(--foreground);font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:nowrap;display:flex;align-items:center}
+.wf-marked{display:flex;align-items:flex-start;gap:8px}
+.wf-marked + .wf-marked{margin-top:2px}
+.wf-marked-body{flex:1;min-width:0}
+.wf-marker{flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;margin-top:3px;padding:0 5px;border-radius:999px;font:700 11.5px/1 ui-monospace,SFMono-Regular,Menlo,monospace}
+.wf-marker-fn{background:var(--wf-primary,#a53257);color:var(--wf-primary-fg,#fdf1f3)}
+.wf-marker-action{background:var(--wf-info,#60a5fa);color:#0a0a0b}
+.wf-spec{display:flex;flex-direction:column;gap:12px;min-width:0}
+.wf-spec-group{border:1px solid var(--border-strong);border-radius:10px;background:var(--surface-2);overflow:hidden}
+.wf-spec-title{padding:7px 12px;background:var(--surface-3);border-bottom:1px solid var(--border-strong);font-weight:700;font-size:12.5px;letter-spacing:.02em}
+.wf-spec-item{display:flex;align-items:flex-start;gap:8px;padding:9px 12px;border-top:1px solid var(--border)}
+.wf-spec-item:first-of-type{border-top:0}
+.wf-spec-badge{flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;min-width:19px;height:19px;padding:0 5px;border-radius:999px;background:var(--surface-3);border:1px solid var(--border-strong);font:700 11px/1 ui-monospace,SFMono-Regular,Menlo,monospace}
+.wf-spec-item-act .wf-spec-badge{background:var(--wf-info,#60a5fa);color:#0a0a0b;border-color:transparent}
+.wf-spec-body{flex:1;min-width:0;font-size:12.5px;line-height:1.6}
+.wf-spec-name{font-weight:600;margin-bottom:2px}
+.wf-spec-notes{margin:0;padding-left:1.1em;color:var(--muted-foreground)}
+.wf-spec-notes li{margin:1px 0}
+.wf-spec-step{margin-left:6px;padding:1px 6px;border-radius:999px;background:var(--surface-3);border:1px solid var(--border-strong);color:var(--muted-foreground);font:600 10.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:nowrap}
+.wf-sub-title{margin:12px 0 6px;font-weight:700;font-size:12.5px;letter-spacing:.02em}
+/* "Called from" sits ABOVE the picture, so the first thing a backend reader learns is
+   which screen and which element reaches this endpoint. */
+.wf-screen > .wf-validations:first-of-type{margin-bottom:2px}
+.wf-diagram-label{margin:8px 0 2px;font-size:11.5px;color:var(--muted-foreground)}
+.wf-diagram-label:first-child{margin-top:0}
+/* Validation table — one row per rule, the numbers it touches in the first column so a
+   rule shared by several markers is traceable instead of scattered through prose. */
+.wf-validations{margin-top:2px}
+.wf-vtable{width:100%;border-collapse:collapse;font-size:12px;border:1px solid var(--border-strong);border-radius:8px;overflow:hidden;table-layout:auto}
+.wf-vtable th{padding:6px 9px;background:var(--surface-3);border-bottom:1px solid var(--border-strong);text-align:left;font-weight:700;white-space:nowrap}
+.wf-vtable td{padding:6px 9px;border-top:1px solid var(--border);vertical-align:top;line-height:1.55}
+.wf-vt-marker{width:1%;white-space:nowrap;font:700 11px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted-foreground)}
+/* State variants — a strip under the frame, never a third column: a third column would
+   squeeze the picture, which is the one thing this format exists to protect. */
+.wf-states-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
+.wf-state{min-width:0}
+.wf-state-label{display:flex;align-items:center;gap:5px;margin-bottom:4px;font-size:11.5px;color:var(--muted-foreground)}
+.wf-state-marker{display:inline-flex;align-items:center;justify-content:center;min-width:17px;height:17px;padding:0 4px;border-radius:999px;background:var(--surface-3);border:1px solid var(--border-strong);font:700 10px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--foreground)}
+.wf-state-frame{border:1px solid var(--wf-border,var(--border-strong));border-radius:8px;background:var(--wf-bg,var(--surface-2));padding:9px 10px}
 .wf-chrome{display:flex;align-items:center;gap:7px;padding:9px 12px;border-bottom:1px solid var(--wf-border);background:var(--wf-card)}
 .wf-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0;opacity:.7}
 .wf-dot-r{background:#fb2c36}.wf-dot-y{background:#fe9a00}.wf-dot-g{background:#00bc7d}
@@ -520,6 +782,9 @@ pre.mermaid.mermaid-fallback::before{content:"\\29c9 \\b2e4\\c774\\c5b4\\adf8\\b
    background:#fff on body while every surface below it kept painting from
    --bg, so the PDF was 20 pages of dark slabs on a white sheet. */
 @media print{
+  /* The single-scroll-region clamp is a SCREEN concern — on paper the document must
+     flow normally, or everything past the first page is clipped away. */
+  html,body{height:auto;overflow:visible}
   :root{
     --bg:#ffffff; --panel:#f6f7f8; --surface-2:#fafafa; --surface-3:#f4f4f5;
     --fg:#111418;                /* 17.74:1 on white */
@@ -786,7 +1051,14 @@ export function renderHtml(data, opts = {}) {
 </script>`
     : "";
 
-  const hasMermaid = slides.some((s) => (s.blocks || []).some((b) => b.type === "mermaid"));
+  // A BE spec's big picture is a diagram carried INSIDE a screen block — it needs the
+  // same loader a top-level mermaid block does, or it would ship as unrendered text.
+  const codeOf = (d) => (typeof d === "string" ? d : d && typeof d.code === "string" ? d.code : "");
+  const screenHasDiagram = (b) =>
+    (Array.isArray(b.diagram) ? b.diagram : [b.diagram]).some((d) => codeOf(d).trim());
+  const hasMermaid = slides.some((s) =>
+    (s.blocks || []).some((b) => b.type === "mermaid" || (b.type === "screen" && screenHasDiagram(b))),
+  );
   // CDN 기본 + 자동 텍스트 폴백: CDN 로드가 실패(오프라인·폐쇄망)하면 <pre class="mermaid">에
   // 담긴 mermaid 원본 코드를 그대로 읽히도록 .mermaid-fallback 로 표시한다.
   const mermaidScript =
@@ -860,6 +1132,26 @@ pre.mermaid .node.new rect,pre.mermaid g.new rect{fill:#5a4415;stroke:var(--warn
 pre.mermaid .node.new .nodeLabel,pre.mermaid g.new .nodeLabel{fill:#f6e8c8;color:#f6e8c8}
 pre.mermaid .node.changed rect,pre.mermaid g.changed rect{fill:#16324f;stroke:#6fb4f2;stroke-width:1.8px}
 pre.mermaid .node.changed .nodeLabel,pre.mermaid g.changed .nodeLabel{fill:#d9ecff;color:#d9ecff}
+/* SEQUENCE diagrams — a backend spec draws the ORDER of a request, and mermaid's own
+   palette for this type assumes a light page (#eaeaea boxes, #333 text). Normalization
+   demotes mermaid's id-scoped rules to .scv-mmd (0,2,0), so these "pre.mermaid svg .x"
+   selectors (0,2,2) win without !important. Without them the message text renders dark
+   grey on the dark card and the whole diagram is unreadable — the same contrast failure
+   the deck redesign fixed for flowcharts, one diagram type later. */
+pre.mermaid svg .actor,pre.mermaid svg rect.actor{fill:var(--panel);stroke:var(--border-strong);stroke-width:1.2px}
+pre.mermaid svg text.actor,pre.mermaid svg text.actor tspan,pre.mermaid svg .actor > tspan{fill:var(--fg);stroke:none}
+pre.mermaid svg .actor-line{stroke:var(--border-strong);stroke-width:1px}
+pre.mermaid svg .messageText,pre.mermaid svg text.messageText{fill:var(--fg);stroke:none}
+pre.mermaid svg .messageLine0,pre.mermaid svg .messageLine1{stroke:var(--fg-body);stroke-width:1.5px}
+pre.mermaid svg .labelBox{fill:var(--surface-2);stroke:var(--border-strong)}
+/* sectionTitle is the else-branch label of an alt block — miss it and half the
+   branches in a failure flow stay unreadable while the other half look fine. */
+pre.mermaid svg .labelText,pre.mermaid svg .labelText tspan,pre.mermaid svg .loopText,pre.mermaid svg .loopText tspan,pre.mermaid svg .sectionTitle,pre.mermaid svg .sectionTitle tspan{fill:var(--fg);stroke:none}
+pre.mermaid svg .loopLine{stroke:var(--border-strong)}
+pre.mermaid svg .note{fill:var(--surface-2);stroke:var(--border-strong)}
+pre.mermaid svg .noteText,pre.mermaid svg .noteText tspan{fill:var(--fg);stroke:none}
+pre.mermaid svg .sequenceNumber{fill:var(--bg)}
+pre.mermaid svg .activation0,pre.mermaid svg .activation1,pre.mermaid svg .activation2{fill:var(--surface-3);stroke:var(--border-strong)}
 </style>
 </head>
 <body>
