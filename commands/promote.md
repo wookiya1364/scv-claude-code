@@ -393,6 +393,29 @@ refs: []
 
 <TODO: 5–15 lines. If this grows beyond ~50 lines, `/scv:work` will suggest splitting into ARCH.md.>
 
+## 순수함수 · 파이프라인 (Pure functions & pipeline)
+
+<!-- REQUIRED in every plan (Step 6.3.5). Name the steps in order, give each one's
+     input → output, and mark where the side effects live. The steps must be pure —
+     no hidden reads or writes — and composed left to right, es-toolkit `flow` shape.
+     `/scv:deck` warns when this section is missing. Do not invent steps the source
+     docs don't describe; ask instead. -->
+
+```
+flow(
+  <step1>,   // <input> → <output>
+  <step2>,   // <input> → <output>
+)
+```
+
+| # | 단계 | 받는 값 → 돌려주는 값 | 순수/부수효과 |
+|---|---|---|---|
+| 1 | <TODO> | <TODO> → <TODO> | 순수 |
+| 2 | <TODO> | <TODO> → <TODO> | 부수효과 (입구/출구) |
+
+- 부수효과 위치: <TODO — 어떤 단계가 DB·네트워크·시각·난수를 만지는가>
+- 재사용: <TODO — 이미 있는 단계 중 무엇을 그대로 쓰는가>
+
 ## Guardrails
 
 <!-- What must NOT be done: untouchable areas, forbidden approaches, and the
@@ -784,41 +807,173 @@ Print one-line confirmation:
   ⚠ Review Mermaid syntax + node labels — LLM-generated.
 ```
 
-#### Step 6.4 — Screen mockups (optional, UI plans only)
+#### Step 6.3.5 — 순수함수 · 파이프라인 (pure functions and pipelines) — REQUIRED in EVERY plan
 
-Markdown alone is hard to picture — "이게 화면이 어떻게 생겼는지 모르겠다." `/scv:deck` renders a `​```screen` fenced JSON block as an actual wireframe (dark scv-native skin, zero build). Skip this step entirely for a CLI/backend-only plan (no user-facing UI). Otherwise, ask:
+**Every plan this project produces — FE, BE, or any other area — must be designed as
+pure functions composed into a pipeline.** This is a standing project rule, not a
+per-plan preference: it is what makes work reusable instead of rebuilt each time, and
+what makes a feature cheap to A/B test (swap one step, keep the rest).
 
-<!-- SCV:GUIDANCE -->
-```
-Question: "이 계획에 화면 목업을 추가할까요? (실제 스크린샷이 아니라 PLAN 내용
-기반의 와이어프레임 — /scv:deck 이 그림으로 그려줍니다)"
+- **Pure function** — same input, same output, no hidden reads or writes. Everything it
+  needs arrives as an argument; everything it produces comes back as a return value.
+- **Pipeline** — the steps are composed left to right, each step's output becoming the
+  next step's input. The reference shape is es-toolkit's `flow`:
 
-[1] "Yes — generate wireframe mockups" (recommended for UI-facing plans)
-    description:
-    "PLAN.md의 Suggested path/Approach Overview 에서 이 계획이
-     건드리는 화면마다 하나씩 그림. 실제 화면 컴포넌트가 아니라 구조만 보여주는
-     중립 와이어프레임(다크, scv 자체 스킨) — 어떤 프로젝트의 실제 디자인도
-     흉내내지 않는다."
+  ```ts
+  import { flow } from 'es-toolkit/function';
 
-[2] "No — skip mockups"
-    description:
-    "PLAN.md 텍스트만으로 충분하거나, 화면 변경이 없는 계획일 때."
-```
-<!-- /SCV:GUIDANCE -->
+  const processSignup = flow(
+    normalizeEmail,      // (raw)      → email
+    validateEmail,       // (email)    → Result<email>
+    checkDuplicate,      // (email)    → Result<email>
+    buildSignupCommand,  // (email)    → command
+  );
+  ```
 
-If [2]: skip the rest of Step 6.4, continue with Step 6.5.
+- **Side effects live at the ends, never in the middle.** Reading a DB, writing a row,
+  calling another service, touching the clock or randomness — those belong to thin
+  adapters at the pipeline's entry and exit. The steps between them stay pure so each
+  one can be tested and swapped alone.
+- **Name each step for the transformation it performs**, and keep one transformation per
+  step. A step that does two things cannot be reused for either.
 
-If [1]: for **each screen this plan materially adds or changes** (named in PLAN.md's `Suggested path` (legacy: `Steps`) / `Approach Overview`), author one `​```screen` fenced JSON block and append it under a new `## 3. Screen mockups` section in FEATURE_ARCHITECTURE.md, one `### <screen name>` subsection per screen.
+**Write this into the plan.** Every PLAN.md carries a `## 순수함수 · 파이프라인
+(Pure functions & pipeline)` section that names the pipeline's steps in order, states
+each step's input → output, and marks which ends hold the side effects. In the numbered
+spec below, each pipeline step is a natural marker: a number on the picture, its
+input/output and role in the detail beside it.
+
+**A plan missing this section is warned about, not blocked** — `/scv:deck` surfaces a
+lint warning so the gap is visible rather than silent. Never invent a pipeline the
+source docs do not describe; ask the user for the steps instead.
+
+#### Step 6.4 — 번호식 화면설계서 (numbered screen spec) — REQUIRED material
+
+A plan that is only sentences reads as a wall of text, not a 기획서. The deck's
+default shape is the **numbered-spec** one: a **big picture** carries **numbered
+markers**, and every description hangs off a number in a list beside it. Numbers
+(`"1"`, `"2"`) name components; **letters** (`"A"`, `"B"`) name actions.
+
+This material is **required for every plan** — the big picture just differs by area:
+
+- **FE (a screen exists)** — a wireframe body. Each component gets a marker, and each
+  marker gets an entry in `functions` (그 컴포넌트의 역할). Every **action** (button,
+  link) gets a letter marker and an `actions` entry describing **what the click does**:
+  the validation it runs, the message on failure, and the destination `PAGE CODE`.
+- **BE (no screen)** — a diagram takes the big-picture slot (`"diagram"` instead of
+  `"body"`), and a backend sheet has four parts the FE one also has, in the same places:
+
+  1. **`screenRefs` — which screen calls this, at the top.** A backend implementer with
+     no screen in front of them is guessing where the endpoint is used. Name the calling
+     page (with its `PAGE CODE`), the element (`Ⓐ 로그인 버튼`), when it fires, and which
+     numbered piece it reaches. This is the first thing on the sheet, not the last.
+  2. **Two diagrams, not one.** Give `diagram` an array: the **구성** (who talks to whom)
+     and the **순서** (what happens first, and where it branches — a mermaid
+     `sequenceDiagram` with `alt` blocks for the failure paths). Drawing the order is
+     what lets the detail panel stop narrating "→ 그다음 →" in prose.
+  3. **`states` as table schemas** — set `statesTitle` to something like
+     "데이터 모양 (테이블 스키마)" and give each numbered store a small table of its
+     columns and what each one costs (which index it depends on, what grows over time).
+  4. **`validations` as the failure/response table** — use the object form with your own
+     columns: 번호 / 조건 / 응답 / 본문·메시지 / 기록·데이터 영향. Every failure the
+     endpoint can produce gets a row, including what is deliberately NOT revealed.
+
+  Write the numbers into the diagram's own node labels (`A["① 인증 API"]`),
+  and number **the data stores too** — a backend spec that draws only the services is
+  half a spec, because the tables are where the real behaviour and the real risk live.
+
+  With the order in a diagram and the failures in a table, the right-hand detail keeps
+  only **역할** and **받는 값 → 돌려주는 값** per number — as short as the FE sheet's.
+  Each numbered entry must cover, in this order:
+  **역할** (what this piece is for, in one line) · **받는 값** · **하는 일** (the steps,
+  in order, referencing the other numbers) · **성공** (status/return, and what was
+  written) · **실패** (each distinct failure and what the caller sees — including what
+  is deliberately NOT revealed) · **데이터(DB) 영향** (which table is read or written,
+  how many times, which index it depends on, what grows over time) · and, where more
+  than one store is touched, the **트랜잭션 경계**.
+  A one-line "받아서 돌려준다" entry is not acceptable — that is the level the plan is
+  supposed to replace.
+- **Any other area** (infra, data, ops) — the skeleton is the same: one big picture,
+  numbered markers, per-number detail beside it, plus action detail where actions exist.
+
+**Missing material warns; it never blocks.** If the plan genuinely has no picture yet,
+say so plainly, write the sections you can, and let `/scv:deck` surface its
+picture-density warning — never invent a screen or a diagram that the source docs do
+not describe (the faithfulness rule below is unchanged).
+
+Author one `​```screen` fenced block per screen (or per BE view) under a `## 3. Screen
+mockups` section in FEATURE_ARCHITECTURE.md, one `### <name>` subsection each.
 
 **Schema** (top-level object inside the fence):
 
 ```jsonc
 {
-  "title": "/campaigns",              // optional — small route/label caption above the frame
+  "title": "회원가입 페이지",          // page/view name — shown in the PATH bar (or as frame chrome when no pageCode)
+  "pageCode": "FO-SU-02-01",          // optional — page identity; other specs point at it ("완료 시 FO-SU-02-02 로 이동")
   "nav": { "items": ["대시보드", "캠페인 관리"], "active": "캠페인 관리" },  // optional top nav
-  "body": [ /* Component[] — top to bottom */ ]
+  "body": [ /* Component[] — top to bottom; each may carry "marker": "1" | "A" */ ],
+  "diagram": [                        // BE: replaces body — 구성 + 순서 두 장
+    { "label": "구성", "code": "flowchart LR\n  A[\"① 인증 API\"] --> B[\"② 토큰 발급\"]" },
+    { "label": "순서", "code": "sequenceDiagram\n  autonumber\n  C->>A: POST /auth/login\n  alt 실패\n    A-->>C: 401\n  end" }
+  ],
+  "functions": [                      // per-number role detail (Function Description)
+    { "marker": "1", "title": "이메일 인풋 박스", "step": "validateEmail",
+      "notes": ["320자 초과 입력 막음", "포커스 아웃 시 형식·중복 검사"] }
+  ],
+  "actions": [                        // per-letter action detail (Button Description)
+    { "marker": "A", "title": "회원가입 버튼", "step": "buildSignupCommand",
+      "notes": ["필수 항목 충족 시 활성화", "완료 시 FO-SU-02-02 로 이동"] }
+  ],
+  "screenRefs": [                     // BE — which screen calls this, rendered ABOVE the picture
+    { "calls": "1", "name": "로그인 페이지", "pageCode": "FO-SU-01-01",
+      "element": "Ⓐ 로그인 버튼", "when": "필수 입력이 유효할 때 클릭" }
+  ],
+  "statesTitle": "데이터 모양 (테이블 스키마)",   // optional — BE renames the strip
+  "states": [                         // optional — the same component in its other states
+    { "marker": "1", "label": "Invalid", "body": [ /* Component[] */ ] }
+  ],
+  "validations": [                    // the validation-message table under the picture
+    { "marker": "1, A", "when": "포커스 아웃 / 제출", "condition": "이메일 형식 오류",
+      "message": "이메일 주소를 확인해주세요.", "shownAs": "인풋 하단 문구" }
+  ],
+  // …or the general form, when you want your own columns (BE failure/response table):
+  // "validations": { "title": "실패 · 응답 표",
+  //   "columns": ["번호", "조건", "응답", "본문 · 메시지", "기록 · 데이터 영향"],
+  //   "rows": [["1", "해시 불일치", "401", "어느 쪽인지 밝히지 않음", "⑤에 실패 1건"]] },
+  "autoMarkers": true                 // default — omit it; set false to keep only explicit markers
 }
 ```
+
+`body` and `diagram` are alternatives — give one. `functions` / `actions` / `states` /
+`validations` are omitted entirely when there is nothing to say; an empty group renders
+nothing (no empty box). A `marker` whose detail you did not write simply has no entry —
+**never fill it in with a guess**. `/scv:deck` warns when a detail entry names a marker
+that is not on the picture, and when one picture carries more than 20 markers.
+
+**Markers are assigned for you.** Write a component's `marker` only when you care which
+number it gets; otherwise leave `marker` off and the deck assigns them in reading order —
+components `1, 2, 3…`, actions `A, B, C…`. Markers you wrote always win and are
+skipped by the generator, so the two mix freely. Captions (`header` / `text`) stay
+unnumbered on purpose: numbering a caption pushes every real item's number out of step.
+`"autoMarkers": false` turns the whole thing off. Numbering happens in the deterministic
+transform, so what the lint checks and what the reader sees are the same numbers.
+
+**`validations` — the table under the picture.** Write one row per rule: **when** it is
+checked, the **condition**, the exact **message**, and **how it is shown** (inline text,
+toast, modal…). Put every marker the rule touches in `marker` (`"1, A"` — the email rule
+fires on the input AND gates submit). This table exists precisely because one rule spans
+several numbers: scattered through per-number prose, nobody can answer "where does this
+message appear?".
+
+**`states` — the same component in its other states.** Default / focused / filled /
+masked / valid / invalid. Each entry names the `marker` it varies and carries a small
+`body` of its own. Use it for the components whose states carry real rules; a state strip
+that repeats the default look for everything adds nothing.
+
+**`step` — the pipeline link.** Name the pipeline step (from the plan's
+`## 순수함수 · 파이프라인` section) that this numbered item implements. It renders as a
+small tag beside the title, so the plan's step, the picture's number, and the function in
+the code read as one chain. Use the step's real name; omit it rather than inventing one.
 
 **Component types** (each object needs a `type`):
 
