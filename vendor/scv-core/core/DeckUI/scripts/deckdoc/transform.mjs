@@ -85,6 +85,72 @@ function listItemsTree(listNode) {
 }
 
 const CALLOUT = { NOTE: "info", TIP: "good", IMPORTANT: "info", WARNING: "warn", CAUTION: "danger" };
+// Past this many markers on one picture, the numbers crowd the drawing they annotate.
+const MAX_MARKERS_PER_PICTURE = 20;
+
+// Auto-numbering lives HERE, not in the renderer, so the numbers are part of the deck
+// data everything downstream agrees on: the lint that pairs detail entries against the
+// picture sees exactly the markers the reader will see, and --emit-json shows them.
+// The author names a marker only when they care which number a component gets;
+// otherwise components take 1,2,3… and actions take A,B,C… in reading order. Explicit
+// markers always win and are skipped by the generator. Captions (header/text) are
+// labels, not spec items, so numbering them would push the real items out of step.
+// "autoMarkers": false turns it off.
+const WF_ACTION_TYPES = new Set(["button"]);
+const WF_UNNUMBERED_TYPES = new Set(["header", "text"]);
+function applyAutoMarkers(block) {
+  const list = Array.isArray(block.body) ? block.body : [];
+  const nonEmpty = (x) => Array.isArray(x) && x.length > 0;
+  // A block with none of the spec fields is a plain mockup from before this format
+  // existed — leave it exactly as authored.
+  const isSpecSheet =
+    (block.pageCode != null && String(block.pageCode).trim()) ||
+    nonEmpty(block.functions) ||
+    nonEmpty(block.actions) ||
+    nonEmpty(block.validations) ||
+    (block.validations && !Array.isArray(block.validations) && typeof block.validations === "object") ||
+    nonEmpty(block.screenRefs) ||
+    nonEmpty(block.states);
+  if (!isSpecSheet || block.autoMarkers === false || !list.length) return block;
+
+  const taken = new Set();
+  const collect = (xs) => {
+    for (const c of Array.isArray(xs) ? xs : []) {
+      if (!c || typeof c !== "object") continue;
+      if (c.marker != null && String(c.marker).trim()) taken.add(String(c.marker).trim());
+      if (Array.isArray(c.body)) collect(c.body);
+    }
+  };
+  collect(list);
+  let n = 0;
+  let a = 0;
+  const nextNumber = () => {
+    let v = "";
+    do {
+      v = String(++n);
+    } while (taken.has(v) && n < 999);
+    return v;
+  };
+  const nextLetter = () => {
+    let v = "";
+    do {
+      v = a < 26 ? String.fromCharCode(65 + a) : "";
+      a += 1;
+    } while (v && taken.has(v));
+    return v; // past Z, stop assigning rather than emit something unreadable
+  };
+  const walk = (xs) =>
+    (Array.isArray(xs) ? xs : []).map((c) => {
+      if (!c || typeof c !== "object" || !c.type) return c;
+      const kids = Array.isArray(c.body) ? { body: walk(c.body) } : null;
+      const already = c.marker != null && String(c.marker).trim();
+      if (already || WF_UNNUMBERED_TYPES.has(c.type)) return kids ? { ...c, ...kids } : c;
+      const marker = WF_ACTION_TYPES.has(c.type) ? nextLetter() : nextNumber();
+      if (!marker) return kids ? { ...c, ...kids } : c;
+      return { ...c, marker, ...(kids || {}) };
+    });
+  return { ...block, body: walk(list) };
+}
 
 function blockOf(node, t) {
   // SCV guidance-ablation markers (see core/scripts/guidance-filter.sh) are
@@ -135,7 +201,7 @@ function blockOf(node, t) {
           // The literal type must win over anything the fence body itself contains —
           // spread FIRST, then pin type, so a stray "type" key inside the JSON can't
           // repurpose this block as something else (bypassing the faithfulness rules).
-          return { ...JSON.parse(node.value), type: "screen" };
+          return applyAutoMarkers({ ...JSON.parse(node.value), type: "screen" });
         } catch (e) {
           return {
             type: "callout",
@@ -310,6 +376,63 @@ export function mdToDeck(raw, slug, sourceLabel, lang) {
     lint.push({ level: "warn", message: t("lintAcceptance") });
   if (!has("edge", "예외", "error", "오류"))
     lint.push({ level: "warn", message: t("lintEdgeCases") });
+
+  // Density: a planning doc with no picture at all reads as a wall of sentences.
+  // The section lints above only ask "is this heading present" — that blindness is
+  // how eight decks in a row shipped with zero diagrams and nobody was told.
+  const pictures = [];
+  for (const s of slides)
+    for (const b of s.blocks || []) {
+      if (b.type === "mermaid") pictures.push(b);
+      else if (b.type === "screen") pictures.push(b);
+    }
+  if (pictures.length === 0) lint.push({ level: "warn", message: t("lintNoPicture") });
+
+  // Standing project rule: every plan states its steps as pure functions composed into
+  // a pipeline. Checked here — in code — because a rule that lives only in the authoring
+  // prose cannot be seen by anyone reading the finished document.
+  //
+  // Section headings only (depth >= 2): the document TITLE may well contain the word
+  // ("파이프라인 개선 계획") without the plan ever stating its own pipeline, and counting
+  // that would pass exactly the documents this check exists to catch.
+  const sectionTexts = tree.children
+    .filter((n) => n.type === "heading" && n.depth >= 2)
+    .map((n) => txt(n).toLowerCase());
+  const hasSection = (...keys) => sectionTexts.some((h) => keys.some((k) => h.includes(k)));
+  if (!hasSection("순수함수", "파이프라인", "pure function", "pipeline", "純粋関数", "パイプライン"))
+    lint.push({ level: "warn", message: t("lintNoPipeline") });
+
+  // Marker hygiene, per picture: detail written for a marker that is not on the
+  // picture is a pairing mistake (never silently dropped), and a picture carrying
+  // more markers than the eye can follow stops being a picture.
+  for (const b of pictures) {
+    if (b.type !== "screen") continue;
+    const onPicture = new Set();
+    const walk = (list) => {
+      for (const c of Array.isArray(list) ? list : []) {
+        if (!c || typeof c !== "object") continue;
+        if (c.marker != null && String(c.marker).trim()) onPicture.add(String(c.marker).trim());
+        if (Array.isArray(c.body)) walk(c.body);
+      }
+    };
+    walk(b.body);
+    if (onPicture.size > MAX_MARKERS_PER_PICTURE)
+      lint.push({ level: "warn", message: t("lintMarkerTooMany", onPicture.size, MAX_MARKERS_PER_PICTURE) });
+    // A diagram's markers live in its node labels (the author writes them there),
+    // so pairing can only be checked against a wireframe body.
+    const hasDiagram = Array.isArray(b.diagram)
+      ? b.diagram.some((d) => (typeof d === "string" ? d.trim() : d && typeof d.code === "string" && d.code.trim()))
+      : typeof b.diagram === "string" && b.diagram.trim();
+    if (!hasDiagram) {
+      const orphan = [];
+      for (const grp of [b.functions, b.actions])
+        for (const it of Array.isArray(grp) ? grp : []) {
+          const m = it && it.marker != null ? String(it.marker).trim() : "";
+          if (m && !onPicture.has(m)) orphan.push(m);
+        }
+        if (orphan.length) lint.push({ level: "warn", message: t("lintMarkerUnmatched", orphan.join(", ")) });
+    }
+  }
 
   return { title: docTitle, slug, source: { label: sourceLabel || `${slug}.md`, text: raw }, slides, lint };
 }
