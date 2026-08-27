@@ -1072,7 +1072,12 @@ Pass the **folder** (not a single file) so the three docs merge into one deck, a
 SAME `LANG_RESOLVED` this promote already resolved in Step 0 — the deck's UI chrome
 (buttons, headings, lint messages) follows it; PLAN.md/TESTS.md/FEATURE_ARCHITECTURE.md
 content itself is untouched (it already IS in `LANG_RESOLVED`, written that way in
-Steps 5/6). Output is `scv/promote/<folder>/<folder>.deck.html`; parse `DECK_HTML:` and
+Steps 5/6). The deck's body is the folder's **picture doc**
+(`FEATURE_ARCHITECTURE.md`) — PLAN.md / TESTS.md travel as source-panel tabs. If Step 6
+was skipped there is no picture doc, so the build prints `DECK_SKIPPED:` and writes
+nothing (**exit 0, not an error** — continue to Step 8): relay that one line, and say the
+deck appears once the plan has diagrams. Output is
+`scv/promote/<folder>/<folder>.deck.html`; parse `DECK_HTML:` and
 surface it in the report. In a nested monorepo module, use that module's path
 (`<SCV_DIR>/promote/<folder>`, e.g. `FE/scv/promote/<folder>`). The first run installs a
 slim (~7MB) renderer; if Node/pnpm are missing, relay the error and point to
