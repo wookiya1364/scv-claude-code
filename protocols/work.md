@@ -434,7 +434,11 @@ After a successful archive, remind the user:
 !${CLAUDE_PLUGIN_ROOT}/scripts/deck.sh "scv/archive/<slug>" --lang "<PLAN_LANG>"
 ```
 
-Read `<PLAN_LANG>` from the archived PLAN.md's `lang:` frontmatter (the same field Step 9d reads — set by `/scv:promote` Step 0; English fallback if absent) so the deck's UI chrome matches the language the plan's own content is already written in. This rewrites `scv/archive/<slug>/<slug>.deck.html` (combining PLAN + FEATURE_ARCHITECTURE + TESTS into one scrollable document) so it's committed with the archive. In a nested module, use the module's path (`<SCV_DIR>/archive/<slug>`). If Node/pnpm are missing, relay the error and continue — the archive itself is unaffected.
+Read `<PLAN_LANG>` from the archived PLAN.md's `lang:` frontmatter (the same field Step 9d reads — set by `/scv:promote` Step 0; English fallback if absent) so the deck's UI chrome matches the language the plan's own content is already written in. This rewrites `scv/archive/<slug>/<slug>.deck.html` (the folder's **picture doc**,
+`FEATURE_ARCHITECTURE.md`, as the body; PLAN.md / TESTS.md ride along as source-panel
+tabs) so it's committed with the archive. A plan with no picture doc prints
+`DECK_SKIPPED:` and writes nothing — **exit 0, not an error**: report that line and
+continue. Any deck already sitting in the folder is left untouched. In a nested module, use the module's path (`<SCV_DIR>/archive/<slug>`). If Node/pnpm are missing, relay the error and continue — the archive itself is unaffected.
 
 #### Step 9b.0 — Decision log append (v0.22.0+)
 

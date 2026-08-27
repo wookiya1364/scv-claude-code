@@ -152,7 +152,7 @@ excuse cannot outlive the text it excuses. `tests/test-guard-consistency.sh`
 fails when an anchor no longer matches.
 
 ```guard:exceptions
-core/protocols/deck.md:145 — forbids hand-editing generated output; the opposite of a sanction
+core/protocols/deck.md:162 — forbids hand-editing generated output; the opposite of a sanction
 core/integrations/loop-runner.md:6 — the subject is the user writing their own loop prompt, not the agent authoring a plan
 core/template/scv/raw/README.md:110 — forbids hand-creating a plan folder and says why
 core/protocols/promote.md:43 — forbids moving raw originals by hand
