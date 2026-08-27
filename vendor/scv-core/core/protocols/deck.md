@@ -72,7 +72,7 @@ reports, summaries, and explanations of what went wrong.
 
 ## Step 0 — Resolve the input markdown
 
-`"${SCV_ARGS[@]}"` is a path to a markdown file, or to a `scv/promote|archive/<slug>/` folder — a folder combines PLAN + FEATURE_ARCHITECTURE + TESTS into one document, and is a document-only input (`--slides` takes a single file). If empty:
+`"${SCV_ARGS[@]}"` is a path to a markdown file, or to a `scv/promote|archive/<slug>/` folder — a folder renders the **picture doc** (`FEATURE_ARCHITECTURE.md`) as the document body, and is a document-only input (`--slides` takes a single file). `PLAN.md` / `TESTS.md` still travel with it as source-panel tabs; `--full` puts all three back in the body. A folder with **no** picture doc builds nothing (see `DECK_SKIPPED` below). If empty:
 - Use `Glob` to find likely docs (`docs/**/*.md`, `**/PRD*.md`, `**/기획*.md`, or a `scv/promote/<slug>/PLAN.md`).
 - If several, ask the user which one. If none, tell the user to pass a path: `/scv:deck docs/prd.md`.
 
@@ -118,15 +118,30 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/deck.sh" "${SCV_ARGS[@]}" --lang "<LANG_RESO
 ```
 
 This produces the **document** by default (`--doc` says so explicitly). If the user
-asked for a slide presentation, append `--slides`. Other flags: `--mermaid none` (skip
-the CDN script, always render mermaid as source text), `--no-source` (drop the
-raw-markdown section), `--no-static` (skip the inline-SVG bake and ship the CDN loader
-instead — `SCV_DECK_STATIC=0` in the environment does the same), `--out <path>`.
+asked for a slide presentation, append `--slides`. Other flags: `--full` (a slug folder
+puts PLAN + FEATURE_ARCHITECTURE + TESTS all in the body, the pre-picture-only combine),
+`--mermaid none` (skip the CDN script, always render mermaid as source text),
+`--no-source` (drop the raw-markdown section), `--no-static` (skip the inline-SVG bake
+and ship the CDN loader instead — `SCV_DECK_STATIC=0` in the environment does the same),
+`--out <path>`.
+
+**Why the body is the picture doc.** A 기획서 is a big picture carrying numbered markers
+with the detail hanging off those numbers. `PLAN.md` and `TESTS.md` are prose by nature,
+and combining all three is how a deck came out twenty sections deep with only two of them
+a picture — the wall of sentences the numbered-spec shape exists to remove. Nothing is
+lost: both docs stay one keystroke away in the source panel, and `--full` restores the
+old body exactly. Section-presence lint is still judged over **all three** docs, so
+narrowing the body never invents a missing-section warning.
 
 Parse the emitted lines:
 - `DECK_SLUG:` — the deck id.
 - `LINT: <n> warning(s)` + each `  ⚠ ...` — missing canonical sections.
 - `DECK_HTML:` — absolute path to the built self-contained HTML.
+- `DECK_SKIPPED:` — **instead of** the three lines above: the slug folder has no
+  `FEATURE_ARCHITECTURE.md`, so nothing was built. Exit code is **0, not an error** —
+  relay the reason in one line and keep going. Tell the user their two ways forward:
+  add screen mockups / diagrams to the plan (see `/scv:promote` Step 6), or re-run
+  with `--full` to render the prose docs as the body.
 - `STATIC_MERMAID: embedded diagrams=<n> → <path>` — the bake worked; that deck draws
   its diagrams offline. Document builds only, and only while mermaid is on.
 - `STATIC_MERMAID: skipped (kept CDN render + text fallback)` — on **stderr**, with the
@@ -137,6 +152,8 @@ If the helper errors (missing Node/pnpm), relay it and suggest `/scv:install-dep
 
 ## Step 2 — Report + quality coaching
 
+0. If the build emitted `DECK_SKIPPED`, there is no deck: say so in one line with the
+   reason, offer the two ways forward above, and skip the rest of this step.
 1. Tell the user it's built and **where**: `DECK_HTML`. One-line how-to-open (`open <path>` / double-click) and that it prints to PDF from the browser. The raw markdown travels with it in an always-on **side panel** (toggle button or the `S` key) — a slug-folder combine shows one tab per file (PLAN.md / FEATURE_ARCHITECTURE.md / TESTS.md). Printing swaps the panel for a plain paginated appendix.
 2. When the bake was meant to run — a document build with mermaid on — and no
    `STATIC_MERMAID: embedded` line came back, **say so**. Silence here is how a deck

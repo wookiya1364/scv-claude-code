@@ -181,6 +181,11 @@ BARE=$(grep -E '^import .* from "[^.]' "$DECKDOC/render.mjs" 2>/dev/null | wc -l
 ck "render.mjs has no external imports" "0" "$BARE"
 
 # 9. slug-FOLDER combine → one <slug>.deck.html in the folder; non-spine frontmatter/H1 not leaked.
+#    The three-doc combine these fixtures assert is what --full renders since
+#    20260827-wookiya1364-deck-picture-only made the picture doc the default body;
+#    the assertions are unchanged, only the way PLAN/TESTS reach the body is. The
+#    new default (picture only, prose-only folder builds nothing) is contracted in
+#    test-deck-picture-only.sh.
 SLUGDIR="$TMP/20260101-tester-combine"
 mkdir -p "$SLUGDIR"
 printf '# 결합 기획\n\n## 배경\n\n본문\n' > "$SLUGDIR/PLAN.md"
@@ -188,7 +193,7 @@ printf '# 결합 기획\n\n## 배경\n\n본문\n' > "$SLUGDIR/PLAN.md"
 printf -- '---\ntitle: 위치\nstatus: planned\n---\n\n# 아키텍처 위치\n\n```mermaid\nflowchart LR\n  A-->B\n```\n' > "$SLUGDIR/FEATURE_ARCHITECTURE.md"
 printf '# TESTS\n\n## 인수기준\n\n| ID | 기대 |\n| --- | --- |\n| T1 | ok |\n' > "$SLUGDIR/TESTS.md"
 node "$DECKDOC/doc.mjs" "$SLUGDIR" >/dev/null 2>&1                              # default (committed, with source)
-node "$DECKDOC/doc.mjs" "$SLUGDIR" --out "$TMP/combine-ns.html" --no-source >/dev/null 2>&1
+node "$DECKDOC/doc.mjs" "$SLUGDIR" --out "$TMP/combine-ns.html" --no-source --full >/dev/null 2>&1
 COMBINED="$SLUGDIR/20260101-tester-combine.deck.html"
 CNS="$TMP/combine-ns.html"
 if [[ -f "$COMBINED" ]]; then pass=$((pass+1)); else echo "  ✗ slug combine: <slug>.deck.html not written into the folder"; fail=$((fail+1)); fi
@@ -206,7 +211,7 @@ SLUGDIR3="$TMP/20260101-tester-rule"
 mkdir -p "$SLUGDIR3"
 printf '# 계획\n\n## 배경\n\n스파인\n' > "$SLUGDIR3/PLAN.md"
 printf -- '---\n\n## 인수기준 A\n\nSENTINEL_A\n\n---\n\n## 인수기준 B\n\nSENTINEL_B\n' > "$SLUGDIR3/TESTS.md"
-node "$DECKDOC/doc.mjs" "$SLUGDIR3" --out "$TMP/rule.html" --no-source >/dev/null 2>&1
+node "$DECKDOC/doc.mjs" "$SLUGDIR3" --out "$TMP/rule.html" --no-source --full >/dev/null 2>&1
 has "$TMP/rule.html" 'SENTINEL_A' "leading '---' rule not mistaken for frontmatter (content kept)"
 has "$TMP/rule.html" '인수기준 A'  "section before a later '---' divider preserved"
 has "$TMP/rule.html" 'SENTINEL_B'  "content after the divider preserved"
@@ -214,14 +219,14 @@ SLUGDIR4="$TMP/20260101-tester-setext"
 mkdir -p "$SLUGDIR4"
 printf '# 계획\n\n## 배경\n\n스파인\n' > "$SLUGDIR4/PLAN.md"
 printf '# TESTS 파일 제목\n\n실제 섹션 SETEXT\n=================\n\nSENTINEL_SETEXT\n' > "$SLUGDIR4/TESTS.md"
-node "$DECKDOC/doc.mjs" "$SLUGDIR4" --out "$TMP/setext.html" --no-source >/dev/null 2>&1
+node "$DECKDOC/doc.mjs" "$SLUGDIR4" --out "$TMP/setext.html" --no-source --full >/dev/null 2>&1
 has   "$TMP/setext.html" '실제 섹션 SETEXT' "setext section heading after the file's title preserved"
 hasnt "$TMP/setext.html" 'TESTS 파일 제목'  "the non-spine file's own leading H1 title stripped"
-# missing files handled gracefully: a PLAN-only slug still builds, no TESTS divider
+# missing files handled gracefully: a PLAN-only slug still builds under --full, no TESTS divider
 SLUGDIR2="$TMP/20260101-tester-planonly"
 mkdir -p "$SLUGDIR2"
 printf '# 계획만\n\n## 배경\n\n본문\n' > "$SLUGDIR2/PLAN.md"
-node "$DECKDOC/doc.mjs" "$SLUGDIR2" >/dev/null 2>&1
+node "$DECKDOC/doc.mjs" "$SLUGDIR2" --full >/dev/null 2>&1
 PLANONLY="$SLUGDIR2/20260101-tester-planonly.deck.html"
 if [[ -f "$PLANONLY" ]]; then pass=$((pass+1)); else echo "  ✗ slug combine: PLAN-only slug failed to build"; fail=$((fail+1)); fi
 hasnt "$PLANONLY" 'Tests · Acceptance Criteria' "slug combine: no TESTS divider when TESTS.md absent (English default)"
@@ -388,7 +393,7 @@ SCV_LANG=korean node "$DECKDOC/doc.mjs" "$FIX" "$SLUG" --out "$TMP/lang-env.html
 has "$TMP/lang-env.html" '<html lang="ko">' "SCV_LANG env var is respected when --lang is not passed"
 
 # slug-combine dividers are ALSO localized (doc.mjs's own SLUG_PARTS labels, not just render.mjs)
-node "$DECKDOC/doc.mjs" "$SLUGDIR" --out "$TMP/combine-ko.html" --no-source --lang korean >/dev/null 2>&1
+node "$DECKDOC/doc.mjs" "$SLUGDIR" --out "$TMP/combine-ko.html" --no-source --lang korean --full >/dev/null 2>&1
 has "$TMP/combine-ko.html" '구조 · FEATURE_ARCHITECTURE' "slug combine divider labels localize too (Korean)"
 
 # byte-identical invariant must survive a non-default SCV_LANG (both CLIs read the same var)
@@ -455,7 +460,7 @@ parallel_groups: [[1, 2], [3]]
 2. 테스트 갱신
 3. 문서 동기화
 MD
-node "$DECKDOC/doc.mjs" "$SLUGDIR6" --out "$TMP/grammar.html" --no-source >/dev/null 2>&1
+node "$DECKDOC/doc.mjs" "$SLUGDIR6" --out "$TMP/grammar.html" --no-source --full >/dev/null 2>&1
 GR="$TMP/grammar.html"
 has "$GR" '<h2>Guardrails</h2>'      "PLAN grammar: Guardrails renders as a normal H2 section"
 has "$GR" '<h2>Exit criteria</h2>'   "PLAN grammar: Exit criteria renders as a normal H2 section"

@@ -59,6 +59,8 @@ const STRINGS = {
     screenParseErrorTitle: "Screen Mockup Parse Error",
     screenParseErrorText: (msg) =>
       `The JSON inside this screen block is invalid (${msg}). Check this block in the source panel.`,
+    deckSkippedNoPicture:
+      "no picture document (FEATURE_ARCHITECTURE.md) — nothing built. PLAN.md / TESTS.md already hold that prose; add screen mockups or diagrams, or pass --full to render all three.",
     featureArchitectureLabel: "📐 Structure · FEATURE_ARCHITECTURE",
     testsLabel: "✅ Tests · Acceptance Criteria (TESTS)",
   },
@@ -112,6 +114,8 @@ const STRINGS = {
     pageCodeLabel: "PAGE CODE",
     screenParseErrorTitle: "화면 목업 파싱 오류",
     screenParseErrorText: (msg) => `screen 블록의 JSON이 올바르지 않습니다 (${msg}). 원문 패널에서 이 블록을 확인하세요.`,
+    deckSkippedNoPicture:
+      "그림 문서(FEATURE_ARCHITECTURE.md)가 없어 기획서를 만들지 않았습니다. 그 내용은 이미 PLAN.md / TESTS.md 에 있습니다 — 화면 목업이나 다이어그램을 추가하거나, 셋 다 보려면 --full 을 쓰세요.",
     featureArchitectureLabel: "📐 구조 · FEATURE_ARCHITECTURE",
     testsLabel: "✅ 테스트 · 인수기준 (TESTS)",
   },
@@ -165,6 +169,8 @@ const STRINGS = {
     pageCodeLabel: "PAGE CODE",
     screenParseErrorTitle: "画面モックアップ解析エラー",
     screenParseErrorText: (msg) => `screen ブロックのJSONが正しくありません (${msg})。原文パネルでこのブロックを確認してください。`,
+    deckSkippedNoPicture:
+      "図のドキュメント(FEATURE_ARCHITECTURE.md)がないため企画書を作成しませんでした。その内容は既に PLAN.md / TESTS.md にあります — 画面モックアップや図を追加するか、三つとも見るには --full を指定してください。",
     featureArchitectureLabel: "📐 構造 · FEATURE_ARCHITECTURE",
     testsLabel: "✅ テスト · 受入基準 (TESTS)",
   },
