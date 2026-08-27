@@ -47,7 +47,7 @@ DECK_RUNTIME="$SCRIPT_DIR/deck-runtime.sh"
 die() { echo "ERROR: $*" >&2; exit 1; }
 
 # ---- args ----
-MD=""; SLUG=""; OUT=""; MODE="doc"; MERMAID="cdn"; SOURCE_FLAG=""; LANG_ARG=""; STATIC="${SCV_DECK_STATIC:-1}"
+MD=""; SLUG=""; OUT=""; MODE="doc"; MERMAID="cdn"; SOURCE_FLAG=""; LANG_ARG=""; FULL_FLAG=""; STATIC="${SCV_DECK_STATIC:-1}"
 while (( $# )); do
   case "$1" in
     --slides) MODE="slides" ;;
@@ -59,6 +59,7 @@ while (( $# )); do
     --lang) LANG_ARG="${2:-}"; shift ;;
     --lang=*) LANG_ARG="${1#--lang=}" ;;
     --no-source) SOURCE_FLAG="--no-source" ;;
+    --full) FULL_FLAG="--full" ;;
     --no-static) STATIC=0 ;;
     -h|--help) sed -n '11,36p' "$0"; exit 0 ;;
     -*) die "unknown flag: $1" ;;
@@ -113,9 +114,9 @@ if [[ "$MODE" == "doc" ]]; then
   # folder so doc.mjs defaults the file into the folder. Capture stdout (and
   # replay it verbatim) so the built path is known for the static-embed step.
   if [[ -n "$OUT" ]]; then
-    BUILD_OUT=$(node "$DECKDOC/doc.mjs" "$MD" "$SLUG" --out "$OUT" --mermaid "$MERMAID" $SOURCE_FLAG $LANG_FLAG) || die "document build failed"
+    BUILD_OUT=$(node "$DECKDOC/doc.mjs" "$MD" "$SLUG" --out "$OUT" --mermaid "$MERMAID" $SOURCE_FLAG $LANG_FLAG $FULL_FLAG) || die "document build failed"
   else
-    BUILD_OUT=$(node "$DECKDOC/doc.mjs" "$MD" "$SLUG" --mermaid "$MERMAID" $SOURCE_FLAG $LANG_FLAG) || die "document build failed"
+    BUILD_OUT=$(node "$DECKDOC/doc.mjs" "$MD" "$SLUG" --mermaid "$MERMAID" $SOURCE_FLAG $LANG_FLAG $FULL_FLAG) || die "document build failed"
   fi
   printf '%s\n' "$BUILD_OUT"
   BUILT=$(printf '%s\n' "$BUILD_OUT" | sed -n 's/^DECK_HTML: //p' | tail -1)
