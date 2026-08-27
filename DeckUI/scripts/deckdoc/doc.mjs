@@ -7,16 +7,19 @@
 //
 // Input can be EITHER:
 //   • a single markdown file, OR
-//   • an scv slug FOLDER (scv/promote/<slug>/ or scv/archive/<slug>/) — then PLAN.md
-//     + FEATURE_ARCHITECTURE.md + TESTS.md are combined into ONE 기획서, written next
-//     to the markdown as <slug>.deck.html. This is what /scv:promote and /scv:work
-//     regenerate so the deck always tracks the plan.
+//   • an scv slug FOLDER (scv/promote/<slug>/ or scv/archive/<slug>/) — then the
+//     PICTURE doc (FEATURE_ARCHITECTURE.md) becomes the 기획서, written next to the
+//     markdown as <slug>.deck.html. PLAN.md / TESTS.md still travel as source-panel
+//     tabs; --full puts all three back in the body. A folder with no picture doc
+//     builds NOTHING (prints DECK_SKIPPED, exits 0) rather than a wall of prose.
+//     This is what /scv:promote and /scv:work regenerate so the deck tracks the plan.
 //
-// Usage: node doc.mjs <input.md|slug-dir> [slug] [--out <path>] [--mermaid cdn|none] [--no-source] [--emit-json]
+// Usage: node doc.mjs <input.md|slug-dir> [slug] [--out <path>] [--mermaid cdn|none] [--no-source] [--emit-json] [--full]
 // Emits (for deck.sh to parse):
 //   DECK_SLUG: <slug>
 //   LINT: <n> warning(s)   (+ one "  ⚠ ..." line each)
 //   DECK_HTML: <absolute path>
+//   DECK_SKIPPED: <reason>   (instead of the three above — no picture doc, nothing built)
 
 import { readFileSync, writeFileSync, mkdirSync, statSync, existsSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
@@ -27,10 +30,9 @@ import { makeT } from "./i18n.mjs";
 const normalizeSlug = (s) =>
   s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "deck";
 
-// A slug folder's parts, in reading order. The first present file is the SPINE
-// (its H1 becomes the document title); the rest are appended under a labeled
-// divider with their own leading H1 stripped (the spine already titled the doc).
-// Labels are resolved to `lang` (English default — see i18n.mjs).
+// A slug folder's parts, in reading order. Which of them reach the rendered body is
+// decided by selectRenderParts below; every present part always reaches the source
+// panel. Labels are resolved to `lang` (English default — see i18n.mjs).
 function slugParts(t) {
   return [
     { file: "PLAN.md", label: null },
@@ -38,24 +40,44 @@ function slugParts(t) {
     { file: "TESTS.md", label: t("testsLabel") },
   ];
 }
-function buildSlugDoc(dir, t) {
+// The picture document. A 기획서 is a BIG PICTURE carrying numbered markers with
+// the detail hanging off those numbers — that shape lives in FEATURE_ARCHITECTURE.md.
+// PLAN.md / TESTS.md are prose by nature, and combining all three is how a deck came
+// out twenty sections deep with only two of them a picture. They still travel with
+// the deck as source-panel tabs, so nothing is lost — only the BODY narrows.
+const PICTURE_PART = "FEATURE_ARCHITECTURE.md";
+
+// ① 읽기 — the only file read on the folder path (pipeline entry; side effect).
+function readSlugParts(dir, t) {
   const present = slugParts(t)
     .map((p) => ({ ...p, path: resolve(dir, p.file) }))
     .filter((p) => existsSync(p.path));
   if (!present.length)
     throw new Error(`slug folder has no PLAN.md / FEATURE_ARCHITECTURE.md / TESTS.md: ${dir}`);
-  const parts = [];
-  const sources = []; // pristine per-file text for the side panel — never the stripped/joined version
-  present.forEach((p, i) => {
-    const text = readFileSync(p.path, "utf8").trim();
-    sources.push({ label: p.file, text });
-    // Spine keeps its frontmatter (parsed at document start) + H1 as the doc title.
-    // Non-spine parts get their leading frontmatter/title stripped (parser-based, so
-    // a leading `---` rule or a following section heading is preserved).
-    if (i === 0) parts.push(text);
-    else parts.push(`\n\n---\n\n## ${p.label || p.file.replace(/\.md$/i, "")}\n\n${stripLeadingMeta(text)}`);
-  });
-  return { raw: parts.join("\n"), label: present.map((p) => p.file).join(" + "), sources };
+  // pristine per-file text — never the stripped/joined version
+  return present.map((p) => ({ file: p.file, label: p.label, text: readFileSync(p.path, "utf8").trim() }));
+}
+
+// ② 고르기 — pure. Splits "what gets rendered as the body" from "what travels as a
+// source tab". Default: the picture doc alone. `full` restores the three-doc combine.
+function selectRenderParts(parts, { full = false } = {}) {
+  return { body: full ? parts : parts.filter((p) => p.file === PICTURE_PART), sources: parts };
+}
+
+// ③ 본문 만들기 — pure. The first body part is the SPINE (its H1 titles the document);
+// the rest are appended under a labeled divider with their own leading H1 stripped.
+// A lone body part needs neither divider nor label — it IS the document.
+function composeBody(bodyParts) {
+  return bodyParts
+    .map((p, i) =>
+      // Spine keeps its frontmatter (parsed at document start) + H1 as the doc title.
+      // Non-spine parts get their leading frontmatter/title stripped (parser-based, so
+      // a leading `---` rule or a following section heading is preserved).
+      i === 0
+        ? p.text
+        : `\n\n---\n\n## ${p.label || p.file.replace(/\.md$/i, "")}\n\n${stripLeadingMeta(p.text)}`,
+    )
+    .join("\n");
 }
 
 // ---- args ----
@@ -69,6 +91,7 @@ let OUT = "";
 let MERMAID = "cdn";
 let SOURCE = true;
 let EMIT_JSON = false;
+let FULL = false;
 let LANG = process.env.SCV_LANG || "english";
 const argv = process.argv.slice(2);
 for (let i = 0; i < argv.length; i++) {
@@ -81,9 +104,10 @@ for (let i = 0; i < argv.length; i++) {
   else if (a.startsWith("--lang=")) LANG = a.slice(7);
   else if (a === "--no-source") SOURCE = false;
   else if (a === "--emit-json") EMIT_JSON = true;
+  else if (a === "--full") FULL = true;
   else if (a === "-h" || a === "--help") {
     console.log(
-      "usage: doc.mjs <input.md|slug-dir> [slug] [--out <path>] [--mermaid cdn|none] [--lang english|korean|japanese] [--no-source] [--emit-json]",
+      "usage: doc.mjs <input.md|slug-dir> [slug] [--out <path>] [--mermaid cdn|none] [--lang english|korean|japanese] [--no-source] [--emit-json] [--full]",
     );
     process.exit(0);
   } else if (a.startsWith("-")) {
@@ -106,28 +130,45 @@ if (!existsSync(INPUT)) {
 // ---- resolve input → (raw markdown, slug, source label, default output) ----
 const isDir = statSync(INPUT).isDirectory();
 let raw, slug, sourceLabel, defaultOut, sources;
+// Section-presence lint is judged over EVERY part, not just the rendered body —
+// see mdToDeck's `lintRaw`.
+let lintRaw;
 if (isDir) {
-  let combined;
+  let parts;
   try {
-    combined = buildSlugDoc(INPUT, t);
+    parts = readSlugParts(INPUT, t);
   } catch (e) {
     console.error(e.message);
     process.exit(1);
   }
-  raw = combined.raw;
+  const picked = selectRenderParts(parts, { full: FULL });
+  if (!picked.body.length) {
+    // ⑥ 만들 것 없음. A deck of nothing but prose is the wall of sentences this
+    // default exists to remove, and that prose already lives in PLAN.md / TESTS.md.
+    // Not an error: callers (/scv:promote, /scv:work) must keep going.
+    console.log(`DECK_SKIPPED: ${t("deckSkippedNoPicture")}`);
+    process.exit(0);
+  }
+  raw = composeBody(picked.body);
+  // Composed the SAME way as the body, over every part — so the divider labels the
+  // combine injects (e.g. "Acceptance Criteria (TESTS)") are present for the lint here
+  // exactly as they were when all three docs were the body. With --full the two strings
+  // are identical, so the deck comes out byte-for-byte as it did before this default.
+  lintRaw = composeBody(parts);
   slug = normalizeSlug(SLUG || basename(INPUT));
-  sourceLabel = combined.label;
-  sources = combined.sources; // pristine PLAN.md/FEATURE_ARCHITECTURE.md/TESTS.md — one tab each
+  sourceLabel = picked.body.map((p) => p.file).join(" + ");
+  sources = picked.sources.map((p) => ({ label: p.file, text: p.text })); // one tab each
   defaultOut = resolve(INPUT, `${slug}.deck.html`); // lives next to the markdown, committed
 } else {
   raw = readFileSync(INPUT, "utf8");
+  lintRaw = raw;
   slug = normalizeSlug(SLUG || basename(INPUT).replace(/\.md$/i, ""));
   sourceLabel = basename(INPUT);
   sources = [{ label: sourceLabel, text: raw }];
   defaultOut = resolve(process.cwd(), `${slug}-doc.html`);
 }
 
-const data = mdToDeck(raw, slug, sourceLabel, LANG);
+const data = mdToDeck(raw, slug, sourceLabel, LANG, lintRaw);
 // render.mjs already guards the known crash vectors (wrong-typed screen-DSL fields,
 // runaway nesting); this catch is defense-in-depth for anything still unforeseen —
 // a clear error + nonzero exit beats a raw Node stack trace and zero bytes written.
