@@ -15,7 +15,7 @@
 #   T9  a deck with zero pictures raises a lint warning (and still builds)
 #   T10 a deck WITH a picture does not raise it (no false warning)
 #   T11 promote.md requires the spec material and warns-without-blocking
-#   T13 an archived plan folder still builds and gains no empty sidebar
+#   T13 archived plans resolve — screen builds, screenless gains no sidebar, prose skips
 #
 # Structural assertions target a --no-source render so a grep can never match the
 # raw-markdown side panel instead of the rendered body (the mistake that let
@@ -431,29 +431,60 @@ has "$RENDER" 'svg .messageText' "T29 메시지 글자 색 규칙"
 has "$RENDER" '.sectionTitle'    "T29 else 분기 라벨 색 규칙"
 has "$RENDER" 'svg .actor'       "T29 참여자 상자 색 규칙"
 
-# ── T13. an archived plan still builds, gains no empty sidebar ───────────────
-echo "T13. 아카이브된 기획서를 다시 만들어도 지금과 같이 열린다"
-# Pick a plan from BEFORE this format existed — one whose docs carry no screen
-# block at all. `tail -1` used to mean that and silently stopped meaning it the
-# moment this very feature was archived: the newest folder became a plan that
-# legitimately renders a sidebar, and the "no empty sidebar" assertion started
-# failing on correct output. The property under test is "an old plan still builds
-# and gains nothing it did not ask for", so select for that property, not for age.
-ARCH=""
+# ── T13. archived plans still resolve — all three kinds ──────────────────────
+# Selection is by PROPERTY, never by age. `tail -1` used to mean "a plan from
+# before this format" and silently stopped meaning it the moment this very
+# feature was archived: the newest folder became a plan that legitimately
+# renders a sidebar, and the "no empty sidebar" assertion started failing on
+# correct output. Since 20260827-deck-picture-only there are three properties
+# worth holding, so each is asserted against a real folder that has it:
+#   · a plan carrying a screen block  → builds, mockup renders
+#   · a picture doc with no screen block → builds, gains NO empty sidebar
+#     (the pre-format guarantee — T8 backs the same property with a golden file)
+#   · no picture doc at all → builds NOTHING, says why, exit 0
+echo "T13. 아카이브된 계획이 세 종류 모두 제대로 처리된다"
+ARCH_SCREEN=""; ARCH_NOSCREEN=""; ARCH_PROSE=""
 for d in $(ls -dr "$REPO"/scv/archive/*/ 2>/dev/null); do
-  grep -rqlF '```screen' "$d" 2>/dev/null && continue
-  ARCH="$d"; break
-done
-if [[ -n "$ARCH" && -f "$ARCH/PLAN.md" ]]; then
-  if node "$DOC" "$ARCH" --out "$TMP/arch.html" --lang korean --no-source >"$TMP/log" 2>&1; then
-    pass=$((pass+1))
-    hasnt "$TMP/arch.html" 'class="wf-spec"'  "T13 빈 사이드바 없음"
-    hasnt "$TMP/arch.html" 'class="wf-pagebar"' "T13 빈 페이지 바 없음"
+  [[ -f "$d/PLAN.md" ]] || continue
+  if [[ ! -f "$d/FEATURE_ARCHITECTURE.md" ]]; then
+    [[ -n "$ARCH_PROSE" ]] || ARCH_PROSE="$d"
+  elif grep -rqlF '```screen' "$d" 2>/dev/null; then
+    [[ -n "$ARCH_SCREEN" ]] || ARCH_SCREEN="$d"
   else
-    echo "  ✗ T13 아카이브 빌드 실패"; cat "$TMP/log"; fail=$((fail+1))
+    [[ -n "$ARCH_NOSCREEN" ]] || ARCH_NOSCREEN="$d"
+  fi
+done
+
+if [[ -n "$ARCH_SCREEN" ]]; then
+  if node "$DOC" "$ARCH_SCREEN" --out "$TMP/arch.html" --lang korean --no-source >"$TMP/log" 2>&1; then
+    pass=$((pass+1))
+    has "$TMP/arch.html" 'wf-screen' "T13 화면 블록이 있는 계획은 목업이 렌더된다"
+  else
+    echo "  ✗ T13 화면 있는 아카이브 빌드 실패"; cat "$TMP/log"; fail=$((fail+1))
   fi
 else
-  echo "  ✗ T13 — no archive folder found"; fail=$((fail+1))
+  echo "  · T13 건너뜀 (화면 블록 있는 아카이브 없음)"
+fi
+
+if [[ -n "$ARCH_NOSCREEN" ]]; then
+  if node "$DOC" "$ARCH_NOSCREEN" --out "$TMP/arch1.html" --lang korean --no-source >"$TMP/log" 2>&1; then
+    pass=$((pass+1))
+    hasnt "$TMP/arch1.html" 'class="wf-spec"'    "T13 빈 사이드바 없음"
+    hasnt "$TMP/arch1.html" 'class="wf-pagebar"' "T13 빈 페이지 바 없음"
+  else
+    echo "  ✗ T13 화면 없는 그림 문서 빌드 실패"; cat "$TMP/log"; fail=$((fail+1))
+  fi
+else
+  echo "  · T13 건너뜀 (화면 없는 그림 문서 아카이브 없음)"
+fi
+
+if [[ -n "$ARCH_PROSE" ]]; then
+  node "$DOC" "$ARCH_PROSE" --out "$TMP/arch2.html" --lang korean --no-source >"$TMP/log" 2>&1
+  ck "T13 그림 문서 없는 계획도 오류가 아니다" "0" "$?"
+  has "$TMP/log" "DECK_SKIPPED:" "T13 그림 문서 없는 계획은 만들지 않고 사유를 낸다"
+  ck "T13 그림 문서 없는 계획은 파일을 쓰지 않는다" "0" "$( [[ -f "$TMP/arch2.html" ]] && echo 1 || echo 0 )"
+else
+  echo "  · T13 건너뜀 (그림 문서 없는 아카이브 없음)"
 fi
 
 echo

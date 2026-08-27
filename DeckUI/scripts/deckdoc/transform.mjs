@@ -295,7 +295,7 @@ export function stripLeadingMeta(md) {
 // language (English default — see i18n.mjs; the SOURCE content itself is never
 // translated, only strings this transform generates). Returns
 // { title, slug, source, slides, lint }.
-export function mdToDeck(raw, slug, sourceLabel, lang) {
+export function mdToDeck(raw, slug, sourceLabel, lang, lintRaw) {
   const t = makeT(lang);
   const tree = unified()
     .use(remarkParse)
@@ -365,7 +365,17 @@ export function mdToDeck(raw, slug, sourceLabel, lang) {
   }
 
   // Lint: canonical planning-doc sections (KO/EN aliases). Warn — never fill in.
-  const headingTexts = tree.children.filter((n) => n.type === "heading").map((n) => txt(n).toLowerCase());
+  //
+  // Judged over `lintRaw` — EVERY part of the slug folder — not the rendered body.
+  // The default deck renders only the picture doc, and scanning that alone would warn
+  // about 비목표 / 성공지표 / 인수기준 / 예외처리 / 파이프라인 that DO exist, in PLAN.md.
+  // Only the section-presence checks move; the picture-density check below stays on the
+  // rendered body, because a body with no picture is exactly what it must still catch.
+  const lintTree =
+    lintRaw != null && lintRaw !== raw
+      ? unified().use(remarkParse).use(remarkGfm).use(remarkFrontmatter, ["yaml"]).parse(lintRaw)
+      : tree;
+  const headingTexts = lintTree.children.filter((n) => n.type === "heading").map((n) => txt(n).toLowerCase());
   const has = (...keys) => headingTexts.some((h) => keys.some((k) => h.includes(k)));
   const lint = [];
   if (!has("non-goal", "비목표", "out of scope", "범위 밖", "하지 않"))
@@ -395,7 +405,7 @@ export function mdToDeck(raw, slug, sourceLabel, lang) {
   // Section headings only (depth >= 2): the document TITLE may well contain the word
   // ("파이프라인 개선 계획") without the plan ever stating its own pipeline, and counting
   // that would pass exactly the documents this check exists to catch.
-  const sectionTexts = tree.children
+  const sectionTexts = lintTree.children
     .filter((n) => n.type === "heading" && n.depth >= 2)
     .map((n) => txt(n).toLowerCase());
   const hasSection = (...keys) => sectionTexts.some((h) => keys.some((k) => h.includes(k)));
