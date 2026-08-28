@@ -8,6 +8,7 @@
     "SCV_PLAIN_LANGUAGE": "쉬운 말 규칙(답의 모양)과 매 턴 안내: on(기본) | off. off 만 끕니다.",
     "SCV_PLAIN_MAX_SENTENCES": "첫 답의 문장 수 상한. 양의 정수, 기본 2 (3–4 가 실용).",
     "SCV_ALWAYS_ON": "일반 대화도 SCV 로: on(기본, 매 메시지를 help 라우팅) | off(명령을 칠 때만).",
+    "SCV_FORCE_HELP": "help 호출을 기계로 강제: on(기본, 부르지 않고 답을 끝내면 되돌려 세운다) | off(안내만). 회차마다 요구가 강해지고 상한은 두지 않는다 — 마지막 안전망은 호스트다.",
     "NOTIFIER_PROVIDER": "팀 보고 채널: slack | discord. 비우면 보고 기능 꺼짐. 토큰·채널 ID 는 비밀 파일에.",
     "NOTIFIER_DRY_RUN": "1 이면 보고를 보내지 않고 내용만 찍음. 기본 0.",
     "NOTIFIER_RETRY_MAX": "보고 전송·첨부 업로드 재시도 횟수. 기본 3.",
@@ -40,6 +41,7 @@
   "SCV_PLAIN_LANGUAGE": "on",
   "SCV_PLAIN_MAX_SENTENCES": "2",
   "SCV_ALWAYS_ON": "on",
+  "SCV_FORCE_HELP": "on",
 
   "NOTIFIER_PROVIDER": "",
   "NOTIFIER_DRY_RUN": "0",

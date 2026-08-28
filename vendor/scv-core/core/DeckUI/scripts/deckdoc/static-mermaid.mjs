@@ -23,6 +23,7 @@ import { createServer } from "node:http";
 import { spawn, spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createHash } from "node:crypto";
 
 const args = process.argv.slice(2);
 let input = "";
@@ -182,6 +183,12 @@ dom = dom
 // Fails OPEN: a markup change in a future mermaid degrades to today's baked
 // colours rather than failing the build.
 function normalizeMermaidSvg(input) {
+  // One document holds several diagrams, and every one of them carries a whole
+  // family of ids: the svg itself, arrowhead markers, drop-shadow filters, the
+  // gradient. Give two diagrams the same id and every url(#…) in the document
+  // resolves to whichever element the parser met first — so diagram three drew
+  // diagram one's arrowheads. Uniqueness is not cosmetic here.
+  const usedIds = new Map();
   try {
     return input.replace(/<svg\b[^>]*\bid="mermaid-\d+"[\s\S]*?<\/svg>/g, (svg) => {
       let s = svg;
@@ -202,9 +209,22 @@ function normalizeMermaidSvg(input) {
       });
 
       // A build-timestamp id makes every rebuild a different file; this artifact
-      // is committed on every promote. Fixed id, stable bytes, and url(#…)
-      // marker references stay consistent because the rename is global.
-      s = s.split(id).join("scv-mmd-1");
+      // is committed on every promote. So the id must be stable — but a single
+      // fixed value bought that stability by making every diagram identical,
+      // which is the collision described above.
+      //
+      // Deriving it from the drawing itself satisfies both: the same picture
+      // always yields the same id, a different picture a different one, and the
+      // value does not depend on where the diagram sits in the document — insert
+      // one at the top and the others' bytes do not move. The hash is taken with
+      // the old id neutralised so it describes the picture, not the render order.
+      const canonical = s.split(id).join("@SCV_MMD_ID@");
+      const digest = createHash("sha256").update(canonical).digest("hex").slice(0, 10);
+      // Two byte-identical diagrams in one document would land on the same
+      // digest, which is the very thing being fixed — number the repeats.
+      const seen = (usedIds.get(digest) || 0) + 1;
+      usedIds.set(digest, seen);
+      s = s.split(id).join(seen === 1 ? "scv-mmd-" + digest : "scv-mmd-" + digest + "-" + seen);
       s = s.replace(/<svg\b/, '<svg class="scv-mmd"');
 
       // Natural size, not 100% of a 694px column. The viewBox is the only place
