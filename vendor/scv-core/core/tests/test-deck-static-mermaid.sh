@@ -72,7 +72,16 @@ if node "$DECKDOC/static-mermaid.mjs" "$TMP/deck.html" > "$TMP/embed.out" 2> "$T
   # comes back, the diagram freezes to whatever the author pasted into the fence
   # and the deck can no longer theme what it renders.
   has   "$TMP/deck.html" 'class="scv-mmd"'                      "the svg is normalized for restyling"
-  has   "$TMP/deck.html" 'id="scv-mmd-1"'                       "the svg id is deterministic (rebuilds stay byte-identical)"
+  # The id must be BOTH stable across rebuilds and unique within the document.
+  # A single fixed value bought the first at the cost of the second, and the
+  # cost was not cosmetic: every arrowhead marker, filter and gradient is keyed
+  # off this id, so identical ids made three diagrams share the first one's
+  # markers. It is now derived from the drawing itself.
+  if grep -qE 'id="scv-mmd-[0-9a-f]{10}(-[0-9]+)?"' "$TMP/deck.html"; then pass=$((pass+1)); else
+    echo "  ✗ the svg id is not derived from the diagram's content"; fail=$((fail+1)); fi
+  if grep -q 'id="scv-mmd-1"' "$TMP/deck.html"; then
+    echo "  ✗ the old single fixed id is back — diagrams would share markers"; fail=$((fail+1))
+  else pass=$((pass+1)); fi
   if grep -qE '#mermaid-[0-9]' "$TMP/deck.html"; then
     echo "  ✗ id-scoped mermaid rules survived — author CSS cannot win"; fail=$((fail+1))
   else pass=$((pass+1)); fi
@@ -92,6 +101,88 @@ else
   else
     echo "  ✗ embed failed with rc=$rc but input was modified or wrong exit code"; fail=$((fail+1))
   fi
+fi
+
+echo ""
+
+# ---- several diagrams in ONE document ---------------------------------------
+# The single-diagram fixture above cannot see this class of bug at all. With two
+# or more, mermaid's clock-derived ids collided inside the same millisecond: the
+# loser resolved its id to the winner's element and came out as an empty <svg>
+# with no viewBox — which is how a wireframe diagram rendered blank while the
+# ones before it were fine.
+cat > "$TMP/multi.md" <<'EOF'
+# Multi
+
+## One
+
+```mermaid
+flowchart LR
+  A["첫째"] -->|간다| B["둘째"]
+```
+
+## Two
+
+```mermaid
+flowchart TB
+  C["셋째"] --> D["넷째"]
+  D --> E["다섯째"]
+```
+
+## Three
+
+```mermaid
+flowchart LR
+  F["여섯째"] --> G["일곱째"]
+```
+EOF
+
+if node "$DECKDOC/doc.mjs" "$TMP/multi.md" --out "$TMP/multi.html" --no-source >/dev/null 2>&1 \
+   && node "$DECKDOC/static-mermaid.mjs" "$TMP/multi.html" > "$TMP/multi.out" 2>/dev/null; then
+  ids="$(grep -oE '<svg [^>]*class="scv-mmd" id="[^"]+"' "$TMP/multi.html" | sed 's/.*id="//; s/"$//')"
+  [[ -z "$ids" ]] && ids="$(grep -oE 'id="scv-mmd-[0-9a-f]{10}(-[0-9]+)?"' "$TMP/multi.html" | sort -u | sed 's/id="//; s/"$//')"
+  n_total=$(printf '%s\n' "$ids" | grep -c . || true)
+  n_uniq=$(printf '%s\n' "$ids" | sort -u | grep -c . || true)
+  if [[ "$n_total" -ge 3 && "$n_total" -eq "$n_uniq" ]]; then pass=$((pass+1)); else
+    echo "  ✗ diagram ids are not unique within one document ($n_total found, $n_uniq distinct)"; fail=$((fail+1)); fi
+
+  # An empty graphic is the collision's other face — assert it directly.
+  if grep -q '<g></g></svg>' "$TMP/multi.html"; then
+    echo "  ✗ a diagram rendered empty — id collision is back"; fail=$((fail+1))
+  else pass=$((pass+1)); fi
+
+  # No viewBox means no size, and the svg keeps width="100%" and collapses.
+  if grep -qE '<svg[^>]*class="scv-mmd"[^>]*width="100%"' "$TMP/multi.html"; then
+    echo "  ✗ a diagram carries no size (width stayed 100%)"; fail=$((fail+1))
+  else pass=$((pass+1)); fi
+
+  # Markers are keyed off the diagram id; duplicates make every diagram borrow
+  # the first one's arrowheads.
+  mk_total=$(grep -oE 'id="scv-mmd-[0-9a-f]{10}(-[0-9]+)?_flowchart-v2-pointEnd"' "$TMP/multi.html" | grep -c . || true)
+  mk_uniq=$(grep -oE 'id="scv-mmd-[0-9a-f]{10}(-[0-9]+)?_flowchart-v2-pointEnd"' "$TMP/multi.html" | sort -u | grep -c . || true)
+  if [[ "$mk_total" -eq "$mk_uniq" ]]; then pass=$((pass+1)); else
+    echo "  ✗ arrowhead marker ids collide ($mk_total found, $mk_uniq distinct)"; fail=$((fail+1)); fi
+
+  # Byte stability is the contract this artifact is committed under.
+  h1=$(sha256sum "$TMP/multi.html" | cut -d' ' -f1)
+  node "$DECKDOC/doc.mjs" "$TMP/multi.md" --out "$TMP/multi2.html" --no-source >/dev/null 2>&1
+  node "$DECKDOC/static-mermaid.mjs" "$TMP/multi2.html" >/dev/null 2>&1
+  h2=$(sha256sum "$TMP/multi2.html" | cut -d' ' -f1)
+  if [[ "$h1" == "$h2" ]]; then pass=$((pass+1)); else
+    echo "  ✗ two builds of the same input differ — the committed artifact would churn"; fail=$((fail+1)); fi
+
+  # Inserting a diagram must not move the others' bytes. That is the whole
+  # reason the id comes from the content and not from a sequence number.
+  { printf '# Multi\n\n## Zero\n\n```mermaid\nflowchart LR\n  Z1["끼움"] --> Z2["시험"]\n```\n\n'; tail -n +2 "$TMP/multi.md"; } > "$TMP/multi3.md"
+  if node "$DECKDOC/doc.mjs" "$TMP/multi3.md" --out "$TMP/multi3.html" --no-source >/dev/null 2>&1 \
+     && node "$DECKDOC/static-mermaid.mjs" "$TMP/multi3.html" >/dev/null 2>&1; then
+    kept=0
+    for one in $ids; do grep -q "id=\"$one\"" "$TMP/multi3.html" && kept=$((kept+1)); done
+    if [[ "$kept" -eq "$n_total" ]]; then pass=$((pass+1)); else
+      echo "  ✗ inserting a diagram changed the others' ids ($kept/$n_total kept)"; fail=$((fail+1)); fi
+  fi
+else
+  echo "  (multi-diagram checks skipped in this environment)"
 fi
 
 echo ""
