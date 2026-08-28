@@ -20,6 +20,25 @@ running. The model cannot fabricate a host event, which is what makes the receip
 worth keying on — unlike any marker written into the project, which the model
 could write itself.
 
+### The receipt store has a second, read-only consumer
+
+The stop hook reads the same store to answer a different question: did the help
+action actually run during *this* turn? It never mints. That asymmetry is the
+whole point — the receipt is worth reading precisely because only a host event
+creates one, and a consumer that could write would destroy the property it
+relies on.
+
+Two consequences bind anyone changing this file:
+
+- **The path rule is shared, not copied.** Both sides resolve the store through
+  `scripts/lib/force-help.sh`. A divergent path does not fail loudly; it reads
+  an empty store and silently stops enforcing. The guard keeps an identical
+  inline fallback for when that library is absent, so a missing library changes
+  nothing about what the guard denies.
+- **Reading must never gate the guard.** The consumer's failures (unreadable
+  store, missing turn marker) resolve to "do not enforce", never to "deny".
+  The guard's own fail-closed policy below is unchanged and unrelated.
+
 ## Guarded path classes
 
 ```guard:guarded
