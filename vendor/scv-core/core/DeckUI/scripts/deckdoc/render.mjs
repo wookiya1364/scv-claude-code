@@ -1071,7 +1071,16 @@ export function renderHtml(data, opts = {}) {
     // not measure with it, fell back to a default width of 200px per label, and
     // every label longer than that was clipped inside its foreignObject.
     const SCV_FONT_STACK = '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR",sans-serif';
-    mermaid.initialize({ startOnLoad: false, theme: "base", themeVariables: { fontFamily: SCV_FONT_STACK, fontSize: "16px" }, flowchart: { useMaxWidth: false, htmlLabels: true }, securityLevel: "strict" });
+    // deterministicIds: mermaid's default id is clock-derived, so two diagrams
+    // rendered inside the same millisecond receive the SAME id — measured: a
+    // three-diagram deck where diagrams 2 and 3 both got the id mermaid-1787895796165.
+    // (No backticks in this block: it lives inside a template literal.)
+    // The loser then resolves its own id to the winner's element and finishes as
+    // an empty <svg> with no viewBox, which is exactly how a wireframe diagram
+    // came out blank while the two before it were fine. Deterministic ids are
+    // sequential per run, so they never collide, and being clock-free they also
+    // keep the built file byte-stable across rebuilds.
+    mermaid.initialize({ startOnLoad: false, theme: "base", themeVariables: { fontFamily: SCV_FONT_STACK, fontSize: "16px" }, flowchart: { useMaxWidth: false, htmlLabels: true }, securityLevel: "strict", deterministicIds: true, deterministicIDSeed: "scv-deck" });
     // Scoped to the ACTIVE page only: mermaid measures text at run-time, so a diagram
     // processed while its .slide-page is display:none comes out zero/tiny-sized — and
     // because mermaid marks nodes data-processed="true" and skips them afterwards, that
