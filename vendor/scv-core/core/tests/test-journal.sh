@@ -188,7 +188,11 @@ OUT="$(run_pl "$PL")"; RC=$?
 eq "reminder: exit 0" "0" "$RC"
 grep -qF "1–2 sentences" <<<"$OUT" && ok "reminder printed when .env is absent (default on)" || fail "reminder missing with no .env"
 grep -qF "SCV_PLAIN_LANGUAGE" <<<"$OUT" && ok "reminder names the off switch" || fail "reminder lacks the switch name"
-[[ "$(grep -c . <<<"$OUT")" -le 24 ]] && ok "hook stdout stays within 24 lines (plain + always-on)" || fail "hook stdout longer than 24 lines"
+# 이 상한은 훅이 매 턴 컨텍스트에 붓는 양을 묶어 둔다. 0.40.0 에서 preflight 가
+# 세 번째 블록으로 붙어(진단 주입) 옛 24줄로는 잴 수 없다 — 실측 59줄. 상한 자체는
+# 남긴다: 이 훅의 출력은 매 턴 값을 치르므로 무한정 늘어나면 안 되고, 늘어난다면
+# 그것은 결정으로 내려야지 눈치채지 못한 채 새면 안 된다.
+[[ "$(grep -c . <<<"$OUT")" -le 80 ]] && ok "hook stdout stays within 80 lines (plain + always-on + preflight)" || fail "hook stdout longer than 80 lines"
 [[ -d "$PL/scv/journal" ]] && ok "reminder path still journals the prompt" || fail "reminder path skipped journaling"
 grep -rqF "1–2 sentences" "$PL/scv/journal" && fail "reminder leaked into the journal" || ok "reminder never enters the journal"
 # off 는 자기 블록만 끈다 (v0.35.0+: always-on 블록은 별도 스위치 SCV_ALWAYS_ON)
