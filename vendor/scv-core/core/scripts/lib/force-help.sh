@@ -1,41 +1,19 @@
 #!/usr/bin/env bash
-# force-help.sh — help 액션 호출 강제의 판정부.
+# force-help.sh — 매 턴 SCV 를 준비시키는 preflight 의 문자열부.
 #
-# 왜 별도 파일인가: 훅은 페이로드를 읽고 파일을 만지는 얇은 층이어야 하고, "이번
-# 턴을 되돌릴 것인가" 라는 판단은 고정 입력에 고정 출력이어야 한다. 그래야 훅을
-# 띄우지 않고도 판정을 그대로 시험할 수 있다 (contracts/purity.md).
+# 이름의 유래는 "강제" 지만, 강제하는 것은 더 이상 없다. 0.39.0 은 응답 종료 시점에
+# 모델을 되돌려 세워 help 호출을 강제했고, 그것이 비쌌다 — 되돌림은 모델이 답을 다
+# 쓴 뒤에 걸리므로 되돌릴 때마다 답이 통째로 다시 생성됐다. 되돌림 한 번의 값은
+# 모델 턴 하나이고, 그것은 진단 3KB 를 주입하는 값보다 훨씬 크다.
 #
-# 여기 있는 것: 저장소 경로 계산, 턴 분류, 되돌림 사유 문구, 표시줄.
-# 여기 없는 것: 파일 읽기·쓰기·표준출력. 전부 훅이 한다.
+# 목적을 잘못 잡은 것이 근본 원인이었다. 목적은 "스킬이 호출되는 것" 이 아니라
+# "이 턴에 SCV 의 현재 상태가 들어와 있는 것" 이었다. 호출은 수단이었을 뿐인데
+# 그 수단을 강제하느라 목적보다 비싼 값을 치렀다. 그래서 지점을 턴의 시작으로
+# 옮겼다: 프롬프트 훅이 진단을 직접 주입하면 목적이 곧바로 달성되고, 강제할 것이
+# 남지 않는다.
 #
-# 영수증 저장소는 가드(template/hooks/guard.sh)가 발행하고 이 판정부는 읽기만
-# 한다. 그 비대칭이 요점이다 — 영수증이 판정 근거로 쓸 만한 이유는 호스트가 직접
-# 찍은 값이라 모델이 위조할 수 없다는 데 있고, 소비자가 쓰기 시작하면 그 성질이
-# 사라진다.
-
-# @deterministic
-# 프로젝트 루트를 짧고 안정적인 키로. 가드와 같은 규칙이어야 같은 영수증을 본다 —
-# 규칙이 갈라지면 강제가 조용히 무력해진다.
-scv_force_project_key() {
-  local root="$1"
-  if command -v cksum >/dev/null 2>&1; then
-    printf '%s' "$root" | cksum | tr -cd '0-9' | cut -c1-12
-  else
-    printf '%s' "$root" | tr -cd '[:alnum:]' | tail -c 24
-  fi
-}
-
-# @pure
-scv_force_receipt_file() {
-  printf '%s/%s-%s' "$1" "$2" "$3"
-}
-
-# @pure
-# 턴 상태는 영수증과 나란히 두되 이름을 달리한다. 영수증에 끼어들면 가드가 그 줄을
-# 액션 발행으로 오해한다.
-scv_force_turn_file() {
-  printf '%s/%s-%s.turn' "$1" "$2" "$3"
-}
+# 여기 있는 것: 스위치 해석, 진단 잘라내기, 표시줄, 분류 지침.
+# 여기 없는 것: 파일 읽기·쓰기·표준출력·명령 실행. 전부 훅이 한다.
 
 # @pure
 # 스위치 해석 — off 만 끈다. 값이 없거나 다른 값이면 켜져 있다. 기존 두 스위치
@@ -53,72 +31,44 @@ scv_force_switch() {
 }
 
 # @pure
-# 이번 턴을 무엇으로 볼 것인가. 파일을 읽지 않는다 — 읽은 결과만 받는다.
-#   $1 강제 스위치 (on|off)
-#   $2 호스트 이벤트 종류 (main|subagent)
-#   $3 턴 시작 표시 (빈 문자열이면 없음 = 프롬프트 훅이 못 돌았거나 못 썼다)
-#   $4 턴 시작 이후의 영수증 줄 (여러 줄 가능, 빈 문자열이면 없음)
-# 출력: off | subagent | unmarked | satisfied | other-action | pending
-scv_force_classify() {
-  local sw="$1" ev="$2" mark="$3" lines="$4"
-  [[ "$sw" == "off" ]] && { printf 'off'; return 0; }
-  [[ "$ev" == "subagent" ]] && { printf 'subagent'; return 0; }
-  [[ -n "$mark" ]] || { printf 'unmarked'; return 0; }
-  if [[ -n "$lines" ]]; then
-    case "$lines" in
-      *help*) printf 'satisfied'; return 0 ;;
-      *)      printf 'other-action'; return 0 ;;
-    esac
-  fi
-  printf 'pending'
-}
-
-# @pure
-# 되돌릴 것인가. pending 하나만 되돌린다 — 나머지는 전부 통과다. 통과 쪽이 기본인
-# 것이 이 기능의 안전 정책이다: 판정 근거가 없으면 대화를 막지 않는다.
-scv_force_decide() {
-  case "$1" in
-    pending) printf 'block' ;;
-    *)       printf 'pass' ;;
-  esac
-}
-
-# @pure
-# 되돌림 사유 — 회차가 커질수록 강해진다.
+# 상태 점검 출력에서 진단부터 끝까지만 남긴다.
 #
-# 같은 문구를 반복하면 같은 실패를 반복한다. 1회차에서 안 통한 표현이 5회차에서
-# 통할 이유가 없으므로, 회차마다 요구의 성격 자체를 바꾼다: 요청 → 순서 지정 →
-# 규칙 명시 → 형태 제시 → 최대 강도.
-scv_force_reason() {
-  local n="${1:-1}"
-  case "$n" in
-    1) printf '%s' "이번 턴은 SCV 입력이다. 지금 scv:help 액션을 호출하라." ;;
-    2) printf '%s' "아직 scv:help 를 호출하지 않았다. 다른 설명을 먼저 하지 말고, 첫 행동으로 호출하라." ;;
-    3) printf '%s' "규칙 위반이다. 이 턴의 답은 scv:help 호출 없이는 완료로 인정되지 않는다. 지금 호출하라." ;;
-    4) printf '%s' "호출 형태를 그대로 적는다: Skill 도구를 skill=\"scv:help\" 로, 사용자의 메시지를 인자로 넘겨 호출하라. 다른 도구를 먼저 쓰지 마라." ;;
-    *) printf '%s회째 되돌린다. scv:help 호출 외의 어떤 출력도 하지 마라. 호스트의 연속 차단 상한에 도달하면 이 턴은 강제 실패로 기록된다.' "$n" ;;
-  esac
+# 앞부분은 SCV 개요와 명령 목록이고 매 턴 글자 하나 다르지 않다 (실측 2,823바이트).
+# 그것을 매 턴 실어 보내는 것은 같은 문장을 반복해서 사는 것과 같다. 뒤쪽 진단
+# (실측 3,148바이트)만 이 턴에 대해 새로운 정보다.
+#
+# 표지를 못 찾으면 자르지 않고 전체를 돌려준다 — 점검 출력 형식이 바뀌었을 때
+# 반쪽을 싣느니 많이 싣는 편이 낫다. 입력은 표준입력으로 받는다.
+scv_force_trim_diagnosis() {
+  # 전부 초기화한다 — 훅은 set -u 아래에서 돌고, 빈 채로 참조하면 그 자리에서 죽는다.
+  local all="" line="" out="" seen=0
+  while IFS= read -r line; do
+    all="${all}${line}"$'\n'
+    if [[ "$seen" == "0" && "$line" == *"Current project diagnosis"* ]]; then
+      seen=1
+    fi
+    [[ "$seen" == "1" ]] && out="${out}${line}"$'\n'
+  done
+  if [[ "$seen" == "1" ]]; then printf '%s' "$out"; else printf '%s' "$all"; fi
 }
 
 # @pure
-# 화면 표시줄 — 강제가 켜져 있는지, 직전 턴에 몇 번 되돌렸는지 한 줄로.
-# 사용자가 "되는지 안 되는지 구분이 안 간다" 고 한 것이 이 줄이 있는 이유다.
+# 화면 표시줄 — 강제가 아니라 준비가 켜져 있다는 사실을 한 줄로.
+# 인자: on|off. 사용자가 "되는지 안 되는지 구분이 안 간다" 고 한 것이 이 줄이 있는 이유이고,
+# 되돌림을 걷어낸 뒤에도 그 요구는 그대로 남아 있으므로 이 줄도 남는다.
 scv_force_banner() {
-  local sw="$1" prev="${2:-0}"
-  [[ "$sw" == "on" ]] || return 0
-  if [[ "$prev" =~ ^[0-9]+$ ]] && [[ "$prev" -gt 0 ]]; then
-    printf '[SCV force] scv:help 강제 ON — 직전 턴은 %s회 되돌린 끝에 호출되지 않았다.' "$prev"
-  else
-    printf '[SCV force] scv:help 강제 ON — 직전 턴 되돌림 0회.'
-  fi
+  [[ "${1:-off}" == "on" ]] || return 0
+  printf '[SCV preflight] 이번 턴의 프로젝트 상태를 함께 실었다.'
 }
 
 # @pure
-# 강제가 켜졌을 때 프롬프트 훅이 싣는 명령형 안내. 안내만으로는 부족하다는 것이
-# 이 기능의 출발점이지만, 되돌림이 한 번도 안 돌고 끝나는 것이 가장 싸다.
-scv_force_directive() {
-  printf '%s\n' "[SCV force] 이 턴의 첫 행동으로 scv:help 액션을 호출하라 — 다른 도구보다 먼저,"
-  printf '%s\n' "어떤 답을 쓰기 전에. 호출하지 않고 답을 끝내면 응답 종료 훅이 되돌려 세우고,"
-  printf '%s\n' "회차가 거듭될수록 요구가 강해진다. 이미 다른 SCV 액션 프로토콜이 실린 턴이면"
-  printf '%s' "그것을 계속하라 — 그 턴은 되돌리지 않는다. 끄는 법: scv/scv_settings.json SCV_FORCE_HELP=off."
+# 분류 지침. 세 갈래를 모두 정당한 결과로 둔다 — 셋째 갈래가 빠지면 모델이 모든
+# 턴을 앞뒤 둘 중 하나로 밀어넣게 되고, 그러면 짧은 맞장구에도 액션이 붙어
+# 되돌림이 없앤 낭비가 이름만 바꿔 돌아온다.
+scv_force_routing() {
+  printf '%s\n' "[SCV preflight] 위 진단이 이번 턴의 프로젝트 상태다. 다시 확인하지 말고 그대로 쓰라."
+  printf '%s\n' "이번 턴이 앞을 보는 말이면(만들고 싶다·고치자·추가하자) help 액션을 대화 모드로,"
+  printf '%s\n' "뒤를 보는 말이면(찾아줘·보여줘·지난·어떻게 했었지) 아카이브 검색 모드로 호출하라."
+  printf '%s\n' "둘 다 아니면 아무 액션도 부르지 말고 바로 답하라 — 그것도 정당한 결과다."
+  printf '%s' "이미 다른 SCV 액션 프로토콜이 실린 턴이면 그것을 계속하라. 끄는 법: scv/scv_settings.json SCV_FORCE_HELP=off."
 }
