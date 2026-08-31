@@ -107,28 +107,12 @@ SESSION="$(field '.session_id')"
 [[ -n "$SESSION" ]] || SESSION="nosession"
 # One receipt per (session, project): a receipt earned in one checkout must not
 # unlock a different one.
-#
-# The path rule is shared with the stop-hook consumer through scripts/lib. Two
-# copies would drift silently, and a drifted path does not fail loudly — it
-# reads an empty receipt and quietly stops enforcing. The shared library is an
-# optimisation, never a dependency: when it is absent this falls back to the
-# identical inline computation, because a missing library must not change what
-# this file denies.
-_scv_force_lib="${SCV_CORE_ROOT:-$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.." 2>/dev/null && pwd )}/scripts/lib/force-help.sh"
-if [[ -f "$_scv_force_lib" ]]; then
-  # shellcheck disable=SC1090
-  source "$_scv_force_lib" 2>/dev/null || true
-fi
-if declare -F scv_force_project_key >/dev/null 2>&1; then
-  PROJECT_KEY="$(scv_force_project_key "$PROJECT_ROOT")"
-  RECEIPT="$(scv_force_receipt_file "$STATE_DIR" "$SESSION" "$PROJECT_KEY")"
-elif command -v cksum >/dev/null 2>&1; then
+if command -v cksum >/dev/null 2>&1; then
   PROJECT_KEY="$(printf '%s' "$PROJECT_ROOT" | cksum | tr -cd '0-9' | cut -c1-12)"
-  RECEIPT="$STATE_DIR/${SESSION}-${PROJECT_KEY}"
 else
   PROJECT_KEY="$(printf '%s' "$PROJECT_ROOT" | tr -cd '[:alnum:]' | tail -c 24)"
-  RECEIPT="$STATE_DIR/${SESSION}-${PROJECT_KEY}"
 fi
+RECEIPT="$STATE_DIR/${SESSION}-${PROJECT_KEY}"
 
 # Minting stays best-effort — a broken store must not turn the mint hook into
 # a denial — but it is no longer silent. Silence was the bug: with nothing

@@ -84,79 +84,40 @@ fi
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" 2>/dev/null && pwd )" || exit 0
 CORE_HOME="${SCV_CORE_ROOT:-$SCRIPT_DIR/../..}"
 JOURNAL_APPEND="$CORE_HOME/scripts/journal-append.sh"
-
-# 표준입력은 여기서 한 번만 읽는다. 저널보다 먼저 읽는 이유는 아래 강제 블록이
-# 세션 식별자를 필요로 하기 때문이다 — 읽는 순서만 앞당겼을 뿐, 저널 기록은
-# 그대로다.
+# 표준입력은 여기서 한 번만 읽는다. 저널 기록은 아래에서 이 값을 그대로 쓴다.
 INPUT="$(cat 2>/dev/null || true)"
 
-# 페이로드에서 문자열 필드 하나. 읽을 도구가 없으면 빈 문자열 — 호출자가 그 경우를
-# 통과로 다룬다.
-_scv_json_str() {  # <키>
-  if command -v jq >/dev/null 2>&1; then
-    printf '%s' "$INPUT" | jq -r --arg k "$1" '.[$k] // empty' 2>/dev/null
-  elif command -v python3 >/dev/null 2>&1; then
-    printf '%s' "$INPUT" | python3 -c '
-import json, sys
-try:
-    d = json.load(sys.stdin)
-    v = d.get(sys.argv[1], "")
-    sys.stdout.write(v if isinstance(v, str) else "")
-except Exception:
-    pass' "$1" 2>/dev/null
-  fi
-}
-
-# help 강제 (v0.39.0+). 이 훅이 하는 일은 되돌리는 것이 아니라 **기준선을 세우는**
-# 것이다: 이번 턴이 시작될 때의 영수증 줄 수를 적어 두어야, 종료 훅이 "이번 턴에
-# 불렀는가" 와 "지난 턴에 불렀는가" 를 구분할 수 있다. 되돌림 횟수도 여기서 0으로
-# 되돌리고, 직전 턴이 끝내 실패했으면 그 사실을 한 줄 남긴다.
+# ---------- preflight (v0.40.0+) --------------------------------------------
+# 이 훅이 하는 일은 강제가 아니라 **준비**다. 이번 턴의 프로젝트 상태를 미리 실어
+# 보내면, 그것을 확인하려고 액션을 한 번 더 부를 이유가 사라진다.
 #
-# 스위치가 꺼졌거나 판정부를 못 찾으면 아무 것도 하지 않는다. 기존 NON-BLOCKING
-# 보장이 여기서도 상한이다 — 이 기능은 편의이지 안전장치가 아니다.
+# 0.39.0 은 같은 목적을 응답 종료 시점의 되돌림으로 달성하려 했고, 그것이 비쌌다 —
+# 되돌림은 모델이 답을 다 쓴 뒤에 걸리므로 되돌릴 때마다 답이 통째로 다시
+# 생성됐다. 지점을 턴의 시작으로 옮기면 반복할 일 자체가 없다.
+#
+# 실려 나가는 것은 셋이다: 진단(점검 출력에서 개요·명령 목록을 뺀 뒷부분), 분류
+# 지침(앞/뒤/둘 다 아님), 표시줄 한 줄. 스위치가 꺼졌거나 문자열부를 못 찾으면
+# 아무 것도 하지 않는다 — 기존 NON-BLOCKING 보장이 여기서도 상한이다.
 _scv_force_lib="$CORE_HOME/scripts/lib/force-help.sh"
 if [[ -f "$_scv_force_lib" ]]; then
   # shellcheck disable=SC1090
   source "$_scv_force_lib" 2>/dev/null || true
 fi
 if [[ "${_scv_always:-on}" != "off" ]] && declare -F scv_force_switch >/dev/null 2>&1; then
-  _scv_force="$(scv_force_switch "$(_scv_read SCV_FORCE_HELP)")"
-  _scv_session="$(_scv_json_str session_id)"
-  [[ -n "$_scv_session" ]] || _scv_session="nosession"
-  if [[ "$_scv_force" == "on" ]]; then
-    _scv_state_dir="${SCV_GUARD_STATE:-${TMPDIR:-/tmp}/scv-guard}"
-    _scv_key="$(scv_force_project_key "$PWD")"
-    _scv_receipt="$(scv_force_receipt_file "$_scv_state_dir" "$_scv_session" "$_scv_key")"
-    _scv_turn="$(scv_force_turn_file "$_scv_state_dir" "$_scv_session" "$_scv_key")"
-
-    # 직전 턴이 되돌림 중에 끝났다면(횟수가 0 이 아니다) 강제가 실패한 것이다.
-    # 호스트가 상한에서 끊었다는 뜻이며, 그 사실이 남아야 나중에 문구를 손볼 근거가
-    # 된다. 호스트의 상한 값 자체는 읽지 않는다 — 알 필요가 없다.
-    _scv_prev=0
-    if [[ -r "$_scv_turn" ]]; then
-      _scv_prev="$(sed -n '2p' "$_scv_turn" 2>/dev/null || true)"
-      [[ "$_scv_prev" =~ ^[0-9]+$ ]] || _scv_prev=0
+  _scv_pre="$(scv_force_switch "$(_scv_read SCV_FORCE_HELP)")"
+  if [[ "$_scv_pre" == "on" ]]; then
+    printf '%s\n' "$(scv_force_banner "$_scv_pre")"
+    # 점검이 실패하거나 없으면 진단 없이 지침만 간다. 막지 않는다.
+    _scv_probe="$CORE_HOME/scripts/help.sh"
+    if [[ -f "$_scv_probe" ]]; then
+      _scv_diag="$(bash "$_scv_probe" 2>/dev/null | scv_force_trim_diagnosis || true)"
+      [[ -n "${_scv_diag//[[:space:]]/}" ]] && printf '%s\n' "$_scv_diag"
     fi
-    if [[ "$_scv_prev" -gt 0 && -f "$JOURNAL_APPEND" ]]; then
-      printf 'scv:help 강제 실패 — 직전 턴을 %s회 되돌렸으나 끝내 호출되지 않았다.\n' "$_scv_prev" \
-        | bash "$JOURNAL_APPEND" --speaker scv-force >/dev/null 2>&1 || true
-    fi
-
-    # 이번 턴의 기준선. 영수증이 없으면 0 줄에서 시작한 것으로 본다.
-    _scv_mark=0
-    if [[ -r "$_scv_receipt" ]]; then
-      _scv_mark="$(wc -l < "$_scv_receipt" 2>/dev/null | tr -d '[:space:]')"
-      [[ "$_scv_mark" =~ ^[0-9]+$ ]] || _scv_mark=0
-    fi
-    if mkdir -p "$_scv_state_dir" 2>/dev/null; then
-      { printf '%s\n0\n' "$_scv_mark" > "$_scv_turn"; } 2>/dev/null || true
-    fi
-
-    printf '%s\n' "$(scv_force_banner "$_scv_force" "$_scv_prev")"
-    scv_force_directive
+    scv_force_routing
     printf '\n'
   fi
 fi
+# ---------- /preflight -------------------------------------------------------
 
 [[ -f "$JOURNAL_APPEND" ]] || exit 0
 [[ -n "$INPUT" ]] || exit 0
