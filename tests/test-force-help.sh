@@ -6,10 +6,13 @@
 # 0.40.0 은 지점을 턴의 시작으로 옮긴다 — 진단을 미리 실어 보내면 확인하려고 액션을
 # 한 번 더 부를 이유가 없어지고, 강제할 것도 남지 않는다.
 #
-# 그래서 이 검사의 핵심 단언은 **부정형**이다: 종료 훅이 어떤 경우에도 되돌리지
-# 않는다. 앞 계획의 검사가 정확히 그 반대를 단언했으므로, 뒤집는 것이 이 파일의 일이다.
+# 0.41.0 은 그 지시가 무시되던 네 원인을 고친다: 자기모순·묻힌 위치·조건문 형태·
+# 중복 블록. 그래서 이 검사는 텍스트의 **순서와 내용**을 직접 읽는다.
 #
-# Covers TESTS.md T1–T15 of 20260831-wookiya1364-force-help-preflight.
+# 검사의 일부(T7~T9)는 대체된 계획에서 **이어받은** 것이다. 그 계획을 supersedes 로
+# 선언하면 옛 검사가 회귀에서 빠지므로, 여기서 다시 세우지 않으면 조용히 사라진다.
+#
+# Covers TESTS.md T1–T15 of 20260901-wookiya1364-preflight-directive-strength.
 #
 # Run: bash core/tests/test-force-help.sh
 set -uo pipefail
@@ -57,128 +60,122 @@ run_stop() {  # <프로젝트> [이벤트] → 종료 훅 stdout
 
 is_block() { grep -q '"decision"[[:space:]]*:[[:space:]]*"block"' <<<"${1:-}"; }
 
-echo "── [T1] 종료 훅이 되돌리지 않는다 ──"
-new_proj t1; run_prompt "$P" >/dev/null
-OUT="$(run_stop "$P")"; rc=$?
-is_block "$OUT" && fail "되돌렸다: $OUT" || ok "차단 결정이 없다"
-[[ $rc -eq 0 ]] && ok "종료 코드 0" || fail "rc=$rc"
+echo "── [T1] 지시 블록이 진단보다 먼저 나온다 ──"
+new_proj t1
+OUT="$(run_prompt "$P")"
+DIR_LINE="$(grep -n "SCV: 이 턴의 첫 행동" <<<"$OUT" | head -1 | cut -d: -f1)"
+DIAG_LINE="$(grep -n "Current project diagnosis" <<<"$OUT" | head -1 | cut -d: -f1)"
+if [[ -n "$DIR_LINE" && -n "$DIAG_LINE" && "$DIR_LINE" -lt "$DIAG_LINE" ]]; then
+  ok "지시(${DIR_LINE}행)가 진단(${DIAG_LINE}행)보다 앞이다"
+else
+  fail "순서가 뒤집혔다 — 지시=${DIR_LINE:-없음} 진단=${DIAG_LINE:-없음}"
+fi
 
-echo "── [T2] 여러 번 실행해도 되돌리지 않는다 ──"
-new_proj t2; run_prompt "$P" >/dev/null
+echo "── [T2] 세 갈래가 모두 있고 명령문이다 ──"
+grep -q "앞으로 할 일" <<<"$OUT" && ok "A — 앞으로 할 일" || fail "A 갈래 없음"
+grep -q "지난 일을 찾는" <<<"$OUT" && ok "B — 지난 일 찾기" || fail "B 갈래 없음"
+grep -q "둘 다 아니면" <<<"$OUT" && ok "C — 둘 다 아님" || fail "C 갈래 없음 — 짧은 턴에도 액션이 붙는다"
+grep -q "바로 답하라" <<<"$OUT" && ok "C 가 '부르지 말고 답하라' 로 끝난다" || fail "C 의 지시가 없다"
+
+echo "── [T3] 빠져나갈 구멍이 닫혀 있다 ──"
+grep -q "상태를 다시 조회하지 않는 데에만" <<<"$OUT" \
+  && ok "재조회 금지가 진단으로 한정돼 있다" || fail "재조회 문장이 여전히 넓다"
+grep -q "호출을 건너뛸 이유가 되지 않는다" <<<"$OUT" \
+  && ok "진단을 받아도 호출은 그대로라는 문장이 있다" || fail "구멍이 열려 있다"
+
+echo "── [T4] 호출해야 하는 이유가 실려 있다 ──"
+grep -q "어디에도 남지 않는다" <<<"$OUT" && ok "부르지 않으면 논의가 사라진다는 사실" || fail "이유 문장 없음"
+grep -q "파일로" <<<"$OUT" && ok "대화 모드가 파일로 남긴다는 설명" || fail "무엇을 남기는지가 없다"
+
+echo "── [T5] 같은 요구를 하는 블록이 하나뿐이다 ──"
+grep -q "\[SCV always-on\]" <<<"$OUT" && fail "옛 라우팅 표지가 따로 나온다" || ok "옛 표지 없음 — 한 블록으로 합쳐졌다"
+
+echo "── [T6] 진단은 여전히 실린다 ──"
+grep -q "Current project diagnosis" <<<"$OUT" && ok "진단이 지시 뒤에 있다" || fail "진단이 사라졌다"
+
+echo "── [T7] 전체 스위치를 끄면 아무 것도 주입하지 않는다 (이어받음) ──"
+new_proj t7 '{"SCV_ALWAYS_ON": "off"}'
+OUT="$(run_prompt "$P")"
+grep -q "SCV: 이 턴의 첫 행동" <<<"$OUT" && fail "off 인데 지시가 있다" || ok "지시 없음"
+grep -q "Current project diagnosis" <<<"$OUT" && fail "off 인데 진단이 있다" || ok "진단 없음"
+
+echo "── [T8] off 만 끈다 (이어받음) ──"
+for v in off OFF; do
+  new_proj "t8$v" "{\"SCV_ALWAYS_ON\": \"$v\"}"
+  grep -q "SCV: 이 턴의 첫 행동" <<<"$(run_prompt "$P")" \
+    && fail "$v 인데 켜져 있다" || ok "$v → 꺼짐"
+done
+for v in on maybe; do
+  new_proj "t8$v" "{\"SCV_ALWAYS_ON\": \"$v\"}"
+  grep -q "SCV: 이 턴의 첫 행동" <<<"$(run_prompt "$P")" \
+    && ok "$v → 켜짐" || fail "$v 인데 꺼졌다"
+done
+
+echo "── [T9] 쉬운말 스위치와 독립이다 (이어받음) ──"
+new_proj t9 '{"SCV_PLAIN_LANGUAGE": "off"}'
+OUT="$(run_prompt "$P")"
+grep -q "\[SCV plain language\]" <<<"$OUT" && fail "쉬운말 off 인데 그 블록이 있다" || ok "쉬운말 블록 없음"
+grep -q "SCV: 이 턴의 첫 행동" <<<"$OUT" && ok "지시 블록은 그대로 있다" || fail "쉬운말 off 가 지시까지 껐다"
+
+echo "── [T10] preflight 스위치를 끄면 진단 없이 지시만 ──"
+new_proj t10 '{"SCV_FORCE_HELP": "off"}'
+OUT="$(run_prompt "$P")"
+grep -q "SCV: 이 턴의 첫 행동" <<<"$OUT" && ok "지시는 있다" || fail "지시가 사라졌다"
+grep -q "Current project diagnosis" <<<"$OUT" && fail "off 인데 진단이 있다" || ok "진단 없음"
+
+echo "── [T11] 되돌림은 여전히 없다 ──"
+new_proj t11; run_prompt "$P" >/dev/null
 blocked=0
 for _ in 1 2 3 4 5; do is_block "$(run_stop "$P")" && blocked=$((blocked+1)); done
 [[ $blocked -eq 0 ]] && ok "5회 모두 차단 없음" || fail "${blocked}회 되돌렸다"
 
-echo "── [T3] 매 턴 진단이 주입된다 ──"
-new_proj t3
-OUT="$(run_prompt "$P")"
-grep -q "Current project diagnosis" <<<"$OUT" && ok "진단이 실린다" || fail "진단 없음"
-
-echo "── [T4] 개요와 명령 목록은 주입되지 않는다 ──"
-if [[ -f "$PROBE" ]]; then
-  FULL="$(bash "$PROBE" 2>/dev/null | wc -c)"
-  INJ="$(printf '%s' "$OUT" | wc -c)"
-  # 훅 출력에는 쉬운말·라우팅 블록도 들어가므로 단순 크기 비교로는 부족하다.
-  # 점검 앞부분에만 있는 표지가 빠졌는지를 직접 본다.
-  grep -q "Core idea (S·C·V)" <<<"$OUT" && fail "SCV 개요가 실렸다" || ok "개요가 빠졌다"
-  grep -q "Run accumulated archived regression" <<<"$OUT" && fail "명령 목록이 실렸다" || ok "명령 목록이 빠졌다"
-  echo "     (점검 전체 ${FULL}바이트 · 훅 출력 ${INJ}바이트)"
-else
-  ok "점검 스크립트가 없어 건너뛴다"
-fi
-
-echo "── [T5] 분류 지침이 세 갈래를 모두 말한다 ──"
-grep -q "앞을 보는 말" <<<"$OUT" && ok "앞을 보는 턴 지침" || fail "앞 갈래 없음"
-grep -q "뒤를 보는 말" <<<"$OUT" && ok "뒤를 보는 턴 지침" || fail "뒤 갈래 없음"
-grep -q "둘 다 아니면" <<<"$OUT" && ok "둘 다 아닌 턴 지침 (가장 중요)" || fail "셋째 갈래 없음 — 모든 턴이 둘 중 하나로 밀린다"
-
-echo "── [T6] 표시줄이 매 턴 나온다 ──"
-A="$(run_prompt "$P")"; B="$(run_prompt "$P")"
-grep -q "\[SCV preflight\]" <<<"$A" && grep -q "\[SCV preflight\]" <<<"$B" \
-  && ok "두 번 다 표시줄이 있다" || fail "표시줄이 빠진 실행이 있다"
-
-echo "── [T7] preflight 스위치를 끄면 주입도 표시줄도 없다 ──"
-new_proj t7 '{"SCV_FORCE_HELP": "off"}'
-OUT="$(run_prompt "$P")"
-grep -q "\[SCV preflight\]" <<<"$OUT" && fail "off 인데 표시줄이 있다" || ok "표시줄 없음"
-grep -q "Current project diagnosis" <<<"$OUT" && fail "off 인데 진단이 있다" || ok "진단 없음"
-grep -q "\[SCV always-on\]" <<<"$OUT" && ok "라우팅 안내는 그대로 (두 스위치는 독립)" || fail "라우팅 안내까지 껐다"
-is_block "$(run_stop "$P")" && fail "되돌렸다" || ok "되돌리지 않는다"
-
-echo "── [T8] 전체 라우팅 스위치를 끄면 아무것도 없다 ──"
-new_proj t8 '{"SCV_ALWAYS_ON": "off"}'
-OUT="$(run_prompt "$P")"
-grep -q "\[SCV always-on\]" <<<"$OUT" && fail "라우팅 안내가 있다" || ok "라우팅 안내 없음"
-grep -q "\[SCV preflight\]" <<<"$OUT" && fail "표시줄이 있다" || ok "표시줄 없음"
-grep -q "Current project diagnosis" <<<"$OUT" && fail "진단이 있다" || ok "진단 없음"
-
-echo "── [T9] scv 폴더가 없으면 아무 출력도 없다 ──"
-mkdir -p "$WORK/t9"; STATE="$WORK/state-t9"
-OUT="$( cd "$WORK/t9" && printf '{"prompt":"x","session_id":"%s"}' "$SESSION" \
+echo "── [T12] scv 폴더가 없으면 아무 출력도 없다 ──"
+mkdir -p "$WORK/t12"; STATE="$WORK/state-t12"
+OUT="$( cd "$WORK/t12" && printf '{"prompt":"x","session_id":"%s"}' "$SESSION" \
   | CLAUDE_PLUGIN_ROOT="$CORE" bash "$PROMPT_HOOK" 2>/dev/null )"; rc=$?
 [[ $rc -eq 0 && -z "$OUT" ]] && ok "프롬프트 훅 무출력·exit 0" || fail "침묵 위반 (rc=$rc)"
-OUT="$( cd "$WORK/t9" && printf '{"hook_event_name":"Stop","session_id":"%s"}' "$SESSION" \
+OUT="$( cd "$WORK/t12" && printf '{"hook_event_name":"Stop","session_id":"%s"}' "$SESSION" \
   | CLAUDE_PLUGIN_ROOT="$CORE" bash "$STOP_HOOK" 2>/dev/null )"; rc=$?
 [[ $rc -eq 0 && -z "$OUT" ]] && ok "종료 훅 무출력·exit 0" || fail "침묵 위반 (rc=$rc)"
 
-echo "── [T10] 점검을 못 돌려도 막지 않는다 ──"
-new_proj t10
+echo "── [T13] 점검을 못 돌려도 지시는 나간다 ──"
+new_proj t13
 FAKE="$WORK/fakecore"; mkdir -p "$FAKE/scripts/lib"
 cp "$FORCE_LIB" "$FAKE/scripts/lib/force-help.sh"
 cp "$SETTINGS_LIB" "$FAKE/scripts/lib/settings.sh" 2>/dev/null || true
-# help.sh 가 없는 코어를 가리킨다 — 진단은 못 싣지만 나머지는 나와야 한다.
 OUT="$( cd "$P" && printf '{"prompt":"x","session_id":"%s"}' "$SESSION" \
   | CLAUDE_PLUGIN_ROOT="$FAKE" bash "$PROMPT_HOOK" 2>/dev/null )"; rc=$?
 [[ $rc -eq 0 ]] && ok "종료 코드 0" || fail "rc=$rc"
-grep -q "\[SCV preflight\]" <<<"$OUT" && ok "표시줄과 지침은 나온다" || fail "점검 실패가 전부를 막았다"
+grep -q "SCV: 이 턴의 첫 행동" <<<"$OUT" && ok "지시는 나온다" || fail "점검 실패가 지시까지 막았다"
 
-echo "── [T11] 저널 기록이 이번 변경 이전과 같다 ──"
+echo "── [T14] 문구 생성부가 순수성 계약을 지킨다 ──"
+OUT="$(bash "$CORE/scripts/check-purity.sh" "$FORCE_LIB" 2>&1)"
+grep -q '^OK  purity' <<<"$OUT" && ok "순수성 계약 통과" || fail "순수성 위반: $OUT"
+
+echo "── [T15] 저널 기록이 그대로다 ──"
 if bash "$CORE/tests/test-journal.sh" >/dev/null 2>&1; then
   ok "기존 저널 검사 초록"
 else
   fail "저널 검사가 깨졌다 — bash core/tests/test-journal.sh 로 확인"
 fi
 
-echo "── [T12] 가드가 라이브러리를 읽지 않는다 ──"
-new_proj t12
-HIDDEN="$WORK/nolib"; mkdir -p "$HIDDEN/scripts"
-# 판정부가 아예 없는 코어를 가리켜도 가드는 평소처럼 영수증을 남겨야 한다.
-( cd "$P" && printf '{"session_id":"%s","cwd":"%s","tool_input":{"skill":"scv:help"}}' "$SESSION" "$P" \
-  | SCV_GUARD_MODE=mint CLAUDE_PLUGIN_ROOT="$HIDDEN" SCV_GUARD_STATE="$STATE" \
-    bash "$GUARD_HOOK" >/dev/null 2>&1 )
-if ls "$STATE"/* >/dev/null 2>&1 && grep -rq "help" "$STATE" 2>/dev/null; then
-  ok "판정부 없이도 영수증을 남긴다 — 가드가 다시 홀로 선다"
-else
-  fail "가드가 라이브러리에 매여 있다"
-fi
-grep -q "force-help" "$GUARD_HOOK" && fail "가드에 라이브러리 참조가 남았다" || ok "가드에 참조 없음"
-
-echo "── [T13] 되돌림용 함수가 남아 있지 않다 ──"
-gone=0
-for fn in scv_force_classify scv_force_decide scv_force_reason scv_force_turn_file scv_force_directive; do
-  grep -q "^${fn}()" "$FORCE_LIB" && { fail "되돌림용 함수가 남았다: $fn"; gone=1; }
-done
-[[ $gone -eq 0 ]] && ok "되돌림용 함수가 모두 걷혔다"
-grep -q "^scv_force_trim_diagnosis()" "$FORCE_LIB" && ok "진단 잘라내기 함수가 있다" || fail "잘라내기 함수 없음"
-grep -q "decision.*block" "$STOP_HOOK" && fail "종료 훅에 차단 결정이 남았다" || ok "종료 훅에 차단 결정 없음"
-
-echo "── [T14] 판정부가 순수성 계약을 지킨다 ──"
-OUT="$(bash "$CORE/scripts/check-purity.sh" "$FORCE_LIB" 2>&1)"
-grep -q '^OK  purity' <<<"$OUT" && ok "순수성 계약 통과" || fail "순수성 위반: $OUT"
-
-echo "── [T15] 잘라내기가 표지를 못 찾으면 전체를 돌려준다 ──"
-# shellcheck source=/dev/null
-source "$FORCE_LIB"
-GOT="$(printf 'a\nb\nc\n' | scv_force_trim_diagnosis)"
-[[ "$GOT" == $'a\nb\nc' ]] && ok "표지 없음 → 전체 반환 (반쪽보다 낫다)" || fail "잘못 잘랐다: $(printf '%q' "$GOT")"
-GOT="$(printf 'x\n Current project diagnosis (p)\ny\n' | scv_force_trim_diagnosis)"
-[[ "$GOT" == $' Current project diagnosis (p)\ny' ]] && ok "표지부터 끝까지만 남긴다" || fail "잘못 잘랐다: $(printf '%q' "$GOT")"
-
-echo "── [T16] 키 등록 — 등록부와 예시 파일 ──"
+echo "── [T16] 두 스위치가 모두 등록부와 예시 파일에 있다 (이어받음) ──"
+# 옛 라우팅 검사가 SCV_ALWAYS_ON 의 등록을 지켰다. 그 계획을 대체하므로 여기서
+# 이어받는다 — 등록되지 않은 키는 사용자가 존재를 알 수 없는 숨은 스위치가 된다.
 # shellcheck source=/dev/null
 source "$SETTINGS_LIB"
-grep -q "SCV_FORCE_HELP" <<<"$SCV_PLAIN_KEYS" && ok "공개 키 목록에 있다" || fail "등록부에 없다"
-grep -q '"SCV_FORCE_HELP": "on"' "$EXAMPLE" && ok "예시 파일 기본값 on" || fail "예시 파일에 기본값 없음"
+for k in SCV_ALWAYS_ON SCV_FORCE_HELP; do
+  grep -q "$k" <<<"$SCV_PLAIN_KEYS" && ok "$k 이 공개 키 목록에 있다" || fail "$k 이 등록부에 없다"
+  grep -q "$k" <<<"$SCV_SECRET_KEYS" && fail "$k 이 비밀 키 목록에 들어갔다" || ok "$k 은 비밀 키가 아니다"
+  grep -q "\"$k\": \"on\"" "$EXAMPLE" && ok "$k 예시 기본값 on" || fail "$k 예시 기본값 없음"
+done
+python3 - "$EXAMPLE" <<'PY2' && ok "두 키 모두 _doc 에 설명이 있다" || fail "_doc 설명 누락"
+import json, sys
+d = json.load(open(sys.argv[1]))
+doc = d.get("_doc", {})
+for k in ("SCV_ALWAYS_ON", "SCV_FORCE_HELP"):
+    assert k in doc and doc[k].strip(), k
+PY2
 
 echo
 echo "─────────────────────────────"
