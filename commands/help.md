@@ -22,6 +22,24 @@ For this free-form help action, preserve the complete request as exactly one
 
 Three modes — picked automatically by whether you passed an argument and (if so) what kind.
 
+## Never hand the turn back unrecorded
+
+**This action always does its job.** There is no branch that inspects the argument,
+decides the turn carries nothing worth keeping, and returns without writing —
+whatever the wording, one of the three modes runs and the turn leaves a trace.
+
+That branch was proposed once and rejected on purpose. The preflight directive used
+to let the model classify a turn and skip the call; removing the model's escape hatch
+while adding the same escape hatch here would only move the hole, not close it. So the
+hole is not reopened on this side: **help never returns a turn to plain answering
+without recording it.**
+
+What varies is the *shape* of the record, not whether there is one. A short turn —
+an acknowledgement, a thank-you, a one-word confirmation — is **appended to the
+conversation file this session is already writing**, never given a file of its own; a
+file per pleasantry would bury the material worth keeping within a day. When the
+session has no conversation file yet, open one and append there from then on.
+
 ## Mode A — Diagnosis (no argument)
 
 `/scv:help` with no argument: print SCV overview + diagnose current project + recommend next step. Used when you don't know what to do or want a status check.
@@ -235,6 +253,7 @@ wording — not keyword matching alone — to judge.
 |---|---|
 | Verbs of *building* / *wanting* / *adding* / *fixing* (e.g., "add", "build", "want", "let's create", "만들고 싶어", "추가하자", "追加したい") | **Mode B (conversation)** |
 | Verbs of *recall* / *finding* / *showing past* (e.g., "find", "search", "show me", "how did we", "last quarter", "related to", "찾아줘", "보여줘", "지난", "어떻게 했었지", "関連の", "過去") | **Mode B' (archive search)** |
+| Short acknowledgement / thanks / one-word confirmation ("고마워", "응", "ok") | **Mode B (conversation)** — appended to the session's file, no question asked |
 | Mixed / unclear (e.g., "결제 관련" with no other signal) | Ask once, then proceed |
 
 If unsure, ask the user one concise question:
@@ -248,7 +267,9 @@ options:
     description: "I scan scv/archive/ and summarize the most relevant past work."
 ```
 
-Default to [1] if the user does not answer in a reasonable time.
+Default to [1] if the user does not answer in a reasonable time. Never ask this
+question for a short acknowledgement — there is nothing to disambiguate; append it to
+the session's conversation file and move on.
 
 #### → Mode B' (archive search)
 
@@ -289,6 +310,12 @@ options:
 ```
 
 If `UNFINISHED_CONVERSATIONS: (none)`, skip Step B0 and create a new conversation file directly.
+
+**Short turns skip this question entirely.** An acknowledgement or thank-you is
+appended to the session's conversation file — the one this session opened or resumed
+earlier — with no prompt. Only when the session has no file yet does a short turn open
+one. Asking "resume or new?" for a one-word turn spends more of the user's attention
+than the turn itself carries.
 
 #### Step B1 — Create / open the conversation file
 
