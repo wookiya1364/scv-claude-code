@@ -208,6 +208,125 @@ n="$(grep -c 'scv: workflow docs refreshed' "$WORK/action-err" || true)"
 [[ "$n" == "1" ]] && pass "T8 the refresh is checked and reported once per action" \
                   || fail "T8 the action produced $n refresh reports — the process-tree guard leaks"
 
+echo "=== T9 — the refresh is VISIBLE in the turn it happens (v0.42.0) ==="
+# 갱신은 예전부터 돌았다. 문제는 훅이 점검의 stderr 를 2>/dev/null 로 버려서
+# 갱신됐다는 증거가 화면에 하나도 안 남았다는 것 — 그래서 사용자가 sync 를 손으로
+# 한 번 더 쳤다. 여기서 보는 것은 "보이는가" 와 "그 외에는 조용한가" 둘이다.
+
+HOOK="$CORE/template/hooks/on-user-prompt.sh"
+
+hook() {  # hook <project-dir> [env...] — 프롬프트 훅을 돌리고 stdout 만 돌려준다
+  local d="$1"; shift
+  ( cd "$d" && printf '{"prompt":"hello"}' \
+      | env CLAUDE_PLUGIN_ROOT="$CORE" "$@" bash "$HOOK" ) 2>/dev/null
+}
+
+# (1) 갱신이 일어난 턴 — 보고가 보이고, 지시 뒤·진단 앞에 있다
+P="$(mk_project visible)"
+set_stamp "$P/scv/SCV.md" "2.0.0"; ( cd "$P" && git commit -qam stale )
+out="$(hook "$P")"
+grep -q "workflow docs refreshed" <<<"$out" && pass "T9 the refresh is reported in the turn's own output" \
+                                            || fail "T9 the refresh happened silently" "$out"
+n_note="$(grep -n 'workflow docs refreshed' <<<"$out" | head -n 1 | cut -d: -f1)"
+n_dir="$(grep -n 'SCV: 이 턴의 첫 행동' <<<"$out" | head -n 1 | cut -d: -f1)"
+n_diag="$(grep -n 'Current project diagnosis' <<<"$out" | head -n 1 | cut -d: -f1)"
+if [[ -n "$n_note" && -n "$n_dir" && -n "$n_diag" && $n_dir -lt $n_note && $n_note -lt $n_diag ]]; then
+  pass "T9 the report sits between the directive and the diagnosis"
+else
+  fail "T9 wrong position (directive=$n_dir report=$n_note diagnosis=$n_diag)"
+fi
+
+# (2) 다음 턴은 조용하다 — 갱신할 것이 없으면 한 줄도 늘지 않는다
+out="$(hook "$P")"
+grep -q '^scv: ' <<<"$out" && fail "T9 a healthy project still emits a report line" "$out" \
+                           || pass "T9 a healthy project's turn carries no report at all"
+
+# (3) 갱신과 무관한 stderr 는 새지 않고, 점검이 죽어도 훅은 막지 않는다
+FAKE="$WORK/fakecore"; mkdir -p "$FAKE/scripts"
+for f in "$CORE"/scripts/*; do ln -s "$f" "$FAKE/scripts/$(basename "$f")" 2>/dev/null || true; done
+rm -f "$FAKE/scripts/help.sh"
+cat > "$FAKE/scripts/help.sh" <<'STUB'
+#!/usr/bin/env bash
+echo "scv: settings file created — scv/scv_settings.json (every SCV key)" >&2
+echo "ERROR: something unrelated went wrong" >&2
+exit 1
+STUB
+rc=0
+out="$( cd "$P" && printf '{"prompt":"hello"}' \
+        | env CLAUDE_PLUGIN_ROOT="$FAKE" bash "$HOOK" 2>/dev/null )" || rc=$?
+[[ $rc -eq 0 ]] && pass "T9 a failing probe never blocks the turn" \
+                || fail "T9 the hook exited $rc when the probe died"
+grep -q 'SCV: 이 턴의 첫 행동' <<<"$out" && pass "T9 the directive still goes out without a probe" \
+                                          || fail "T9 the directive was lost with the probe" "$out"
+grep -q 'settings file created' <<<"$out" && fail "T9 an unrelated scv: report leaked into the turn" "$out" \
+                                          || pass "T9 unrelated scv: reports do not leak"
+grep -q 'something unrelated' <<<"$out" && fail "T9 raw probe stderr leaked into the turn" "$out" \
+                                        || pass "T9 raw probe stderr does not leak"
+
+# (4) 자동 갱신을 껐으면 기존 안내가 그대로 보인다 — 파일은 그대로다
+P="$(mk_project offnotice)"
+set_stamp "$P/scv/SCV.md" "2.0.0"; ( cd "$P" && git commit -qam stale )
+out="$(hook "$P" SCV_AUTOSYNC=off)"
+grep -q "OUT OF DATE" <<<"$out" && pass "T9 with autosync off, the gap notice is visible" \
+                                || fail "T9 the off-notice never reached the turn" "$out"
+[[ "$(stamp_of "$P/scv/SCV.md")" == "2.0.0" ]] && pass "T9 off still wrote nothing" \
+                                               || fail "T9 off wrote anyway"
+
+# (5) scv 를 채택하지 않은 디렉터리는 아무 말도 하지 않는다
+D="$WORK/nohook"; mkdir -p "$D"
+rc=0; out="$( cd "$D" && printf '{"prompt":"hello"}' \
+              | env CLAUDE_PLUGIN_ROOT="$CORE" bash "$HOOK" 2>/dev/null )" || rc=$?
+[[ $rc -eq 0 && -z "$out" ]] && pass "T9 a non-SCV directory produces nothing" \
+                             || fail "T9 output or failure outside an SCV project (rc=$rc)" "$out"
+
+echo "=== T9p — the picker keeps template reports and drops everything else ==="
+# 고르는 규칙 자체를 직접 본다. 부분 갱신의 본문(DIRTY 줄)은 보고에 붙어 있어야
+# 어느 파일이 거부됐는지 알 수 있다.
+pick() { ( source "$CORE/scripts/lib/force-help.sh"; scv_force_refresh_note ); }
+picked="$(printf '%s\n' \
+  'scv: settings file created — scv/scv_settings.json' \
+  'scv: template refresh 2.0.0 → 2.3.0 was PARTIAL — the files below were skipped:' \
+  '  DIRTY scv/PROMOTE.md' \
+  'ERROR: unrelated noise' \
+  '  WARN  should not survive a broken chain' \
+  'scv: workflow docs refreshed 2.0.0 → 2.3.0 (automatic)' | pick)"
+grep -q 'template refresh' <<<"$picked" && pass "T9p a PARTIAL report is kept" \
+                                        || fail "T9p the PARTIAL report was dropped" "$picked"
+grep -q 'DIRTY scv/PROMOTE.md' <<<"$picked" && pass "T9p the skipped-file body rides along" \
+                                             || fail "T9p the DIRTY body was lost" "$picked"
+grep -q 'workflow docs refreshed' <<<"$picked" && pass "T9p a refreshed report is kept" \
+                                                || fail "T9p the refreshed report was dropped" "$picked"
+grep -q 'settings file created' <<<"$picked" && fail "T9p a settings report leaked" "$picked" \
+                                             || pass "T9p settings reports are dropped"
+grep -q 'unrelated noise' <<<"$picked" && fail "T9p unrelated stderr leaked" "$picked" \
+                                       || pass "T9p unrelated stderr is dropped"
+grep -q 'should not survive' <<<"$picked" && fail "T9p an orphaned continuation line leaked" "$picked" \
+                                          || pass "T9p a continuation line after unrelated text is dropped"
+[[ -z "$(printf 'scv: settings file created — x\nplain line\n' | pick)" ]] \
+  && pass "T9p nothing to report means no output at all" \
+  || fail "T9p the picker spoke when it had nothing to say"
+
+echo "=== T9w — the wrapper docs no longer order a manual sync (skipped if absent) ==="
+# 이 저장소 밖이다. 옆에 체크아웃이 있을 때만 돌고, 없으면 건너뛴다.
+REPO_ROOT="$(cd "$CORE/.." 2>/dev/null && pwd)"
+SIBLINGS="$(cd "$REPO_ROOT/.." 2>/dev/null && pwd || true)"
+wrapper_docs=(
+  "$SIBLINGS/scv-claude-code/commands/update.md"
+  "$SIBLINGS/scv-codex/plugins/scv/README.md"
+  "$SIBLINGS/scv-codex/plugins/scv/adapter/protocols/update.md"
+)
+checked=0
+for doc in "${wrapper_docs[@]}"; do
+  [[ -f "$doc" ]] || continue
+  checked=$((checked+1))
+  if grep -qiE 'sync\`? separately' "$doc"; then
+    fail "T9w $(basename "$(dirname "$doc")")/$(basename "$doc") still orders a separate sync"
+  else
+    pass "T9w $(basename "$(dirname "$doc")")/$(basename "$doc") no longer orders a separate sync"
+  fi
+done
+[[ $checked -eq 0 ]] && echo "  – T9w SKIP (no wrapper checkout beside this repo)"
+
 echo
 echo "  passed: $PASS  failed: $FAIL"
 [[ $FAIL -eq 0 ]] || exit 1
