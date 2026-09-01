@@ -98,9 +98,27 @@ if [[ "${_scv_always:-on}" != "off" ]] && declare -F scv_force_routing >/dev/nul
   if [[ "$_scv_pre" == "on" ]]; then
     printf '%s\n' "$(scv_force_banner "$_scv_pre")"
     # 점검이 실패하거나 없으면 진단 없이 지시만 간다. 막지 않는다.
+    #
+    # stderr 를 버리지 않는 것이 0.42.0 의 변경이다. 점검은 시작 줄에서 자동 갱신을
+    # 부르고, 갱신이 일어나면 그 사실을 stderr 로 알린다. 예전에는 2>/dev/null 로
+    # 통째로 버려서, 문서가 갱신됐는데도 화면에 아무 증거가 남지 않았다 — 그래서
+    # 사용자가 sync 를 손으로 한 번 더 쳤다. 이제 받아서, 템플릿 갱신에 관한 줄만
+    # 골라 지시 뒤·진단 앞에 싣는다. 고르는 일은 순수 함수가 한다.
     _scv_probe="$CORE_HOME/scripts/help.sh"
+    _scv_note=""
     if [[ -f "$_scv_probe" ]]; then
-      _scv_diag="$(bash "$_scv_probe" 2>/dev/null | scv_force_trim_diagnosis || true)"
+      _scv_err="$(mktemp 2>/dev/null || printf '')"
+      if [[ -n "$_scv_err" ]]; then
+        _scv_diag="$(bash "$_scv_probe" 2>"$_scv_err" | scv_force_trim_diagnosis || true)"
+        if declare -F scv_force_refresh_note >/dev/null 2>&1; then
+          _scv_note="$(scv_force_refresh_note < "$_scv_err" || true)"
+        fi
+        rm -f "$_scv_err" 2>/dev/null || true
+      else
+        # mktemp 이 없는 환경 — 예전 동작 그대로. 보고는 못 싣지만 막지도 않는다.
+        _scv_diag="$(bash "$_scv_probe" 2>/dev/null | scv_force_trim_diagnosis || true)"
+      fi
+      [[ -n "${_scv_note//[[:space:]]/}" ]] && printf '%s\n' "$_scv_note"
       [[ -n "${_scv_diag//[[:space:]]/}" ]] && printf '%s\n' "$_scv_diag"
     fi
     printf '\n'
