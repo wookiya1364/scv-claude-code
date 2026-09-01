@@ -60,26 +60,10 @@ SCV_PLAIN_MAX_SENTENCES=<n> (sentence cap, default 2).
 PLAIN
 fi
 
-# Always-on routing (v0.35.0+). Without the command, hosts treat the skill
-# description's "use whenever…" as advice and mostly ignore it — so free
-# conversation never reaches SCV. This block is the switch the user asked for:
-# unless the settings file says SCV_ALWAYS_ON=off (only off turns it off, any
-# case), every free-conversation turn is routed through the help action's Mode
-# decision. A turn that already carries an SCV action protocol is never
-# hijacked. Same non-blocking guarantee: stdout only, never fails the session.
+# 라우팅 스위치. 켜져 있으면 아래 preflight 가 지시 블록과 진단을 싣는다 —
+# 0.41.0 부터 안내 문구는 preflight 블록에 흡수됐다. 무시되는 지시가 둘이면
+# 서로를 약화시키므로, 같은 요구는 한 곳에서만 한다.
 _scv_always="$(_scv_read SCV_ALWAYS_ON | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]' || true)"
-if [[ "${_scv_always:-on}" != "off" ]]; then
-  cat <<'ALWAYS'
-[SCV always-on] SCV_ALWAYS_ON is on (default): treat this message as SCV
-input, not free conversation. If this turn already loaded an SCV action
-protocol (help/promote/work/…), continue that protocol and ignore this notice.
-Otherwise route the message through the SCV help action — invoke it the way
-this host invokes SCV actions (e.g. the scv help command) with the message as
-its argument, run its state probe, and follow its Mode decision (A diagnosis /
-B conversation / B' archive search) for the reply. Turn off:
-scv/scv_settings.json SCV_ALWAYS_ON=off.
-ALWAYS
-fi
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" 2>/dev/null && pwd )" || exit 0
 CORE_HOME="${SCV_CORE_ROOT:-$SCRIPT_DIR/../..}"
@@ -103,17 +87,22 @@ if [[ -f "$_scv_force_lib" ]]; then
   # shellcheck disable=SC1090
   source "$_scv_force_lib" 2>/dev/null || true
 fi
-if [[ "${_scv_always:-on}" != "off" ]] && declare -F scv_force_switch >/dev/null 2>&1; then
+# 전체 스위치가 꺼져 있으면 여기서 끝난다 — 지시도 진단도 없다. 대체된 계획의
+# 검사에 있던 성질이고, 새 검사가 이어받는다.
+if [[ "${_scv_always:-on}" != "off" ]] && declare -F scv_force_routing >/dev/null 2>&1; then
   _scv_pre="$(scv_force_switch "$(_scv_read SCV_FORCE_HELP)")"
+  # 지시가 먼저, 진단이 나중이다. 0.40.0 은 반대였고 명령이 40줄 뒤에 묻혀
+  # 무시됐다. 읽는 쪽에서 명령은 맨 앞에 와야 한다.
+  scv_force_routing
+  printf '\n'
   if [[ "$_scv_pre" == "on" ]]; then
     printf '%s\n' "$(scv_force_banner "$_scv_pre")"
-    # 점검이 실패하거나 없으면 진단 없이 지침만 간다. 막지 않는다.
+    # 점검이 실패하거나 없으면 진단 없이 지시만 간다. 막지 않는다.
     _scv_probe="$CORE_HOME/scripts/help.sh"
     if [[ -f "$_scv_probe" ]]; then
       _scv_diag="$(bash "$_scv_probe" 2>/dev/null | scv_force_trim_diagnosis || true)"
       [[ -n "${_scv_diag//[[:space:]]/}" ]] && printf '%s\n' "$_scv_diag"
     fi
-    scv_force_routing
     printf '\n'
   fi
 fi
