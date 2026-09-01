@@ -74,7 +74,7 @@ After the user reports running both commands, suggest re-invoking `/scv:update`.
 
 Claude Code slash commands run in a sandboxed protocol — they cannot programmatically invoke other slash commands (`/plugin marketplace update`, `/reload-plugins`) on behalf of the user. `/scv:update` therefore acts as a *diagnostic + guide*, not an automatic updater.
 
-For the project-level template re-sync (`scv/SCV.md`, `scv/PROMOTE.md`, etc. after a plugin update bumps the template), run `/scv:sync` separately. `/scv:update` does not touch project files.
+The project's workflow docs (`scv/SCV.md`, `scv/PROMOTE.md`, etc.) close their own gap: after `/reload-plugins`, the first Core-scripted action of the next turn compares the project's stamped template against the payload's and refreshes the docs when they differ — and reports that it did, in that turn's output. Nothing to run by hand. `/scv:update` itself never touches project files; `/scv:sync` remains the by-hand re-run and the interactive path for pre-2.x projects, which the automatic refresh deliberately skips.
 
 ## Never
 
