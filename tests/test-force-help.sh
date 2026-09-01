@@ -71,11 +71,23 @@ else
   fail "순서가 뒤집혔다 — 지시=${DIR_LINE:-없음} 진단=${DIAG_LINE:-없음}"
 fi
 
-echo "── [T2] 세 갈래가 모두 있고 명령문이다 ──"
-grep -q "앞으로 할 일" <<<"$OUT" && ok "A — 앞으로 할 일" || fail "A 갈래 없음"
-grep -q "지난 일을 찾는" <<<"$OUT" && ok "B — 지난 일 찾기" || fail "B 갈래 없음"
-grep -q "둘 다 아니면" <<<"$OUT" && ok "C — 둘 다 아님" || fail "C 갈래 없음 — 짧은 턴에도 액션이 붙는다"
-grep -q "바로 답하라" <<<"$OUT" && ok "C 가 '부르지 말고 답하라' 로 끝난다" || fail "C 의 지시가 없다"
+echo "── [T2] 갈래가 없다 — 판단보다 행동이 앞선다 ──"
+# 0.41.0 까지는 세 갈래를 제시하고 고르게 했다. 고르는 일이 행동보다 앞에 있으면
+# 그 판단이 곧 빠져나갈 구멍이 된다 — 애매한 턴 앞에서 침묵이 언제나 더 싸다.
+grep -qE "^  A\.|^  B\.|^  C\." <<<"$OUT" && fail "갈래 표지가 남아 있다" || ok "A/B/C 갈래 표지 없음"
+grep -q "셋 중 하나를 고르" <<<"$OUT" && fail "여전히 고르라고 한다" || ok "고르라는 문장 없음"
+grep -q "바로 답하라" <<<"$OUT" && fail "부르지 말라는 출구가 남아 있다" || ok "부르지 말라는 출구 없음"
+
+echo "── [T2b] 명령이 하나이고 조건이 붙어 있지 않다 ──"
+grep -q "답을 쓰기 전에" <<<"$OUT" && ok "답보다 먼저라는 시점이 있다" || fail "시점이 없다"
+grep -q "지금 호출하라" <<<"$OUT" && ok "호출 명령이 있다" || fail "호출 명령이 없다"
+grep -q "판단하지 말고 부르라" <<<"$OUT" && ok "판단을 넘기는 문장이 있다" || fail "판단이 여전히 모델에게 있다"
+grep -q "help 가 판단한다" <<<"$OUT" && ok "판단 주체가 help 로 명시돼 있다" || fail "판단 주체가 없다"
+
+echo "── [T2c] 부르지 않는 경우가 둘만 명시돼 있다 ──"
+grep -q "이미 SCV 액션이 실려 있거나" <<<"$OUT" && ok "예외 1 — 이미 액션이 실린 턴" || fail "예외 1 없음 — 자기 자신을 다시 부른다"
+grep -q "사람이 쓰지 않은 자동 알림" <<<"$OUT" && ok "예외 2 — 자동 알림" || fail "예외 2 없음"
+grep -q "그 외에는 예외가 없다" <<<"$OUT" && ok "그 둘 외에 예외가 없다고 못 박았다" || fail "예외의 상한이 없다"
 
 echo "── [T3] 빠져나갈 구멍이 닫혀 있다 ──"
 grep -q "상태를 다시 조회하지 않는 데에만" <<<"$OUT" \
@@ -178,6 +190,41 @@ for k in ("SCV_ALWAYS_ON", "SCV_FORCE_HELP"):
 PY2
 
 echo
+echo "── [T17] 지시 블록이 전보다 짧다 ──"
+# 분류를 걷어낸 만큼 줄어야 한다. 늘었다면 갈래를 말로 바꿔 남긴 것이다.
+LINES="$( ( source "$FORCE_LIB"; scv_force_routing ) | wc -l | tr -d ' ' )"
+if [[ "$LINES" -lt 21 ]]; then
+  ok "지시 블록 ${LINES}행 — 이전 21행보다 짧다"
+else
+  fail "지시 블록이 ${LINES}행 — 줄지 않았다 (이전 21행)"
+fi
+
+echo "── [T18] help 에 돌려보내는 갈래가 없다 ──"
+# 초안은 모델의 출구를 없애면서 help 안에 같은 출구를 새로 뒀다. 출구를 옮기는 것은
+# 없애는 것이 아니다 — 이 검사가 그 실수를 다시 못 하게 막는다.
+HELP_PROTO="$CORE/protocols/help.md"
+if [[ -f "$HELP_PROTO" ]]; then
+  grep -q "Never hand the turn back unrecorded" "$HELP_PROTO" \
+    && ok "돌려보내지 않는다는 규칙이 있다" || fail "규칙이 없다"
+  grep -qi "nothing worth keeping" "$HELP_PROTO" \
+    && grep -qi "rejected on purpose" "$HELP_PROTO" \
+    && ok "그 갈래를 일부러 뺐다는 근거가 남아 있다" \
+    || fail "왜 뺐는지가 없다 — 다음 사람이 다시 넣는다"
+else
+  fail "help 프로토콜을 찾을 수 없다: $HELP_PROTO"
+fi
+
+echo "── [T19] 짧은 턴은 세션의 대화 파일에 이어 붙는다 ──"
+if [[ -f "$HELP_PROTO" ]]; then
+  grep -q "appended to the" "$HELP_PROTO" \
+    && grep -q "conversation file this session is already writing" "$HELP_PROTO" \
+    && ok "세션 파일에 이어 붙인다는 규칙이 있다" || fail "이어 붙이기 규칙이 없다"
+  grep -q "no conversation file yet, open one" "$HELP_PROTO" \
+    && ok "세션 파일이 없을 때 하나 연다는 규칙이 있다" || fail "첫 짧은 턴의 처리가 없다"
+  grep -q "Short turns skip this question entirely" "$HELP_PROTO" \
+    && ok "짧은 턴에는 되묻지 않는다" || fail "짧은 턴에도 질문이 붙는다"
+fi
+
 echo "─────────────────────────────"
 echo "  통과 $PASS · 실패 $FAIL"
 [[ $FAIL -eq 0 ]] && { echo "  ALL GATES OK"; exit 0; } || exit 1
