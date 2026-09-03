@@ -26,6 +26,7 @@
     "SCV_GIF_MAX_SECONDS": "GIF 로 만들 최대 길이(초). 기본 60.",
     "SCV_GIF_WIDTH": "GIF 가로 픽셀. 기본 480.",
     "SCV_EFFORT_MODE": "작업 강도 자동 조절: auto(기본) | ask | off.",
+    "SCV_MODEL_POLICY": "SCV 액션이 도는 모델 정책. session-default(기본) = 세션 모델 그대로, 액션이 모델을 바꾸지 않는다. recommended = 무거운 액션(help·promote·work 등)은 상위 모델, 가벼운 액션(status·update 등)은 경량 모델. 그 밖의 값과 뜻은 호스트 래퍼의 set-models 액션 문서를 따른다. 액션별 모델 선택을 지원하는 호스트에서만 뜻이 있다.",
     "SCV_FAST_PATH_LINE_THRESHOLD": "계획 없이 허용하는 작은 수정의 줄 수 상한. 기본 5.",
     "SCV_STATUS_CACHE_TTL": "status 가 PR 첨부 상태를 캐시하는 초. 기본 300, CI 에서는 1.",
     "JIRA_BASE_URL": "Jira 주소. 비우면 refs 에 전체 URL 저장.",
@@ -64,6 +65,7 @@
   "SCV_GIF_WIDTH": "480",
 
   "SCV_EFFORT_MODE": "auto",
+  "SCV_MODEL_POLICY": "session-default",
   "SCV_FAST_PATH_LINE_THRESHOLD": "5",
   "SCV_STATUS_CACHE_TTL": "300",
 
