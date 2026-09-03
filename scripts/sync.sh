@@ -79,7 +79,7 @@ else
     --core-sync-succeeded
   if (( JOIN_MODE == 0 )) && [[ -x "$SCRIPT_DIR/apply-model-policy.sh" ]]; then
     echo
-    echo "Model policy (from .env SCV_MODEL_POLICY):"
+    echo "Model policy (from scv/scv_settings.json SCV_MODEL_POLICY, .env fallback):"
     SCV_PROJECT_DIR="$PROJECT_DIR" \
       "$SCRIPT_DIR/apply-model-policy.sh" --from-env 2>&1 |
       sed 's/^/  /'

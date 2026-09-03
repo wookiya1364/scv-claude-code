@@ -1,5 +1,5 @@
 ---
-description: "Choose a model policy and apply it to every SCV command's frontmatter. Persists the choice in .env so /scv:sync can reapply on template updates. Use whenever the user wants to change which model SCV commands run on — not only when they type /scv:set-models."
+description: "Choose a model policy and apply it to every SCV command's frontmatter. Persists the choice in scv/scv_settings.json so /scv:sync can reapply it after a plugin update. The shipped default is the session model — no per-command model selection until you turn one on. Use whenever the user wants to change which model SCV commands run on — not only when they type /scv:set-models."
 argument-hint: "[recommended|all-opus|all-sonnet|all-haiku|session-default]"
 allowed-tools:
   - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/apply-model-policy.sh:*)"
@@ -8,12 +8,11 @@ allowed-tools:
   - "Read"
   - "Edit"
   - "Write"
-model: haiku
 ---
 
 # /scv:set-models
 
-Apply a model policy to all SCV commands and remember the choice in `.env`.
+Apply a model policy to all SCV commands and remember the choice in `scv/scv_settings.json`. The shipped default is the session model.
 
 ## Language preference
 
@@ -40,21 +39,21 @@ Technical identifiers stay as-is: policy names (`recommended`, `all-opus`, `all-
 
 If `$ARGUMENTS` is exactly one of `recommended`, `all-opus`, `all-sonnet`, `all-haiku`, `session-default`, treat that as the chosen policy and skip to Step 2.
 
-Otherwise, fire **AskUserQuestion** with these 5 options (the first is the recommended default — put it first in the list):
+Otherwise, fire **AskUserQuestion** with these 5 options (the first is the shipped default — put it first in the list):
 
 ```
 Question: "Which model policy do you want for SCV commands?"
 options:
-[1] "recommended (Recommended)"
-    description: "Per-command mapping. status/report/update/install-deps run on haiku (cheap, fast). sync/help/promote/codegen/regression/work run on opus (heavy reasoning). Matches v0.11.5 baseline."
-[2] "all-opus"
-    description: "Every SCV command uses opus. Highest quality. Significantly higher cost — use only if your team's budget allows."
-[3] "all-sonnet"
-    description: "Every SCV command uses sonnet. Balanced between cost and quality. Good middle ground if you don't want per-command policy."
-[4] "all-haiku"
-    description: "Every SCV command uses haiku. Lowest cost. Reasoning-heavy commands (work, codegen, promote) may produce lower-quality output."
-[5] "session-default"
-    description: "Remove model: lines entirely. Each command inherits the model of the current Claude Code session. Use this if you want full manual control."
+[1] "session-default (Recommended — the shipped default)"
+    description: "No model: lines at all. Every SCV command runs on the model your Claude Code session already uses — pick Fable, Opus, or anything else once, and SCV never changes it. This is what a fresh install does."
+[2] "recommended"
+    description: "Per-command mapping to save cost: status/report/update/install-deps run on haiku; sync/help/promote/codegen/regression/work run on opus. Note: help runs every turn, so this switches your session to opus on nearly every turn."
+[3] "all-opus"
+    description: "Every SCV command uses opus. Highest quality, significantly higher cost."
+[4] "all-sonnet"
+    description: "Every SCV command uses sonnet. A middle ground if you want one fixed model for SCV."
+[5] "all-haiku"
+    description: "Every SCV command uses haiku. Lowest cost; reasoning-heavy commands (work, codegen, promote) may degrade."
 ```
 
 Map the user's selection to the corresponding lowercase identifier: `recommended` / `all-opus` / `all-sonnet` / `all-haiku` / `session-default`. Call this value **`POLICY`** from now on.
@@ -75,20 +74,22 @@ For example, if the user picked `all-haiku`, the actual call must be:
 
 The script will print per-file changes (`status: haiku -> opus` / `report: ok (haiku)` / etc). Capture stdout and surface a short summary to the user — one line per file that changed (skip the `ok` lines).
 
-## Step 3 — Persist the choice in `.env`
+## Step 3 — Persist the choice in the settings file
 
-The choice must survive `/scv:sync` (which re-renders frontmatter from templates). Persist it:
+The choice must survive `/scv:sync` and plugin updates (a fresh plugin cache carries
+no `model:` lines; sync re-applies your policy from the settings file). Persist it with
+the Core script — it creates the settings file when absent and leaves every unrelated
+line byte for byte:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/vendor/scv-core/core/scripts/env-set.sh" SCV_MODEL_POLICY=<POLICY>
+bash "${CLAUDE_PLUGIN_ROOT}/vendor/scv-core/core/scripts/settings-set.sh" SCV_MODEL_POLICY=<POLICY>
 ```
 
-It creates `.env` when absent, replaces the key in place when present, and leaves
-every unrelated line byte for byte. Do not hand-edit `.env` with Write or Edit —
-the script is what keeps this write legible to the workspace guard, and a
-hand-rolled sed or an editor call would either be denied or slip past unrecorded.
-
-The value MUST be the literal policy identifier (e.g., `recommended`), never quoted, never with spaces.
+Do not hand-edit the settings file with Write or Edit — the script is what keeps this
+write legible to the workspace guard. The value MUST be the literal policy identifier
+(e.g., `recommended`), never quoted, never with spaces. Projects that stored the key in
+`.env` before settings moved keep working: sync reads the settings file first and falls
+back to `.env`.
 
 ## Step 4 — User notice
 
@@ -97,18 +98,18 @@ Print a short final summary in the resolved language. Include:
 - Which policy was applied.
 - How many files changed (from Step 2 output).
 - A reminder: "Restart Claude Code or run `/reload-plugins` so the new model frontmatter takes effect."
-- A note: "Whenever `/scv:sync` runs and template frontmatter changes, this policy will be reapplied automatically from `.env`."
+- A note: "Whenever `/scv:sync` runs after a plugin update, this policy is re-applied from `scv/scv_settings.json`. If you never set one, commands simply follow your session model."
 
 Example summary (English):
 
 > Applied model policy: **all-haiku**.
 > 4 files updated.
 > Run `/reload-plugins` (or restart Claude Code) for the change to take effect.
-> Saved `SCV_MODEL_POLICY=all-haiku` in `.env` — `/scv:sync` will keep this in force on future template updates.
+> Saved `SCV_MODEL_POLICY=all-haiku` in `scv/scv_settings.json` — `/scv:sync` will re-apply it after future plugin updates.
 
 ## Non-negotiable rules
 
 - **Never use `<chosen>` / `<POLICY>` style placeholder strings inside a shell command that will actually execute.** When generating the Bash call in Step 2, the resolved policy identifier must be inlined as a real literal (e.g., `--policy all-haiku`). The `<POLICY>` notation in this file is documentation only.
 - **Never run `apply-model-policy.sh` without first resolving `POLICY` from Step 1.** If Step 1 cannot resolve a valid policy (e.g., AskUserQuestion was cancelled), stop and report — do not guess.
 - **Never modify command files directly.** All frontmatter updates go through the helper script for idempotence and validation.
-- **Never write `SCV_MODEL_POLICY=` with an empty value to `.env`.** If the user picks `session-default`, the value is the literal string `session-default`, not empty.
+- **Never write `SCV_MODEL_POLICY=` with an empty value to the settings file.** If the user picks `session-default`, the value is the literal string `session-default`, not empty.
