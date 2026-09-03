@@ -6,11 +6,20 @@
 #   apply-model-policy.sh --from-env [--project-dir <dir>]
 #
 # Policies:
-#   recommended       — per-command mapping (default; matches v0.11.5 baseline)
+#   session-default   — no model: line at all — every command runs on the Claude Code
+#                       session model. THIS IS THE SHIPPED DEFAULT: the committed
+#                       commands/*.md carry no model: line, and a fresh install changes
+#                       nothing about the user's model. (Before this, `recommended` was
+#                       baked into the files; with help running every turn, a Fable or
+#                       Opus session was silently switched per command.)
+#   recommended       — opt-in per-command mapping (light actions on haiku, heavy on opus)
 #   all-opus          — every command uses opus
 #   all-sonnet        — every command uses sonnet
 #   all-haiku         — every command uses haiku
-#   session-default   — remove model: line entirely (use Claude Code session model)
+#
+# --from-env reads the project's choice: scv/scv_settings.json SCV_MODEL_POLICY first
+# (where /scv:set-models persists it), then the legacy .env key for projects that set
+# it before settings moved. No value anywhere means session-default — nothing to do.
 #
 # Idempotent: running twice with the same policy produces no diff.
 # Never uses placeholder substitution — only real shell values.
@@ -150,6 +159,24 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ "$FROM_ENV" == "1" ]]; then
+  # 1) The shared settings file — where /scv:set-models persists the choice.
+  SETTINGS_FILE="$PROJECT_DIR/scv/scv_settings.json"
+  if [[ -f "$SETTINGS_FILE" ]] && command -v python3 >/dev/null 2>&1; then
+    POLICY="$(python3 - "$SETTINGS_FILE" <<'PYEOF' 2>/dev/null || true
+import json, sys
+try:
+    d = json.load(open(sys.argv[1], encoding="utf-8"))
+    v = d.get("SCV_MODEL_POLICY", "")
+    print(v.strip() if isinstance(v, str) else "")
+except Exception:
+    print("")
+PYEOF
+)"
+  fi
+  if [[ -n "${POLICY:-}" ]]; then
+    echo "model policy from $SETTINGS_FILE: $POLICY"
+  else
+  # 2) Legacy: projects that set the key in .env before settings moved (pre-0.23.0).
   ENV_FILE="$PROJECT_DIR/.env"
   if [[ ! -f "$ENV_FILE" ]]; then
     echo "no .env at $ENV_FILE — skipping model policy apply."
@@ -162,6 +189,7 @@ if [[ "$FROM_ENV" == "1" ]]; then
   if [[ -z "$POLICY" ]]; then
     echo "SCV_MODEL_POLICY not set in $ENV_FILE — skipping."
     exit 0
+  fi
   fi
 fi
 
