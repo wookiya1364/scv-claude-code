@@ -55,8 +55,13 @@ for action in \
   codegen deck handoff help install-deps promote regression report \
   routine set-models status sync update work workspace; do
   [[ -f "commands/$action.md" ]] || fail "missing commands/$action.md"
-  grep -q "^model: " "commands/$action.md" ||
-    fail "commands/$action.md lost Claude model metadata"
+  # The shipped default is the session model: a committed command file must NOT
+  # carry a model: line. One would switch the user's session model every time the
+  # command runs — and help runs every turn. A mapping is opt-in via /scv:set-models,
+  # which edits the installed copy, never the repository.
+  if grep -q "^model: " "commands/$action.md"; then
+    fail "commands/$action.md carries a model: line — the shipped default is the session model"
+  fi
 done
 
 # The frontmatter must actually parse, and every command must say *when* to

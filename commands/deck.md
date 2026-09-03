@@ -9,7 +9,6 @@ allowed-tools:
   - "Glob"
   - "Grep"
   - "Edit"
-model: opus
 ---
 
 # /scv:deck — markdown → 기획서 HTML
