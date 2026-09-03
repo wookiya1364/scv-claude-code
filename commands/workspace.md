@@ -2,7 +2,6 @@
 description: "Set up or change this repo's place in a multi-repo SCV workspace: join an umbrella as a child, create an umbrella (root), check status, or detach. Friendly — no long flags to remember. Use whenever the user asks how this repo relates to sibling repos, or wants to join, create, or leave a multi-repo workspace — not only when they type /scv:workspace."
 argument-hint: ""
 allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/workspace-helper.sh:*)", "AskUserQuestion", "Read", "Edit"]
-model: haiku
 ---
 
 # /scv:workspace

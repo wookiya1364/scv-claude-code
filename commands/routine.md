@@ -12,7 +12,6 @@ allowed-tools:
   - "Grep"
   - "Write"
   - "Edit"
-model: opus
 ---
 
 # action:routine
