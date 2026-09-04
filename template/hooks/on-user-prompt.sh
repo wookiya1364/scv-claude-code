@@ -87,14 +87,32 @@ if [[ -f "$_scv_force_lib" ]]; then
   # shellcheck disable=SC1090
   source "$_scv_force_lib" 2>/dev/null || true
 fi
+# ---------- delegate (v0.46.0+) ----------------------------------------------
+# 넷째 블록. 기본은 꺼짐이고 on 만 켠다 — 기존 셋과 반대라 정규화 함수가 따로다.
+# 켜진 프로젝트에서만 "깊은 질문은 배경 조사로" 지시를 싣는다. 세션의 노력 단계는
+# 건드리지 않는다. 다른 스위치와 독립이다: 항상-켬이 꺼져 있어도 자기 스위치만 본다.
+# 자리는 라우팅 지시 **뒤, 진단 앞** — 이것도 지시라서, 진단 뒤에 두면 0.40.0 이
+# 겪은 대로 40줄 뒤에 묻혀 무시된다. 함수를 못 찾으면 아무 것도 하지 않는다.
+_scv_delegate="off"
+if declare -F scv_delegate_switch >/dev/null 2>&1 && declare -F scv_delegate_block >/dev/null 2>&1; then
+  _scv_delegate="$(scv_delegate_switch "$(_scv_read SCV_DELEGATE_EFFORT)")"
+fi
+_scv_emit_delegate() {
+  [[ "$_scv_delegate" == "on" ]] || return 0
+  scv_delegate_block
+  printf '\n\n'
+}
+# ---------- /delegate --------------------------------------------------------
+
 # 전체 스위치가 꺼져 있으면 여기서 끝난다 — 지시도 진단도 없다. 대체된 계획의
-# 검사에 있던 성질이고, 새 검사가 이어받는다.
+# 검사에 있던 성질이고, 새 검사가 이어받는다. (위임 블록만은 자기 스위치로 따로 실린다.)
 if [[ "${_scv_always:-on}" != "off" ]] && declare -F scv_force_routing >/dev/null 2>&1; then
   _scv_pre="$(scv_force_switch "$(_scv_read SCV_FORCE_HELP)")"
   # 지시가 먼저, 진단이 나중이다. 0.40.0 은 반대였고 명령이 40줄 뒤에 묻혀
   # 무시됐다. 읽는 쪽에서 명령은 맨 앞에 와야 한다.
   scv_force_routing
   printf '\n'
+  _scv_emit_delegate
   if [[ "$_scv_pre" == "on" ]]; then
     printf '%s\n' "$(scv_force_banner "$_scv_pre")"
     # 점검이 실패하거나 없으면 진단 없이 지시만 간다. 막지 않는다.
@@ -123,6 +141,9 @@ if [[ "${_scv_always:-on}" != "off" ]] && declare -F scv_force_routing >/dev/nul
     fi
     printf '\n'
   fi
+else
+  # 항상-켬이 꺼진 프로젝트 — 지시도 진단도 없지만 위임 블록은 자기 스위치대로.
+  _scv_emit_delegate
 fi
 # ---------- /preflight -------------------------------------------------------
 
