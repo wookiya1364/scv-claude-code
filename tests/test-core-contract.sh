@@ -160,6 +160,24 @@ if grep -RInE \
   fail "Codex-only syntax leaked into the Claude adapter"
 fi
 
+# The version helper has to actually run. It once kept a rewrite of a README line
+# that no longer exists, so every release ended non-zero after the three version
+# files had already been written — a half-applied release that only a human
+# reading the terminal would catch. Re-applying the version the repo already
+# carries proves the helper exits clean and changes nothing.
+version_probe="$(mktemp -d)"
+mkdir -p "$version_probe/.claude-plugin" "$version_probe/scripts"
+cp VERSION "$version_probe/VERSION"
+cp .claude-plugin/plugin.json .claude-plugin/marketplace.json "$version_probe/.claude-plugin/"
+cp scripts/set-wrapper-version.sh "$version_probe/scripts/"
+bash "$version_probe/scripts/set-wrapper-version.sh" "$wrapper_version" >/dev/null ||
+  fail "scripts/set-wrapper-version.sh exits non-zero — a release would end half-applied"
+for version_file in VERSION .claude-plugin/plugin.json .claude-plugin/marketplace.json; do
+  cmp -s "$version_file" "$version_probe/$version_file" ||
+    fail "scripts/set-wrapper-version.sh changed $version_file when re-applying the current version"
+done
+rm -rf "$version_probe"
+
 bash tests/test-state-adapter.sh
 
 echo "PASS: Claude wrapper/core contract"
