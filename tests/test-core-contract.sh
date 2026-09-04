@@ -64,6 +64,26 @@ for action in \
   fi
 done
 
+# The background investigator (core 0.46.0+, SCV_DELEGATE_EFFORT). It is the
+# only agent this plugin ships. It must run in the background, inherit the
+# session model, and carry NO effort: line — the session's effort dial belongs
+# to the user (same principle as the model: line above). Edit tools are denied
+# outright; the rule that its only write is the report under scv/raw/ lives in
+# the definition body (Bash and Write stay, the report needs them).
+[[ -f agents/scv-investigator.md ]] || fail "agents/scv-investigator.md is absent"
+_inv_fm="$(awk 'NR==1 && $0=="---"{f=1; next} f && $0=="---"{exit} f' agents/scv-investigator.md)"
+grep -qE '^name:[[:space:]]*scv-investigator[[:space:]]*$' <<<"$_inv_fm" || fail "investigator agent is not named scv-investigator"
+grep -qE '^background:[[:space:]]*true' <<<"$_inv_fm" || fail "investigator agent is not background: true"
+grep -qE '^model:[[:space:]]*inherit' <<<"$_inv_fm" || fail "investigator agent does not inherit the session model"
+if grep -qE '^effort:' <<<"$_inv_fm"; then
+  fail "agents/scv-investigator.md carries an effort: line — the session effort belongs to the user"
+fi
+if grep -qE '^tools:.*\bEdit\b' <<<"$_inv_fm"; then
+  fail "investigator agent has the Edit tool — it must not modify the repository"
+fi
+grep -qE '^disallowedTools:.*\bEdit\b' <<<"$_inv_fm" || fail "investigator agent does not deny the Edit tool"
+grep -q 'scv/raw/' agents/scv-investigator.md || fail "investigator agent does not write its report under scv/raw/"
+
 # The frontmatter must actually parse, and every command must say *when* to
 # reach for it. A description that only states what the command does gives the
 # model no reason to run it when the user asks in plain language — it writes the
