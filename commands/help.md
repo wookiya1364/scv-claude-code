@@ -129,6 +129,29 @@ setting now shows there. Want the exact lines?"
 This governs everything the user reads: answers, questions, plans, progress
 reports, summaries, and explanations of what went wrong.
 
+## Deep questions go to a background investigator (switch, v0.46.0+)
+
+Skip this section unless `scv/scv_settings.json` sets `SCV_DELEGATE_EFFORT=on`
+(case-insensitive; absent, `off`, or any other value = off — nothing changes).
+
+When on, the per-turn hook already carries this rule for free conversation; it
+holds the same way on a turn where help is invoked directly. Answer now, at the
+session's effort — SCV never changes that dial, the same principle as the session
+model. When the question is deep (several files to read, or a claim to verify)
+and the host ships a background investigator agent named `scv-investigator`,
+hand the deep part to it in the background and say in the reply that a deeper
+result will follow. The investigator writes its full report to
+`scv/raw/<YYYYMMDD>-research-<slug>.md` — the completion notification is
+truncated, so the file is the record — and returns only a summary. When that
+summary arrives, append the file path and one line of summary to the session's
+conversation file (through the redaction filter) so the record links back.
+Where the delegation tool supports a per-call effort level, pick one that
+matches the depth; otherwise the investigator simply runs at the session's
+effort. Shallow questions are never delegated. No SCV action launches the
+investigator automatically — it is launched only on the answering model's
+judgment that the question is deep, inside whatever turn is answering, help
+included.
+
 ## Answer shape — the slots the question calls for
 
 `Plain language first` governs the lead — the first 1–2 sentences. This section
