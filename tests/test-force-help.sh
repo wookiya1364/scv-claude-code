@@ -225,6 +225,15 @@ if [[ -f "$HELP_PROTO" ]]; then
     && ok "짧은 턴에는 되묻지 않는다" || fail "짧은 턴에도 질문이 붙는다"
 fi
 
+echo "── [T20] 위임 스위치 — 기본 꺼짐, on 만 켠다 (v0.46.0+) ──"
+new_proj t20; OUT="$(run_prompt "$P")"
+grep -q "\[SCV delegate\]" <<<"$OUT" && fail "스위치 없음인데 위임 블록이 있다" || ok "기본: 위임 블록 없음"
+new_proj t20on '{"SCV_DELEGATE_EFFORT": "on"}'; OUT="$(run_prompt "$P")"
+grep -q "\[SCV delegate\]" <<<"$OUT" && ok "on → 위임 블록 있음" || fail "on 인데 위임 블록이 없다"
+grep -q "SCV: 이 턴의 첫 행동" <<<"$OUT" && ok "라우팅 지시는 그대로" || fail "위임 스위치가 라우팅 지시를 껐다"
+new_proj t20both '{"SCV_DELEGATE_EFFORT": "on", "SCV_ALWAYS_ON": "off"}'; OUT="$(run_prompt "$P")"
+grep -q "\[SCV delegate\]" <<<"$OUT" && ok "항상-켬 off 여도 위임 블록은 자기 스위치만 본다" || fail "항상-켬 off 가 위임 블록까지 껐다"
+
 echo "─────────────────────────────"
 echo "  통과 $PASS · 실패 $FAIL"
 [[ $FAIL -eq 0 ]] && { echo "  ALL GATES OK"; exit 0; } || exit 1

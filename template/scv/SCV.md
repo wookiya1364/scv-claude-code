@@ -22,7 +22,11 @@
   conversation through the help action — a plain message gets the same Mode
   decision (diagnosis / conversation / archive search) as an explicit command.
   `off` limits SCV to explicit commands. A turn already running an SCV action
-  is never hijacked.
+  is never hijacked. Two more switches on the same hook: `SCV_FORCE_HELP`
+  (default `on`, carries the project diagnosis each turn) and
+  `SCV_DELEGATE_EFFORT` (default `off`; `on` sends deep questions to a
+  background investigator when the host ships one — the session's effort is
+  never changed).
 - **Answers lead plain.** First 1–2 sentences of what you get, then one
   example, code values only when asked. Switch: `SCV_PLAIN_LANGUAGE=off`;
   sentence cap: `SCV_PLAIN_MAX_SENTENCES=<n>`.
