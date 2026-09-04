@@ -43,8 +43,8 @@ outrun the bot. It just has to be declared, with a reason.
 VERSION=<version>       # e.g. VERSION=0.28.0
 
 # Bump the wrapper version. This touches every place that records it at once:
-# VERSION, .claude-plugin/plugin.json, .claude-plugin/marketplace.json, and the
-# release line in README.md / README.ko.md / README.ja.md.
+# VERSION, .claude-plugin/plugin.json, .claude-plugin/marketplace.json.
+# The READMEs show the release through a badge, so nothing there needs editing.
 bash scripts/set-wrapper-version.sh "$VERSION"
 ```
 
