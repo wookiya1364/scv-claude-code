@@ -9,6 +9,7 @@
     "SCV_PLAIN_MAX_SENTENCES": "첫 답의 문장 수 상한. 양의 정수, 기본 2 (3–4 가 실용).",
     "SCV_ALWAYS_ON": "일반 대화도 SCV 로: on(기본, 매 메시지를 help 라우팅) | off(명령을 칠 때만).",
     "SCV_FORCE_HELP": "매 턴 프로젝트 상태를 미리 실어 보냄(preflight): on(기본) | off. 확인하려고 액션을 한 번 더 부를 이유를 없애 답이 한 번만 생성된다. 0.39.0 의 되돌림 강제는 답을 반복 생성시켜 폐기했다.",
+    "SCV_DELEGATE_EFFORT": "깊은 질문은 배경 조사로: off(기본) | on. on 만 켠다. 켜면 매 턴 지시 블록이 하나 늘어, 여러 파일을 읽거나 검증이 필요한 질문은 호스트의 배경 조사 에이전트(scv-investigator, 있을 때만)에 넘기고 답은 지금 세션 그대로 나간다. 조사 결과 전문은 scv/raw/ 파일로. 세션의 노력 단계(effort)는 어느 경우에도 SCV 가 바꾸지 않는다.",
     "NOTIFIER_PROVIDER": "팀 보고 채널: slack | discord. 비우면 보고 기능 꺼짐. 토큰·채널 ID 는 비밀 파일에.",
     "NOTIFIER_DRY_RUN": "1 이면 보고를 보내지 않고 내용만 찍음. 기본 0.",
     "NOTIFIER_RETRY_MAX": "보고 전송·첨부 업로드 재시도 횟수. 기본 3.",
@@ -43,6 +44,7 @@
   "SCV_PLAIN_MAX_SENTENCES": "2",
   "SCV_ALWAYS_ON": "on",
   "SCV_FORCE_HELP": "on",
+  "SCV_DELEGATE_EFFORT": "off",
 
   "NOTIFIER_PROVIDER": "",
   "NOTIFIER_DRY_RUN": "0",
