@@ -124,7 +124,7 @@ copy_fixture() {
   mkdir -p "$destination"
   cp -p "$REPO_ROOT/.gitignore" "$destination/.gitignore"
   for directory in \
-    .claude-plugin adapter scripts commands tests template protocols assets vendor; do
+    .claude-plugin adapter scripts skills tests template protocols assets vendor; do
     cp -R -p "$REPO_ROOT/$directory" "$destination/$directory"
   done
   mkdir -p "$destination/DeckUI"
@@ -806,7 +806,7 @@ run_protected_path_case \
   dirty
 run_protected_path_case \
   "tracked command protocol-body edit" \
-  "commands/help.md" \
+  "skills/help/SKILL.md" \
   dirty
 
 fixture="$WORK/adapter-file-replaced-by-directory"
@@ -937,18 +937,18 @@ fixture="$WORK/staged-command-body"
 output="$WORK/staged-command-body.out"
 copy_fixture "$fixture"
 index_body="$WORK/staged-command-body.md"
-git -C "$fixture" show HEAD:commands/help.md > "$index_body"
+git -C "$fixture" show HEAD:skills/help/SKILL.md > "$index_body"
 printf '\nstaged index body sentinel\n' >> "$index_body"
 index_blob=$(git -C "$fixture" hash-object -w "$index_body")
 git -C "$fixture" update-index \
-  --cacheinfo "100644,$index_blob,commands/help.md"
+  --cacheinfo "100644,$index_blob,skills/help/SKILL.md"
 before=$(tree_snapshot "$fixture")
 bash "$fixture/scripts/sync-core.sh" --source "$SOURCE_CORE" --dry-run \
   >"$output" 2>&1
 rc=$?
 after=$(tree_snapshot "$fixture")
 if [[ "$rc" -ne 0 &&
-      "$(git -C "$fixture" show :commands/help.md)" == *"staged index body sentinel"* &&
+      "$(git -C "$fixture" show :skills/help/SKILL.md)" == *"staged index body sentinel"* &&
       "$(cat "$output")" == *"Core sync would overwrite tracked change"* &&
       "$before" == "$after" ]]; then
   ok "staged command body is rejected and remains in the index"
@@ -961,20 +961,20 @@ output="$WORK/late-index.out"
 copy_fixture "$fixture"
 late_index_body="$WORK/late-index-body.md"
 late_index_replacement="$WORK/late-index-replacement"
-git -C "$fixture" show HEAD:commands/help.md > "$late_index_body"
+git -C "$fixture" show HEAD:skills/help/SKILL.md > "$late_index_body"
 printf '\nlate staged index sentinel\n' >> "$late_index_body"
 late_index_blob=$(git -C "$fixture" hash-object -w "$late_index_body")
 git -C "$fixture" update-index \
-  --cacheinfo "100644,$late_index_blob,commands/help.md"
+  --cacheinfo "100644,$late_index_blob,skills/help/SKILL.md"
 cp -p "$fixture/.git/index" "$late_index_replacement"
-git -C "$fixture" reset -q HEAD -- commands/help.md
+git -C "$fixture" reset -q HEAD -- skills/help/SKILL.md
 SCV_CORE_SYNC_TEST_DRIFT=index \
   SCV_CORE_SYNC_TEST_INDEX_REPLACEMENT="$late_index_replacement" \
   bash "$fixture/scripts/sync-core.sh" --source "$SOURCE_CORE" \
   >"$output" 2>&1
 rc=$?
 if [[ "$rc" -ne 0 &&
-      "$(git -C "$fixture" show :commands/help.md)" == *"late staged index sentinel"* &&
+      "$(git -C "$fixture" show :skills/help/SKILL.md)" == *"late staged index sentinel"* &&
       ! -e "$fixture/.git/index.lock" &&
       -z "$(transaction_debris "$fixture")" ]]; then
   ok "late index-only change is rejected, preserved, and unlocks Git"
@@ -988,11 +988,11 @@ copy_fixture "$fixture"
 alternate_index="$WORK/alternate-clean-index"
 cp -p "$fixture/.git/index" "$alternate_index"
 alternate_index_body="$WORK/alternate-index-body.md"
-git -C "$fixture" show HEAD:commands/help.md > "$alternate_index_body"
+git -C "$fixture" show HEAD:skills/help/SKILL.md > "$alternate_index_body"
 printf '\ncanonical staged index sentinel\n' >> "$alternate_index_body"
 alternate_index_blob=$(git -C "$fixture" hash-object -w "$alternate_index_body")
 git -C "$fixture" update-index \
-  --cacheinfo "100644,$alternate_index_blob,commands/help.md"
+  --cacheinfo "100644,$alternate_index_blob,skills/help/SKILL.md"
 before=$(tree_snapshot "$fixture")
 GIT_INDEX_FILE="$alternate_index" \
   bash "$fixture/scripts/sync-core.sh" --source "$SOURCE_CORE" --dry-run \
@@ -1001,7 +1001,7 @@ rc=$?
 after=$(tree_snapshot "$fixture")
 if [[ "$rc" -ne 0 &&
       "$before" == "$after" &&
-      "$(git -C "$fixture" show :commands/help.md)" == \
+      "$(git -C "$fixture" show :skills/help/SKILL.md)" == \
         *"canonical staged index sentinel"* &&
       "$(cat "$output")" == *"unsupported Git repository override: GIT_INDEX_FILE"* ]]; then
   ok "alternate index override is rejected without hiding canonical staging"
@@ -1413,8 +1413,8 @@ mkdir -p "$symlink_destination"
 for directory in scripts tests; do
   cp -R -p "$REPO_ROOT/$directory" "$symlink_destination/$directory"
 done
-cp -R -p "$REPO_ROOT/commands" "$external_commands"
-ln -s "$external_commands" "$symlink_destination/commands"
+cp -R -p "$REPO_ROOT/skills" "$external_commands"
+ln -s "$external_commands" "$symlink_destination/skills"
 printf '%s\n' "$token" > "$symlink_stage/.scv-project-core-token"
 external_before=$(tree_snapshot "$external_commands")
 output="$WORK/project-core-tree-symlink.out"
@@ -1435,7 +1435,7 @@ nested_stage="$WORK/project-core-nested-symlink-stage"
 nested_destination="$nested_stage/wrapper"
 external_lib="$WORK/project-core-external-lib"
 mkdir -p "$nested_destination"
-for directory in scripts commands tests; do
+for directory in scripts skills tests; do
   cp -R -p "$REPO_ROOT/$directory" "$nested_destination/$directory"
 done
 mv "$nested_destination/scripts/lib" "$external_lib"
@@ -1464,7 +1464,7 @@ race_ready="$WORK/project-core-late-race.ready"
 race_continue="$WORK/project-core-late-race.continue"
 output="$WORK/project-core-late-race.out"
 mkdir -p "$race_destination" "$race_external"
-for directory in scripts commands tests; do
+for directory in scripts skills tests; do
   cp -R -p "$REPO_ROOT/$directory" "$race_destination/$directory"
 done
 printf '%s\n' "$token" > "$race_stage/.scv-project-core-token"
@@ -1503,7 +1503,7 @@ new_path_stage="$WORK/project-core-new-path-stage"
 new_path_destination="$new_path_stage/wrapper"
 new_path_vendor="$WORK/project-core-new-path-vendor"
 mkdir -p "$new_path_destination"
-for directory in scripts commands tests; do
+for directory in scripts skills tests; do
   cp -R -p "$REPO_ROOT/$directory" "$new_path_destination/$directory"
 done
 cp -R -p "$SOURCE_CORE" "$new_path_vendor"
@@ -1526,12 +1526,12 @@ else
   fail "project-core rejected a new nested Core path as a missing removal parent"
 fi
 
-for directory in scripts commands tests; do
+for directory in scripts skills tests; do
   cp -R -p "$REPO_ROOT/$directory" "$project_destination/$directory"
 done
 command_mode_before=$(python3 -c \
   'import os,stat,sys; print(stat.S_IMODE(os.lstat(sys.argv[1]).st_mode))' \
-  "$project_destination/commands/help.md")
+  "$project_destination/skills/help/SKILL.md")
 if SCV_PROJECT_CORE_STAGE_ROOT="$project_stage" \
     SCV_PROJECT_CORE_WRITE_TOKEN="$token" \
     bash "$REPO_ROOT/scripts/project-core.sh" \
@@ -1543,7 +1543,7 @@ else
 fi
 command_mode_after=$(python3 -c \
   'import os,stat,sys; print(stat.S_IMODE(os.lstat(sys.argv[1]).st_mode))' \
-  "$project_destination/commands/help.md")
+  "$project_destination/skills/help/SKILL.md")
 if [[ "$command_mode_before" == "$command_mode_after" ]]; then
   ok "command body rewrite preserves adapter-owned file mode"
 else
