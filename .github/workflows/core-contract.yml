@@ -8,7 +8,7 @@ on:
       - 'vendor/scv-core/**'
       - 'scripts/**'
       - 'tests/**'
-      - 'commands/**'
+      - 'skills/**'
       - 'protocols/**'
   pull_request:
     branches: [main, stage, develop]
@@ -21,7 +21,7 @@ on:
       - 'DeckUI/**'
       - 'assets/**'
       - 'protocols/**'
-      - 'commands/**'
+      - 'skills/**'
       - 'tests/**'
       - 'VERSION'
       - 'TEMPLATE_VERSION'
@@ -62,6 +62,17 @@ jobs:
 
       - name: Verify pinned core and Claude adapter
         run: bash tests/test-core-contract.sh
+
+      # Plugin structure gate (core 0.47.0+): the same check a marketplace
+      # submission runs. --strict turns unrecognized frontmatter fields and
+      # missing metadata into failures. Local validation only — no login.
+      # Pinned to the CLI version the layout was verified against; bump on purpose.
+      - name: Plugin structure (claude plugin validate --strict)
+        if: runner.os == 'Linux'
+        run: |
+          npm install -g @anthropic-ai/claude-code@2.1.268 >/dev/null 2>&1
+          claude --version
+          claude plugin validate . --strict
 
       - name: Shell syntax
         run: |

@@ -6,7 +6,8 @@ Core payload in `vendor/scv-core/`.
 Adapter-owned behavior:
 
 - `.claude-plugin/` marketplace and plugin manifests
-- `commands/*.md` frontmatter, including `allowed-tools` and per-command
+- `skills/<action>/SKILL.md` frontmatter (`name`, `description`, `argument-hint`,
+  `allowed-tools`), including per-command
   `model:` metadata
 - `/scv:<action>` invocation syntax and `CLAUDE_PLUGIN_ROOT`
 - Claude Code language, skill-discovery, question, install, reload, and update UX
