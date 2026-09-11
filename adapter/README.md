@@ -20,7 +20,12 @@ Adapter-owned behavior:
   `on-stop.sh`, exporting `SCV_CORE_ROOT`. The templates themselves (and
   the `journal-append.sh` redaction path they call) are core-owned;
   the journal registration must stay non-blocking and must never write to
-  `scv/journal/` directly. The `PreToolUse` / `UserPromptExpansion`
+  `scv/journal/` directly. The `SessionStart` registration (Core 0.47.0+,
+  matcher `compact|clear|resume` — never `startup`) binds
+  `vendor/scv-core/core/template/hooks/on-session-start.sh`, which prints
+  the resume recap (active plans, recent decisions, the active conversation)
+  to stdout right after a context reset; it writes nothing, exits 0 on every
+  failure, and honors `SCV_RESUME_RECAP=off`. The `PreToolUse` / `UserPromptExpansion`
   registrations are a separate seam and are deliberately blocking: they
   point at `template/hooks/guard.sh`, which denies writes no SCV action
   accounts for. Non-blocking is a property of the journal templates, not of
