@@ -5,12 +5,12 @@ on:
     branches: [main, stage, develop]
     paths:
       - 'scripts/apply-model-policy.sh'
-      - 'commands/*.md'
+      - 'skills/*/SKILL.md'
       - '.github/workflows/test-model-policy.yml'
   pull_request:
     paths:
       - 'scripts/apply-model-policy.sh'
-      - 'commands/*.md'
+      - 'skills/*/SKILL.md'
       - '.github/workflows/test-model-policy.yml'
   workflow_dispatch:
 
@@ -52,32 +52,32 @@ jobs:
       - name: Policy — all-opus (15 files → opus)
         run: |
           ./scripts/apply-model-policy.sh --policy all-opus > /dev/null
-          n=0; for f in commands/*.md; do if grep -q '^model: opus' "$f"; then n=$((n+1)); fi; done
+          n=0; for f in skills/*/SKILL.md; do if grep -q '^model: opus' "$f"; then n=$((n+1)); fi; done
           [ "$n" = "15" ] || { echo "expected 15 opus, got $n"; exit 1; }
 
       - name: Policy — all-haiku (15 files → haiku)
         run: |
           ./scripts/apply-model-policy.sh --policy all-haiku > /dev/null
-          n=0; for f in commands/*.md; do if grep -q '^model: haiku' "$f"; then n=$((n+1)); fi; done
+          n=0; for f in skills/*/SKILL.md; do if grep -q '^model: haiku' "$f"; then n=$((n+1)); fi; done
           [ "$n" = "15" ] || { echo "expected 15 haiku, got $n"; exit 1; }
 
       - name: Policy — all-sonnet (15 files → sonnet)
         run: |
           ./scripts/apply-model-policy.sh --policy all-sonnet > /dev/null
-          n=0; for f in commands/*.md; do if grep -q '^model: sonnet' "$f"; then n=$((n+1)); fi; done
+          n=0; for f in skills/*/SKILL.md; do if grep -q '^model: sonnet' "$f"; then n=$((n+1)); fi; done
           [ "$n" = "15" ] || { echo "expected 15 sonnet, got $n"; exit 1; }
 
       - name: Policy — session-default (0 files with model:)
         run: |
           ./scripts/apply-model-policy.sh --policy session-default > /dev/null
-          n=0; for f in commands/*.md; do if grep -q '^model:' "$f"; then n=$((n+1)); fi; done
+          n=0; for f in skills/*/SKILL.md; do if grep -q '^model:' "$f"; then n=$((n+1)); fi; done
           [ "$n" = "0" ] || { echo "expected 0 model lines, got $n"; exit 1; }
 
       - name: Policy — recommended (6 haiku, 9 opus)
         run: |
           ./scripts/apply-model-policy.sh --policy recommended > /dev/null
           h=0; o=0
-          for f in commands/*.md; do
+          for f in skills/*/SKILL.md; do
             if grep -q '^model: haiku' "$f"; then h=$((h+1)); fi
             if grep -q '^model: opus'  "$f"; then o=$((o+1)); fi
           done
@@ -106,7 +106,7 @@ jobs:
           TMP=$(mktemp -d)
           echo "SCV_MODEL_POLICY=all-haiku" > "$TMP/.env"
           SCV_PROJECT_DIR="$TMP" ./scripts/apply-model-policy.sh --from-env > /dev/null
-          n=0; for f in commands/*.md; do if grep -q '^model: haiku' "$f"; then n=$((n+1)); fi; done
+          n=0; for f in skills/*/SKILL.md; do if grep -q '^model: haiku' "$f"; then n=$((n+1)); fi; done
           [ "$n" = "15" ] || { echo "from-env: expected 15 haiku, got $n"; exit 1; }
           ./scripts/apply-model-policy.sh --policy recommended > /dev/null
 
@@ -118,15 +118,15 @@ jobs:
       - name: CRLF input — replace + insert paths
         run: |
           TMP=$(mktemp -d)
-          mkdir -p "$TMP/scripts" "$TMP/commands"
+          mkdir -p "$TMP/scripts" "$TMP/skills/status"
           cp scripts/apply-model-policy.sh "$TMP/scripts/"
           chmod +x "$TMP/scripts/apply-model-policy.sh"
-          printf -- '---\r\ndescription: "x"\r\nmodel: opus\r\n---\r\nbody\r\n' > "$TMP/commands/status.md"
+          printf -- '---\r\ndescription: "x"\r\nmodel: opus\r\n---\r\nbody\r\n' > "$TMP/skills/status/SKILL.md"
           for c in report update install-deps set-models sync help promote codegen regression work; do
-            printf -- '---\r\nx: y\r\n---\r\n' > "$TMP/commands/$c.md"
+            mkdir -p "$TMP/skills/$c"; printf -- '---\r\nx: y\r\n---\r\n' > "$TMP/skills/$c/SKILL.md"
           done
           "$TMP/scripts/apply-model-policy.sh" --policy all-haiku > /dev/null
-          n=0; for f in "$TMP"/commands/*.md; do if grep -q '^model: haiku' "$f"; then n=$((n+1)); fi; done
+          n=0; for f in "$TMP"/skills/*/SKILL.md; do if grep -q '^model: haiku' "$f"; then n=$((n+1)); fi; done
           [ "$n" = "11" ] || { echo "CRLF: expected 11 haiku, got $n"; exit 1; }
           # idempotent on CRLF
           out=$("$TMP/scripts/apply-model-policy.sh" --policy all-haiku)
