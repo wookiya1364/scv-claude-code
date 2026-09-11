@@ -72,7 +72,13 @@ jobs:
         run: |
           npm install -g @anthropic-ai/claude-code@2.1.268 >/dev/null 2>&1
           claude --version
+          # `validate .` picks the marketplace manifest when one sits at the root,
+          # so the plugin manifest and the component directories are named
+          # explicitly — each is a separate check with its own exit code.
           claude plugin validate . --strict
+          claude plugin validate .claude-plugin/plugin.json --strict
+          claude plugin validate skills --strict
+          claude plugin validate agents --strict
 
       - name: Shell syntax
         run: |
