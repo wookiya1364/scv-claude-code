@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# apply-model-policy.sh — apply a model policy to every commands/*.md frontmatter.
+# apply-model-policy.sh — apply a model policy to every skills/<action>/SKILL.md frontmatter.
 #
 # Usage:
 #   apply-model-policy.sh --policy <name>
@@ -8,7 +8,7 @@
 # Policies:
 #   session-default   — no model: line at all — every command runs on the Claude Code
 #                       session model. THIS IS THE SHIPPED DEFAULT: the committed
-#                       commands/*.md carry no model: line, and a fresh install changes
+#                       skills/*/SKILL.md carry no model: line, and a fresh install changes
 #                       nothing about the user's model. (Before this, `recommended` was
 #                       baked into the files; with help running every turn, a Fable or
 #                       Opus session was silently switched per command.)
@@ -27,7 +27,7 @@
 set -euo pipefail
 
 PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-COMMANDS_DIR="$PLUGIN_ROOT/commands"
+COMMANDS_DIR="$PLUGIN_ROOT/skills"
 
 COMMANDS=(status report update install-deps set-models sync help promote codegen regression work workspace handoff deck routine)
 
@@ -60,7 +60,7 @@ resolve_model() {
 
 update_file() {
   local cmd="$1" target="$2"
-  local file="$COMMANDS_DIR/$cmd.md"
+  local file="$COMMANDS_DIR/$cmd/SKILL.md"
 
   if [[ ! -f "$file" ]]; then
     echo "  $cmd: SKIP (file not found: $file)" >&2

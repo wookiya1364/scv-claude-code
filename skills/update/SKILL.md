@@ -1,4 +1,5 @@
 ---
+name: update
 description: "Check installed SCV plugin version vs latest release, and guide the user through /plugin marketplace update + /reload-plugins. Read-only — does not modify project files. (v0.11.2+) Use whenever the user asks whether SCV is current or how to update it — not only when they type /scv:update."
 argument-hint: ""
 allowed-tools:
