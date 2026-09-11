@@ -508,16 +508,16 @@ compare_or_copy_file \
   "$DESTINATION/host-profile.env" \
   host-profile.env
 
-# A command's YAML frontmatter is owned by the Claude adapter. Its protocol
+# A skill's YAML frontmatter (skills/<action>/SKILL.md) is owned by the Claude adapter. Its protocol
 # body is generated from core. update and set-models are wholly adapter-owned.
 for protocol in "$CORE_ROOT"/protocols/*.md; do
   [[ -f "$protocol" ]] || continue
   action=$(basename "$protocol" .md)
   is_adapter_action "$action" && continue
-  command="$DESTINATION/commands/$action.md"
+  command="$DESTINATION/skills/$action/SKILL.md"
   validate_destination_write_path "$command"
   [[ -f "$command" ]] || {
-    echo "ERROR: missing Claude command adapter: commands/$action.md" >&2
+    echo "ERROR: missing Claude skill adapter: skills/$action/SKILL.md" >&2
     exit 1
   }
 
@@ -541,7 +541,7 @@ PY
 
   if [[ "$MODE" == check ]]; then
     if ! cmp -s "$expected" "$command"; then
-      echo "PROJECTION_MISMATCH: commands/$action.md (core body)"
+      echo "PROJECTION_MISMATCH: skills/$action/SKILL.md (core body)"
       FAILURES=$((FAILURES + 1))
     fi
   else

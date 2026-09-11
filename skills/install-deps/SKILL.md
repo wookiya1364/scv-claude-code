@@ -1,4 +1,5 @@
 ---
+name: install-deps
 description: "Detect missing SCV system dependencies (git, gh, glab, curl, jq, ffmpeg, python3) and either show OS-specific install commands or run them. graphify (Claude Code skill) is detected separately and links to its install guide. Use whenever a command reports a missing external tool, or the user asks what SCV needs installed — not only when they type /scv:install-deps."
 argument-hint: ""
 allowed-tools:
