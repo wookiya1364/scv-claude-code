@@ -148,6 +148,23 @@ check "[P6] the sync bot's branch is exempt" ALLOW \
   "$PROV" "$CODE" develop chore/core-v0.26.0 "chore(core): sync"
 check "[P7] a declared exception with a reason passes" ALLOW \
   "$PROV" "$CODE" develop fix/x "fix: one-line typo [no-plan: typo in a comment]"
+
+# The plan was committed under scv/promote/ in an earlier pull request and this
+# one archives it: git reports the move as a RENAME, so the gate must not rely on
+# rename detection to see "a plan was added under scv/archive/".
+MOVED="$TMP/plan-moved"; mkdir -p "$MOVED"
+( cd "$MOVED"
+  git init -q .; git config user.email t@e; git config user.name t; git config core.excludesFile /dev/null
+  mkdir -p scv/promote/20260813-a-thing
+  printf -- '---\ntitle: A thing\nslug: a-thing\nauthor: t\ncreated_at: 2026-08-13\nstatus: done\ntags: [test]\n---\n\nbody\n' > scv/promote/20260813-a-thing/PLAN.md
+  git add -A -f && git commit -qm base
+  git rev-parse HEAD > "$MOVED.base"
+  mkdir -p scv/archive && git mv scv/promote/20260813-a-thing scv/archive/20260813-a-thing
+  mkdir -p src && echo x > src/app.ts
+  git add -A -f && git commit -qm change
+) >/dev/null 2>&1
+check "[P9] a plan moved from promote/ to archive/ (git rename) counts as archived" ALLOW \
+  "$PROV" "$MOVED" develop feat/x "feat: add a thing"
 check "[P8] a bare marker with no reason is denied" DENY \
   "$PROV" "$CODE" develop fix/x "fix: something [no-plan]"
 

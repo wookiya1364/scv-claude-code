@@ -1,4 +1,5 @@
 ---
+name: set-models
 description: "Choose a model policy and apply it to every SCV command's frontmatter. Persists the choice in scv/scv_settings.json so /scv:sync can reapply it after a plugin update. The shipped default is the session model — no per-command model selection until you turn one on. Use whenever the user wants to change which model SCV commands run on — not only when they type /scv:set-models."
 argument-hint: "[recommended|all-opus|all-sonnet|all-haiku|session-default]"
 allowed-tools:
