@@ -129,14 +129,14 @@ jobs:
           git switch -c "$branch"
           git add \
             vendor/scv-core core.lock TEMPLATE_VERSION host-profile.env \
-            scripts template DeckUI assets protocols commands tests \
+            scripts template DeckUI assets protocols skills tests \
             ralph-template-scv.md
           git diff --cached --check
           git commit -m "chore(core): sync scv-core v${TARGET_VERSION}"
 
           # There is deliberately NO "refuse to delete files outside the vendored
           # payload" guard here. This wrapper materialises core into template/,
-          # commands/, protocols/, assets/, DeckUI/, scripts/ and tests/, and
+          # skills/, protocols/, assets/, DeckUI/, scripts/ and tests/, and
           # sync-core.sh swaps each of those trees wholesale — so a core release
           # that drops a file legitimately deletes its projection too. The
           # v0.22.0 sync removed 14 files, 7 of them outside vendor/. Such a

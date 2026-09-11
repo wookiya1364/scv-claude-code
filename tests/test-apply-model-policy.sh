@@ -60,9 +60,9 @@ printf '%s' "$OUT4" | grep -qi "invalid policy" && ok "invalid policy value: cor
 
 # 5. Isolated scratch copy: SCV_MODEL_POLICY=all-opus actually applies (still works after the fix)
 SCRATCH="$WORK/scratch-plugin"
-mkdir -p "$SCRATCH/scripts" "$SCRATCH/commands"
+mkdir -p "$SCRATCH/scripts" "$SCRATCH/skills/status"
 cp "$SCRIPT" "$SCRATCH/scripts/apply-model-policy.sh"
-cat > "$SCRATCH/commands/status.md" <<'EOF'
+cat > "$SCRATCH/skills/status/SKILL.md" <<'EOF'
 ---
 description: "test"
 model: haiku
@@ -74,36 +74,36 @@ mkdir -p "$PROJ5"
 printf 'SCV_MODEL_POLICY=all-opus\n' > "$PROJ5/.env"
 OUT5="$(SCV_PROJECT_DIR="$PROJ5" "$SCRATCH/scripts/apply-model-policy.sh" --from-env 2>&1)"; RC5=$?
 [[ $RC5 -eq 0 ]] && ok "valid policy (all-opus): exit 0" || { fail "valid policy: exit $RC5"; echo "[$OUT5]"; }
-grep -q "^model: opus" "$SCRATCH/commands/status.md" && ok "valid policy (all-opus): status.md updated to opus" || fail "valid policy: status.md not updated"
+grep -q "^model: opus" "$SCRATCH/skills/status/SKILL.md" && ok "valid policy (all-opus): status.md updated to opus" || fail "valid policy: status.md not updated"
 
 # 6. Settings file first: scv/scv_settings.json SCV_MODEL_POLICY=all-haiku, no .env → applies haiku
 SCRATCH6="$WORK/scratch6"
-mkdir -p "$SCRATCH6/scripts" "$SCRATCH6/commands"
+mkdir -p "$SCRATCH6/scripts" "$SCRATCH6/skills/help"
 cp "$SCRIPT" "$SCRATCH6/scripts/apply-model-policy.sh"
-printf -- '---\ndescription: "test"\n---\n# /scv:help\n' > "$SCRATCH6/commands/help.md"
+printf -- '---\ndescription: "test"\n---\n# /scv:help\n' > "$SCRATCH6/skills/help/SKILL.md"
 PROJ6="$WORK/proj-settings"
 mkdir -p "$PROJ6/scv"
 printf '{\n  "SCV_MODEL_POLICY": "all-haiku"\n}\n' > "$PROJ6/scv/scv_settings.json"
 OUT6="$(SCV_PROJECT_DIR="$PROJ6" "$SCRATCH6/scripts/apply-model-policy.sh" --from-env 2>&1)"; RC6=$?
 [[ $RC6 -eq 0 ]] && ok "settings file policy: exit 0" || { fail "settings file policy: exit $RC6"; echo "[$OUT6]"; }
-grep -q "^model: haiku" "$SCRATCH6/commands/help.md" && ok "settings file policy (all-haiku): help.md gained haiku" || { fail "settings file policy: help.md not updated"; echo "[$OUT6]"; }
+grep -q "^model: haiku" "$SCRATCH6/skills/help/SKILL.md" && ok "settings file policy (all-haiku): help.md gained haiku" || { fail "settings file policy: help.md not updated"; echo "[$OUT6]"; }
 
 # 7. Settings file present WITHOUT the key, .env has it → legacy .env still honored
 SCRATCH7="$WORK/scratch7"
-mkdir -p "$SCRATCH7/scripts" "$SCRATCH7/commands"
+mkdir -p "$SCRATCH7/scripts" "$SCRATCH7/skills/status"
 cp "$SCRIPT" "$SCRATCH7/scripts/apply-model-policy.sh"
-printf -- '---\ndescription: "test"\n---\n# /scv:status\n' > "$SCRATCH7/commands/status.md"
+printf -- '---\ndescription: "test"\n---\n# /scv:status\n' > "$SCRATCH7/skills/status/SKILL.md"
 PROJ7="$WORK/proj-legacy-env"
 mkdir -p "$PROJ7/scv"
 printf '{\n  "SCV_LANG": "korean"\n}\n' > "$PROJ7/scv/scv_settings.json"
 printf 'SCV_MODEL_POLICY=all-opus\n' > "$PROJ7/.env"
 OUT7="$(SCV_PROJECT_DIR="$PROJ7" "$SCRATCH7/scripts/apply-model-policy.sh" --from-env 2>&1)"; RC7=$?
 [[ $RC7 -eq 0 ]] && ok "legacy .env fallback: exit 0" || { fail "legacy .env fallback: exit $RC7"; echo "[$OUT7]"; }
-grep -q "^model: opus" "$SCRATCH7/commands/status.md" && ok "legacy .env fallback (all-opus): status.md gained opus" || { fail "legacy .env fallback: status.md not updated"; echo "[$OUT7]"; }
+grep -q "^model: opus" "$SCRATCH7/skills/status/SKILL.md" && ok "legacy .env fallback (all-opus): status.md gained opus" || { fail "legacy .env fallback: status.md not updated"; echo "[$OUT7]"; }
 
-# 8. Shipped default: the repository's commands/*.md carry no model: line
-n_model="$(grep -l '^model: ' "$REPO_ROOT"/commands/*.md 2>/dev/null | wc -l | tr -d ' ')"
-[[ "$n_model" == "0" ]] && ok "shipped default: no commands/*.md carries a model: line" || fail "shipped default: $n_model command file(s) still carry a model: line"
+# 8. Shipped default: the repository's skills/*/SKILL.md carry no model: line
+n_model="$(grep -l '^model: ' "$REPO_ROOT"/skills/*/SKILL.md 2>/dev/null | wc -l | tr -d ' ')"
+[[ "$n_model" == "0" ]] && ok "shipped default: no skills/*/SKILL.md carries a model: line" || fail "shipped default: $n_model command file(s) still carry a model: line"
 
 echo ""
 echo "── result: $PASS passed, $FAIL failed ──"
