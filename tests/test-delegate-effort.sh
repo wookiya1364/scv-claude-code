@@ -171,7 +171,7 @@ REPO_ROOT="$(cd "$CORE/.." 2>/dev/null && pwd)"
 SIB="$(cd "$REPO_ROOT/.." 2>/dev/null && pwd || true)"
 CC="$SIB/scv-claude-code"; CX="$SIB/scv-codex"
 
-if [[ -d "$CC/commands" ]]; then
+if [[ -d "$CC/skills" ]]; then
   echo "── [T9] 래퍼가 배경 조사 에이전트를 싣는다 ──"
   A="$CC/agents/scv-investigator.md"
   if [[ -f "$A" ]]; then

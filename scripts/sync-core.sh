@@ -156,7 +156,7 @@ TRANSACTION_PATHS=(
   vendor
   core.lock
   scripts
-  commands
+  skills
   tests
   template
   DeckUI
@@ -498,7 +498,7 @@ scopes = (
     "vendor",
     "core.lock",
     "scripts",
-    "commands",
+    "skills",
     "tests",
     "template",
     "DeckUI",
@@ -521,8 +521,8 @@ adapter_owned = {
     "tests/test-core-contract.sh",
     "tests/test-sync-core-atomicity.sh",
     "tests/test-state-adapter.sh",
-    "commands/set-models.md",
-    "commands/update.md",
+    "skills/set-models/SKILL.md",
+    "skills/update/SKILL.md",
 }
 
 def git(*arguments: str) -> bytes:
@@ -563,8 +563,8 @@ def frontmatter_body(data: bytes):
 
 def command_frontmatter_only(path: str) -> bool:
     if not (
-        path.startswith("commands/")
-        and path.endswith(".md")
+        path.startswith("skills/")
+        and path.endswith("/SKILL.md")
         and path not in adapter_owned
     ):
         return False
@@ -629,7 +629,7 @@ for record in git("ls-files", "--stage", "-z", "--", *scopes).split(b"\0"):
     index_entries[path] = (index_mode, object_id)
     mode_is_core_owned = (
         path not in adapter_owned
-        and not path.startswith("commands/")
+        and not path.startswith("skills/")
         and not (
             path.startswith("vendor/")
             and not path.startswith("vendor/scv-core/")
@@ -1110,7 +1110,7 @@ printf '%s\n' "$PROJECT_TOKEN" > "$TMP_DIR/.scv-project-core-token"
 chmod 600 "$TMP_DIR/.scv-project-core-token"
 mkdir -p "$PROJECTION_STAGE"
 cp -R -p "$REPO_ROOT/scripts" "$PROJECTION_STAGE/scripts"
-cp -R -p "$REPO_ROOT/commands" "$PROJECTION_STAGE/commands"
+cp -R -p "$REPO_ROOT/skills" "$PROJECTION_STAGE/skills"
 cp -R -p "$REPO_ROOT/tests" "$PROJECTION_STAGE/tests"
 SCV_PROJECT_CORE_STAGE_ROOT="$TMP_DIR" \
 SCV_PROJECT_CORE_WRITE_TOKEN="$PROJECT_TOKEN" \
