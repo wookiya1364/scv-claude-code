@@ -311,7 +311,7 @@ echo "=== T9w — the wrapper docs no longer order a manual sync (skipped if abs
 REPO_ROOT="$(cd "$CORE/.." 2>/dev/null && pwd)"
 SIBLINGS="$(cd "$REPO_ROOT/.." 2>/dev/null && pwd || true)"
 wrapper_docs=(
-  "$SIBLINGS/scv-claude-code/commands/update.md"
+  "$SIBLINGS/scv-claude-code/skills/update/SKILL.md"
   "$SIBLINGS/scv-codex/plugins/scv/README.md"
   "$SIBLINGS/scv-codex/plugins/scv/adapter/protocols/update.md"
 )

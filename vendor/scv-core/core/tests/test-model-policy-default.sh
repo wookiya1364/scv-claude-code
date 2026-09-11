@@ -55,16 +55,16 @@ REPO_ROOT="$(cd "$CORE/.." 2>/dev/null && pwd)"
 SIB="$(cd "$REPO_ROOT/.." 2>/dev/null && pwd || true)"
 CC="$SIB/scv-claude-code"; CX="$SIB/scv-codex"
 
-if [[ -d "$CC/commands" && -f "$CC/scripts/apply-model-policy.sh" ]]; then
+if [[ -d "$CC/skills" && -f "$CC/scripts/apply-model-policy.sh" ]]; then
   echo "── [T3] 래퍼 명령 파일에 모델 지정 줄이 없다 ──"
-  n=$(grep -l '^model:' "$CC"/commands/*.md 2>/dev/null | wc -l | tr -d ' ')
-  [[ "$n" == "0" ]] && ok "명령 파일 $(ls "$CC"/commands/*.md | wc -l | tr -d ' ')개 모두 model 줄 없음" \
-                    || fail "model 줄이 남은 명령 파일 ${n}개: $(grep -l '^model:' "$CC"/commands/*.md | xargs -n1 basename | tr '\n' ' ')"
+  n=$(grep -l '^model:' "$CC"/skills/*/SKILL.md 2>/dev/null | wc -l | tr -d ' ')
+  [[ "$n" == "0" ]] && ok "명령 파일 $(ls "$CC"/skills/*/SKILL.md | wc -l | tr -d ' ')개 모두 model 줄 없음" \
+                    || fail "model 줄이 남은 명령 파일 ${n}개: $(grep -l '^model:' "$CC"/skills/*/SKILL.md | sed "s#.*/skills/##" | tr '\n' ' ')"
 
   # 스크립트를 임시 배치에 복사 — PLUGIN_ROOT 는 스크립트 위치에서 계산되므로 배치를 흉내낸다.
   mk_wrap() {  # <이름> → 경로
-    local d="$WORK/$1"; mkdir -p "$d/scripts" "$d/commands" "$d/vendor/scv-core/core/scripts/lib"
-    cp "$CC/scripts/apply-model-policy.sh" "$d/scripts/"; cp "$CC"/commands/*.md "$d/commands/"
+    local d="$WORK/$1"; mkdir -p "$d/scripts" "$d/vendor/scv-core/core/scripts/lib"
+    cp "$CC/scripts/apply-model-policy.sh" "$d/scripts/"; cp -R "$CC/skills" "$d/skills"
     cp "$CORE/scripts/lib/settings.sh" "$d/vendor/scv-core/core/scripts/lib/"
     printf '%s' "$d"
   }
@@ -72,37 +72,37 @@ if [[ -d "$CC/commands" && -f "$CC/scripts/apply-model-policy.sh" ]]; then
   echo "── [T4] 매핑을 켜면 줄이 생기고, 끄면 사라진다 (멱등) ──"
   Wd="$(mk_wrap w4)"
   bash "$Wd/scripts/apply-model-policy.sh" --policy recommended >/dev/null 2>&1
-  h="$(grep -E '^model: ' "$Wd/commands/help.md" | head -1)"; s="$(grep -E '^model: ' "$Wd/commands/status.md" | head -1)"
+  h="$(grep -E '^model: ' "$Wd/skills/help/SKILL.md" | head -1)"; s="$(grep -E '^model: ' "$Wd/skills/status/SKILL.md" | head -1)"
   [[ -n "$h" && -n "$s" && "$h" != "$s" ]] \
     && ok "recommended → 무거운 액션(help)과 가벼운 액션(status)에 서로 다른 model 줄이 생겼다" || fail "recommended 적용 결과가 다르다 (help=[$h] status=[$s])"
   bash "$Wd/scripts/apply-model-policy.sh" --policy session-default >/dev/null 2>&1
-  [[ "$(grep -l '^model:' "$Wd"/commands/*.md 2>/dev/null | wc -l | tr -d ' ')" == "0" ]] \
+  [[ "$(grep -l '^model:' "$Wd"/skills/*/SKILL.md 2>/dev/null | wc -l | tr -d ' ')" == "0" ]] \
     && ok "session-default → 전부 제거" || fail "session-default 뒤에도 줄이 남았다"
-  before="$(cat "$Wd"/commands/*.md | cksum)"; bash "$Wd/scripts/apply-model-policy.sh" --policy session-default >/dev/null 2>&1
-  [[ "$before" == "$(cat "$Wd"/commands/*.md | cksum)" ]] && ok "두 번 적용해도 같다 (멱등)" || fail "멱등이 아니다"
+  before="$(cat "$Wd"/skills/*/SKILL.md | cksum)"; bash "$Wd/scripts/apply-model-policy.sh" --policy session-default >/dev/null 2>&1
+  [[ "$before" == "$(cat "$Wd"/skills/*/SKILL.md | cksum)" ]] && ok "두 번 적용해도 같다 (멱등)" || fail "멱등이 아니다"
 
   echo "── [T5] 정책을 설정 파일에서 읽는다 ──"
   Wd="$(mk_wrap w5)"; Pd="$WORK/p5"; mkdir -p "$Pd/scv"
   printf '{\n  "SCV_MODEL_POLICY": "recommended"\n}\n' > "$Pd/scv/scv_settings.json"
   out="$(SCV_PROJECT_DIR="$Pd" bash "$Wd/scripts/apply-model-policy.sh" --from-env 2>&1)"
-  grep -q '^model: ' "$Wd/commands/help.md" && ok "설정 파일의 정책(recommended)이 적용됐다 — model 줄이 생겼다" \
+  grep -q '^model: ' "$Wd/skills/help/SKILL.md" && ok "설정 파일의 정책(recommended)이 적용됐다 — model 줄이 생겼다" \
     || fail "설정 파일을 읽지 않았다: $(printf '%s' "$out" | tail -2 | tr '\n' ' ')"
 
   echo "── [T6] 옛 .env 만 있는 프로젝트도 읽는다 ──"
   Wd="$(mk_wrap w6)"; Pd="$WORK/p6"; mkdir -p "$Pd"
   printf 'SCV_MODEL_POLICY=recommended\n' > "$Pd/.env"
   out="$(SCV_PROJECT_DIR="$Pd" bash "$Wd/scripts/apply-model-policy.sh" --from-env 2>&1)"
-  grep -q '^model: ' "$Wd/commands/status.md" && ok ".env 의 정책(recommended)이 호환 경로로 적용됐다" \
+  grep -q '^model: ' "$Wd/skills/status/SKILL.md" && ok ".env 의 정책(recommended)이 호환 경로로 적용됐다" \
     || fail ".env 호환 읽기가 안 된다: $(printf '%s' "$out" | tail -2 | tr '\n' ' ')"
 
   echo "── [T6b] 아무 데도 없으면 세션 모델 — 줄을 만들지 않는다 ──"
   Wd="$(mk_wrap w6b)"; Pd="$WORK/p6b"; mkdir -p "$Pd/scv"; printf '{}\n' > "$Pd/scv/scv_settings.json"
   SCV_PROJECT_DIR="$Pd" bash "$Wd/scripts/apply-model-policy.sh" --from-env >/dev/null 2>&1
-  [[ "$(grep -l '^model:' "$Wd"/commands/*.md 2>/dev/null | wc -l | tr -d ' ')" == "0" ]] \
+  [[ "$(grep -l '^model:' "$Wd"/skills/*/SKILL.md 2>/dev/null | wc -l | tr -d ' ')" == "0" ]] \
     && ok "정책 없음 → 줄 없음 그대로" || fail "정책이 없는데 줄이 생겼다"
 
   echo "── [T7] set-models 문서가 없는 스크립트를 부르지 않는다 ──"
-  SM="$CC/commands/set-models.md"
+  SM="$CC/skills/set-models/SKILL.md"
   grep -q "env-set.sh" "$SM" && fail "사라진 env-set.sh 를 아직 부른다" || ok "env-set.sh 언급 없음"
   grep -q "settings-set.sh" "$SM" && ok "저장은 settings-set.sh 로" || fail "settings-set.sh 로 저장하지 않는다"
   first="$(grep -m1 -E '^\[1\] "' "$SM" || true)"
@@ -113,7 +113,7 @@ if [[ -d "$CC/commands" && -f "$CC/scripts/apply-model-policy.sh" ]]; then
   grep -q 'lost .* model metadata' "$TC" && fail "옛 단언('model 줄 있어야')이 남아 있다" || ok "옛 단언 없음"
   grep -qE 'model: .*(session|default|carries|shipped)' "$TC" && ok "새 단언('기본은 없어야') 있음" || fail "새 단언이 없다"
 else
-  skip "commands 형 래퍼(scv-claude-code) 체크아웃 없음 — T3~T8 건너뜀"
+  skip "skills 형 래퍼(scv-claude-code) 체크아웃 없음 — T3~T8 건너뜀"
 fi
 
 if [[ -d "$CX/plugins/scv" ]]; then
