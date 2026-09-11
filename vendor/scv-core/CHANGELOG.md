@@ -2,6 +2,53 @@
 
 All notable changes to SCV Core are documented here.
 
+## [0.47.0] - 2026-09-11
+
+### 비운 뒤에도 이어진다 — 그리고 명령은 skills 로 (epic plugin-modernize)
+
+두 계획을 한 릴리스로 묶었다. 하나는 사용자가 겪던 공백을 메우고, 하나는 호스트의
+현재 구조를 따라간다.
+
+**1. 압축·/clear·재개 뒤 진행 상황 재주입** (`20260911-wookiya1364-session-resume-recap`)
+
+대화를 지우거나 컨텍스트가 압축되거나 세션을 재개하면 다음 턴의 모델은 방금까지 하던
+계획·결정·대화를 몰랐다. 저널·결정·대화는 다 저장돼 있는데 **다시 읽어 주는 훅이
+없었다.**
+
+- **새 훅 템플릿 `core/template/hooks/on-session-start.sh`.** 머리말(무엇이 비웠는지) +
+  기존 `recap.sh` 출력(진행 중 계획 · 최근 결정 5건 · 미결) + 가장 최근 **활성 대화 1건
+  전문**(가림 필터 경유, 나머지 활성은 경로만). 아무 것도 쓰지 않고 항상 exit 0.
+  상한은 두지 않는다 — 결정과 대화가 길 수 있다는 판단. 실측: recap 약 1.5KB.
+- **스위치 `SCV_RESUME_RECAP`** (기본 on, off 만 끔). 순수부 `lib/resume-recap.sh`
+  (@pure 4개: 스위치 · 머리말 · 활성 대화 고르기 · 나머지 목록).
+- **래퍼 등록은 압축·비움·재개에만.** 새 세션 시작(startup)은 등록하지 않는다 — 첫
+  메시지의 preflight 가 이미 상태를 싣는다. 경쟁 플러그인처럼 매 턴 재주입하지 않는
+  이유도 같다: 매 턴은 preflight 가 맡고, 되찾기는 비운 직후 한 번.
+- 적대 검증에서 잡아 같이 고친 것: 심볼릭 링크·탭/개행 파일명 제외, `scv/` 폴더 고정
+  (`SCV_DIR` 무시 — 다른 두 훅과 같음), status 관대 인식(BOM·CRLF·따옴표·대소문자·
+  주석·60줄 상한), mtime 동률은 이름이 뒤인 쪽, 파일마다 프로세스 대신 awk·stat 일괄
+  (대화 3천 파일: 21초 → 0.2초), stat 폴백 중복 제거.
+- 코어 검사 `test-session-resume.sh` 38건. 훅 seam 문서 §6 에 셋째 템플릿 행 + 요구사항 7.
+
+**2. 명령을 skills 로 — 플러그인 구조·설명 길이를 CI 가 지킨다**
+(`20260911-wookiya1364-skills-layout-gates`)
+
+Claude Code 문서는 `commands/` 를 legacy 로 표시한다. 래퍼의 열다섯 명령을 같은 이름의
+`skills/<action>/SKILL.md` 로 옮기고(`name:` 추가) `commands/` 는 같은 릴리스에서 없앤다.
+**호출 이름 `/scv:<action>` 은 하나도 바뀌지 않는다.** `context: fork` 는 채택하지 않았다
+— 포크는 대화 이력이 없고 기본으로 사용자와 대화하지 못한다.
+
+- 코어: `test-model-policy-default.sh` · `test-autosync.sh` 가 새 경로를 본다.
+  **새 검사 `test-skill-descriptions.sh`** (옆 체크아웃 있을 때만): `name` == 디렉터리,
+  description 개별 ≤1,536자(호스트 목록 잘림 지점) · 합계 ≤8,000자(지금 5,709자),
+  `model:`·`context:` 줄 없음. 상한은 환경변수로 조정.
+- 래퍼(scv-claude-code): 투영·갱신 소유 규칙·모델 정책·계약 검사·워크플로 `paths` 가
+  `skills/` 를 본다. PR 게이트에 `claude plugin validate . --strict` (CLI 2.1.268 고정).
+- 문서 §3: 현재 발견 구조를 쓰라는 문장.
+
+**Codex 래퍼는 무변경** — 이미 skills 구조이고, 세션 시작 등가 훅은 미확인.
+갱신 뒤 예전 `commands/` 캐시가 남아 스킬이 두 번 보이면 `/reload-plugins`.
+
 ## [0.46.0] - 2026-09-04
 
 ### 깊은 질문은 배경 조사로 — 세션 effort 는 그대로, 스위치는 기본 off

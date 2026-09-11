@@ -64,7 +64,10 @@ if [[ -z "${base:-}" ]]; then
 fi
 
 changed="$(git diff --name-only "$base"...HEAD 2>/dev/null)"
-added="$(git diff --name-only --diff-filter=A "$base"...HEAD 2>/dev/null)"
+# --no-renames: a plan that was committed under scv/promote/ and then archived
+# arrives as a RENAME into scv/archive/, and git's rename detection hides it from
+# --diff-filter=A. The archive folder is new to the base either way.
+added="$(git diff --name-only --no-renames --diff-filter=A "$base"...HEAD 2>/dev/null)"
 
 # --- exemption 4: nothing but workflow files and prose ---------------------
 # This list is the guard's exempt set. core/contracts/guard.md says the two must
