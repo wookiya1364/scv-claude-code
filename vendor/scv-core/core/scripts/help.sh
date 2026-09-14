@@ -5,6 +5,13 @@ set -uo pipefail
 
 VERBOSE=0
 HAS_CONTEXT=0
+# v0.48.0+: --with-context prints only the parse header (ARG_CONTEXT · ARG_CONVERSATION ·
+# UNFINISHED_CONVERSATIONS · LEGACY_CONVERSATIONS) and exits — the per-turn hook already
+# carries the diagnosis, so printing it again here doubled every turn. --archive-index adds
+# the ARCHIVE_INDEX block for the archive-search branch only. The no-flag (diagnosis) form and
+# the legacy positional-argument form keep their full output byte for byte.
+HEADER_ONLY=0
+WANT_INDEX=0
 # v0.9.0+: collect non-flag args as the "conversation argument" (free-form text
 # the user typed after /scv:help). If empty, /scv:help runs in diagnosis mode.
 # If non-empty, /scv:help enters conversation mode (the help protocol handles).
@@ -12,8 +19,9 @@ CONV_ARG=""
 for a in "$@"; do
   case "$a" in
     --verbose|-v) VERBOSE=1 ;;
-    --with-context) HAS_CONTEXT=1 ;;
-    *) HAS_CONTEXT=1; CONV_ARG="${CONV_ARG:+$CONV_ARG }$a" ;;
+    --with-context) HAS_CONTEXT=1; HEADER_ONLY=1 ;;
+    --archive-index) HAS_CONTEXT=1; HEADER_ONLY=1; WANT_INDEX=1 ;;
+    *) HAS_CONTEXT=1; WANT_INDEX=1; CONV_ARG="${CONV_ARG:+$CONV_ARG }$a" ;;
   esac
 done
 
@@ -95,7 +103,7 @@ echo ""
 # For retrospective intent it uses this index + targeted grep on PLAN.md to
 # answer; future-leaning ignores the index entirely.
 ARCHIVE_DIR="scv/archive"
-if [[ $HAS_CONTEXT -eq 1 ]]; then
+if [[ $WANT_INDEX -eq 1 ]]; then
   if [[ -d "$ARCHIVE_DIR" ]]; then
     # Newest archives first, capped at 30 entries to keep prompt size bounded.
     echo "ARCHIVE_INDEX:"
@@ -152,6 +160,12 @@ if [[ $HAS_CONTEXT -eq 1 ]]; then
     echo "ARCHIVE_INDEX: (no archive yet)"
   fi
   echo ""
+fi
+
+# Header-only forms stop here: the conversation protocol needs nothing below, and the
+# per-turn hook already injected the diagnosis for this turn.
+if [[ $HEADER_ONLY -eq 1 ]]; then
+  exit 0
 fi
 
 # --- Fixed overview (always shown) -------------------------------------------
