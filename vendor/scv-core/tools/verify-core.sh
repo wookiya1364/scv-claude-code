@@ -73,7 +73,7 @@ else
 fi
 
 action_count="$(grep -c '"id":' "$ROOT/core/actions.json")"
-protocol_count="$(find "$ROOT/core/protocols" -type f -name '*.md' | wc -l | tr -d '[:space:]')"
+protocol_count="$(find "$ROOT/core/protocols" -maxdepth 1 -type f -name '*.md' | wc -l | tr -d '[:space:]')"
 [[ "$action_count" -eq 15 ]] || { echo "expected 15 actions, got $action_count" >&2; exit 1; }
 [[ "$protocol_count" -eq 15 ]] || { echo "expected 15 protocols, got $protocol_count" >&2; exit 1; }
 grep -A4 '"id": "update"' "$ROOT/core/actions.json" | grep -q '"owner": "adapter"'
