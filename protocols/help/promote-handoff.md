@@ -2,6 +2,11 @@
 
 Read from `/scv:help` at "Step B3 — "Enough information" signal". Follow it, then return to the protocol where you left off.
 
+> `<plugin root>` below means the directory two levels above this file (this file lives at
+> `<plugin root>/protocols/help/`; the helper scripts live at `<plugin root>/scripts/`). Branch
+> files are read as plain text, so no path placeholder is expanded here — derive the absolute
+> path from where you read this file.
+
 #### Step B3 — "Enough information" signal
 
 You decide when the three goals (goal / scope / acceptance) are clear enough. **Be soft, not strict**: if scope is mostly clear and there's at least one concrete acceptance criterion, that's enough — the user can refine more during `/scv:promote`.
