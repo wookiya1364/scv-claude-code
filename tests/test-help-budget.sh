@@ -10,7 +10,8 @@
 #   T1  help.md 본문 ≤ SCV_HELP_BODY_MAX (기본 14000)
 #   T2  부속 파일 다섯이 있고, 본문이 각각을 정확히 한 번 참조한다 (고아 참조·고아 파일·중복 없음)
 #   T3  참조 줄은 "Read … now" 명령형 한 문장
-#   T4  부속 파일에 쉬운 말 절·언어 절이 없다 (규칙 중복 금지)
+#   T4  부속 파일에 쉬운 말 절·언어 절이 없고, 경로 자리표시자(CLAUDE_PLUGIN_ROOT)가 없다 —
+#       부속 파일은 SKILL.md 와 달리 호스트가 자리표시자를 펼치지 않는다 (0.48.1)
 #   T10 help.sh --with-context 는 파싱 머리만 (진단·배너·archive 목록 없음, ≤ 1000B);
 #       인자 없음 출력은 진단을 품고, 위치 인자 출력은 ARCHIVE_INDEX 를 품는다
 #   T11 help.sh --archive-index 는 파싱 머리 + ARCHIVE_INDEX 만; 규약 파싱 목록엔 ARCHIVE_INDEX 없음
@@ -102,13 +103,15 @@ scv_help_pointer_bad() {
 }
 
 # @pure
-# 부속 파일 문자열 + 이름 → 규칙 중복 위반 줄들 (쉬운 말 절 · 언어 절이 있으면).
+# 부속 파일 문자열 + 이름 → 위반 줄들: 규칙 중복(쉬운 말 절 · 언어 절) · 경로 자리표시자
+# (부속 파일은 호스트가 자리표시자를 펼치지 않는다 — 0.48.0 실사용에서 발견, 0.48.1).
 scv_help_sub_clean() {
   local text="${1:-}" name="${2:-}" line
   while IFS= read -r line; do
     case "$line" in
       "## Plain language first"*) printf 'dup-rule %s: plain-language section\n' "$name" ;;
       "## Language preference"*)  printf 'dup-rule %s: language section\n' "$name" ;;
+      *CLAUDE_PLUGIN_ROOT*)            printf 'placeholder %s: CLAUDE_PLUGIN_ROOT in a branch file (not expanded by the host; write the path plugin-root-relative)\n' "$name" ;;
     esac
   done <<<"$text"
 }
