@@ -2,6 +2,11 @@
 
 Read from `/scv:help` at "Step A0 — Auto-hydrate on first run". Follow it, then return to the protocol where you left off.
 
+> `<plugin root>` below means the directory two levels above this file (this file lives at
+> `<plugin root>/protocols/help/`; the helper scripts live at `<plugin root>/scripts/`). Branch
+> files are read as plain text, so no path placeholder is expanded here — derive the absolute
+> path from where you read this file.
+
 #### Step A0 — Auto-hydrate on first run (v0.10.0+)
 
 If the helper output contains the line `This directory is not hydrated yet.`, the project hasn't been initialized. Don't just relay the script's instructions — offer to hydrate now.
@@ -33,8 +38,8 @@ options:
     description: "Skip automatic setup. I'll print the bash command and you can run it yourself when ready."
 ```
 
-On choice [1]: run `bash "$CLAUDE_PLUGIN_ROOT/scripts/hydrate.sh" init .`. After
-hydrate completes, re-run `bash "$CLAUDE_PLUGIN_ROOT/scripts/help.sh"` and present
+On choice [1]: run `bash "<plugin root>/scripts/hydrate.sh" init .`. After
+hydrate completes, re-run `bash "<plugin root>/scripts/help.sh"` and present
 the new diagnosis. On [2]: re-present the manual command from the helper
 output and stop.
 
