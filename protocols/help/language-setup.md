@@ -2,6 +2,11 @@
 
 Read from `/scv:help` at "First-time language setup". Follow it, then return to the protocol where you left off.
 
+> `<plugin root>` below means the directory two levels above this file (this file lives at
+> `<plugin root>/protocols/help/`; the helper scripts live at `<plugin root>/scripts/`). Branch
+> files are read as plain text, so no path placeholder is expanded here — derive the absolute
+> path from where you read this file.
+
 ### First-time language setup (only when `scv/scv_settings.json` `SCV_LANG` is unset)
 
 Ask this question exactly once:
@@ -30,7 +35,7 @@ Write it with the Core script, which creates the settings file when absent and l
 unrelated line byte for byte:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/settings-set.sh" SCV_LANG=<value>
+bash "<plugin root>/scripts/settings-set.sh" SCV_LANG=<value>
 ```
 
 Do not hand-edit the settings file for this. The script is what makes the write legible to
