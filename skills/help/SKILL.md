@@ -187,11 +187,17 @@ every turn a `load`.
 
   ```markdown
   ## Turn <N> — <ISO timestamp>
+  protocol: <fingerprint>
 
   **User**: <user's message>
 
   **Claude Code**: <your response, including any clarifying questions>
   ```
+
+  The `protocol:` line is this session's fingerprint — the `nonce` printed by
+  `help-state.sh mark` when the full protocol was read (also the one line of
+  `scv/journal/.help-nonce`). The stop hook checks it; a missing or wrong value makes the
+  next turn a `load`.
 
 - **Each turn has one shape**: the lead first (1–2 sentences, per `Plain language first`),
   then the slots the question calls for (per `Answer shape`), and then
