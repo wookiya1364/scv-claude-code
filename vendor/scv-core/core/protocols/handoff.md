@@ -67,7 +67,7 @@ reports, summaries, and explanations of what went wrong.
 
 3. **Write + commit to the root** (commits locally; does NOT push):
 
-   ```!
+   ```bash
    "${CLAUDE_PLUGIN_ROOT}/scripts/handoff.sh" write --to "<to_repo>" --slug "<slug>" --title "<title>" --decision "<needed|maybe|not-needed>" [--from-slug "<slug>"] [--ref-pr "<url>"] --body-file /tmp/scv-handoff-body.md --why-file /tmp/scv-handoff-why.md
    ```
 
@@ -79,7 +79,7 @@ reports, summaries, and explanations of what went wrong.
    *"Push this handoff to the workspace root (`<root>`)? It becomes visible to the
    other repo on their next pull."* Only on explicit yes:
 
-   ```!
+   ```bash
    "${CLAUDE_PLUGIN_ROOT}/scripts/handoff.sh" push
    ```
 
