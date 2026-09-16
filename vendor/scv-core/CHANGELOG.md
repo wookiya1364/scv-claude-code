@@ -2,6 +2,37 @@
 
 All notable changes to SCV Core are documented here.
 
+## [0.49.0] - 2026-09-16
+
+### help 규약은 세션당 한 번 — 매 턴은 기록 계약만, 진단은 변동 시에만 전체
+
+0.48 에서 help 본문을 13KB 로 줄였지만 여전히 매 턴 다시 실렸다 — 20턴 세션이면 사본 20개가
+컨텍스트에 쌓여 압축을 앞당긴다. 규약을 둘로 나눈다.
+
+- **매 턴(라우터, `protocols/help.md` ≈ 9.4KB)**: 인자 규칙 · 기록 없이 돌려보내지 않는다 · 언어 ·
+  쉬운 말 · 조사 위임 포인터 · **답 모양 절 전체** · 스크립트 실행 · 매 턴 계약(짧은 턴 이어붙이기,
+  append 형식, 한 턴 한 모양). 답 모양을 매 턴 남긴 것은 의도다 — "대화가 길어지면 잊는다"는 우려에
+  대한 답으로, 답의 계약은 사본을 아끼지 않는다.
+- **세션당 한 번(`protocols/help/full.md` ≈ 6.4KB)**: 세 모드 · 의도 분류 · B0~B3 · 분기 포인터.
+- **다시 읽을 때는 모델이 아니라 훅이 정한다.** 표식 `scv/journal/.help-state`(ignore 대상, 한 줄
+  JSON). 매 턴 훅이 세션 번호가 바뀌면 protocol=0, `SCV_HELP_RELOAD_EVERY`(기본 10)턴마다 protocol=0;
+  되찾기 훅(compact·clear·resume)이 protocol=0; `help.sh --with-context` 가 `PROTOCOL: load|loaded`
+  를 찍고, 라우터는 load 일 때만 full.md 를 읽고 `help-state.sh mark`. mark 없이는 다음 턴에 다시
+  load(자기 회복). 세션 번호가 없으면(입력이 JSON 이 아니거나 호스트가 안 줌) 표식을 건드리지 않고
+  이전 동작.
+- **진단은 변동 시에만 전체.** 잘라낸 진단의 해시가 직전 턴과 같으면 한 줄("진단 변동 없음 —
+  마지막 전체 HH:MM")만, 다르면 전체. 첫 턴은 항상 전체.
+- 스위치 `SCV_HELP_LOAD_ONCE`(기본 on; off 면 매 턴 load + 진단 매 턴 전체 = 0.48 동작).
+- 순수부 `scripts/lib/help-state.sh`(parse·reload·mark·diag·render·protocol_line, check-purity 통과) +
+  효과부 `scripts/help-state.sh`(read·prompt·reset·mark·diag). 새 검사 `tests/test-help-load-once.sh`
+  39건(전이·훅·PROTOCOL·실패 시 이전 동작·10턴 시뮬레이션). `test-help-budget.sh` 는 라우터 ≤9,500B ·
+  full ≤8,000B · 진단 변동 없는 턴 스택 ≤12,000B.
+- 계약 변경 하나: 되찾기 훅이 "아무 것도 쓰지 않는다" 에서 "표식 한 파일만 쓴다(scv/journal/ 안)" 로.
+  `test-session-resume` T10 이 그 예외만 허용한다.
+
+실측(코어): 진단 변동 없는 턴 스택 11,291B (0.48.1 의 17,653B 에서 −36%); 세션 누적은 full.md 를
+10턴에 한 번만 더한다. 설치 후 `claude plugin details` 실측은 릴리스 뒤 기록.
+
 ## [0.48.1] - 2026-09-15
 
 ### help 부속 파일의 명령 경로 — 호스트가 자리표시자를 펼치지 않는다

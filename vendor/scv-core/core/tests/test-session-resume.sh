@@ -181,12 +181,15 @@ conv "$P" 20260911-000009-s.md active "line token=abc123secret end"
 run_hook "$P"; O="$OUT"
 [[ "$O" != *"abc123secret"* && "$O" == *"[REDACTED]"* ]] && ok "T9 대화 본문의 비밀값이 가려진다" || fail "T9 비밀값이 그대로 나간다"
 
-# ---------- T10 아무 것도 쓰지 않는다 ----------
+# ---------- T10 아무 것도 쓰지 않는다 (v0.49.0: scv/journal/.help-state 표식 하나만 예외) ----------
+# 되찾기 훅은 recap 을 조립할 뿐 아무 것도 쓰지 않는다. 0.49.0 부터 단 하나의 예외 — "규약은 세션당
+# 한 번" 표식(scv/journal/.help-state, ignore 대상)의 protocol 을 0 으로 되돌리는 쓰기. 그 밖의 파일은
+# 바이트 단위로 그대로여야 한다.
 P="$(mkproj t10)"; plan "$P" 20260911-x-demo "데모 계획"; conv "$P" 20260911-000010-c.md active "BODY"
-before="$( cd "$P" && find scv -type f | LC_ALL=C sort | xargs cksum )"
+before="$( cd "$P" && find scv -type f ! -name .help-state | LC_ALL=C sort | xargs cksum )"
 run_hook "$P" >/dev/null; run_hook "$P" >/dev/null
-after="$( cd "$P" && find scv -type f | LC_ALL=C sort | xargs cksum )"
-[[ "$before" == "$after" ]] && ok "T10 두 번 돌려도 scv/ 아래 파일이 그대로다" || fail "T10 훅이 무언가 썼다"
+after="$( cd "$P" && find scv -type f ! -name .help-state | LC_ALL=C sort | xargs cksum )"
+[[ "$before" == "$after" ]] && ok "T10 두 번 돌려도 scv/ 아래 파일이 그대로다 (표식 제외)" || fail "T10 훅이 무언가 썼다"
 
 # ---------- T11 순수부 · 호스트 중립 ----------
 if bash "$CORE/scripts/check-purity.sh" "$LIB" >/dev/null 2>&1; then ok "T11 순수부 @pure 통과"; else fail "T11 순수부가 순수성 검사에 걸린다"; fi
