@@ -47,7 +47,10 @@ INCLUDE_OBSOLETE=0
 CI_MODE=0
 QUIET=0
 JSON_PATH=""
-TIMEOUT=300
+# 블록 하나(또는 메모된 게이트 하나)의 상한. 코어 검사 전부를 도는 게이트는 한 번만 돌지만 검사가 47개
+# (0.50.0 기준 약 290초)라 300 으로는 게이트 자체가 잘려 "검사 실패" 로 보였다 — 세 보관 계약이 같은
+# 게이트로 붉게 떴다. --timeout 으로 바꿀 수 있다.
+TIMEOUT=600
 MEMO=1                 # suite-gate memoization (v0.34.0): identical whole-suite calls run once per run
 ONLY_LIST=()
 SKIP_LIST=()

@@ -112,6 +112,13 @@ if [[ "${_scv_always:-on}" != "off" ]] && declare -F scv_force_routing >/dev/nul
   # 무시됐다. 읽는 쪽에서 명령은 맨 앞에 와야 한다.
   scv_force_routing
   printf '\n'
+  # v0.50.0+ — 종료 훅이 예약한 경고(규약 지문 없음 · 답 모양 위반)를 지시 바로 뒤에 한 번 싣고 지운다.
+  # 표식은 이미 protocol=0 이라 이번 help 호출이 규약 전체를 다시 읽는다 — 이 줄은 그 이유를 말할 뿐이다.
+  _scv_warn="${SCV_JOURNAL_DIR:-scv/journal}/.help-warn"
+  if [[ -f "$_scv_warn" && ! -L "$_scv_warn" ]]; then
+    head -c 2048 "$_scv_warn" 2>/dev/null; printf '\n'
+    rm -f "$_scv_warn" 2>/dev/null || true
+  fi
   _scv_emit_delegate
   if [[ "$_scv_pre" == "on" ]]; then
     printf '%s\n' "$(scv_force_banner "$_scv_pre")"
