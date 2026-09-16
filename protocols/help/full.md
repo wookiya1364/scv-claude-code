@@ -115,6 +115,7 @@ redaction-filtered through `journal-append.sh --redact-only`):
 
 ```markdown
 ## Turn <N> — <ISO timestamp>
+protocol: <fingerprint>
 
 **User**: <user's message>
 
@@ -129,3 +130,14 @@ Be soft, not strict: mostly clear scope plus one concrete acceptance criterion i
 the user asks to move on, or 8+ turns have passed), hand the conversation to
 `/scv:promote`; the branch file carries the question and Steps B4–B6.
 Read `<plugin root>/protocols/help/promote-handoff.md` now and follow it.
+
+## This session's protocol fingerprint (v0.50.0+)
+
+The fingerprint is how the hooks tell whether this protocol is still in your context
+without asking you. `help-state.sh mark` (run right after this file, as the main protocol
+says) generates a fresh 8-hex-digit value: it is the `nonce` in mark's output and the one
+line of `scv/journal/.help-nonce` — Read that file now if mark's output is not in front
+of you. Write it as the `protocol: <fingerprint>` line under every Turn heading you append,
+short turns included. The stop hook compares that line with the marker: a missing or
+different value means the protocol has left your context, so the next turn reloads it
+and says why in one line. Never copy the fingerprint into any other file.
