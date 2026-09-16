@@ -71,6 +71,33 @@ if command -v python3 >/dev/null 2>&1; then
   _scv_clean="$(printf '%s' "$SUMMARY" | python3 -c 'import sys; sys.stdout.buffer.write(sys.stdin.buffer.read().decode("utf-8","ignore").encode("utf-8"))' 2>/dev/null || true)"
   [[ -n "${_scv_clean//[[:space:]]/}" ]] && SUMMARY="$_scv_clean"
 fi
+# ---------- drift check (v0.50.0+) -------------------------------------------
+# 규약 지문 메아리 + 답 모양 린트. 이번 턴의 대화 기록에 이 세션의 규약 지문이 있는지, 직전 답의
+# 골격이 답 모양 계약 안인지를 표식 스크립트가 판정한다 — 흐려졌으면 표식을 protocol=0 으로 되돌리고
+# 다음 턴 훅이 실을 경고 한 줄을 예약한다. 답을 막거나 고치지 않는다. 어떤 실패도 exit 0.
+# 자리: 저널 기록 앞 — 저널은 4000B 꼬리만 남기지만 린트는 답의 첫 문단을 봐야 하므로 마지막
+# 어시스턴트 메시지를 통째로 따로 뽑는다(앞 64KB).
+_scv_core="${SCV_CORE_ROOT:-$SCRIPT_DIR/../..}"
+_scv_hs="$_scv_core/scripts/help-state.sh"
+if [[ -f "$_scv_hs" ]]; then
+  _scv_settings_lib="$_scv_core/scripts/lib/settings.sh"
+  # shellcheck disable=SC1090
+  [[ -f "$_scv_settings_lib" ]] && source "$_scv_settings_lib" 2>/dev/null || true
+  _scv_get() { declare -F settings_get >/dev/null 2>&1 || return 0; settings_get "$1" 2>/dev/null || true; }
+  _scv_echo="$(_scv_get SCV_HELP_ECHO)"; _scv_lint="$(_scv_get SCV_ANSWER_LINT)"
+  # 규약을 매 턴 읽는 프로젝트(SCV_HELP_LOAD_ONCE=off)에서는 지문이 무의미 — 메아리만 끈다.
+  _scv_once="$(printf '%s' "$(_scv_get SCV_HELP_LOAD_ONCE)" | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]')"
+  [[ "$_scv_once" == "off" ]] && _scv_echo="off"
+  _scv_cap="$(printf '%s' "$(_scv_get SCV_PLAIN_MAX_SENTENCES)" | tr -d '"[:space:]' | tr -d "'")"
+  [[ "$_scv_cap" =~ ^[1-9][0-9]*$ ]] || _scv_cap=2
+  _scv_last="$(tail -n 400 "$TRANSCRIPT" 2>/dev/null \
+    | jq -Rrs '[split("\n")[] | fromjson? | select(.type? == "assistant")
+                | [.message.content[]? | select(.type? == "text") | .text] | join("\n") | select(length > 0)]
+               | last // ""' 2>/dev/null | head -c 65536 || true)"
+  printf '%s' "$_scv_last" | bash "$_scv_hs" stop --echo "${_scv_echo:-on}" --lint "${_scv_lint:-on}" --cap "$_scv_cap" >/dev/null 2>&1 || true
+fi
+# ---------- /drift check -----------------------------------------------------
+
 [[ -n "${SUMMARY//[[:space:]]/}" ]] || exit 0
 
 printf '%s\n' "$SUMMARY" | bash "$JOURNAL_APPEND" --speaker assistant >/dev/null 2>&1 || true
