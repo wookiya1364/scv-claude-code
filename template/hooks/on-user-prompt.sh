@@ -137,7 +137,37 @@ if [[ "${_scv_always:-on}" != "off" ]] && declare -F scv_force_routing >/dev/nul
         _scv_diag="$(bash "$_scv_probe" 2>/dev/null | scv_force_trim_diagnosis || true)"
       fi
       [[ -n "${_scv_note//[[:space:]]/}" ]] && printf '%s\n' "$_scv_note"
-      [[ -n "${_scv_diag//[[:space:]]/}" ]] && printf '%s\n' "$_scv_diag"
+      # v0.49.0+ — 규약은 세션당 한 번, 진단은 변동 시에만 전체. 표식은 scv/journal/.help-state.
+      # 어떤 실패도 이전 동작(전체 진단)으로 떨어진다. 스위치 SCV_HELP_LOAD_ONCE=off 면 손대지 않는다.
+      _scv_hs_sh="$CORE_HOME/scripts/help-state.sh"; _scv_hs_lib="$CORE_HOME/scripts/lib/help-state.sh"
+      _scv_diag_mode="full"
+      if [[ -f "$_scv_hs_sh" && -f "$_scv_hs_lib" ]] && source "$_scv_hs_lib" 2>/dev/null \
+         && [[ "$(scv_hstate_switch "$(_scv_read SCV_HELP_LOAD_ONCE)")" == "on" ]]; then
+        _scv_sid=""
+        if command -v jq >/dev/null 2>&1; then
+          _scv_sid="$(printf '%s' "$INPUT" | jq -r 'try (.session_id // empty)' 2>/dev/null || true)"
+        elif command -v python3 >/dev/null 2>&1; then
+          _scv_sid="$(printf '%s' "$INPUT" | python3 -c 'import json,sys
+try:
+    d=json.load(sys.stdin); s=d.get("session_id",""); sys.stdout.write(s if isinstance(s,str) else "")
+except Exception:
+    pass' 2>/dev/null || true)"
+        fi
+        # 세션 번호가 없으면(호스트가 안 줌 · 입력이 JSON 이 아님) 표식을 건드리지 않는다 —
+        # 아무 것도 쓰지 않고 이전 동작(전체 진단, 다음 help 는 load)으로 간다.
+        if [[ -n "$_scv_sid" ]]; then
+          _scv_every="$(_scv_read SCV_HELP_RELOAD_EVERY | tr -d '"[:space:]' | tr -d "'" || true)"
+          [[ "$_scv_every" =~ ^[0-9]+$ ]] || _scv_every=10
+          bash "$_scv_hs_sh" prompt "$_scv_sid" "$_scv_every" >/dev/null 2>&1 || true
+          _scv_dm="$(printf '%s' "$_scv_diag" | bash "$_scv_hs_sh" diag "$(date +%H:%M 2>/dev/null || printf '?')" 2>/dev/null || printf 'full')"
+          [[ "$_scv_dm" == brief* ]] && _scv_diag_mode="brief" && _scv_diag_at="${_scv_dm#brief }"
+        fi
+      fi
+      if [[ "$_scv_diag_mode" == "brief" ]]; then
+        printf '%s\n' "$(scv_hstate_brief_line "$_scv_diag_at")"
+      else
+        [[ -n "${_scv_diag//[[:space:]]/}" ]] && printf '%s\n' "$_scv_diag"
+      fi
     fi
     printf '\n'
   fi

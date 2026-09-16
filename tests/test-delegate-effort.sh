@@ -44,6 +44,9 @@ new_proj() {  # <이름> [설정 JSON]
   return 0
 }
 run_hook() {  # <프로젝트> → 훅 stdout
+  # v0.49.0: 같은 프로젝트를 되풀이 돌릴 때 "진단 변동 없음" 한 줄로 바뀌지 않도록 표식을 지운다 —
+  # 이 검사는 위임 블록의 유무만 본다.
+  rm -f "$1/scv/journal/.help-state" 2>/dev/null
   ( cd "$1" && printf '{"prompt":"안녕","session_id":"s"}' \
     | CLAUDE_PLUGIN_ROOT="$CORE" SCV_GUARD_STATE="$WORK/state" bash "$HOOK" 2>/dev/null )
 }

@@ -165,6 +165,18 @@ fi
 # Header-only forms stop here: the conversation protocol needs nothing below, and the
 # per-turn hook already injected the diagnosis for this turn.
 if [[ $HEADER_ONLY -eq 1 ]]; then
+  # v0.49.0+ — PROTOCOL: load|loaded. "load" = read the full protocol file now (new session,
+  # after compact/clear/resume, every N turns, or the switch is off); "loaded" = it is already
+  # in this session's context. Read-only here: the per-turn hook and help-state.sh own the file.
+  _hs_lib="$SCRIPT_DIR/lib/help-state.sh"
+  if [[ -f "$_hs_lib" ]] && source "$_hs_lib" 2>/dev/null; then
+    _hs_sw="$(scv_hstate_switch "$(settings_get SCV_HELP_LOAD_ONCE 2>/dev/null || true)")"
+    _hs_file="${SCV_JOURNAL_DIR:-scv/journal}/.help-state"
+    _hs_raw=""; [[ -f "$_hs_file" && ! -L "$_hs_file" ]] && _hs_raw="$(head -c 4096 "$_hs_file" 2>/dev/null | head -1)"
+    scv_hstate_protocol_line "$(scv_hstate_parse "$_hs_raw")" "$_hs_sw"; echo
+  else
+    echo "PROTOCOL: load"
+  fi
   exit 0
 fi
 
