@@ -102,7 +102,7 @@ Options:
 Answer handling:
 
 - **[1] Install now**:
-  ```!
+  ```bash
   "${CLAUDE_PLUGIN_ROOT}/scripts/install-deps.sh" --install
   ```
   After it returns, summarize the result in the user's language: how many tools installed, any failures, whether `--check` should be re-run for verification (you can offer to do so but don't auto-run).

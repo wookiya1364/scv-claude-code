@@ -69,14 +69,14 @@ Ask the user for confirmation "이 레포를 워크스페이스에서 어떻게 
    - 이 레포의 **id** (기본값 = 폴더 이름) 와 **role** (예: frontend / backend / ai-agent).
    - (선택) workspace 이름.
 2. Run:
-   ```!
+   ```bash
    "${CLAUDE_PLUGIN_ROOT}/scripts/workspace-helper.sh" join --root "<URL>" --id "<id>" --role "<role>" --workspace "<ws>"
    ```
 3. Confirm: 이제 CHILD. `git pull` 후 `/scv:status`에 들어온 handoff가 보입니다.
 
 **우산 만들기 선택 시:**
 1. Run:
-   ```!
+   ```bash
    "${CLAUDE_PLUGIN_ROOT}/scripts/workspace-helper.sh" init-root
    ```
 2. Open `scv/WORKSPACE.yaml` (Read/Edit) and help the user fill `members:` (id / role / url per repo).
@@ -87,7 +87,7 @@ Ask the user for confirmation "이 레포를 워크스페이스에서 어떻게 
 Show repo_id / role / root / reachable (from `info`). Then ask:
 - **그대로 둔다**
 - **분리(detach) — 단일로 되돌림** → run:
-  ```!
+  ```bash
   "${CLAUDE_PLUGIN_ROOT}/scripts/workspace-helper.sh" detach
   ```
   (Reversible and lossless — re-join later with `/scv:workspace`.)
