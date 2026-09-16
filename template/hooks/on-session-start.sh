@@ -45,6 +45,11 @@ _scv_read() {  # <KEY> — 라이브러리가 없으면 빈값(=기본값).
 }
 
 # 순수부 — 없으면 아무 것도 하지 않는다. 문자열부 없이 블록을 손으로 찍지 않는다.
+# v0.49.0+ — 컨텍스트가 비워졌다(압축·지우기·재개): 다음 help 호출이 규약 전체를 다시 읽도록
+# 표식을 되돌린다. 되찾기(recap) 스위치와 무관하게, 어떤 실패도 exit 0 로.
+if [[ -f "$CORE_HOME/scripts/help-state.sh" ]]; then
+  bash "$CORE_HOME/scripts/help-state.sh" reset >/dev/null 2>&1 || true
+fi
 _scv_resume_lib="$CORE_HOME/scripts/lib/resume-recap.sh"
 [[ -f "$_scv_resume_lib" ]] || exit 0
 # shellcheck disable=SC1090

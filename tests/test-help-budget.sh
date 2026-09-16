@@ -15,7 +15,7 @@
 #   T10 help.sh --with-context 는 파싱 머리만 (진단·배너·archive 목록 없음, ≤ 1000B);
 #       인자 없음 출력은 진단을 품고, 위치 인자 출력은 ARCHIVE_INDEX 를 품는다
 #   T11 help.sh --archive-index 는 파싱 머리 + ARCHIVE_INDEX 만; 규약 파싱 목록엔 ARCHIVE_INDEX 없음
-#   T12 매 턴 스택(훅 출력 + help.md + --with-context 출력) ≤ SCV_HELP_TURN_MAX (기본 18000)
+#   T12 매 턴 스택(훅 출력[진단 변동 없는 2턴째] + help.md + --with-context 출력) ≤ SCV_HELP_TURN_MAX (기본 12000, v0.49.0)
 #   합계(본문 + 부속 파일) ≤ SCV_HELP_TOTAL_MAX (기본 30000) — 내용 폭증 방지
 #
 # 순수부: 문자열을 받아 위반 줄을 내는 함수들 (@pure). 파일 읽기·스크립트 실행은 바깥층.
@@ -39,9 +39,10 @@ ok()   { echo "  ✓ $1"; PASS=$((PASS + 1)); }
 fail() { echo "  ✖ FAIL: $1"; FAIL=$((FAIL + 1)); }
 skip() { echo "  – SKIP: $1"; SKIP=$((SKIP + 1)); }
 
-BODY_MAX="${SCV_HELP_BODY_MAX:-14000}"
-TOTAL_MAX="${SCV_HELP_TOTAL_MAX:-30000}"
-TURN_MAX="${SCV_HELP_TURN_MAX:-18000}"
+BODY_MAX="${SCV_HELP_BODY_MAX:-10000}"     # v0.49.0: 라우터(매 턴) 상한 — 답 모양 절은 매 턴 남긴다
+FULL_MAX="${SCV_HELP_FULL_MAX:-8000}"      # 세션당 1회 읽는 full.md 상한
+TOTAL_MAX="${SCV_HELP_TOTAL_MAX:-32000}"
+TURN_MAX="${SCV_HELP_TURN_MAX:-12000}"    # v0.49.0: 진단 변동 없는 턴(훅 한 줄) 기준
 WC_MAX="${SCV_HELP_WITH_CONTEXT_MAX:-1000}"
 SUBS="language-setup legacy-migration hydrate archive-search promote-handoff"
 
@@ -127,24 +128,35 @@ v="$(scv_help_budget "$BODY_BYTES" "$BODY_MAX" help.md)"
 v="$(scv_help_budget 99999 "$BODY_MAX" fake)"
 [[ -n "$v" ]] && ok "상한 초과를 잡는다" || fail "상한 초과를 못 잡는다"
 
-echo "── [T2] 부속 파일 다섯 — 존재·참조 1회 ──"
+echo "── [T2] 부속 파일 — 라우터→full 1회 · full→분기 다섯 각 1회 ──"
 ACTUAL=""
 if [[ -d "$SUBDIR" ]]; then
   for f in "$SUBDIR"/*.md; do [[ -f "$f" ]] && ACTUAL="$ACTUAL $(basename "$f" .md)"; done
 fi
 REFS="$(scv_help_refs "$BODY")"
-v="$(scv_help_check_refs "$REFS" "$SUBS" "${ACTUAL# }")"
-[[ -z "$v" ]] && ok "다섯 파일 존재 · 본문 참조 각 1회 · 고아 없음" || fail "$(printf '%s' "$v" | tr '\n' ';')"
+v="$(scv_help_check_refs "$REFS" "full language-setup" "full language-setup")"
+[[ -z "$v" ]] && ok "help.md 는 full.md 와 language-setup.md 를 각 한 번 참조" || fail "help.md 참조: $(printf '%s' "$v" | tr '\n' ';')"
+FULL="$SUBDIR/full.md"; FULL_BYTES=0
+if [[ -f "$FULL" ]]; then
+  FULL_BYTES=$(wc -c < "$FULL" | tr -d '[:space:]')
+  v="$(scv_help_budget "$FULL_BYTES" "$FULL_MAX" full.md)"; [[ -z "$v" ]] && ok "full.md ${FULL_BYTES}B ≤ ${FULL_MAX}B" || fail "$v"
+  REFS_FULL="$(scv_help_refs "$(cat "$FULL")")"
+  v="$(scv_help_check_refs "$REFS_FULL" "legacy-migration hydrate archive-search promote-handoff" "$(printf '%s' "${ACTUAL# }" | tr ' ' '\n' | grep -vxE 'full|language-setup' | tr '\n' ' ')")"
+  [[ -z "$v" ]] && ok "full.md 가 분기 넷을 각 1회 참조 · 고아 없음" || fail "full.md 참조: $(printf '%s' "$v" | tr '\n' ';')"
+else
+  fail "full.md 없음"
+fi
 v="$(scv_help_check_refs "$(printf 'hydrate\nhydrate\n')" "hydrate archive-search" "hydrate")"
 grep -q "ref-count hydrate=2" <<<"$v" && grep -q "missing-file archive-search" <<<"$v" \
   && ok "중복 참조·빠진 파일을 잡는다" || fail "순수부가 위반을 못 잡는다: $v"
 
 echo "── [T3] 포인터는 명령형 한 문장 ──"
-v="$(scv_help_pointer_bad "$BODY")"
-[[ -z "$v" ]] && ok "참조 줄 전부 'Read … now'" || fail "명령형 아님: $(printf '%s' "$v" | head -2)"
+v="$(scv_help_pointer_bad "$BODY")"; [[ -f "$SUBDIR/full.md" ]] && v="$v$(scv_help_pointer_bad "$(cat "$SUBDIR/full.md")")"
+[[ -z "$v" ]] && ok "참조 줄 전부 'Read … now' (help.md · full.md)" || fail "명령형 아님: $(printf '%s' "$v" | head -2)"
 
 echo "── [T4] 부속 파일 청결 ──"
-TOTAL_BYTES=$BODY_BYTES
+TOTAL_BYTES=$((BODY_BYTES + FULL_BYTES))
+[[ -f "$SUBDIR/full.md" ]] && { v="$(scv_help_sub_clean "$(cat "$SUBDIR/full.md")" full)"; [[ -z "$v" ]] && ok "full: 규칙 중복·자리표시자 없음" || fail "$v"; }
 for n in $SUBS; do
   f="$SUBDIR/$n.md"
   if [[ -f "$f" ]]; then
@@ -197,8 +209,9 @@ fi
 
 echo "── [T12] 매 턴 스택 합 ──"
 if [[ -f "$PROMPT_HOOK" ]]; then
+  ( cd "$WORK/p" && printf '{"prompt":"안녕","session_id":"t"}' | CLAUDE_PLUGIN_ROOT="$CORE" SCV_GUARD_STATE="$WORK/state" bash "$PROMPT_HOOK" >/dev/null 2>&1 )
   HOOK_OUT="$(cd "$WORK/p" && printf '{"prompt":"안녕","session_id":"t"}' \
-    | CLAUDE_PLUGIN_ROOT="$CORE" SCV_GUARD_STATE="$WORK/state" bash "$PROMPT_HOOK" 2>/dev/null)"
+    | CLAUDE_PLUGIN_ROOT="$CORE" SCV_GUARD_STATE="$WORK/state" bash "$PROMPT_HOOK" 2>/dev/null)"   # 2턴째: 진단 변동 없음 → 한 줄
   HOOK_BYTES=$(printf '%s' "$HOOK_OUT" | wc -c | tr -d '[:space:]')
   TURN=$((HOOK_BYTES + BODY_BYTES + WC_BYTES))
   echo "  · hook=${HOOK_BYTES}B body=${BODY_BYTES}B with-context=${WC_BYTES}B → turn=${TURN}B"
