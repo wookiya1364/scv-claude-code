@@ -2,6 +2,23 @@
 
 All notable changes to SCV Core are documented here.
 
+## [0.49.1] - 2026-09-16
+
+### 들여쓴 동적 펜스가 스킬 로드 시 실행되던 결함 — 0.49.0 의 "규약 전체 읽기" 가 한 번도 뜨지 않았다
+
+0.49.0 실사용(/clear 뒤 첫 턴)에서 발견. Claude 프로필 변환은 열 0 의 동적 펜스만 일반 `bash` 예시로
+바꿔서, 목록 항목 안에 들여쓴 동적 펜스 8곳(help 2 · workspace 3 · handoff 2 · install-deps 1)이 그대로
+남아 호스트가 스킬을 펼치는 순간 실행됐다. help 에서는 `help-state.sh mark` 가 `help.sh` 의 `PROTOCOL`
+줄보다 먼저 돌아 표식이 항상 `loaded` — 규약 전체를 읽는 분기가 어떤 세션에서도 뜨지 않았다.
+실측: 표식 갱신 시각이 프롬프트 훅 8초 뒤, turn:1 에 protocol:1.
+
+- `tools/materialize-profile.sh`: 앞 공백을 허용하는 치환 — 들여쓴 펜스도 `bash` 예시가 된다.
+- `tests/test-host-runtime-materialization.sh`: 남은 동적 펜스 검사도 들여쓴 것을 본다(수정 전 실패 확인).
+- 0.49.0 의 검사 39건이 못 잡은 이유: 훅과 mark 를 셸에서 정한 순서로 부를 뿐, 스킬 문서의 펜스가
+  호스트에서 언제 실행되는지는 보지 않았다 — 이번 검사가 그 자리를 채운다.
+- 실측 help on-invoke: 0.49.0 에서 ~5.2k → ~3.9k 토큰(매 턴 SKILL.md 만). 규약 전체는 이제 실제로
+  세션당 한 번 실린다.
+
 ## [0.49.0] - 2026-09-16
 
 ### help 규약은 세션당 한 번 — 매 턴은 기록 계약만, 진단은 변동 시에만 전체
