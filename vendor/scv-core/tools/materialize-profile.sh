@@ -122,7 +122,7 @@ if [[ "$ARGUMENT_STYLE" == "template-string" && -d "$CORE_ROOT/protocols" ]]; th
   # text must never share that execution surface, so Claude-style projections
   # contain ordinary Bash examples for the agent to invoke after safe parsing.
   while IFS= read -r -d '' protocol; do
-    perl -pi -e 's/^```!$/```bash/' "$protocol"
+    perl -pi -e 's/^([ \t]*)```![ \t]*$/$1```bash/' "$protocol"
   done < <(find "$CORE_ROOT/protocols" -type f -name '*.md' -print0)
 fi
 
