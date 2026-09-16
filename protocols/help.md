@@ -157,7 +157,7 @@ every turn a `load`.
 - `PROTOCOL: load` — Read `${CLAUDE_PLUGIN_ROOT}/protocols/help/full.md` now, follow it for this
   turn, then record that it is loaded:
 
-  ```!
+  ```bash
   bash "${CLAUDE_PLUGIN_ROOT}/scripts/help-state.sh" mark
   ```
 
@@ -174,7 +174,7 @@ every turn a `load`.
   appended the same way.
 - **Append, never overwrite**, both sides redaction-filtered:
 
-  ```!
+  ```bash
   bash "${CLAUDE_PLUGIN_ROOT}/scripts/journal-append.sh" --redact-only
   ```
 
