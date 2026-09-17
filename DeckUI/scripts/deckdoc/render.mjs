@@ -256,6 +256,11 @@ function renderComponentInner(c, depth, t) {
   }
 }
 
+// 단계 이름 → 상태 낱말. renderHtml 이 한 번 채우고, 아래 상세 목록이 읽기만 한다.
+// 화면의 번호가 어떤 함수로 동작하는지에 더해 "그 함수가 새 것인가" 까지 보이게 하려면
+// 이 값이 상세 목록까지 내려가야 하는데, 그 사이 함수들은 이 일과 아무 상관이 없다.
+let STEP_STATUS = new Map();
+
 // One "번호별 상세" group — the list that hangs off the picture's markers. Only
 // what the author wrote is rendered: a marker with no entry here simply has no
 // entry (the deck never invents the description it could not read).
@@ -273,7 +278,13 @@ function renderSpecGroup(items, cls, kind, label) {
       // `step` ties this numbered item to a step of the plan's pipeline, so the plan,
       // the picture and the code read as one chain instead of three parallel documents.
       const step = it.step == null ? "" : String(it.step).trim();
-      const stepTag = step ? `<span class="wf-spec-step">${esc(step)}</span>` : "";
+      const stepState = step ? STEP_STATUS.get(step) : null;
+      const stepStateTag = stepState
+        ? `<span class="wf-spec-state wf-spec-state-${esc(stepState.key)}">${esc(stepState.label)}</span>`
+        : "";
+      const stepTag = step
+        ? `<span class="wf-spec-step">${esc(step)}</span>${stepStateTag}`
+        : "";
       const name = it.title || stepTag ? `<div class="wf-spec-name">${esc(it.title || "")}${stepTag}</div>` : "";
       const body = notes ? `<ul class="wf-spec-notes">${notes}</ul>` : "";
       return `<div class="wf-spec-item ${kind}">${badge}<div class="wf-spec-body">${name}${body}</div></div>`;
@@ -715,6 +726,11 @@ pre.mermaid.mermaid-fallback::before{content:"\\29c9 \\b2e4\\c774\\c5b4\\adf8\\b
 .wf-spec-name{font-weight:600;margin-bottom:2px}
 .wf-spec-notes{margin:0;padding-left:1.1em;color:var(--muted-foreground)}
 .wf-spec-notes li{margin:1px 0}
+.wf-spec-state{margin-left:4px;padding:1px 6px;border-radius:999px;border:1px solid var(--border-strong);font:700 10.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:nowrap}
+.wf-spec-state-added{background:#FFE082;border-color:#F57C00;color:#000}
+.wf-spec-state-changed{background:#90CAF9;border-color:#1565C0;color:#000}
+.wf-spec-state-removed{background:transparent;border-color:#EF9A9A;color:#EF9A9A;border-style:dashed}
+.wf-spec-state-reused{background:var(--surface-3);border-color:var(--border-strong);color:var(--muted-foreground)}
 .wf-spec-step{margin-left:6px;padding:1px 6px;border-radius:999px;background:var(--surface-3);border:1px solid var(--border-strong);color:var(--muted-foreground);font:600 10.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:nowrap}
 .wf-sub-title{margin:12px 0 6px;font-weight:700;font-size:12.5px;letter-spacing:.02em}
 /* "Called from" sits ABOVE the picture, so the first thing a backend reader learns is
@@ -836,6 +852,15 @@ pre.mermaid.mermaid-fallback::before{content:"\\29c9 \\b2e4\\c774\\c5b4\\adf8\\b
 // makes no sense on paper).
 export function renderHtml(data, opts = {}) {
   const t = makeT(opts.lang);
+  // 변경 지도가 있으면 단계→상태 표를 채운다. 없으면 비운다 — 지난 호출의 값이 남지 않게.
+  STEP_STATUS = new Map();
+  if (opts.changeMap && Array.isArray(opts.changeMap.steps)) {
+    const words = t("changeMapWords") || {};
+    for (const st of opts.changeMap.steps) {
+      if (!st || !st.name || st.status === "unspecified") continue;
+      STEP_STATUS.set(st.name, { key: st.status, label: String(words[st.status] || st.status) });
+    }
+  }
   const mermaid = opts.mermaid || "cdn";
   const withSource = opts.source !== false;
   const sources = withSource ? opts.sources || (data.source ? [data.source] : []) : [];
