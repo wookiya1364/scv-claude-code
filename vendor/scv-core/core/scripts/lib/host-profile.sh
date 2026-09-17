@@ -119,17 +119,6 @@ scv_state_index_conflicts() {
   done < <(printf '%s\n' "$SCV_LEGACY_STATE_INDEXES" | tr '|' '\n')
 }
 
-scv_graph_skill_available() {
-  local raw candidate
-  [[ -n "$SCV_GRAPH_SKILL_PATHS" ]] || return 1
-  while IFS= read -r raw; do
-    [[ -n "$raw" ]] || continue
-    candidate="${raw//\$HOME/$HOME}"
-    if compgen -G "$candidate" >/dev/null 2>&1; then
-      return 0
-    fi
-  done < <(printf '%s\n' "$SCV_GRAPH_SKILL_PATHS" | tr '|' '\n')
-  return 1
-}
+# SCV_GRAPH_SKILL_PATHS (deprecated 0.51.0): still accepted from wrappers, ignored — the docs graph is built by scripts/graph.sh.
 
 scv_host_profile_load
