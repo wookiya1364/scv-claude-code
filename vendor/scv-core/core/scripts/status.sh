@@ -250,30 +250,16 @@ echo ""
 
 # ---------- [3] docs graph ----------
 
-echo "[docs graph (graphify skill)]"
-# Skill presence
-GRAPHIFY_SKILL="missing"
-scv_graph_skill_available && GRAPHIFY_SKILL="available"
-# Graph status
-if [[ "$GRAPHIFY_SKILL" == "missing" ]]; then
-  echo "  skill not installed — /scv:promote will run without graph optimization"
-else
-  GRAPH_DIR=".graphify/docs/graphify-out"
-  if [[ ! -d "$GRAPH_DIR" ]]; then
-    echo "  status: missing  — /scv:promote will build on first run"
-  elif [[ ! -f "$STATE_FILE" ]]; then
-    echo "  status: built    (no readpath baseline yet)"
-  else
-    # BSD/GNU portable mtime in epoch seconds.
-    graph_mt=$(stat -c %Y "$GRAPH_DIR" 2>/dev/null || stat -f %m "$GRAPH_DIR" 2>/dev/null || echo 0)
-    state_mt=$(stat -c %Y "$STATE_FILE" 2>/dev/null || stat -f %m "$STATE_FILE" 2>/dev/null || echo 0)
-    if [[ "$graph_mt" -ge "$state_mt" ]]; then
-      echo "  status: built    (up to date with readpath baseline)"
-    else
-      echo "  status: stale    — /scv:promote will auto-refresh"
-    fi
-  fi
-fi
+echo "[docs graph (scv graph)]"
+# SCV 자체 그래프 (v0.51.0+): 문서 링크 · 보관 계획→파일 · 결정 참조 · 동시변경. 낡았으면 /scv:promote/work 가 자동으로 다시 만든다.
+_gs="$(bash "$SCRIPT_DIR/graph.sh" status 2>/dev/null | sed -n 's/^GRAPH_STATUS: //p' | head -1)"
+case "${_gs:-unavailable}" in
+  built)       echo "  status: built    (scv/.graph — up to date with docs · archive · decisions)" ;;
+  stale)       echo "  status: stale    — /scv:promote / /scv:work will auto-refresh" ;;
+  missing)     echo "  status: missing  — built on first /scv:promote / /scv:work" ;;
+  off)         echo "  status: off      (SCV_GRAPH=off)" ;;
+  *)           echo "  status: unavailable (jq missing) — plans proceed without diagram 2 / impact" ;;
+esac
 
 echo ""
 

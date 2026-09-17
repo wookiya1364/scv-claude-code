@@ -147,14 +147,16 @@ pure_marked() {  # <함수 이름> — 직전 함수 정의 이후에 @pure 표�
 echo "── [T7] 코어 본문은 호스트 중립이다 ──"
 BLOCK="$( ( source "$FORCE_LIB"; scv_delegate_block ) )"
 DOC="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["_doc"]["SCV_DELEGATE_EFFORT"])' "$EXAMPLE")"
-SECTION="$(sed -n '/^## Deep questions go to a background investigator/,/^## Answer shape/p' "$HELP_PROTO")"
-[[ -n "$SECTION" ]] && ok "help 규약에 위임 단락이 있다" || fail "help 규약에 위임 단락이 없다"
+# v0.51.0: 위임 단락은 세션당 한 번 읽는 full.md 로 옮겨졌다 (라우터 다이어트).
+FULL_PROTO="$CORE/protocols/help/full.md"
+SECTION="$(awk 'index($0,"## Deep questions go to a background investigator")==1{f=1;print;next} f&&/^## /{exit} f' "$FULL_PROTO")"
+[[ -n "$SECTION" ]] && ok "help 규약(full.md)에 위임 단락이 있다" || fail "help 규약(full.md)에 위임 단락이 없다"
 # 호스트 이름은 저장소 전체 검사(test-host-neutral)가 본다 — 이 파일에 그 이름을 적으면
 # 그 검사에 이 파일이 걸린다. 여기서는 단계 이름만 직접 본다.
 for text in "$BLOCK" "$DOC" "$SECTION"; do
   grep -qiE '\b(ultracode|xhigh|low|medium|high|max)\b' <<<"$text" && fail "단계 이름이 코어 본문에 있다" || ok "단계 이름 없음"
 done
-grep -q "never changes that dial" "$HELP_PROTO" && ok "규약: 세션 다이얼은 손대지 않는다" || fail "규약에 세션 다이얼 불변 문장이 없다"
+grep -q "never changes that dial" "$FULL_PROTO" && ok "규약: 세션 다이얼은 손대지 않는다" || fail "규약에 세션 다이얼 불변 문장이 없다"
 if [[ -f "$CORE/../tests/test-host-neutral.sh" ]]; then
   bash "$CORE/../tests/test-host-neutral.sh" >/dev/null 2>&1 && ok "호스트 중립 검사 전체 통과" || fail "호스트 중립 검사 실패"
 else
