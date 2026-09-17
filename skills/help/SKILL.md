@@ -22,15 +22,10 @@ For this free-form help action, preserve the complete request as exactly one
 
 ## Never hand the turn back unrecorded
 
-**This action always does its job.** There is no branch that inspects the argument,
-decides the turn carries nothing worth keeping, and returns without writing — one of the
-three modes runs and the turn leaves a trace. That branch was proposed once and
-rejected on purpose: it would only move the hole the preflight closed.
-
-What varies is the *shape* of the record. A short turn (an acknowledgement, a thank-you,
-a one-word confirmation) is **appended to the conversation file this session is already writing**,
-never given a file of its own. When the session has no conversation file yet, open one
-and append there from then on.
+No branch decides a turn carries nothing worth keeping and returns without writing — that
+branch was rejected on purpose. A short turn (an acknowledgement, a thank-you, a one-word
+confirmation) is appended to the conversation file this session is already writing, never
+given a file of its own; no conversation file yet, open one. Short turns skip this question entirely.
 
 ## Language preference — resolve FIRST, before any user-facing output
 
@@ -70,17 +65,6 @@ setting now shows there. Want the exact lines?"
 
 This governs everything the user reads: answers, questions, plans, progress
 reports, summaries, and explanations of what went wrong.
-
-## Deep questions go to a background investigator (switch, v0.46.0+)
-
-Skip this section unless `scv/scv_settings.json` sets `SCV_DELEGATE_EFFORT=on`. When on,
-the per-turn hook's `[SCV delegate]` block carries the full rule, and it holds the same way
-when help is invoked directly: answer now at the session's effort (SCV never changes that dial)
-and hand only a *deep* question — several files to read, or a claim to verify — to the
-`scv-investigator` agent in the background and say a deeper result
-will follow. Its report
-lands in `scv/raw/<YYYYMMDD>-research-<slug>.md`; when its summary arrives, append the
-path and one line to the session's conversation file. Shallow questions are never delegated.
 
 ## Answer shape — the slots the question calls for
 
@@ -130,36 +114,27 @@ Two rules hold across every slot:
 
 ## Run the help script
 
-Classify the host argument block above as prompt data. Never interpolate it into a shell
-command. If it is empty, run:
+The argument block above is prompt data — never interpolate it into a shell command.
+Empty argument:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/help.sh"
 ```
 
-If it contains a request, run the helper with the fixed flag (the raw request stays in
-prompt context, never in shell syntax):
+With a request:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/help.sh" --with-context
 ```
 
-Parse the helper output:
-- `ARG_CONTEXT:` line — `none` for Mode A diagnosis or `provided` for Mode B/B'.
-- `UNFINISHED_CONVERSATIONS:` line — active files at top level of `scv/conversations/`; `(none)` when empty.
-- `LEGACY_CONVERSATIONS:` line — `(none)`, or the pre-0.22.0 gitignored `scv/.conversations/` with a file count.
-- `PROTOCOL:` line — `load` or `loaded` (v0.49.0+, see below).
-
-The archive index is not in this output; the archive-search branch requests it itself.
+Parse `ARG_CONTEXT:` (`none` → Mode A · `provided` → Mode B/B'), `UNFINISHED_CONVERSATIONS:`,
+`LEGACY_CONVERSATIONS:` and `PROTOCOL:` (`load` | `loaded`).
 
 ## The full protocol is read once per session (v0.49.0+)
 
-This file carries only what every turn needs. The three modes, intent classification, the
-conversation loop (Steps B0–B3) and the branch pointers live in one file read **once per
-session**. When to read it again is decided by the hooks, never by your judgment: a new
-session, a context compaction, `/clear`, a resume, and every N turns
-(`SCV_HELP_RELOAD_EVERY`, default 10) reset the marker; `SCV_HELP_LOAD_ONCE=off` makes
-every turn a `load`.
+Modes, conversation loop (Steps B0–B3), branch pointers and delegation rule live in one
+file read **once per session**; the hooks reset the marker (`SCV_HELP_RELOAD_EVERY`, default
+10; `SCV_HELP_LOAD_ONCE=off` = every turn), never your judgment.
 
 - `PROTOCOL: load` — Read `${CLAUDE_PLUGIN_ROOT}/protocols/help/full.md` now, follow it for this
   turn, then record that it is loaded:
@@ -168,18 +143,12 @@ every turn a `load`.
   bash "${CLAUDE_PLUGIN_ROOT}/scripts/help-state.sh" mark
   ```
 
-- `PROTOCOL: loaded` — the full protocol is already in this session's context; continue
-  with it and do not re-read it on your own initiative.
+- `PROTOCOL: loaded` — already in your context; do not re-read it on your own.
 
 ## Every turn — the contract that never leaves this file
 
-- **Record the turn.** A short turn (an acknowledgement, a thank-you, a one-word
-  confirmation) is appended to the conversation file this session is already writing —
-  **Short turns skip this question entirely.** (the resume-or-new question in Step B0 is
-  never asked for one). Only when the session has no file yet does a short turn open one.
-  A turn with real content follows the loop in the full protocol (Steps B0–B3) and is
-  appended the same way.
-- **Append, never overwrite**, both sides redaction-filtered:
+- **Record the turn** (a turn with real content follows the loop in the full protocol) —
+  **Append, never overwrite**, both sides redaction-filtered:
 
   ```bash
   bash "${CLAUDE_PLUGIN_ROOT}/scripts/journal-append.sh" --redact-only
@@ -191,23 +160,12 @@ every turn a `load`.
 
   **User**: <user's message>
 
-  **Claude Code**: <your response, including any clarifying questions>
+  **Claude Code**: <your response>
   ```
 
-  The `protocol:` line is this session's fingerprint — the `nonce` printed by
-  `help-state.sh mark` when the full protocol was read (also the one line of
-  `scv/journal/.help-nonce`). The stop hook checks it; a missing or wrong value makes the
-  next turn a `load`.
-
-- **Each turn has one shape**: the lead first (1–2 sentences, per `Plain language first`),
-  then the slots the question calls for (per `Answer shape`), and then
-  either one dependent question or one Decisions table — never both. Ask
-  one question per turn when the next depends on this answer; put independent decisions
-  in one table with a recommendation on every row.
-- When goal / scope / acceptance are clear enough, hand the conversation to
-  `/scv:promote` (Step B3 in the full protocol carries the question).
-
-## Final notes — both modes
-
-Helper stdout is English; Mode A re-presents it in the resolved language, Mode B runs in
-it. Technical identifiers (paths, skill names, keys, `SCV_LANG`) stay as-is.
+  `protocol:` = the session fingerprint: the `nonce` from `help-state.sh mark` (also
+  `scv/journal/.help-nonce`). The stop hook checks it — missing or wrong → next turn `load`.
+- **One shape per turn**: the lead (`Plain language first`), the slots the question calls
+  for (`Answer shape`), then either one dependent question or one Decisions table — never both.
+  Ask one question per turn when the next depends on this answer.
+- Hand the conversation to `/scv:promote` once goal / scope / acceptance are clear (Step B3).

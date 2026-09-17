@@ -81,11 +81,12 @@ else
   echo "DOCS_CONTEXT: absent"
 fi
 
-# graphify docs graph (project-root relative, matching /scv:work convention).
-if [[ -d ".graphify/docs/graphify-out" ]]; then
-  echo "GRAPHIFY_GRAPH: present .graphify/docs/graphify-out"; present=1
+# SCV 자체 그래프 (v0.51.0+) — 낡았으면 여기서 다시 만든다.
+_gs="$(bash "$SCRIPT_DIR/graph.sh" ensure 2>/dev/null | sed -n 's/^GRAPH_STATUS: //p' | head -1)"
+if [[ "${_gs:-}" == "built" ]]; then
+  echo "SCV_GRAPH: present scv/.graph"; present=1
 else
-  echo "GRAPHIFY_GRAPH: absent"
+  echo "SCV_GRAPH: absent (${_gs:-unavailable})"
 fi
 
 # FEATURE_ARCHITECTURE for a specific plan (position-in-whole diagram).
@@ -104,5 +105,5 @@ if [[ $present -eq 1 ]]; then
   echo "MODE_HINT: A (pull existing big picture → compose context-first deck)"
 else
   echo "BIG_PICTURE: absent"
-  echo "MODE_HINT: B (no big picture found → run /graphify or /scv:promote first, then A)"
+  echo "MODE_HINT: B (no big picture found → run /scv:promote first — the graph builds itself — then A)"
 fi
