@@ -84,7 +84,9 @@ cp "$J" "$WORK/g1.json"; sleep 1; gs build >/dev/null; [[ "$(jq -S 'del(.built_a
 echo "── [T6] 이 저장소 빌드 ──"
 if (( IS_CORE_REPO )); then
   t0=$(now_ms); ( cd "$REPO" && bash "$GRAPH" build >/dev/null 2>&1 ); t1=$(now_ms); RJ="$REPO/scv/.graph/graph.json"
-  (( t1 - t0 <= 2000 )) && ok "빌드 $((t1 - t0))ms ≤ 2000ms" || fail "빌드 느림: $((t1 - t0))ms"
+  # 벽시계 단언은 두지 않는다. 밀리초를 재면 기계가 바쁠 때 코드와 무관하게 무너지고,
+  # 그 검사를 공유하는 계획들이 한꺼번에 붉는다. 걸린 시간은 사람이 보게 적기만 한다.
+  ok "빌드 완료 ($((t1 - t0))ms)"
   [[ -f "$RJ" ]] && jq -e '(.nodes|length)>50' "$RJ" >/dev/null && ok "노드 > 50" || fail "노드 수"
   jq -e '.links[]|select(.kind=="cochange" and ((.source=="core/template/hooks/on-stop.sh" and .target=="core/scripts/lib/help-state.sh") or (.source=="core/scripts/lib/help-state.sh" and .target=="core/template/hooks/on-stop.sh")))|.evidence|index("20260916-wookiya1364-answer-lint-turn-race")' "$RJ" >/dev/null && ok "on-stop.sh–lib/help-state.sh 동시변경, 근거에 answer-lint-turn-race" || fail "알려진 동시변경 쌍 없음"
 else
