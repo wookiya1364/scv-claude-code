@@ -76,7 +76,8 @@ nonce_of() { ( cd "$1" && bash "$STATE_SH" read | grep -o '"nonce":"[0-9a-f]*"' 
 # 종료 훅: 답 본문을 transcript(JSONL) 에 담아 넘긴다. jq 없으면 훅은 조용히 건너뛴다.
 stop() {  # <proj> <답 본문>
   local tr="$WORK/tr-$RANDOM.jsonl"
-  jq -cn --arg t "$2" '{type:"assistant",message:{content:[{type:"text",text:$t}]}}' > "$tr"
+  # v0.51.0+: 린트는 마지막 사람 프롬프트 이후의 답만 보므로 실제 원본처럼 프롬프트 항목을 앞에 둔다.
+  jq -cn --arg t "$2" '{type:"user",message:{content:"안녕"}},{type:"assistant",message:{content:[{type:"text",text:$t}]}}' > "$tr"
   ( cd "$1" && printf '{"transcript_path":"%s"}' "$tr" | CLAUDE_PLUGIN_ROOT="$CORE" GIT_AUTHOR_NAME=t bash "$STOP_HOOK" >/dev/null 2>&1 ); echo $?
 }
 # 대화 파일에 Turn 블록을 이어붙인다 — 지문 줄은 셋째 인자(빈 문자열이면 줄 자체를 뺀다).

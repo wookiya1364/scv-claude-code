@@ -2,6 +2,99 @@
 
 All notable changes to SCV Core are documented here.
 
+## [0.51.2] - 2026-09-17
+
+### 라우터 크기 상한은 scv-core 원본에서만
+
+0.51.1 을 codex 래퍼에 벤더링하자 `core/tests/test-help-router-diet.sh` T1 이 붉었다 — 호스트 자리표시자를 펼친
+사본의 help.md 가 7,260B(원본 7,115B). 원본 기준 7,200B 는 scv-core 에서만 보고, 사본에서는 budget 검사와 같은
+7,500B 를 쓴다. 코드 변경 없음.
+
+## [0.51.1] - 2026-09-17
+
+### 그래프 검사의 저장소 전용 항목은 scv-core 에서만
+
+0.51.0 을 래퍼에 벤더링하면 `core/tests/test-graph.sh` 의 세 항목이 사본에서 붉었다 — T6(이 저장소의 보관 계획
+동시변경 쌍) · T10(docs·README·루트 tests 의 옛 스킬 이름 — 래퍼의 host-profile.env 가 걸림) · T11(루트 gitignore).
+VERSION·TEMPLATE_DIGEST·scv/archive 가 있는 scv-core 에서만 보고 사본에서는 건너뛴다. 코어 페이로드(scripts·
+protocols·template·contracts·tests)의 옛 스킬 이름 검사는 어디서든 그대로. 코드 변경 없음.
+
+## [0.51.0] - 2026-09-17
+
+### Graft 어댑터 — 있으면 코드 영향 범위와 관련 코드 후보를 덧붙이고, 없으면 조용히 생략
+
+자체 그래프는 "과거에 같이 바뀐 것"(이력)을, Graft(코드 그래프 엔진)는 "지금 코드가 의존하는 것"(현재)을
+안다. Graft 를 필수가 아닌 **선택 제공자**로 붙인다 — `graft` 가 PATH 에 있고 `graft/` 그래프가 있을 때만.
+
+- `core/scripts/graft.sh status | blast [--base <ref>] [--json] | ask <task> [--json]` + 순수부 `lib/graft.sh`
+  (상태 판정 · blast/ask JSON 요약(jq, 흔한 모양 둘) · 렌더). 시간 제한(기본 20초), 실패·타임아웃·깨진 JSON 은
+  빈 출력 + stderr 한 줄, exit 0. 설치·init·build·훅·MCP 를 절대 부르지 않는다.
+- 소비처: `regression.sh` 는 자체 그래프 영향 블록 아래에 `=== impact (graft blast) ===` (ready 일 때만);
+  `work.sh` 는 `GRAFT_STATUS:` 한 줄 + ready 면 `=== code candidates (graft ask) ===`(계획 제목, ≤10 file:line);
+  `promote-helper.sh` 는 `GRAFT_STATUS:` 한 줄. `install-deps --print` 에 선택 항목 한 줄
+  (`graft init --no-hooks --no-statusline` · `graft telemetry disable`). 설정 `SCV_GRAFT=auto|off`, `SCV_GRAFT_TIMEOUT`.
+- 확인: Graft 는 bash/shell 을 지원하지 않는다 — scv-core 자체에서는 후보가 비고, TS·Python 프로젝트에서 의미가 있다.
+  검사 `core/tests/test-graft-adapter.sh` (가짜 graft 픽스처 셋: 정상 · 깨진 JSON · 느림).
+
+### SCV 자체 그래프 — 문서·계획·동시변경을 의존성 0 으로, graphify 제거
+
+그래프 스킬(graphify)은 보관된 52개 계획 중 실제로 쓴 계획이 0 이었고, Python 스킬 + LLM 빌드 비용이
+붙는데 SCV 가 그것으로 하던 일은 문서 그래프 하나였다. 이제 SCV 가 이미 가진 재료로 그래프를 직접
+만든다 — 문서의 링크, 보관된 계획이 건드린 파일(`scope:` + 백틱 경로), 결정 로그의 참조, 같은 계획에서
+함께 바뀐 파일 쌍(가중치 = 계획 수, 근거 = 슬러그). bash + jq, 새 의존 없음, 이 저장소(55 계획)에서 ≈2초.
+
+- **`core/scripts/graph.sh`** `build | status | ensure | impact [--json] <path>… | report` + 순수부 `lib/graph.sh`
+  (`@pure`/`@deterministic`). 산출물 `scv/.graph/graph.json`(version 1: nodes doc|file|plan|decision · links
+  link|touches|refers|cochange · communities(폴더/epic) · god_nodes · missing 표시) + `GRAPH_REPORT.md`. 무시 파일,
+  낡으면(문서·PLAN·DECISIONS 보다 오래되면) 자동 재생성. 결정적 출력(`built_at` 만 시각).
+- **영향 조회** `graph.sh impact` — "이 파일을 바꾸면 무엇이 같이 바뀌고(가중치·근거) 어느 계획·결정이
+  얽혔는가". `work.sh` 가 계획 `scope:` 파일들로 `=== impact (scv graph) ===` 블록을 싣고, `regression.sh`
+  가 변경 파일(`--changed a,b` 또는 git 작업 트리)로 앞단에 같은 블록을 싣는다(정보만, 실행 선택 불변).
+  `regression.sh --dry` 는 계획·영향만 찍고 실행하지 않는다.
+- **소비처**: promote-helper · work · status · deck-context 가 `graph.sh ensure` 를 쓴다 — `GRAPH_STATUS:
+  built|stale|missing|off|unavailable` + `GRAPH_DIR: scv/.graph`. promote.md Step 1 은 자동(질문 없음), Step 6.2
+  의 3-way/2-way 질문 제거, 그림 2 매핑은 새 graph.json 계약(군집 = 폴더/epic 라벨, god_nodes, cochange
+  가중치·근거). `Source: scv graph (built YYYY-MM-DD)`.
+- **graphify 제거**: 의존성 표(help.sh) · install-deps · host-profile 감지(`SCV_GRAPH_SKILL_PATHS` 는 받아도
+  무시, 폐기 표시) · gitignore(`.graphify*` → `scv/.graph/`) · PROMOTE.md · 규약 여섯 · run-dry 계약.
+- 설정: `SCV_GRAPH=on|off`, `SCV_GRAPH_DOCS`(기본 `docs README.md README.*.md core/contracts`).
+- 검사 `core/tests/test-graph.sh` (신설). 래퍼 계약: docs/wrapper-integration.md §8.
+
+### 매 턴 라우터 다이어트 — 답 모양은 남기고 나머지는 압축, 진단 안내문은 직접 부를 때만
+
+매 턴 실리는 help 라우터(core/protocols/help.md) 9,670B → 7,115B (−26%), 매 턴 스택(훅 한 줄 + 라우터 +
+헬퍼) 11.5KB → ≈9.0KB. 언어·쉬운 말·답 모양 절은 바이트 그대로(0.49 의 "답 모양 절은 매 턴 남긴다" 결정
+유지); 기록 계약·헬퍼 호출·규약 읽기 절을 압축하고, 배경 조사(위임) 절은 세션당 한 번 읽는
+`protocols/help/full.md` 로 옮겼다(문구 그대로). "Final notes" 절 제거.
+
+- **preflight 진단 다듬기** (`lib/force-help.sh` `scv_force_trim_diagnosis`): 진단이 바뀐 턴에 훅이 싣는
+  전체 진단에서 "Learn more" 블록과 "Recommended next action" 의 방법 설명을 뺀다 — 진단 본문 + 권장
+  행동 제목·첫 줄만(3,266B → ≈1.5KB). 사용자가 직접 부른 help.sh 출력은 그대로.
+- **상한 잠금** (`test-help-budget.sh`): BODY 10,000→7,500 · TURN 12,000→9,500 · FULL 8,000→9,000.
+- 검사 `core/tests/test-help-router-diet.sh` (신설, 35) — 남긴 세 절 md5 고정(fixtures), 위임 절 이동 문구
+  동일, 기록 계약 문구·명령 셋 존재, 훅 진단에 안내문 없음·직접 호출은 그대로, brief/full 전환 유지.
+  `test-delegate-effort.sh` 는 위임 절을 full.md 에서 본다.
+
+### 답 모양 검사는 이번 턴의 답만 본다 — 기록 경합 제거
+
+0.50.0 의 답 모양 린트는 종료 훅이 대화 원본(transcript)의 마지막 어시스턴트 텍스트를 읽었다.
+호스트는 원본을 비동기로 적으므로 훅이 먼저 읽으면 **한 턴 전 답**을 본다 — 실사용에서 두 턴 전
+답의 문구가 경고에 걸리고 엉뚱한 재읽기(≈6k 토큰)가 났다(훅 실행 시각과 마지막 답 기록 시각이
+같은 초). 공식 문서도 "원본은 늦을 수 있으니 Stop 훅은 `last_assistant_message` 를 쓰라" 고 적는다.
+
+- **본문 출처 셋** (`on-stop.sh`): (1) 호스트가 넘긴 `last_assistant_message` → (2) 없으면 원본에서
+  마지막 **사람** 프롬프트 이후의 어시스턴트 텍스트만(도구 결과 항목은 경계가 아니다), 아직 안 적혔으면
+  4회 × 250ms 재시도 → (3) 그래도 없으면 이번 턴 린트 생략(경고·재읽기 없음). 지문(echo) 검사는 그대로.
+  순수부 `scv_turn_slice` · `scv_stop_pick_source` (lib/help-state.sh), `help-state.sh stop --src`.
+- **드리프트 줄 끝에 `src=host|transcript|none`** — 기존 토큰·순서 그대로, 옛 줄(0.50.0)도 같은
+  정규식으로 집계된다. 사후에 "린트가 본 본문이 어디서 왔는지" 를 셀 수 있다.
+- **문장 세기 오탐** — 따옴표(" " “ ” ‘ ’)·괄호 안의 마침표를 문장 끝으로 세지 않는다
+  (`scv_lint_strip_quoted`). 관찰: 인용문 안 마침표로 2문장이 3문장으로 판정된 사례.
+- 스위치 둘 다 off 면 원본을 읽지도 재시도하지도 않는다(0.49 와 같음). 린트만 off 면 본문을 읽지 않고
+  지문 검사만(src=none). 종료 훅은 여전히 어떤 실패에도 exit 0.
+- 검사 `core/tests/test-answer-lint-source.sh` (신설, 41) · `test-help-echo.sh` 의 원본 흉내에 사람 프롬프트
+  항목 추가. 래퍼 계약(docs/wrapper-integration.md §6): 마지막 답 본문을 넘길 수 있는 래퍼는 넘길 것.
+
 ## [0.50.0] - 2026-09-16
 
 ### 규약 지문 메아리 + 답 모양 린트 — 잊었는지 묻지 않고, 지문과 답 모양으로 잡아 다시 싣는다
