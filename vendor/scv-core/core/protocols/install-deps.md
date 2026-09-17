@@ -55,7 +55,7 @@ Parse the output:
 
 ## Step 1 — Decide what to do
 
-If the `Result:` line says **`All deps installed`** AND graphify is present:
+If the `Result:` line says **`All deps installed`**:
 - Tell the user "All SCV dependencies are installed." in their preferred language.
 - Stop.
 
@@ -71,8 +71,6 @@ Options:
     "Run `install-deps.sh --install` to actually install the missing system tools.
      - Linux / macOS: sudo password may be prompted for apt / dnf / pacman.
      - Windows: winget will open its own confirmation dialog per package.
-     - graphify (Claude Code skill) is NOT installed by this command — it has a
-       different distribution channel. See https://github.com/safishamsi/graphify
        and place SKILL.md in the skill directory configured by your wrapper."
 
 [2] "Just print the install commands (I'll run them myself)"
@@ -104,12 +102,12 @@ Answer handling:
 
 ## Notes
 
-- **graphify is NOT auto-installed.** It is a Claude Code skill (not a system CLI) with a different distribution channel. The script's output and Step 1's description always link to https://github.com/safishamsi/graphify so the user can install it manually.
+- **The docs graph needs no install.** `scripts/graph.sh` builds it from the repository with bash + jq (v0.51.0+); jq is already in the list above.
 - **Idempotency**: `--check` and `--install` are safe to re-run. `--install` skips already-installed tools.
 - **Verification scope**: install commands are documented per upstream packaging guides. The repository author has end-to-end-verified Linux/apt only. macOS / Windows / other Linux distros are best-effort — if a command needs adjustment, open an issue on the SCV repo.
 
 ## Never
 
 - Auto-run `--install` without an explicit confirmation. The user must choose `[1] Install now`.
-- Modify the user's wrapper skill directory or attempt to download graphify automatically.
+- Modify the user's wrapper skill directory.
 - Suggest `sudo` commands for Windows (winget runs as user; admin elevation is per-package via the system dialog).

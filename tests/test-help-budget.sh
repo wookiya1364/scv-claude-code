@@ -39,10 +39,10 @@ ok()   { echo "  ✓ $1"; PASS=$((PASS + 1)); }
 fail() { echo "  ✖ FAIL: $1"; FAIL=$((FAIL + 1)); }
 skip() { echo "  – SKIP: $1"; SKIP=$((SKIP + 1)); }
 
-BODY_MAX="${SCV_HELP_BODY_MAX:-10000}"     # v0.49.0: 라우터(매 턴) 상한 — 답 모양 절은 매 턴 남긴다
-FULL_MAX="${SCV_HELP_FULL_MAX:-8000}"      # 세션당 1회 읽는 full.md 상한
+BODY_MAX="${SCV_HELP_BODY_MAX:-7500}"      # v0.51.0: 라우터(매 턴) 상한 — 답 모양 절은 매 턴 남기고 나머지는 압축
+FULL_MAX="${SCV_HELP_FULL_MAX:-9000}"      # 세션당 1회 읽는 full.md 상한 (v0.51.0: 배경 조사 절 수용)
 TOTAL_MAX="${SCV_HELP_TOTAL_MAX:-32000}"
-TURN_MAX="${SCV_HELP_TURN_MAX:-12000}"    # v0.49.0: 진단 변동 없는 턴(훅 한 줄) 기준
+TURN_MAX="${SCV_HELP_TURN_MAX:-9500}"     # v0.51.0: 진단 변동 없는 턴(훅 한 줄) 기준
 WC_MAX="${SCV_HELP_WITH_CONTEXT_MAX:-1000}"
 SUBS="language-setup legacy-migration hydrate archive-search promote-handoff"
 

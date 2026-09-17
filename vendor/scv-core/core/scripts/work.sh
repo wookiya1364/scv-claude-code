@@ -23,7 +23,7 @@ fi
 #                                 so the change is announced rather than assumed.
 #
 # Output header (same style as promote-helper.sh) — Claude Code parses these keys:
-#   MODE / TODAY / AUTHOR / GRAPHIFY_SKILL / GRAPH_STATUS
+#   MODE / TODAY / AUTHOR / GRAPH_STATUS / GRAPH_DIR
 #   TARGET_SLUG / TARGET_DIR / PLAN_FILE / TESTS_FILE
 #
 # Content blocks:
@@ -119,30 +119,16 @@ CRITERIA
   exit 0
 fi
 
-# Graphify skill check (shared logic with promote-helper.sh)
-GRAPHIFY_SKILL="missing"
-scv_graph_skill_available && GRAPHIFY_SKILL="available"
-echo "GRAPHIFY_SKILL: $GRAPHIFY_SKILL"
-
-GRAPH_STATUS="n/a"
-if [[ "$GRAPHIFY_SKILL" == "available" ]]; then
-  GRAPH_DIR=".graphify/docs/graphify-out"
-  if [[ ! -d "$GRAPH_DIR" ]]; then
-    GRAPH_STATUS="missing"
-  elif [[ ! -f "$STATE_FILE" ]]; then
-    GRAPH_STATUS="built"
-  else
-    # BSD/GNU portable mtime in epoch seconds.
-    graph_mt=$(stat -c %Y "$GRAPH_DIR" 2>/dev/null || stat -f %m "$GRAPH_DIR" 2>/dev/null || echo 0)
-    state_mt=$(stat -c %Y "$STATE_FILE" 2>/dev/null || stat -f %m "$STATE_FILE" 2>/dev/null || echo 0)
-    if [[ "$graph_mt" -ge "$state_mt" ]]; then
-      GRAPH_STATUS="built"
-    else
-      GRAPH_STATUS="stale"
-    fi
-  fi
-fi
+# SCV 자체 그래프 (v0.51.0+). 낡았으면 여기서 자동으로 다시 만든다(bash+jq, 목표 2초 안).
+# jq 가 없으면 unavailable, SCV_GRAPH=off 면 off — 어느 쪽도 이 스크립트를 막지 않는다.
+GRAPH_DIR="scv/.graph"
+GRAPH_STATUS="$(bash "$SCRIPT_DIR/graph.sh" ensure 2>/dev/null | sed -n 's/^GRAPH_STATUS: //p' | head -1)"
+[[ -n "$GRAPH_STATUS" ]] || GRAPH_STATUS="unavailable"
 echo "GRAPH_STATUS: $GRAPH_STATUS"
+[[ "$GRAPH_STATUS" == "built" ]] && echo "GRAPH_DIR: $GRAPH_DIR"
+# Graft 어댑터 (v0.51.0+, 선택) — 있으면 ready, 없으면 absent 한 줄. 아래 IMPACT 절 뒤에 후보 블록.
+GRAFT_STATUS="$(bash "$SCRIPT_DIR/graft.sh" status 2>/dev/null | sed -n 's/^GRAFT_STATUS: //p' | head -1)"
+echo "GRAFT_STATUS: ${GRAFT_STATUS:-absent}"
 
 # ---------- helpers ----------
 
@@ -436,5 +422,34 @@ if [[ -f "$PLAN" ]]; then
         fi
       done <<< "$refs_data"
     done
+  fi
+fi
+
+# ---------- impact (scv graph, v0.51.0+) ----------
+# 이 계획의 scope: 파일들에 대해 — 함께 바뀌는 파일(가중치·근거 계획) · 건드린 계획 · 얽힌 결정 · 링크한 문서.
+# 정보만 싣는다; 그래프가 없으면(off/unavailable) 조용히 생략.
+if [[ -n "${PLAN:-}" && -f "$PLAN" && "${GRAPH_STATUS:-}" == "built" && -f "$SCRIPT_DIR/lib/graph.sh" ]]; then
+  # shellcheck disable=SC1091
+  source "$SCRIPT_DIR/lib/graph.sh"
+  _impact_rec="$(scv_graph_plan_touches "$TARGET_SLUG" "$(cat "$PLAN")")"
+  _impact_files="${_impact_rec##*$'\x1f'}"
+  echo ""
+  echo "=== impact (scv graph) ==="
+  if [[ -n "${_impact_files//[[:space:]]/}" ]]; then
+    # shellcheck disable=SC2046
+    bash "$SCRIPT_DIR/graph.sh" impact $(printf '%s' "$_impact_files" | tr ' ' '\n' | head -12) 2>/dev/null || echo "(graph unavailable)"
+  else
+    echo "(PLAN.md has no scope: paths)"
+  fi
+fi
+
+# ---------- code candidates (graft ask, v0.51.0+) ----------
+# Graft 가 준비돼 있으면 계획 제목으로 관련 코드 후보(file:line)를 싣는다. 없으면 아무것도 더하지 않는다.
+if [[ "${GRAFT_STATUS:-}" == "ready" && -n "${PLAN:-}" && -f "$PLAN" ]]; then
+  _plan_title="$(awk '/^title:/{sub(/^title: */, ""); gsub(/"/, ""); print; exit}' "$PLAN" 2>/dev/null)"
+  if [[ -n "$_plan_title" ]]; then
+    echo ""
+    echo "=== code candidates (graft ask) ==="
+    bash "$SCRIPT_DIR/graft.sh" ask "$_plan_title" 2>/dev/null || echo "  (graft unavailable)"
   fi
 fi

@@ -15,7 +15,7 @@ Required keys:
 | `SCV_STATE_INDEX` | Must be `SCV.md`, the shared project state index. |
 | `SCV_LEGACY_STATE_INDEXES` | Optional `|`-separated legacy basenames that Core may read when `SCV.md` is absent and may finalize as pointers during an explicit migration. |
 | `SCV_ROOT_ENV` | Uppercase environment-variable identifier for the installed payload root. |
-| `SCV_GRAPH_SKILL_PATHS` | Optional `|`-separated file globs. Literal `$HOME` is expanded at runtime without evaluating shell code. |
+| `SCV_GRAPH_SKILL_PATHS` | **Deprecated (0.51.0)** — still accepted, ignored. The docs graph is built by `scripts/graph.sh` from the repository (bash + jq); no host skill is consulted. Wrappers may stop setting it. |
 | `SCV_UPDATE_OWNER` | Must be `adapter`. |
 | `SCV_MODEL_POLICY_OWNER` | Must be `adapter`. |
 

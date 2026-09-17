@@ -20,9 +20,8 @@ playwright-report/
 # Notifier 큐잉 (전송 실패 시 재시도 대상)
 test-results/report-queue/
 
-# graphify 스킬 로컬 캐시 (글로벌 /graphify 스킬이 생성)
-.graphify_python
-.graphify_version
+# SCV 자체 그래프 산출물 — 필요할 때 자동 재생성 (graph.sh)
+scv/.graph/
 
 # v0.22.0+ — 대화는 커밋됩니다: action:help conversation mode 는 redaction 을
 # 거쳐 scv/conversations/ 에 저장됩니다 (구 dot-conversations ignore 는 제거됨).

@@ -9,7 +9,7 @@ if (( BASH_VERSINFO[0] < 4 )); then
 fi
 
 # Surface project metadata + scv/raw inventory + existing promote/archive
-# + raw diff + graphify skill availability for /scv:promote.
+# + raw diff + docs-graph freshness (scripts/graph.sh) for /scv:promote.
 # This script is read-only; it only prints context for Claude Code to work with.
 set -uo pipefail
 
@@ -77,36 +77,18 @@ if [[ -f "$SCV_INDEX_PATH" ]]; then
   echo "STANDARD_VERSION: ${ver:-unknown}"
 fi
 
-# Graphify skill availability (best-effort check — user/global skill dir)
-GRAPHIFY_SKILL="missing"
-scv_graph_skill_available && GRAPHIFY_SKILL="available"
-echo "GRAPHIFY_SKILL: $GRAPHIFY_SKILL"
-
-# Graph status: compare .graphify/docs/graphify-out/ mtime vs readpath.json mtime
-GRAPH_STATUS="n/a"
-if [[ "$GRAPHIFY_SKILL" == "available" ]]; then
-  GRAPH_DIR=".graphify/docs/graphify-out"
-  if [[ ! -d "$GRAPH_DIR" ]]; then
-    GRAPH_STATUS="missing"
-  elif [[ ! -f "$STATE_FILE" ]]; then
-    # No readpath yet — if graph exists, consider it fresh (nothing to compare)
-    GRAPH_STATUS="built"
-  else
-    # Compare mtimes
-    # BSD (macOS) and GNU (Linux) portable mtime in epoch seconds.
-    graph_mt=$(stat -c %Y "$GRAPH_DIR" 2>/dev/null || stat -f %m "$GRAPH_DIR" 2>/dev/null || echo 0)
-    state_mt=$(stat -c %Y "$STATE_FILE" 2>/dev/null || stat -f %m "$STATE_FILE" 2>/dev/null || echo 0)
-    if [[ "$graph_mt" -ge "$state_mt" ]]; then
-      GRAPH_STATUS="built"
-    else
-      GRAPH_STATUS="stale"
-    fi
-  fi
-fi
+# SCV 자체 그래프 (v0.51.0+). 낡았으면 여기서 자동으로 다시 만든다(bash+jq, 목표 2초 안).
+# jq 가 없으면 unavailable, SCV_GRAPH=off 면 off — 어느 쪽도 이 스크립트를 막지 않는다.
+GRAPH_DIR="scv/.graph"
+GRAPH_STATUS="$(bash "$SCRIPT_DIR/graph.sh" ensure 2>/dev/null | sed -n 's/^GRAPH_STATUS: //p' | head -1)"
+[[ -n "$GRAPH_STATUS" ]] || GRAPH_STATUS="unavailable"
 echo "GRAPH_STATUS: $GRAPH_STATUS"
+[[ "$GRAPH_STATUS" == "built" ]] && echo "GRAPH_DIR: $GRAPH_DIR"
+# Graft 어댑터 (v0.51.0+, 선택): 있으면 ready — 계획 제목이 정해진 뒤 graft.sh ask 로 후보를 볼 수 있다.
+_graft="$(bash "$SCRIPT_DIR/graft.sh" status 2>/dev/null | sed -n 's/^GRAFT_STATUS: //p' | head -1)"
+echo "GRAFT_STATUS: ${_graft:-absent}"
 
-# Graph-only mode: stop here after emitting metadata. Claude Code then decides
-# whether to invoke the graphify skill based on GRAPH_STATUS + GRAPHIFY_SKILL.
+# Graph-only mode: stop here after ensuring the graph (the graph is built above; nothing to decide).
 if [[ "$MODE" == "graph-only" ]]; then
   exit 0
 fi

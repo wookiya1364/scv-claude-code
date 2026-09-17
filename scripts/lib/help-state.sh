@@ -140,9 +140,23 @@ scv_echo_check() {
 }
 
 # @pure
+# 첫 문단에서 따옴표(" " “ ” ‘ ’)와 괄호(( ) （ ）) 안을 비운다 — 인용문 안의 마침표를 문장 끝으로 세지 않기 위해.
+# 짝이 안 맞는 기호는 그대로 둔다(그러면 0.50.0 과 같은 세기). 곧은 작은따옴표는 영어 축약형과 겹쳐 손대지 않는다.
+scv_lint_strip_quoted() {
+  local s="${1:-}"
+  while [[ "$s" =~ ^(.*)\"[^\"]*\"(.*)$ ]]; do s="${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"; done
+  while [[ "$s" =~ ^(.*)“.*”(.*)$ ]]; do s="${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"; done
+  while [[ "$s" =~ ^(.*)‘.*’(.*)$ ]]; do s="${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"; done
+  while [[ "$s" =~ ^(.*)\([^()]*\)(.*)$ ]]; do s="${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"; done
+  while [[ "$s" =~ ^(.*)（.*）(.*)$ ]]; do s="${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"; done
+  printf '%s' "$s"
+}
+
+# @pure
 # 답 본문 + 첫 문단 문장 상한 → 위반 줄들 (없으면 빈 출력). 골격만 본다 — 내용은 판정하지 않는다.
 #   lead-missing              결론 문단 없이 표·목록·제목으로 시작
-#   lead-sentences=<n>><cap>  첫 문단 문장 수가 상한 초과 (마침표·물음표·느낌표 뒤 공백/끝 기준 — "0.49.1" 은 안 센다)
+#   lead-sentences=<n>><cap>  첫 문단 문장 수가 상한 초과 (마침표·물음표·느낌표 뒤 공백/끝 기준 — "0.49.1" 은 안 센다,
+#                             따옴표·괄호 안의 마침표도 안 센다 v0.51.0+)
 #   lead-code=<값>            첫 문단의 코드값 (백틱 안 경로·버전·파일·설정 키)
 #   decision-no-reco=<행>     결정표(| # | … |) 행의 셋째 열(추천)이 비어 있음
 # 코드 블록 안은 보지 않는다. 근사이며, 오탐의 비용은 재읽기 한 번이다.
@@ -190,7 +204,7 @@ scv_answer_lint() {
   done <<<"$text"
   [[ "$lead_kind" == "structure" ]] && printf 'lead-missing\n'
   if [[ -n "$lead" ]]; then
-    rest="${lead//.../.}"; rest="${rest//…/.}"; n=0
+    rest="$(scv_lint_strip_quoted "$lead")"; rest="${rest//.../.}"; rest="${rest//…/.}"; n=0
     while [[ "$rest" =~ $pat_end ]]; do rest="${BASH_REMATCH[1]}"; n=$((n + 1)); done
     (( n > cap )) && printf "lead-sentences=%s${gt}%s\n" "$n" "$cap"
     rest="$lead"
@@ -229,7 +243,41 @@ scv_drift_decide() {
 # @pure
 # <시각> <turn> <메아리 판정> <위반 줄들> <reload> → 드리프트 로그 한 줄. 세션 뒤 "흐려진 턴" 을 세는 자료.
 scv_drift_line() {
-  local now="${1:-?}" turn="${2:-0}" echo_r="${3:-skip}" viol="${4:-}" reload="${5:-0}" nviol=0 line
+  local now="${1:-?}" turn="${2:-0}" echo_r="${3:-skip}" viol="${4:-}" reload="${5:-0}" src="${6:-}" nviol=0 line
   while IFS= read -r line; do [[ -n "${line//[[:space:]]/}" ]] && nviol=$((nviol + 1)); done <<<"$viol"
   printf '%s turn=%s echo=%s lint=%s reload=%s' "$now" "$turn" "$echo_r" "$nviol" "$reload"
+  # v0.51.0+: 린트가 본 본문의 출처. 안 주면 0.50.0 형식 그대로 — 옛 줄과 같은 정규식으로 집계된다.
+  [[ -n "$src" ]] && printf ' src=%s' "$src"
+  return 0
+}
+
+# @pure
+# 턴 스트림 → 이번 턴의 어시스턴트 텍스트. 스트림은 줄마다 "U"(사람이 쓴 프롬프트) 또는
+# "A\x1f<텍스트, 줄바꿈은 \x1e>"(어시스턴트 텍스트 블록들). 마지막 U 이후의 A 만 줄바꿈으로 이어붙인다.
+# U 가 하나도 없으면 빈값 — 창 안에서 턴 경계를 못 찾았으니 낡은 답을 볼 바에는 검사를 생략한다(안전 쪽).
+# 도구 결과(tool_result)는 사람 프롬프트가 아니므로 효과부의 필터가 U 로 내지 않는다.
+scv_turn_slice() {
+  local stream="${1:-}" line buf="" seen=0 us=$'\x1f' rs=$'\x1e' t
+  while IFS= read -r line; do
+    case "$line" in
+      U) seen=1; buf="" ;;
+      A"$us"*)
+        t="${line#A"$us"}"; t="${t//$rs/$'\n'}"
+        [[ -n "${t//[[:space:]]/}" ]] || continue
+        [[ -n "$buf" ]] && buf+=$'\n'
+        buf+="$t" ;;
+    esac
+  done <<<"$stream"
+  (( seen )) || return 0
+  printf '%s' "$buf"
+}
+
+# @pure
+# <호스트가 넘긴 마지막 답> <원본의 이번 턴 텍스트> → "<src>\x1f<본문>". src ∈ host | transcript | none.
+# 호스트 값이 1순위(공식 문서: 원본은 늦게 적힐 수 있다), 없으면 원본의 이번 턴, 그래도 없으면 none(린트 생략).
+scv_stop_pick_source() {
+  local host="${1:-}" turn="${2:-}" us=$'\x1f'
+  if [[ -n "${host//[[:space:]]/}" ]]; then printf 'host%s%s' "$us" "$host"
+  elif [[ -n "${turn//[[:space:]]/}" ]]; then printf 'transcript%s%s' "$us" "$turn"
+  else printf 'none%s' "$us"; fi
 }

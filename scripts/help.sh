@@ -358,15 +358,6 @@ _scv_check_dep ffmpeg  optional    "PR video → GIF inline preview"
 _scv_check_dep python3 optional    "attachments_status cache parsing"
 unset -f _scv_check_dep
 
-# graphify (Claude Code skill — different distribution channel than system CLIs)
-GRAPHIFY_PRESENT=0
-scv_graph_skill_available && GRAPHIFY_PRESENT=1
-if [[ $GRAPHIFY_PRESENT -eq 1 ]]; then
-  printf '    [✓] %-8s — %s\n' "graphify" 'Claude Code skill — token-efficient graph queries (/scv:promote, /scv:work)'
-else
-  printf '    [△] %-8s — %s (optional, graceful degrade)\n' "graphify" "Claude Code skill — token-efficient graph queries"
-  echo "        Install: https://github.com/safishamsi/graphify"
-fi
 
 if [[ ${#DEP_MISSING_HARD[@]} -gt 0 || ${#DEP_MISSING_SOFT[@]} -gt 0 ]]; then
   ALL_MISSING=("${DEP_MISSING_HARD[@]}" "${DEP_MISSING_SOFT[@]}")

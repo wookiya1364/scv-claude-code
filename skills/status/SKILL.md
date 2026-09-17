@@ -23,7 +23,7 @@ Inspects the project's SCV state:
 - **Raw lifecycle**: **unused** docs (still directly under `scv/raw/` — never consumed by any promote) vs **consumed** docs (moved to `scv/raw/stale/` by `/scv:promote`, shown with the promote slugs that used them from `readpath.json`'s `ref_docs`).
 - **Outdated candidates**: consumed docs that mention repo files changed since their `ref_commit` — their content may have drifted from the code. This is a heuristic flag; when the user wants to reuse such a doc, offer to verify its claims against the current code first.
 - **Active promote plans**: entries under `scv/promote/` waiting for implementation.
-- **Docs graph**: graphify skill presence + docs graph freshness (`missing` / `built` / `stale` / skill-not-installed).
+- **Docs graph**: SCV graph freshness (`built` / `stale` / `missing` / `off` / `unavailable`) — built from docs links, archived plans and decisions by `scripts/graph.sh`, no install needed (v0.51.0+).
 - **Archive**: count of completed plans under `scv/archive/`.
 - **Recent decisions** (v0.22.0+): the last N entries of the append-only `scv/DECISIONS.md` (author-attributed — written by promote approval, work archive, and regression obsolete triage).
 - **Open TODOs** (v0.22.0+): unchecked `scv/TODO.md` items, counted per author (`@<author>`), listed with their `(T-NNN)` ids.
