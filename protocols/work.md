@@ -42,7 +42,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/work.sh" "${SCV_ARGS[@]}"
 
 > **Monorepo (nested scv)** — pass a module dir as the first argument to target its scv: `/scv:work FE <slug>` operates on `FE/scv`. Omit it to use the current dir's `scv/` (or nearest parent).
 
-Parse the header (`MODE:`, `SCV_DIR:`, `TARGET_SLUG:`, `PLAN_FILE:`, `TESTS_FILE:`, `GRAPHIFY_SKILL:`, `GRAPH_STATUS:`) and the three content blocks (`=== active promote plans ===`, `=== related documents (from PLAN.md) ===`, `=== external refs (from PLAN.md frontmatter refs:) ===`).
+Parse the header (`MODE:`, `SCV_DIR:`, `TARGET_SLUG:`, `PLAN_FILE:`, `TESTS_FILE:`, `GRAPH_STATUS:`, `GRAPH_DIR:`, `GRAFT_STATUS:`) and the three content blocks (`=== active promote plans ===`, `=== related documents (from PLAN.md) ===`, `=== external refs (from PLAN.md frontmatter refs:) ===`).
 
 > **Monorepo module threading** — if `SCV_DIR:` is **not** plain `scv` (i.e. the user targeted a nested module, e.g. `/scv:work FE <slug>` → `SCV_DIR: FE/scv`), pass that `SCV_DIR` value as the **leading arg** to every lifecycle helper in Step 9 — `regression.sh <SCV_DIR>`, `work.sh <SCV_DIR> <slug> --archive`, `pr-helper.sh <SCV_DIR> <slug>` — so Steps 9a/9b/9d all operate on the SAME scv/. Omitting it makes the Step-9a regression gate run against the wrong scv and pass **without testing (false green)**. For a plain `scv` (standalone/root), pass nothing extra.
 
@@ -77,9 +77,9 @@ reports, summaries, and explanations of what went wrong.
 
 <!-- SCV:GUIDANCE -->
 > **Dependency note** — If the helper emits warnings about missing external CLI
-> (`gh` / `glab` / `ffmpeg` / etc.) or missing `graphify` skill, suggest running
+> (`gh` / `glab` / `ffmpeg` / etc.), suggest running
 > `/scv:install-deps` once to get OS-specific install commands. Don't auto-run
-> it. graphify install: https://github.com/safishamsi/graphify
+> it.
 <!-- /SCV:GUIDANCE -->
 
 ### Step 0 — Archive short-circuit
@@ -93,18 +93,20 @@ If `MODE: archive`: the helper already moved the folder and wrote `ARCHIVED_AT.m
 
 ### Step 2 — Graph freshness check
 
-Never invoke `/scv:promote` yourself from `/scv:work` — when a refresh is
-needed, tell the user the command and let them run it.
+The helper already ran `scripts/graph.sh ensure` (v0.51.0+): the SCV graph — docs links,
+archived plans → files, decision refs, co-change pairs — is rebuilt automatically when
+stale (bash + jq, about a second). Nothing to ask.
 
-<!-- SCV:GUIDANCE -->
-Based on `GRAPHIFY_SKILL` + `GRAPH_STATUS`:
+| GRAPH_STATUS | Action |
+|---|---|
+| `built` | Continue. `GRAPH_DIR:` names `scv/.graph` (graph.json + GRAPH_REPORT.md). The `=== impact (scv graph) ===` block below the refs lists, for this plan's `scope:` files, what changes together with them, which archived plans touched them, and which decisions are involved — use it in Step 3's scope summary and when choosing Related Documents. |
+| `off` / `unavailable` | Continue without the graph (`SCV_GRAPH=off`, or jq missing). Mention once, one line. |
 
-| GRAPHIFY_SKILL | GRAPH_STATUS | Action |
-|---|---|---|
-| `available` | `stale` | Ask the user: "docs graph is stale — refresh it first via `/scv:promote --graph-only`?" Default: **yes**. If yes, tell user the command (do NOT invoke `/scv:promote` yourself from here — they run it). If no, continue. |
-| `available` | `missing` or `built` | Continue. |
-| `missing` (skill) | any | Continue. Mention once (one line): "graphify skill not installed — see https://github.com/safishamsi/graphify or run `/scv:install-deps` for the full deps list." Don't repeat on subsequent runs. |
-<!-- /SCV:GUIDANCE -->
+`GRAFT_STATUS:` (v0.51.0+, optional second provider): `ready` means the Graft code graph is
+present (`graft` on PATH + `graft/`), and the helper appends `=== code candidates (graft ask) ===`
+— file:line candidates for this plan's title — below the impact block; use them as starting
+points, not as facts. `absent` / `no-graph` / `off` change nothing. SCV never installs, builds
+or hooks Graft; `/scv:install-deps --print` shows the optional one-liner.
 
 ### Step 3 — Load PLAN.md (required)
 

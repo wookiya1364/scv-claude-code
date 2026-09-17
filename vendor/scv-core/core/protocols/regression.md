@@ -209,3 +209,13 @@ invocations (`bash core/tests/run-dry.sh`, `bash tests/run.sh`, the
 exit code — a contract's own assertions still run every time. The summary line
 `MEMOIZED_GATES:` says how many gates ran and how often they were reused.
 Pass `--no-memo` (or set `SCV_REGRESSION_MEMO=off`) to run every gate per slug.
+
+## Impact blocks before execution (v0.51.0+)
+
+When the working tree (or `--changed a,b`) has changed files, the runner prints
+`=== impact (scv graph) ===` first — for each file, what changed together with it in
+archived plans (weight · evidence slugs), which plans touched it and which decisions are
+involved — and, when the optional Graft code graph is `ready`, `=== impact (graft blast) ===`
+right below it (files · symbols · top files by static dependency). Both are information for
+triage; they never change which slugs run. `--dry` prints the plan and these blocks and
+executes nothing.
