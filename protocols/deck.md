@@ -94,7 +94,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/deck-context.sh" "${SCV_ARGS[@]}"
 
 Parse `BIG_PICTURE:` + `MODE_HINT:` (and the `DOCS_CONTEXT` / `SCV_GRAPH` / `FEATURE_ARCH` source lines).
 
-- **B — `BIG_PICTURE: absent`** → the deck can't show a whole that isn't documented, and you must not invent one. **Establish it first.** Offer by asking the user (default: build the graph): (1) **run `/scv:promote <slug>`** — the SCV graph builds itself (docs links · archived plans · decisions) and gives the As-Is whole; (2) **run `/scv:promote <slug>`** — generates `FEATURE_ARCHITECTURE.md` (a "position in whole" diagram); (3) **proceed feature-only** with a lint warning that the big picture is missing (the minimum). Once it exists, continue to A.
+- **B — `BIG_PICTURE: absent`** → the deck can't show a whole that isn't documented, and you must not invent one. **Establish it first.** The helper already tried to build the SCV graph before printing this, so `absent` means it produced nothing usable — read the `SCV_GRAPH:` reason before you offer. Offer by asking the user (default: 1): (1) **run `/scv:promote <slug>`** — generates `FEATURE_ARCHITECTURE.md` (a "position in whole" diagram) and gives the graph archived plans and decisions to draw on; (2) **add or point to a real architecture / screen / IA doc under `docs/`** — the helper picks it up as `DOCS_CONTEXT` on the next run; (3) **proceed feature-only** with a lint warning that the big picture is missing (the minimum). Once it exists, continue to A.
 - **A — `BIG_PICTURE: present`** → pull the sources below and compose the context-first structure.
 
 **Big-picture sources (priority):**
@@ -110,6 +110,24 @@ Parse `BIG_PICTURE:` + `MODE_HINT:` (and the `DOCS_CONTEXT` / `SCV_GRAPH` / `FEA
 5. Details — 목표/비목표, 요구사항, 화면, 데이터, 성공지표, 예외처리.
 
 **Faithfulness (non-negotiable):** the big picture must come from real docs. If no SCV graph / `FEATURE_ARCHITECTURE.md` / real architecture doc exists, do **not** invent a system diagram — tell the user the deck can't show the whole until one exists (offer to run `/scv:promote`, which builds the SCV graph and generates `FEATURE_ARCHITECTURE.md`), and proceed with what's available plus a lint warning. Ask for confirmation before rewriting the user's source.
+
+## 변경 지도 (change map, v0.52.0+)
+
+A **slug folder** deck carries one more section, built for you — nothing to author.
+The helper reads the plan's `## 순수함수 · 파이프라인` table, and when its rows declare a
+status (추가 · 변경 · 삭제 · 재사용) it renders the pipeline as a mermaid diagram coloured by
+status, plus a table of the same rows. A row with no status reads `미지정`; a status the plan
+never declares produces no row at all — the deck does not invent a deletion it was not told
+about. A single-file deck gets none of this: there is no plan to read it from.
+
+When the **Graft** code graph is present (`graft` on PATH + `graft/`), each declared step is
+also checked against the real code: `일치` / `이미 있음` / `근거없음`. The check never rewrites
+the plan's declaration — it only shows where the two disagree. When Graft is absent the column
+reads `근거없음` throughout, the build prints the one-line install command, and everything else
+renders exactly the same. Graft is never installed, built, or hooked by SCV.
+
+Numbered screen items that name a pipeline `step` pick the status up too, so a component on the
+mockup shows both the function that drives it and whether that function is new.
 
 ## Step 1 — Build
 
