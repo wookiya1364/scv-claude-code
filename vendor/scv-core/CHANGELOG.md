@@ -2,6 +2,14 @@
 
 All notable changes to SCV Core are documented here.
 
+## [0.51.2] - 2026-09-17
+
+### 라우터 크기 상한은 scv-core 원본에서만
+
+0.51.1 을 codex 래퍼에 벤더링하자 `core/tests/test-help-router-diet.sh` T1 이 붉었다 — 호스트 자리표시자를 펼친
+사본의 help.md 가 7,260B(원본 7,115B). 원본 기준 7,200B 는 scv-core 에서만 보고, 사본에서는 budget 검사와 같은
+7,500B 를 쓴다. 코드 변경 없음.
+
 ## [0.51.1] - 2026-09-17
 
 ### 그래프 검사의 저장소 전용 항목은 scv-core 에서만
