@@ -193,7 +193,10 @@ if (isDir) {
     const screenSteps = parseScreenSteps(lintRaw);
     const evidence = collectEvidence(
       steps.map((x) => x.name),
-      { coreRoot: CORE_ROOT, cwd: INPUT },
+      // Graft 어댑터는 `graft/` 를 현재 디렉터리 기준으로 찾는다. 계획 폴더가 아니라
+      // 저장소 뿌리에서 찾아야 하므로 프로세스의 현재 디렉터리를 넘긴다 —
+      // 계획 폴더를 넘기면 그래프가 있어도 no-graph 로 떨어진다.
+      { coreRoot: CORE_ROOT, cwd: process.cwd() },
     );
     const reconciled = reconcileWithEvidence(steps, evidence);
     const diagram = buildPipelineDiagram(reconciled);

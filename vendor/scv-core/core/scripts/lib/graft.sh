@@ -22,8 +22,14 @@ _SCV_GRAFT_JQ_BLAST='
         + ($f | sort_by([-.n, .p]) | .[:10] | map("\(.p):\(.n)") | join(" "))
     end'
 _SCV_GRAFT_JQ_ASK='
+  # hits[] 는 graft 0.18 에서 실물로 확인한 모양이다 — pointer "경로:L12-L34", title "이름 · 종류".
+  # results[] / nodes[] 는 그 전의 추정이며, 다른 판이 그 모양을 쓸 경우를 위해 남겨 둔다.
+  def ptr_path: (. // "") | split(":") | .[0];
+  def ptr_line: [ (. // "") | scan("L([0-9]+)") | .[0] ] | (.[0] // "0") | tonumber;
+  def head_title: (. // "") | split(" \u00b7 ") | .[0];
   def rows:
-    if (.results? | type) == "array" then [ .results[] | {p: (.path // .file // ""), l: (.line // 0), t: (.label // .name // .symbol // ""), s: (.score // 0)} ]
+    if (.hits? | type) == "array" then [ .hits[] | {p: (.path // (.pointer | ptr_path) // ""), l: (.line // (.pointer | ptr_line)), t: (.name // (.title | head_title) // ""), s: (.score // 0)} ]
+    elif (.results? | type) == "array" then [ .results[] | {p: (.path // .file // ""), l: (.line // 0), t: (.label // .name // .symbol // ""), s: (.score // 0)} ]
     elif (.nodes? | type) == "array" then [ .nodes[] | {p: (.file // .path // ""), l: (.line // 0), t: (.name // .label // .symbol // ""), s: (.score // 0)} ]
     else [] end;
   rows | map(select(.p != "")) | sort_by([-.s, .p, .l]) | .[:$n] | .[] | "\(.p):\(.l)\u001f\(.t)"'
