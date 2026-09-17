@@ -69,7 +69,9 @@ assert_contains() {
   grep -qF -- "$2" "$1" && pass "contains: ${1#"$APP/"} ← '${2:0:60}'" \
                         || fail "does NOT contain: ${1#"$APP/"} ← '${2:0:60}'"
 }
-assert_out_contains(){ printf '%s' "$2" | grep -qF -- "$1" && pass "$3" || fail "$3 — got: $(printf '%s' "$2" | head -3)"; }
+# 파이프 대신 히어스트링: `set -o pipefail` 아래에서 grep -q 가 일찍 닫으면 printf 가 SIGPIPE 를 받아
+# 파이프라인 전체가 실패로 읽힌다 — macOS 에서 간헐적으로 "일치했는데 실패" 가 났다 (2026-09-16, PR #217 CI).
+assert_out_contains(){ grep -qF -- "$1" <<<"$2" && pass "$3" || fail "$3 — got: $(head -3 <<<"$2")"; }
 assert_ok_exit()     { [[ "$1" -eq 0 ]] && pass "$2" || fail "$2 (exit=$1)"; }
 
 TMP=$(mktemp -d)
@@ -194,10 +196,10 @@ EMPTY_DIR2=$(mktemp -d)
   OUT=$(bash "$HELP_SH" 2>&1)
   assert_out_contains "not hydrated yet" "$OUT" "help(un-hydrated): detects un-hydrated dir"
   assert_out_contains "hydrate.sh" "$OUT"       "help(un-hydrated): shows the single hydrate command"
-  printf '%s' "$OUT" | grep -qF -- "--new" \
+  grep -qF -- "--new" <<<"$OUT" \
     && fail "help(un-hydrated): still offers --new" \
     || pass "help(un-hydrated): --new option gone"
-  printf '%s' "$OUT" | grep -q "INTAKE" \
+  grep -q "INTAKE" <<<"$OUT" \
     && fail "help(un-hydrated): still mentions INTAKE" \
     || pass "help(un-hydrated): no INTAKE mention"
 )
@@ -355,7 +357,7 @@ printf 'fakepdf' > "$APP/scv/raw/customer-interview.pdf"
   assert_out_contains "TODAY:" "$OUT"              "helper prints TODAY"
   assert_out_contains "AUTHOR:" "$OUT"             "helper prints AUTHOR"
   assert_out_contains "STANDARD_VERSION:" "$OUT"   "helper prints STANDARD_VERSION"
-  assert_out_contains "GRAPHIFY_SKILL:" "$OUT"     "helper prints GRAPHIFY_SKILL"
+  assert_out_contains "GRAPH_DIR: scv/.graph" "$OUT" "helper prints GRAPH_DIR (scv graph built, v0.51.0)"
   assert_out_contains "GRAPH_STATUS:" "$OUT"       "helper prints GRAPH_STATUS"
   assert_out_contains "scv/raw changes since last index" "$OUT" "helper prints raw diff section"
   assert_out_contains "existing archive folders" "$OUT" "helper prints archive section"
@@ -367,7 +369,7 @@ printf 'fakepdf' > "$APP/scv/raw/customer-interview.pdf"
   OUT=$(bash "$PROMOTE_HELPER" --graph-only 2>&1)
   assert_out_contains "MODE: graph-only" "$OUT"    "helper surfaces --graph-only flag"
   assert_out_contains "GRAPH_STATUS:" "$OUT"       "helper still prints GRAPH_STATUS in graph-only"
-  printf '%s' "$OUT" | grep -qF "scv/raw inventory" \
+  grep -qF "scv/raw inventory" <<<"$OUT" \
     && fail "helper --graph-only should skip inventory section" \
     || pass "helper --graph-only skips inventory"
 )
@@ -393,7 +395,7 @@ echo "sub content"  > "$RP_APP/scv/raw/subdir/inside.md"
   assert_out_contains '"files":'     "$OUT"                                  "readpath scan: files field"
   assert_out_contains 'scv/raw/notes.md' "$OUT"                              "readpath scan: includes notes.md"
   assert_out_contains 'scv/raw/subdir/inside.md' "$OUT"                      "readpath scan: recurses into subdir"
-  printf '%s' "$OUT" | grep -qF 'scv/raw/README.md' \
+  grep -qF 'scv/raw/README.md' <<<"$OUT" \
     && fail "readpath scan: README.md should be skipped" \
     || pass "readpath scan: README.md skipped"
 
@@ -781,7 +783,7 @@ T
   assert_out_contains "https://confluence.example.com/x/spec" "$OUT" "work refs: confluence url"
   assert_out_contains "[pr] 1"        "$OUT" "work refs: pr count = 1"
   # Verify no 'id=https://' prefix bug (url-only entries should show url cleanly)
-  printf '%s' "$OUT" | grep -qF "id=https://" \
+  grep -qF "id=https://" <<<"$OUT" \
     && fail "work refs: url-only entry incorrectly prefixed with 'id='" \
     || pass "work refs: url-only entries rendered without id= prefix"
 )
@@ -813,7 +815,7 @@ echo
 echo '=== [11e] /scv:promote workflow protocol ==='
 PROMOTE_CMD_FILE="$PROTOCOL_ROOT/promote.md"
 # why: [11i] /scv:work refs: parsing & grouping — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
-assert_contains "$PROMOTE_CMD_FILE" 'Invoke the `graphify` skill'
+assert_contains "$PROMOTE_CMD_FILE" "scripts/graph.sh ensure"
 assert_contains "$PROMOTE_CMD_FILE" "readpath.sh"
 assert_contains "$PROMOTE_CMD_FILE" "GRAPH_STATUS"
 assert_contains "$PROMOTE_CMD_FILE" "--graph-only"
@@ -828,9 +830,9 @@ echo '=== [11f] /scv:status docs graph section ==='
   cd "$RP_APP"
   OUT=$(bash "$STATUS_SH" 2>&1)
   assert_out_contains "[docs graph" "$OUT" "status: includes docs graph section"
-  # Should show exactly one of: missing, built, stale, or skill-missing message
-  printf '%s' "$OUT" | grep -qE 'status: (missing|built|stale)|skill not installed' \
-    && pass "status: graph state reported (one of missing/built/stale/skill-missing)" \
+  # Should show exactly one of: built, stale, missing, off, unavailable (scv graph, v0.51.0)
+  grep -qE 'status: (missing|built|stale|off|unavailable)' <<<"$OUT" \
+    && pass "status: graph state reported (one of built/stale/missing/off/unavailable)" \
     || fail "status: graph state not reported"
 )
 
@@ -899,7 +901,7 @@ echo "=== [11c] /scv:help banner for raw changes ==="
   # No pending changes → change-window banner absent. The lifecycle banner
   # still prints: notes.md + subdir/inside.md were never consumed (unused).
   OUT=$(bash "$HELP_SH" 2>&1)
-  printf '%s' "$OUT" | grep -qF 'added ·' \
+  grep -qF 'added ·' <<<"$OUT" \
     && fail "help: change banner should be absent when no changes" \
     || pass "help: no change banner when raw clean"
   assert_out_contains "never promoted" "$OUT"      "help: lifecycle banner lists unused docs"
@@ -1746,10 +1748,10 @@ if _get_github_owner_repo >/dev/null; then echo "gitlab-not-rejected"; else echo
 cd /; rm -rf "$TMP"
 INNER_EOF
 )
-printf '%s' "$PARSE_OUT" | grep -qF "https://github.com/owner/repo.git -> owner/repo" && pass "attachments URL: https/.git → owner/repo" || fail "attachments URL: https/.git parse"
-printf '%s' "$PARSE_OUT" | grep -qF "git@github.com:owner/repo.git -> owner/repo" && pass "attachments URL: ssh/.git → owner/repo" || fail "attachments URL: ssh/.git parse"
-printf '%s' "$PARSE_OUT" | grep -qF "https://github.com/owner/repo -> owner/repo" && pass "attachments URL: https no-suffix → owner/repo" || fail "attachments URL: no-suffix parse"
-printf '%s' "$PARSE_OUT" | grep -qF "gitlab-rejected" && pass "attachments URL: gitlab rejected" || fail "attachments URL: gitlab not rejected"
+grep -qF "https://github.com/owner/repo.git -> owner/repo" <<<"$PARSE_OUT" && pass "attachments URL: https/.git → owner/repo" || fail "attachments URL: https/.git parse"
+grep -qF "git@github.com:owner/repo.git -> owner/repo" <<<"$PARSE_OUT" && pass "attachments URL: ssh/.git → owner/repo" || fail "attachments URL: ssh/.git parse"
+grep -qF "https://github.com/owner/repo -> owner/repo" <<<"$PARSE_OUT" && pass "attachments URL: https no-suffix → owner/repo" || fail "attachments URL: no-suffix parse"
+grep -qF "gitlab-rejected" <<<"$PARSE_OUT" && pass "attachments URL: gitlab rejected" || fail "attachments URL: gitlab not rejected"
 
 echo
 echo "=== [11gg] lib/attachments.sh — backend dispatch + stub ==="
@@ -1765,8 +1767,8 @@ rm -f /tmp/test.webm
 cd /; rm -rf "$TMP"
 INNER_EOF
 )
-printf '%s' "$DISPATCH_OUT" | grep -qF "unknown SCV_ATTACHMENTS_BACKEND='invalid'" && pass "attachments dispatch: invalid backend rejected" || fail "attachments dispatch: invalid not rejected"
-printf '%s' "$DISPATCH_OUT" | grep -qF "s3 backend not yet implemented" && pass "attachments dispatch: s3 stub warning" || fail "attachments dispatch: s3 stub missing"
+grep -qF "unknown SCV_ATTACHMENTS_BACKEND='invalid'" <<<"$DISPATCH_OUT" && pass "attachments dispatch: invalid backend rejected" || fail "attachments dispatch: invalid not rejected"
+grep -qF "s3 backend not yet implemented" <<<"$DISPATCH_OUT" && pass "attachments dispatch: s3 stub warning" || fail "attachments dispatch: s3 stub missing"
 
 echo
 echo "=== [11hh] lib/attachments.sh — size guards ==="
@@ -1798,7 +1800,7 @@ rm -f /tmp/big.webm
 cd /; rm -rf "$TMP" "$BARE"
 INNER_EOF
 )
-printf '%s' "$SIZE_OUT" | grep -qE 'WARN.*51MB|>50MB' && pass "attachments size: 50MB+ WARN" || fail "attachments size: 50MB+ WARN missing — got: $SIZE_OUT"
+grep -qE 'WARN.*51MB|>50MB' <<<"$SIZE_OUT" && pass "attachments size: 50MB+ WARN" || fail "attachments size: 50MB+ WARN missing — got: $SIZE_OUT"
 
 echo
 echo "=== [11ii] lib/attachments.sh — manifest + cleanup with mock gh ==="
@@ -1864,9 +1866,9 @@ git ls-tree -r origin/scv-attachments | awk '{print $4}'
 cd /; rm -rf "$WORK" "$MOCK"
 INNER_EOF
 )
-printf '%s' "$CLEAN_OUT" | grep -qF "DELETED merged-old" && pass "attachments cleanup: stale slug deleted" || fail "attachments cleanup: DELETED line missing"
-printf '%s' "$CLEAN_OUT" | grep -qF "still-open/v2.webm" && pass "attachments cleanup: open PR preserved" || fail "attachments cleanup: open PR was deleted"
-printf '%s' "$CLEAN_OUT" | grep -qF "merged-old/v1.webm" && fail "attachments cleanup: merged file still in tree" || pass "attachments cleanup: merged file removed from tree"
+grep -qF "DELETED merged-old" <<<"$CLEAN_OUT" && pass "attachments cleanup: stale slug deleted" || fail "attachments cleanup: DELETED line missing"
+grep -qF "still-open/v2.webm" <<<"$CLEAN_OUT" && pass "attachments cleanup: open PR preserved" || fail "attachments cleanup: open PR was deleted"
+grep -qF "merged-old/v1.webm" <<<"$CLEAN_OUT" && fail "attachments cleanup: merged file still in tree" || pass "attachments cleanup: merged file removed from tree"
 
 echo
 echo "=== [11jj] work protocol — Step 9d retention question content ==="
@@ -1944,7 +1946,7 @@ cd /; rm -rf "$WORK"
 INNER_EOF
 )
 
-printf '%s' "$MIGRATE_OUT" | grep -qF "Migrated v0.3.0 layout → scv/" \
+grep -qF "Migrated v0.3.0 layout → scv/" <<<"$MIGRATE_OUT" \
   && pass "attachments migrate: stderr notice emitted" \
   || fail "attachments migrate: stderr notice missing"
 
@@ -1964,7 +1966,7 @@ printf '%s' "$MIGRATE_OUT" | awk '/---FILES---/,/---LOG---/' | grep -qE '^old-sl
   && fail "attachments migrate: old root slug folder still in tree" \
   || pass "attachments migrate: old root slug folder removed"
 
-printf '%s' "$MIGRATE_OUT" | grep -qF "Migrate v0.3.0 layout → scv/ subdirectory (v0.3.1)" \
+grep -qF "Migrate v0.3.0 layout → scv/ subdirectory (v0.3.1)" <<<"$MIGRATE_OUT" \
   && pass "attachments migrate: commit message correct" \
   || fail "attachments migrate: commit message missing"
 
@@ -2138,40 +2140,40 @@ RENDER_SH="$STANDARD_ROOT/scripts/render-template.sh"
 
 # 1. English (default — no SCV_LANG)
 OUT_EN=$(PHASE="Phase 1" STATUS=passed PROJECT=test GIT_SHORT=abc1234 bash "$RENDER_SH")
-printf '%s' "$OUT_EN" | grep -qF "Passed" \
+grep -qF "Passed" <<<"$OUT_EN" \
   && pass "render-template: english passed label" \
   || fail "render-template: english passed label missing"
-printf '%s' "$OUT_EN" | grep -qF "Project:" \
+grep -qF "Project:" <<<"$OUT_EN" \
   && pass "render-template: english Project label" \
   || fail "render-template: english Project label missing"
 
 # 2. Korean
 OUT_KO=$(PHASE="Phase 1" STATUS=passed PROJECT=test GIT_SHORT=abc1234 SCV_LANG=korean bash "$RENDER_SH")
-printf '%s' "$OUT_KO" | grep -qF "완료" \
+grep -qF "완료" <<<"$OUT_KO" \
   && pass "render-template: korean passed label" \
   || fail "render-template: korean passed label missing"
-printf '%s' "$OUT_KO" | grep -qF "프로젝트:" \
+grep -qF "프로젝트:" <<<"$OUT_KO" \
   && pass "render-template: korean Project label" \
   || fail "render-template: korean Project label missing"
 
 # 3. Japanese (failed status — covers cause / retry chrome too)
 OUT_JA=$(PHASE="Phase 1" STATUS=failed PROJECT=test GIT_SHORT=abc1234 SCV_LANG=japanese bash "$RENDER_SH")
-printf '%s' "$OUT_JA" | grep -qF "失敗" \
+grep -qF "失敗" <<<"$OUT_JA" \
   && pass "render-template: japanese failed label" \
   || fail "render-template: japanese failed label missing"
-printf '%s' "$OUT_JA" | grep -qF "原因" \
+grep -qF "原因" <<<"$OUT_JA" \
   && pass "render-template: japanese cause label" \
   || fail "render-template: japanese cause label missing"
 
 # 4. Unknown language → English fallback
 OUT_FB=$(PHASE="Phase 1" STATUS=passed PROJECT=test GIT_SHORT=abc1234 SCV_LANG=esperanto bash "$RENDER_SH")
-printf '%s' "$OUT_FB" | grep -qF "Passed" \
+grep -qF "Passed" <<<"$OUT_FB" \
   && pass "render-template: unknown lang falls back to english" \
   || fail "render-template: unknown lang fallback missing"
 
 # 5. Case-insensitive (KOREAN matches korean)
 OUT_KO_CAP=$(PHASE="Phase 1" STATUS=passed PROJECT=test GIT_SHORT=abc1234 SCV_LANG=KOREAN bash "$RENDER_SH")
-printf '%s' "$OUT_KO_CAP" | grep -qF "완료" \
+grep -qF "완료" <<<"$OUT_KO_CAP" \
   && pass "render-template: SCV_LANG case-insensitive" \
   || fail "render-template: SCV_LANG case-sensitive (should be insensitive)"
 
@@ -2408,16 +2410,16 @@ S3=$(printf '%s' "$GITLAB_TOKEN_OUT" | awk '/---S3---/{f=1;next} /---S4---/{f=0}
 
 # Scenario 4: error message + non-zero
 S4_BLOCK=$(printf '%s' "$GITLAB_TOKEN_OUT" | awk '/---S4---/{f=1;next} f')
-printf '%s' "$S4_BLOCK" | grep -q "no GitLab token available" \
+grep -q "no GitLab token available" <<<"$S4_BLOCK" \
   && pass "_pr_gitlab_token: error mentions 'no GitLab token available'" \
   || fail "_pr_gitlab_token: error message wrong (got: $S4_BLOCK)"
-printf '%s' "$S4_BLOCK" | grep -q "glab auth login" \
+grep -q "glab auth login" <<<"$S4_BLOCK" \
   && pass "_pr_gitlab_token: error suggests 'glab auth login'" \
   || fail "_pr_gitlab_token: error doesn't mention glab auth login"
-printf '%s' "$S4_BLOCK" | grep -q "settings-set.sh GITLAB_TOKEN=" \
+grep -q "settings-set.sh GITLAB_TOKEN=" <<<"$S4_BLOCK" \
   && pass "_pr_gitlab_token: error points at settings-set.sh for the token" \
   || fail "_pr_gitlab_token: error doesn't show how to store GITLAB_TOKEN"
-printf '%s' "$S4_BLOCK" | grep -q "S4-EXIT=1" \
+grep -q "S4-EXIT=1" <<<"$S4_BLOCK" \
   && pass "_pr_gitlab_token: returns exit 1 when no source available" \
   || fail "_pr_gitlab_token: should exit 1 (got: $S4_BLOCK)"
 
@@ -2452,7 +2454,7 @@ assert_contains "$REGRESSION_CMD" "Recommended for large archives"
 assert_contains "$REGRESSION_CMD" "Do not auto-add tags"
 
 echo
-echo '=== [11xx] install-deps.sh + /scv:install-deps + graphify awareness (v0.6.0+) ==='
+echo '=== [11xx] install-deps.sh + /scv:install-deps (v0.6.0+; graph skill dropped v0.51.0) ==='
 
 INSTALL_DEPS_SH="$STANDARD_ROOT/scripts/install-deps.sh"
 INSTALL_DEPS_CMD="$PROTOCOL_ROOT/install-deps.md"
@@ -2477,13 +2479,10 @@ CHECK_EXIT=$?
 assert_out_contains "OS detected:" "$CHECK_OUT"            "install-deps --check: OS detection line"
 assert_out_contains "Package manager:" "$CHECK_OUT"        "install-deps --check: PM detection line"
 assert_out_contains "Dependency check:" "$CHECK_OUT"       "install-deps --check: deps section"
-assert_out_contains "graphify (Claude Code skill" "$CHECK_OUT" "install-deps --check: graphify section header"
-# graphify install link only appears when graphify is missing — check via mock
-GRAPHIFY_MISSING_OUT=$(bash <<INNER_EOF
-HOME=/nonexistent-home-for-test bash $STANDARD_ROOT/scripts/install-deps.sh --check 2>&1
-INNER_EOF
-)
-assert_out_contains "github.com/safishamsi/graphify" "$GRAPHIFY_MISSING_OUT" "install-deps --check: graphify install link when missing"
+# v0.51.0: the docs graph is built by scripts/graph.sh — no external skill is mentioned anywhere
+grep -qi "graph""ify" <<<"$CHECK_OUT" \
+  && fail "install-deps --check: old graph skill still mentioned" \
+  || pass "install-deps --check: no external graph skill (scv graph, v0.51.0)"
 
 # --print mode covers all OSes
 PRINT_OUT=$(bash "$INSTALL_DEPS_SH" --print 2>&1)
@@ -2497,7 +2496,9 @@ assert_out_contains "── windows (winget) ──" "$PRINT_OUT"       "install
 assert_out_contains "brew install gh" "$PRINT_OUT"              "install-deps --print: macOS gh install command"
 assert_out_contains "GitHub.cli" "$PRINT_OUT"                   "install-deps --print: Windows winget gh package id"
 assert_out_contains "Gyan.FFmpeg" "$PRINT_OUT"                  "install-deps --print: Windows winget ffmpeg package id"
-assert_out_contains "github.com/safishamsi/graphify" "$PRINT_OUT" "install-deps --print: graphify GitHub link"
+grep -qi "graph""ify" <<<"$PRINT_OUT" \
+  && fail "install-deps --print: old graph skill still mentioned" \
+  || pass "install-deps --print: no external graph skill"
 
 # Unknown mode rejected with exit 2
 bash "$INSTALL_DEPS_SH" --bogus 2>/dev/null
@@ -2510,30 +2511,32 @@ bash "$INSTALL_DEPS_SH" --bogus 2>/dev/null
 assert_contains "$INSTALL_DEPS_CMD" "Detect SCV's external CLI dependencies"
 assert_contains "$INSTALL_DEPS_CMD" "install-deps.sh"
 assert_contains "$INSTALL_DEPS_CMD" "Language preference"
-assert_contains "$INSTALL_DEPS_CMD" "github.com/safishamsi/graphify"
+grep -qi "graph""ify" "$INSTALL_DEPS_CMD" \
+  && fail "install-deps.md: old graph skill still mentioned" \
+  || pass "install-deps.md: no external graph skill"
 assert_contains "$INSTALL_DEPS_CMD" "Install now"
 # why: [11vv] regression.md — Archive scale guidance + --tag recommendation (v0.5.1+) — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
 assert_contains "$INSTALL_DEPS_CMD" "Just print the install commands"
 assert_contains "$INSTALL_DEPS_CMD" "Cancel"
 
-# help.sh now mentions graphify in deps check
-HELP_GRAPHIFY_OUT=$(bash <<INNER_EOF
+# help.sh deps check no longer lists an external graph skill (v0.51.0)
+HELP_DEPS_OUT=$(bash <<INNER_EOF
 TMP=\$(mktemp -d)
 cd "\$TMP"
 bash $STANDARD_ROOT/scripts/help.sh 2>&1
 cd /; rm -rf "\$TMP"
 INNER_EOF
 )
-assert_out_contains "graphify" "$HELP_GRAPHIFY_OUT" "help.sh: graphify row in deps check"
-assert_out_contains "Claude Code skill" "$HELP_GRAPHIFY_OUT" "help.sh: graphify is identified as a Claude Code skill"
-assert_out_contains '/scv:install-deps' "$HELP_GRAPHIFY_OUT" 'help.sh: install hint references the Claude Code skill'
+grep -qi "graph""ify" <<<"$HELP_DEPS_OUT" \
+  && fail "help.sh: old graph skill row still in deps check" \
+  || pass "help.sh: no external graph skill row (scv graph, v0.51.0)"
+assert_out_contains '/scv:install-deps' "$HELP_DEPS_OUT" 'help.sh: install hint references /scv:install-deps'
 
-# work.md mentions /scv:install-deps + graphify install link
+# work.md mentions /scv:install-deps; no external graph skill anywhere in the protocols
 assert_contains "$WORK_CMD" '/scv:install-deps'
-assert_contains "$WORK_CMD" "github.com/safishamsi/graphify"
-
-# promote.md graphify warning has resolved install link
-assert_contains "$PROMOTE_CMD" "github.com/safishamsi/graphify"
+grep -qil "graph""ify" "$PROTOCOL_ROOT"/*.md "$PROTOCOL_ROOT"/*/*.md 2>/dev/null \
+  && fail "protocols: old graph skill still mentioned in $(grep -qil "graph""ify" "$PROTOCOL_ROOT"/*.md | tr '\n' ' ')" \
+  || pass "protocols: no external graph skill mentioned (scv graph, v0.51.0)"
 
 echo
 echo "=== [11yy] v2.0.0 — 표준 문서 게이트 소멸 (Scenario 8) + Y5+ refs 자동 인식 ==="
@@ -2634,19 +2637,20 @@ assert_contains "$PROMOTE_CMD" "Step 6.1 — First diagram (Component data flow)
 assert_contains "$PROMOTE_CMD" "flowchart LR"
 assert_contains "$PROMOTE_CMD" 'functionName(arg1, arg2)'
 
-# commands/promote.md — Step 6.2 second diagram + branching table (graphify-only, v2.0.0)
+# commands/promote.md — Step 6.2 second diagram + source table (scv graph, v0.51.0)
 # why: [11aaa] FEATURE_ARCHITECTURE.md auto-generation (v0.7.0+) — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
 assert_contains "$PROMOTE_CMD" "Step 6.2 — Second diagram (Position in whole"
-assert_contains "$PROMOTE_CMD" "GRAPHIFY_SKILL"
 assert_contains "$PROMOTE_CMD" "GRAPH_STATUS"
-assert_contains "$PROMOTE_CMD" ".graphify/docs/graphify-out/graph.json"
-assert_contains "$PROMOTE_CMD" "**3-way question**"
-assert_contains "$PROMOTE_CMD" "**2-way question**"
+assert_contains "$PROMOTE_CMD" "scv/.graph/graph.json"
+assert_contains "$PROMOTE_CMD" "**Source = scv graph**"
+grep -qF '**3-way question**' "$PROMOTE_CMD" \
+  && fail "promote.md: graph run-or-skip question still present (graph is automatic, v0.51.0)" \
+  || pass "promote.md: no graph run-or-skip question (graph is automatic, v0.51.0)"
 grep -qF 'scv/ARCHITECTURE.md' "$PROMOTE_CMD" \
   && fail "promote.md: still references scv/ARCHITECTURE.md as a diagram source" \
   || pass "promote.md: scv/ARCHITECTURE.md source branch removed (v2.0.0)"
 
-# commands/promote.md — graphify run-or-skip question
+# commands/promote.md — diagram 2 is skipped only when the graph is off/unavailable
 assert_contains "$PROMOTE_CMD" "Skip diagram 2"
 
 # commands/promote.md — Mermaid TB + classDef new highlight
@@ -2734,12 +2738,11 @@ assert_contains "$PROMOTE_DOC" "Component data flow"
 assert_contains "$PROMOTE_DOC" "Position in whole architecture"
 # why: [11aaa] FEATURE_ARCHITECTURE.md auto-generation (v0.7.0+) — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
 assert_contains "$PROMOTE_DOC" "Two is the floor, not the ceiling"
-assert_contains "$PROMOTE_DOC" "graphify status?"
+assert_contains "$PROMOTE_DOC" "SCV graph status?"
 # why: [11aaa] FEATURE_ARCHITECTURE.md auto-generation (v0.7.0+) — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
-assert_contains "$PROMOTE_DOC" "skill installed + graph fresh"
+assert_contains "$PROMOTE_DOC" "built → use scv/.graph/graph.json"
 # why: [11aaa] FEATURE_ARCHITECTURE.md auto-generation (v0.7.0+) — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
-assert_contains "$PROMOTE_DOC" "skill installed + graph stale/missing"
-assert_contains "$PROMOTE_DOC" "skill missing"
+assert_contains "$PROMOTE_DOC" "off / unavailable → diagram 2 is skipped"
 # why: [11aaa] FEATURE_ARCHITECTURE.md auto-generation (v0.7.0+) — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
 assert_contains "$PROMOTE_DOC" 'classDef new fill:#FFE082'
 assert_contains "$PROMOTE_DOC" "is **not enforced** by"
@@ -2749,18 +2752,18 @@ assert_contains "$PROMOTE_DOC" "is **not enforced** by"
 assert_contains "$PROMOTE_DOC" "FEATURE_ARCHITECTURE.md   # optional — two Mermaid diagrams"
 
 echo
-echo "=== [11bbb] v0.7.1 — Mermaid + graphify mapping 정확도 보강 ==="
+echo "=== [11bbb] v0.7.1 — Mermaid + graph mapping 정확도 보강 (scv graph, v0.51.0) ==="
 
 PROMOTE_CMD="$PROTOCOL_ROOT/promote.md"
 WORK_CMD="$PROTOCOL_ROOT/work.md"
 PR_HELPER="$STANDARD_ROOT/scripts/pr-helper.sh"
 
 # Step 6.1 — Mermaid 정확도 prompt 보강
-# why: [11bbb] v0.7.1 — Mermaid + graphify mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
+# why: [11bbb] v0.7.1 — Mermaid + graph mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
 assert_contains "$PROMOTE_CMD" "Mapping rules (must follow)"
-# why: [11bbb] v0.7.1 — Mermaid + graphify mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
+# why: [11bbb] v0.7.1 — Mermaid + graph mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
 assert_contains "$PROMOTE_CMD" "Every component named in \`Approach Overview\`"
-# why: [11bbb] v0.7.1 — Mermaid + graphify mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
+# why: [11bbb] v0.7.1 — Mermaid + graph mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
 assert_contains "$PROMOTE_CMD" "Every external system named in PLAN.md"
 assert_contains "$PROMOTE_CMD" "Every edge needs a label"
 assert_contains "$PROMOTE_CMD" "No invented components"
@@ -2768,18 +2771,18 @@ assert_contains "$PROMOTE_CMD" "Anti-patterns to avoid"
 assert_contains "$PROMOTE_CMD" "Bare \`A --> B\` edges"
 assert_contains "$PROMOTE_CMD" "More than ~12 nodes"
 
-# Step 6.2 — graphify mapping algorithm
-# why: [11bbb] v0.7.1 — Mermaid + graphify mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
+# Step 6.2 — scv graph mapping algorithm
+# why: [11bbb] v0.7.1 — Mermaid + graph mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
 assert_contains "$PROMOTE_CMD" "Mapping rules by data source"
-# why: [11bbb] v0.7.1 — Mermaid + graphify mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
+# why: [11bbb] v0.7.1 — Mermaid + graph mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
 assert_contains "$PROMOTE_CMD" "Subgraphs from communities"
-# why: [11bbb] v0.7.1 — Mermaid + graphify mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
-assert_contains "$PROMOTE_CMD" "graphify already labeled them in plain language"
-# why: [11bbb] v0.7.1 — Mermaid + graphify mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
+# why: [11bbb] v0.7.1 — Mermaid + graph mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
+assert_contains "$PROMOTE_CMD" "labels are the ones the graph assigns"
+# why: [11bbb] v0.7.1 — Mermaid + graph mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
 assert_contains "$PROMOTE_CMD" "Nodes from god_nodes only"
-# why: [11bbb] v0.7.1 — Mermaid + graphify mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
+# why: [11bbb] v0.7.1 — Mermaid + graph mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
 assert_contains "$PROMOTE_CMD" "Edges from top-weight links"
-# why: [11bbb] v0.7.1 — Mermaid + graphify mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
+# why: [11bbb] v0.7.1 — Mermaid + graph mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
 assert_contains "$PROMOTE_CMD" "New components from PLAN.md"
 assert_contains "$PROMOTE_CMD" 'dashed edge `-.->'
 assert_contains "$PROMOTE_CMD" "Drawing every node from"
@@ -2788,48 +2791,48 @@ assert_contains "$PROMOTE_CMD" "Drawing every node from"
 # 20260826-numbered-spec-deck made the spec material REQUIRED for every plan (FE and
 # BE alike), so the old "optional / skip mockups" wording is gone on purpose. What is
 # asserted now is the replacement contract, not a looser version of the old one.
-# why: [11bbb] v0.7.1 — Mermaid + graphify mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
+# why: [11bbb] v0.7.1 — Mermaid + graph mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
 assert_contains "$PROMOTE_CMD" "번호식 화면설계서 (numbered screen spec) — REQUIRED material"
-# why: [11bbb] v0.7.1 — Mermaid + graphify mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
+# why: [11bbb] v0.7.1 — Mermaid + graph mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
 assert_contains "$PROMOTE_CMD" '```screen` fenced block per screen'
-# why: [11bbb] v0.7.1 — Mermaid + graphify mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
+# why: [11bbb] v0.7.1 — Mermaid + graph mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
 assert_contains "$PROMOTE_CMD" "Missing material warns; it never blocks"
-# why: [11bbb] v0.7.1 — Mermaid + graphify mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
+# why: [11bbb] v0.7.1 — Mermaid + graph mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
 assert_contains "$PROMOTE_CMD" "Markers are assigned for you"
-# why: [11bbb] v0.7.1 — Mermaid + graphify mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
+# why: [11bbb] v0.7.1 — Mermaid + graph mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
 assert_contains "$PROMOTE_CMD" "which screen calls this, at the top"
 assert_contains "$PROMOTE_CMD" '"nav": { "items"'
-# why: [11bbb] v0.7.1 — Mermaid + graphify mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
+# why: [11bbb] v0.7.1 — Mermaid + graph mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
 assert_contains "$PROMOTE_CMD" '| `table` | `{ type:"table"'
-# why: [11bbb] v0.7.1 — Mermaid + graphify mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
+# why: [11bbb] v0.7.1 — Mermaid + graph mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
 assert_contains "$PROMOTE_CMD" "Faithfulness (non-negotiable, same rule as the diagrams)"
-# why: [11bbb] v0.7.1 — Mermaid + graphify mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
+# why: [11bbb] v0.7.1 — Mermaid + graph mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
 assert_contains "$PROMOTE_CMD" "Never invent a screen, a data column, or a button"
-# why: [11bbb] v0.7.1 — Mermaid + graphify mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
+# why: [11bbb] v0.7.1 — Mermaid + graph mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
 assert_contains "$PROMOTE_CMD" "always static illustrations"
 assert_contains "$PROMOTE_CMD" "Added N screen mockup(s)"
 
 # Step 6.4 — style priority: scv skin default, project tokens only when told (v0.19.0+)
-# why: [11bbb] v0.7.1 — Mermaid + graphify mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
+# why: [11bbb] v0.7.1 — Mermaid + graph mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
 assert_contains "$PROMOTE_CMD" "Style priority — scv skin first, project tokens only when told"
-# why: [11bbb] v0.7.1 — Mermaid + graphify mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
+# why: [11bbb] v0.7.1 — Mermaid + graph mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
 assert_contains "$PROMOTE_CMD" "2순위 default: the scv-native skin"
-# why: [11bbb] v0.7.1 — Mermaid + graphify mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
+# why: [11bbb] v0.7.1 — Mermaid + graph mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
 assert_contains "$PROMOTE_CMD" "do not go hunting for the project's real colors unprompted"
-# why: [11bbb] v0.7.1 — Mermaid + graphify mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
+# why: [11bbb] v0.7.1 — Mermaid + graph mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
 assert_contains "$PROMOTE_CMD" "1순위 override: only when the user has told you this project has its own design tokens"
-# why: [11bbb] v0.7.1 — Mermaid + graphify mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
+# why: [11bbb] v0.7.1 — Mermaid + graph mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
 assert_contains "$PROMOTE_CMD" '"primary": "#5a6cff", "success": "#22c55e", "danger": "#f4556d"'
 assert_contains "$PROMOTE_CMD" "Base hex colors only"
-# why: [11bbb] v0.7.1 — Mermaid + graphify mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
+# why: [11bbb] v0.7.1 — Mermaid + graph mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
 assert_contains "$PROMOTE_CMD" "Do **not** compute paired values yourself"
-# why: [11bbb] v0.7.1 — Mermaid + graphify mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
+# why: [11bbb] v0.7.1 — Mermaid + graph mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
 assert_contains "$PROMOTE_CMD" "failed WCAG contrast for some palettes"
-# why: [11bbb] v0.7.1 — Mermaid + graphify mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
+# why: [11bbb] v0.7.1 — Mermaid + graph mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
 assert_contains "$PROMOTE_CMD" "silently dropped by the renderer and falls back to the scv-native default"
-# why: [11bbb] v0.7.1 — Mermaid + graphify mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
+# why: [11bbb] v0.7.1 — Mermaid + graph mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
 assert_contains "$PROMOTE_CMD" "Glass/blur/translucency effects"
-# why: [11bbb] v0.7.1 — Mermaid + graphify mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
+# why: [11bbb] v0.7.1 — Mermaid + graph mapping 정확도 보강 — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
 assert_contains "$PROMOTE_CMD" "not** supported by this override yet"
 
 assert_contains "$PROMOTE_CMD" "Step 6.5 — Self-review"
@@ -2867,7 +2870,7 @@ flowchart LR
 
 ## 2. Position in whole architecture
 
-> Source: graphify graph (built 2026-01-01)
+> Source: scv graph (built 2026-01-01)
 
 ```mermaid
 flowchart TB
@@ -2882,22 +2885,22 @@ EXTRACTED=$(awk '
 ' "$TMP_FA")
 rm -f "$TMP_FA"
 
-if printf '%s' "$EXTRACTED" | grep -qF "### 1. Component data flow"; then
+if grep -qF "### 1. Component data flow" <<<"$EXTRACTED"; then
   pass "pr-helper awk: heading 1 extracted as ### subsection"
 else
   fail "pr-helper awk: heading 1 not found"
 fi
-if printf '%s' "$EXTRACTED" | grep -qF "### 2. Position in whole architecture"; then
+if grep -qF "### 2. Position in whole architecture" <<<"$EXTRACTED"; then
   pass "pr-helper awk: heading 2 extracted"
 else
   fail "pr-helper awk: heading 2 not found"
 fi
-if printf '%s' "$EXTRACTED" | grep -c '```mermaid' | grep -q '^2$'; then
+if grep -c '```mermaid' <<<"$EXTRACTED" | grep -q '^2$'; then
   pass "pr-helper awk: exactly 2 mermaid fences (both blocks)"
 else
   fail "pr-helper awk: mermaid fence count != 2"
 fi
-if printf '%s' "$EXTRACTED" | grep -qF "Source: graphify graph (built 2026-01-01)"; then
+if grep -qF "Source: scv graph (built 2026-01-01)" <<<"$EXTRACTED"; then
   fail "pr-helper awk: Source line leaked into output (should be excluded)"
 else
   pass "pr-helper awk: Source line excluded (only mermaid blocks inline)"
@@ -3059,11 +3062,11 @@ flowchart LR
   A --> B
 ```
 
-> Source: graphify graph (built 2026-01-01)
+> Source: scv graph (built 2026-01-01)
 
 ## 2. Position in whole
 
-> Source: graphify (built 2026-05-04)
+> Source: scv graph (built 2026-05-04)
 
 Some intro text.
 
@@ -3079,7 +3082,7 @@ if printf '%s\n' "$RESULT_E" | grep -qF "Description paragraph"; then
 else
   pass "[11ccc] Scenario E: description paragraph excluded"
 fi
-if printf '%s\n' "$RESULT_E" | grep -qF "Source: graphify graph (built 2026-01-01)"; then
+if printf '%s\n' "$RESULT_E" | grep -qF "Source: scv graph (built 2026-01-01)"; then
   fail "[11ccc] Scenario E: Source line leaked"
 else
   pass "[11ccc] Scenario E: Source line excluded"
@@ -3230,17 +3233,17 @@ OUT_JA=$(bash "$PR_HELPER" test-ja --dry-run 2>&1 || true)
 
 cd "$STANDARD_ROOT"
 
-if printf '%s' "$OUT_EN" | grep -qF "## Summary" && printf '%s' "$OUT_EN" | grep -qF "🗂  Archived"; then
+if grep -qF "## Summary" <<<"$OUT_EN" && grep -qF "🗂  Archived" <<<"$OUT_EN"; then
   pass "[11ddd] pr-helper dry-run: lang=english produces English labels"
 else
   fail "[11ddd] pr-helper dry-run: English labels missing"
 fi
-if printf '%s' "$OUT_KO" | grep -qF "## 요약" && printf '%s' "$OUT_KO" | grep -qF "🗂  보관됨"; then
+if grep -qF "## 요약" <<<"$OUT_KO" && grep -qF "🗂  보관됨" <<<"$OUT_KO"; then
   pass "[11ddd] pr-helper dry-run: lang=korean produces 한국어 labels (## 요약 / 🗂 보관됨)"
 else
   fail "[11ddd] pr-helper dry-run: Korean labels missing"
 fi
-if printf '%s' "$OUT_JA" | grep -qF "## 概要" && printf '%s' "$OUT_JA" | grep -qF "🗂  アーカイブ済み"; then
+if grep -qF "## 概要" <<<"$OUT_JA" && grep -qF "🗂  アーカイブ済み" <<<"$OUT_JA"; then
   pass "[11ddd] pr-helper dry-run: lang=japanese produces 日本語 labels (## 概要 / 🗂 アーカイブ済み)"
 else
   fail "[11ddd] pr-helper dry-run: Japanese labels missing"
@@ -3282,7 +3285,7 @@ EOF
 cd "$TMP_PRH"
 OUT_OTHER=$(bash "$PR_HELPER" test-other --dry-run 2>&1 || true)
 cd "$STANDARD_ROOT"
-if printf '%s' "$OUT_OTHER" | grep -qF "## Summary" && printf '%s' "$OUT_OTHER" | grep -qF "🗂  Archived"; then
+if grep -qF "## Summary" <<<"$OUT_OTHER" && grep -qF "🗂  Archived" <<<"$OUT_OTHER"; then
   pass "[11ddd] pr-helper dry-run: lang=spanish (unknown) falls back to English labels"
 else
   fail "[11ddd] pr-helper dry-run: unknown lang fallback broken"
@@ -3970,7 +3973,7 @@ TODO
   assert_out_contains "[scv/TODO.md — open items]" "$OUT" "status: TODO section present"
   assert_out_contains "1 open — by author: @kim 1" "$OUT" "status: open TODO counted per author"
   assert_out_contains "(T-001) write hook registration handoff — @kim" "$OUT" "status: open item listed with author"
-  printf '%s' "$OUT" | grep -qF "(T-002)" \
+  grep -qF "(T-002)" <<<"$OUT" \
     && fail "status: completed TODO leaked into open list" \
     || pass "status: completed TODO excluded"
 )
@@ -4109,7 +4112,8 @@ for _gp in "$PROTOCOL_ROOT"/*.md; do
   [[ "$_open" -eq "$_close" ]] && pass "guidance: $(basename "$_gp") blocks balanced ($_open)" \
                                || fail "guidance: $(basename "$_gp") unbalanced open=$_open close=$_close"
 done
-_gq=$(grep -cE '^[[:space:]]*Question:' "$PROTOCOL_ROOT/promote.md"); [[ "$_gq" -ge 5 ]] && pass "guidance: promote.md has $_gq question blocks (>=5)" || fail "guidance: promote.md question blocks $_gq < 5"
+# v0.51.0: the two graph run-or-skip questions are gone (the scv graph builds itself) — 5 → 3.
+_gq=$(grep -cE '^[[:space:]]*Question:' "$PROTOCOL_ROOT/promote.md"); [[ "$_gq" -ge 3 ]] && pass "guidance: promote.md has $_gq question blocks (>=3)" || fail "guidance: promote.md question blocks $_gq < 3"
 _gq=$(grep -cE '^[[:space:]]*Question:' "$PROTOCOL_ROOT/work.md");    [[ "$_gq" -ge 6 ]] && pass "guidance: work.md has $_gq question blocks (>=6)"    || fail "guidance: work.md question blocks $_gq < 6"
 for _gp in "$PROTOCOL_ROOT/promote.md" "$PROTOCOL_ROOT/work.md"; do
   _empty=$(awk '/<!-- SCV:GUIDANCE -->/{f=1;n=0;next} /<!-- \/SCV:GUIDANCE -->/{if(f&&n==0)e++;f=0;next} f&&NF{n++} END{print e+0}' "$_gp")

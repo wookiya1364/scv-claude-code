@@ -12,9 +12,8 @@ __pycache__/
 # Node
 node_modules/
 
-# graphify local caches
-.graphify_python
-.graphify_version
+# SCV graph output (regenerated on demand by scripts/graph.sh)
+scv/.graph/
 
 # Environment files
 .env

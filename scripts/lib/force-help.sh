@@ -41,13 +41,25 @@ scv_force_switch() {
 # 반쪽을 싣느니 많이 싣는 편이 낫다. 입력은 표준입력으로 받는다.
 scv_force_trim_diagnosis() {
   # 전부 초기화한다 — 훅은 set -u 아래에서 돌고, 빈 채로 참조하면 그 자리에서 죽는다.
-  local all="" line="" out="" seen=0
+  # v0.51.0+: 훅에 싣는 진단은 본문 + "Recommended next action" 제목·밑줄·첫 내용 줄까지.
+  # 그 뒤의 방법 설명과 "Learn more" 블록은 매 턴 같은 안내문이라 싣지 않는다 — 사용자가
+  # 직접 부른 help.sh 출력은 이 함수를 지나지 않으므로 그대로다. 진단 제목이 없으면 입력 그대로.
+  local all="" line="" out="" seen=0 reco=0
   while IFS= read -r line; do
     all="${all}${line}"$'\n'
     if [[ "$seen" == "0" && "$line" == *"Current project diagnosis"* ]]; then
       seen=1
     fi
-    [[ "$seen" == "1" ]] && out="${out}${line}"$'\n'
+    [[ "$seen" == "1" ]] || continue
+    [[ "$line" == *"Learn more"* ]] && break
+    if (( reco == 0 )); then
+      out="${out}${line}"$'\n'
+      [[ "$line" == *"Recommended next action"* ]] && reco=1
+    elif (( reco == 1 )); then
+      [[ -z "${line//[[:space:]]/}" ]] && continue
+      out="${out}${line}"$'\n'
+      [[ "$line" =~ ^[[:space:]]*[─-]+[[:space:]]*$ ]] || reco=2
+    fi
   done
   if [[ "$seen" == "1" ]]; then printf '%s' "$out"; else printf '%s' "$all"; fi
 }

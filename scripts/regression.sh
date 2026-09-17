@@ -16,6 +16,7 @@ fi
 #   regression.sh [<slug-prefix>]
 #                 [--tag <x>] [--include-promote] [--include-obsolete]
 #                 [--only <slug>] [--skip <slug>] [--ci] [--quiet]
+                [--dry] [--changed <a,b,…>]     # v0.51.0: 계획·영향만 보기 / 영향 조회 대상 지정
 #                 [--json <path>] [--timeout <sec>] [--no-memo]
 #
 # Exit codes:
@@ -46,6 +47,8 @@ INCLUDE_PROMOTE=0
 INCLUDE_OBSOLETE=0
 CI_MODE=0
 QUIET=0
+DRY=0
+CHANGED_LIST=""
 JSON_PATH=""
 # 블록 하나(또는 메모된 게이트 하나)의 상한. 코어 검사 전부를 도는 게이트는 한 번만 돌지만 검사가 47개
 # (0.50.0 기준 약 290초)라 300 으로는 게이트 자체가 잘려 "검사 실패" 로 보였다 — 세 보관 계약이 같은
@@ -72,6 +75,8 @@ while [[ $# -gt 0 ]]; do
     --json)              JSON_PATH="$2"; shift 2 ;;
     --timeout)           TIMEOUT="$2"; shift 2 ;;
     --no-memo)           MEMO=0; shift ;;
+    --dry)               DRY=1; shift ;;                       # v0.51.0: 계획·영향만 찍고 실행하지 않는다
+    --changed)           CHANGED_LIST="$2"; shift 2 ;;         # v0.51.0: 쉼표 구분 경로 — 영향 조회 대상 (없으면 git diff)
     -h|--help)           usage; exit 0 ;;
     -*)                  echo "Unknown flag: $1" >&2; exit 1 ;;
     *)
@@ -477,6 +482,30 @@ main() {
     any_skip=1
   done
   [[ $any_skip -eq 0 ]] && echo "(none)"
+
+  # 6b. 영향 조회 (v0.51.0+, 정보만 — 실행 선택은 바꾸지 않는다): 변경 파일이 있으면 SCV 그래프로
+  #     함께 바뀌는 파일·얽힌 계획·결정을 앞단에 보인다. --changed a,b 가 없으면 git 작업 트리의 변경 파일.
+  local changed=""
+  if [[ -n "$CHANGED_LIST" ]]; then changed="$(printf '%s' "$CHANGED_LIST" | tr ',' '\n')"
+  elif command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    changed="$( { git diff --name-only HEAD 2>/dev/null; git ls-files --others --exclude-standard 2>/dev/null; } | grep -v '^scv/' | LC_ALL=C sort -u | head -20 )"
+  fi
+  if [[ -n "${changed//[[:space:]]/}" && -f "$SCRIPT_DIR/graph.sh" ]]; then
+    echo ""
+    echo "=== impact (scv graph) ==="
+    # shellcheck disable=SC2086
+    bash "$SCRIPT_DIR/graph.sh" impact $changed 2>/dev/null || echo "(graph unavailable)"
+    # Graft 어댑터 (v0.51.0+, 선택): graft 가 있고 그래프가 있으면 정적 영향 범위를 그 아래에 덧붙인다. 없으면 줄도 없다.
+    if [[ -f "$SCRIPT_DIR/graft.sh" ]]; then
+      local graft_out; graft_out="$(bash "$SCRIPT_DIR/graft.sh" blast 2>/dev/null || true)"
+      if [[ -n "${graft_out//[[:space:]]/}" ]]; then echo ""; echo "=== impact (graft blast) ==="; printf '%s\n' "$graft_out"; fi
+    fi
+  fi
+  if [[ $DRY -eq 1 ]]; then
+    echo ""
+    echo "DRY: no test was executed (--dry)"
+    return 0
+  fi
 
   # 7. execute
   echo ""

@@ -1,8 +1,8 @@
 # help — full protocol (read once per session)
 
 Read from `/scv:help` when its helper prints `PROTOCOL: load`. This is the rest of the
-protocol: the three modes, intent classification, the conversation loop (Steps B0–B3) and
-the pointers to the branch files. After reading it, run `help-state.sh mark` as the main
+protocol: the three modes, intent classification, the conversation loop (Steps B0–B3), the
+pointers to the branch files, and the delegation rule (moved here in v0.51.0). After reading it, run `help-state.sh mark` as the main
 protocol says, then continue with the current turn.
 
 > `<plugin root>` below means the directory two levels above this file (this file lives at
@@ -130,6 +130,17 @@ Be soft, not strict: mostly clear scope plus one concrete acceptance criterion i
 the user asks to move on, or 8+ turns have passed), hand the conversation to
 `/scv:promote`; the branch file carries the question and Steps B4–B6.
 Read `<plugin root>/protocols/help/promote-handoff.md` now and follow it.
+
+## Deep questions go to a background investigator (switch, v0.46.0+)
+
+Skip this section unless `scv/scv_settings.json` sets `SCV_DELEGATE_EFFORT=on`. When on,
+the per-turn hook's `[SCV delegate]` block carries the full rule, and it holds the same way
+when help is invoked directly: answer now at the session's effort (SCV never changes that dial)
+and hand only a *deep* question — several files to read, or a claim to verify — to the
+`scv-investigator` agent in the background and say a deeper result
+will follow. Its report
+lands in `scv/raw/<YYYYMMDD>-research-<slug>.md`; when its summary arrives, append the
+path and one line to the session's conversation file. Shallow questions are never delegated.
 
 ## This session's protocol fingerprint (v0.50.0+)
 
