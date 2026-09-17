@@ -23,7 +23,11 @@ ROUTER="$CORE/protocols/help.md"; FULL="$CORE/protocols/help/full.md"
 FIX="$HERE/fixtures"; FORCE_LIB="$CORE/scripts/lib/force-help.sh"
 PROMPT_HOOK="$CORE/template/hooks/on-user-prompt.sh"; HELP_SH="$CORE/scripts/help.sh"
 section() { awk -v S="## $2" 'index($0,S)==1{f=1;print;next} f&&/^## /{exit} f' "$1"; }
-ROUTER_MAX=7200   # 사용자 결정(2026-09-16): 고정 절 4,529B + 계약 문구·명령 ≈1,000B 가 바닥
+# 사용자 결정(2026-09-16): 고정 절 4,529B + 계약 문구·명령 ≈1,000B 가 바닥 → scv-core 원본은 7,200B.
+# 래퍼가 벤더링하며 호스트 자리표시자를 펼치면 몇백 바이트가 늘 수 있으므로, 사본에서는 budget 검사의 상한(7,500B)을 쓴다.
+REPO="$(cd "$CORE/.." && pwd)"
+IS_CORE_REPO=0; [[ -f "$REPO/VERSION" && -f "$REPO/core/TEMPLATE_DIGEST" && -d "$REPO/scv/archive" ]] && IS_CORE_REPO=1
+ROUTER_MAX=7200; (( IS_CORE_REPO )) || ROUTER_MAX=7500
 
 echo "── [T1] 라우터 크기 ──"
 n="$(wc -c < "$ROUTER")"; (( n <= ROUTER_MAX )) && ok "help.md ${n}B ≤ ${ROUTER_MAX}B" || fail "help.md ${n}B > ${ROUTER_MAX}B"
