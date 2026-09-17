@@ -26,6 +26,21 @@ import { basename, dirname, resolve } from "node:path";
 import { mdToDeck, stripLeadingMeta } from "./transform.mjs";
 import { renderHtml } from "./render.mjs";
 import { makeT } from "./i18n.mjs";
+import {
+  parsePipelineSection,
+  parseScreenSteps,
+  reconcileWithEvidence,
+  buildPipelineDiagram,
+  buildChangeTable,
+  countByStatus,
+  renderChangeMapMarkdown,
+} from "./change-map.mjs";
+import { collectEvidence } from "./change-map-evidence.mjs";
+import { fileURLToPath } from "node:url";
+
+// core/ 의 뿌리. 이 파일은 core/DeckUI/scripts/deckdoc/ 안에 있고, Graft 어댑터는
+// core/scripts/graft.sh 에 있다. 래퍼에 벤더링돼도 둘의 상대 위치는 같다.
+const CORE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
 const normalizeSlug = (s) =>
   s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "deck";
@@ -168,13 +183,37 @@ if (isDir) {
   defaultOut = resolve(process.cwd(), `${slug}-doc.html`);
 }
 
+// ---- 변경 지도 (v0.52.0+) ----
+// 계획 폴더일 때만 붙인다. 아무 마크다운 한 장에는 가져올 근거가 없고, 빈 표를 내보내느니
+// 절을 만들지 않는 편이 낫다. 순수한 부분은 change-map.mjs 가, Graft 호출은 그 옆 파일이 한다.
+let changeMap = null;
+if (isDir) {
+  const steps = parsePipelineSection(lintRaw);
+  if (steps.length) {
+    const screenSteps = parseScreenSteps(lintRaw);
+    const evidence = collectEvidence(
+      steps.map((x) => x.name),
+      { coreRoot: CORE_ROOT, cwd: INPUT },
+    );
+    const reconciled = reconcileWithEvidence(steps, evidence);
+    const diagram = buildPipelineDiagram(reconciled);
+    const rows = buildChangeTable(reconciled, screenSteps, t("changeMapWords"));
+    const md = renderChangeMapMarkdown(diagram, rows, t("changeMapWords"));
+    if (md) {
+      raw = `${raw}\n\n${md}`;
+      lintRaw = `${lintRaw}\n\n${md}`;
+      changeMap = { steps: reconciled, rows, counts: countByStatus(reconciled), graft: evidence.status };
+    }
+  }
+}
+
 const data = mdToDeck(raw, slug, sourceLabel, LANG, lintRaw);
 // render.mjs already guards the known crash vectors (wrong-typed screen-DSL fields,
 // runaway nesting); this catch is defense-in-depth for anything still unforeseen —
 // a clear error + nonzero exit beats a raw Node stack trace and zero bytes written.
 let html;
 try {
-  html = renderHtml(data, { mermaid: MERMAID, source: SOURCE, sources, lang: LANG });
+  html = renderHtml(data, { mermaid: MERMAID, source: SOURCE, sources, lang: LANG, changeMap });
 } catch (e) {
   console.error(`render failed: ${e.message}`);
   process.exit(1);
@@ -194,4 +233,12 @@ if (EMIT_JSON) {
 console.log(`DECK_SLUG: ${slug}`);
 console.log(`LINT: ${data.lint.length} warning(s)`);
 data.lint.forEach((l) => console.log(`  ⚠ ${l.message}`));
+if (changeMap) {
+  const parts = Object.entries(changeMap.counts).map(([k, v]) => `${k}=${v}`).join(" ");
+  console.log(`CHANGE_MAP: steps=${changeMap.steps.length} ${parts} graft=${changeMap.graft}`);
+  if (changeMap.graft !== "ready") {
+    console.log(`  ${t("changeMapNoGraft")}`);
+    console.log("  npm i -g @nanonets/graft && graft init --no-hooks --no-statusline && graft telemetry disable");
+  }
+}
 console.log(`DECK_HTML: ${OUT}`);
