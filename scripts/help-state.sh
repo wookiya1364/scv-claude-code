@@ -74,10 +74,11 @@ case "$cmd" in
           printf '%s\n' "$json" ;;
   mark)   _n="$(_nonce_new)"; st="$(scv_hstate_mark "$st" "$_n")"; json="$(scv_hstate_render "$st")"; _write "$json"
           _put "$NONCE_FILE" "$_n"; printf '%s\n' "$json" ;;
-  stop)   # 인자: --echo on|off · --lint on|off · --cap N · --now ISO. stdin = 직전 답 본문(없으면 린트 생략).
-          _esw=on; _lsw=on; _cap=2; _now=""
+  stop)   # 인자: --echo on|off · --lint on|off · --cap N · --now ISO · --src host|transcript|none. stdin = 직전 답 본문(없으면 린트 생략).
+          _esw=on; _lsw=on; _cap=2; _now=""; _src=""
           while [[ $# -gt 0 ]]; do
             case "$1" in
+              --src)  _src="${2:-}"; shift 2 ;;   # v0.51.0+: 본문 출처 host|transcript|none — 드리프트 줄 끝에 남긴다
               --echo) _esw="$(scv_hstate_switch "${2:-}")"; shift 2 ;;
               --lint) _lsw="$(scv_hstate_switch "${2:-}")"; shift 2 ;;
               --cap)  _cap="${2:-2}"; shift 2 ;;
@@ -98,12 +99,12 @@ case "$cmd" in
             st="$(scv_hstate_reload "$st" "" reset 0)"   # protocol=0 · 지문 비움 — 다음 mark 가 새 지문을 만든다
             _write "$(scv_hstate_render "$st")"; _put "$WARN_FILE" "$_warn"
           fi
-          mkdir -p "$JOURNAL_DIR" 2>/dev/null && [[ ! -L "$DRIFT_FILE" ]] && { scv_drift_line "$_now" "${_t:-0}" "$_echo" "$_viol" "$_reload"; echo; } >> "$DRIFT_FILE" 2>/dev/null
+          mkdir -p "$JOURNAL_DIR" 2>/dev/null && [[ ! -L "$DRIFT_FILE" ]] && { scv_drift_line "$_now" "${_t:-0}" "$_echo" "$_viol" "$_reload" "$_src"; echo; } >> "$DRIFT_FILE" 2>/dev/null
           _nv=0; [[ -n "${_viol//[[:space:]]/}" ]] && _nv="$(printf '%s\n' "$_viol" | grep -c . || true)"
           printf 'echo=%s lint=%s reload=%s\n' "$_echo" "$_nv" "$_reload" ;;
   diag)   text="$(cat 2>/dev/null || true)"; r="$(scv_hstate_diag "$st" "$text" "${1:-}")"; mode="${r%%$'\x1f'*}"; st="${r#*$'\x1f'}"
           json="$(scv_hstate_render "$st")"; _write "$json"
           if [[ "$mode" == "brief" ]]; then IFS=$'\x1f' read -r _s _p _t _d _at _n <<<"$st"; printf 'brief %s\n' "${_at:-}"; else printf 'full\n'; fi ;;
-  *) echo "usage: help-state.sh read|prompt <session_id> [N]|reset|mark|diag <hhmm>|stop [--echo on|off] [--lint on|off] [--cap N] [--now ISO]" >&2 ;;
+  *) echo "usage: help-state.sh read|prompt <session_id> [N]|reset|mark|diag <hhmm>|stop [--echo on|off] [--lint on|off] [--cap N] [--now ISO] [--src host|transcript|none]" >&2 ;;
 esac
 exit 0
