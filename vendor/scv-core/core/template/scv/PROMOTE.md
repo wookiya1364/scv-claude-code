@@ -568,13 +568,12 @@ Trivial changes (typo fix, single-line null guard, patch dep bump) get no value 
 **Diagram 2's data source:**
 
 ```
-graphify status?
-  ├─ skill installed + graph fresh → use .graphify/docs/graphify-out/
-  ├─ skill installed + graph stale/missing → ask user (run graphify? skip? other?)
-  └─ skill missing → ask user (skip? other?)
+SCV graph status? (scripts/graph.sh ensure — automatic, bash + jq)
+  ├─ built → use scv/.graph/graph.json (communities · god nodes · co-change pairs with evidence)
+  └─ off / unavailable → diagram 2 is skipped with a one-line note
 ```
 
-`action:promote` decides this branching automatically. The user only sees the resulting user confirmation when there is a real decision to make (graphify run-or-skip).
+`action:promote` decides this branching automatically. The graph builds itself when stale, so there is no run-or-skip question anymore (v0.51.0+).
 
 **File location and frontmatter:**
 
@@ -612,7 +611,7 @@ flowchart LR
 
 ## 2. Position in whole architecture
 
-> Source: <graphify graph (built YYYY-MM-DD) | skipped>
+> Source: <scv graph (built YYYY-MM-DD) | skipped>
 
 ```mermaid
 %%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#1e1e1e','primaryTextColor':'#fff','primaryBorderColor':'#9096a8','lineColor':'#e7e9f0','secondaryColor':'#2d2d2d','tertiaryColor':'#1e1e1e','background':'#171922','edgeLabelBackground':'#171922'}}}%%
@@ -626,7 +625,7 @@ flowchart TB
 
 - New components introduced by this feature are highlighted with the `new` class (yellow fill, orange stroke).
 - The "Source:" line in section 2 is mandatory when section 2 is present — it makes the diagram's accuracy basis auditable.
-- If diagram 2 is skipped (no graphify graph available), section 2 is replaced by a one-line note pointing at how to enable it (run `/graphify`).
+- If diagram 2 is skipped (graph off or jq missing), section 2 is replaced by a one-line note saying why (`SCV_GRAPH=off` / install jq).
 - LLM-generated Mermaid may have syntax errors or wrong labels. Treat the file like PLAN.md / TESTS.md — review and edit before `action:work`.
 - The file is **not enforced** by `action:work` or `action:regression`. Its value is human comprehension, not gating.
 

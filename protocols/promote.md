@@ -57,7 +57,7 @@ First, gather context:
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/promote-helper.sh" "${SCV_ARGS[@]}"
 ```
 
-Parse the helper output — the lines `MODE:`, `TODAY:`, `AUTHOR:`, `STANDARD_VERSION:`, `GRAPHIFY_SKILL:`, `GRAPH_STATUS:`, `RAW_FILE_COUNT:`, `RAW_TOPIC_CLUSTERS:`, `SUGGEST_SPLIT:`, `SPLIT_REASON:`, `RAW_STALE_COUNT:`, `RAW_OUTDATED_COUNT:` are the primary signals; section blocks (`=== scv/raw inventory ===` etc.) give you the content to work with.
+Parse the helper output — the lines `MODE:`, `TODAY:`, `AUTHOR:`, `STANDARD_VERSION:`, `GRAPH_STATUS:`, `GRAPH_DIR:`, `GRAFT_STATUS:`, `RAW_FILE_COUNT:`, `RAW_TOPIC_CLUSTERS:`, `SUGGEST_SPLIT:`, `SPLIT_REASON:`, `RAW_STALE_COUNT:`, `RAW_OUTDATED_COUNT:` are the primary signals; section blocks (`=== scv/raw inventory ===` etc.) give you the content to work with.
 
 ### Source material — raw / conversations / both (v0.9.0+)
 
@@ -134,17 +134,20 @@ asked again.
 
 **Technical identifiers stay as-is in every language**: file paths, skill invocation names, frontmatter keys (`status`, `kind`, `epic`, `supersedes`, `lang`), env var names (`SCV_LANG`, `SCV_PROMOTE_LANG`), SCV terms (`promote`, `archive`, `orphan branch`, `epic`).
 
-### Step 1 — Graph freshness (run before dialog)
+### Step 1 — Graph freshness (automatic, v0.51.0+)
 
-Based on the helper header:
+The helper already ran `scripts/graph.sh ensure`: the **SCV graph** — docs links, archived
+plans → files, decision refs, and co-change pairs with the plan slugs as evidence — is
+rebuilt from the repository whenever it is stale (bash + jq, about a second, no install,
+no LLM). There is nothing to ask the user.
 
-| GRAPHIFY_SKILL | GRAPH_STATUS | Action |
-|---|---|---|
-| `available` | `stale` or `missing` | Invoke the `graphify` skill to build / refresh the docs graph **before** proceeding with dialog. Tool: `Skill` with `skill: "graphify"` and args: `scope=docs`, `src=scv/raw`, `update=true` (or equivalent the skill expects). Then move the output into `.graphify/docs/` if the skill wrote `graphify-out/` at cwd. |
-| `available` | `built` | Skip graph update. |
-| `missing` | anything | Print a **short one-line warning**: "graphify skill not found — proceeding without token-efficient graph queries. Install guide: https://github.com/safishamsi/graphify (place SKILL.md in the skill directory configured by your wrapper)". Continue. |
+| GRAPH_STATUS | Action |
+|---|---|
+| `built` | Continue. `GRAPH_DIR:` names `scv/.graph` (`graph.json` + `GRAPH_REPORT.md`). Step 6.2 draws diagram 2 from it. |
+| `off` / `unavailable` | Continue without the graph (`SCV_GRAPH=off`, or jq missing). Say so once, in one line; diagram 2 is skipped later. |
 
-If `MODE: graph-only`: after handling the graph (or warning if skill missing), **stop here**. Do not proceed to dialog or file creation. Print a one-line summary of what you did.
+If `MODE: graph-only`: the helper ensured the graph and stopped — print one line with
+`GRAPH_STATUS` and stop here. Do not proceed to dialog or file creation.
 
 ### Step 2 — Plan summary (before dialog)
 
@@ -633,76 +636,36 @@ flowchart LR
 
 #### Step 6.2 — Second diagram (Position in whole — data source branching)
 
-Determine the source for the system-level layout:
+Determine the source for the system-level layout from the helper header (no question —
+the graph builds itself, v0.51.0+):
 
-| `GRAPHIFY_SKILL` | `GRAPH_STATUS` | Action |
-|---|---|---|
-| `available` | `built` | Use `.graphify/docs/graphify-out/graph.json` |
-| `available` | `stale` or `missing` | Ask the 3-way question below |
-| `missing` | (any) | Ask the 2-way question below |
+| `GRAPH_STATUS` | Action |
+|---|---|
+| `built` | **Source = scv graph**: use `scv/.graph/graph.json` (+ `scv/.graph/GRAPH_REPORT.md`). |
+| `off` / `unavailable` | **Skip diagram 2** — write the one-line skipped note in Step 6.3 and say why (`SCV_GRAPH=off` / jq missing). |
 
-<!-- SCV:GUIDANCE -->
-**3-way question** (graphify available + stale/missing graph):
-
-```
-Question: "The graphify graph is <stale|missing>. How should I source diagram 2?"
-
-[1] "Run graphify update (or full build) now"
-    description:
-    "Builds / refreshes the knowledge graph from the codebase.
-     Token cost: code-only changes use 0 LLM tokens (AST is deterministic).
-     Doc / image changes use chunked extraction. No changes since last run
-     means 0 tokens. Then I build diagram 2 from the graph."
-
-[2] "Skip diagram 2"
-    description:
-    "FEATURE_ARCHITECTURE.md will contain only diagram 1 (component data
-     flow). Diagram 2 needs a system-level reference that does not exist
-     right now. Pick this when you do not want to spend time on graph build
-     or this promote is exploratory."
-
-[3] (free-form) "Other — type your direction"
-    description:
-    "Examples: 'use stale graph as-is, note the date' / 'guess from code
-     structure'."
-```
-
-**2-way question** (graphify not installed):
-
-```
-Question: "graphify is not installed. How should I source diagram 2?"
-
-[1] "Skip diagram 2"
-    description:
-    "Only diagram 1 (component data flow) will be generated. The system-
-     level layout needs a graphify graph that is not available."
-
-[2] (free-form) "Other — type your direction"
-    description:
-    "Examples: 'guess from code top-level directory layout' / 'I will install
-     graphify first (see /scv:install-deps)'."
-```
-<!-- /SCV:GUIDANCE -->
-
-After the source decision, build a `flowchart TB` with subgraphs for each layer / domain.
+With the source settled, build a `flowchart TB` with subgraphs for each layer / domain.
 
 **Mapping rules by data source:**
 
-**Source = graphify `graph.json`** (`.graphify/docs/graphify-out/graph.json` exists):
+**Source = scv graph** (`GRAPH_STATUS: built` — `scv/.graph/graph.json` exists):
 
 ```bash
-# Read graph.json + GRAPH_REPORT.md (graphify outputs)
-# graph.json structure: { nodes: [{id, label, community, ...}], links: [{source, target, ...}] }
-# GRAPH_REPORT.md sections: "Community labels", "God nodes", "Surprising connections"
+# Read graph.json + GRAPH_REPORT.md (scripts/graph.sh outputs, v0.51.0+)
+# graph.json: { nodes: [{id, label, kind: doc|file|plan|decision, community, degree, missing?}],
+#               links: [{source, target, kind: link|touches|refers|cochange, weight, evidence: [plan slugs]}],
+#               god_nodes: [id…], communities: {label: [id…]} }
+# GRAPH_REPORT.md sections: "Communities", "God Nodes", "Co-change pairs", "Missing paths"
+# Query for one path: bash "${CLAUDE_PLUGIN_ROOT}/scripts/graph.sh" impact <path>…
 ```
 
 Mapping algorithm:
 
-1. **Subgraphs from communities.** Each community in `graph.json` (with the label graphify generated, e.g., "Auth Module" / "Payment Gateway") → one `subgraph "<community-label>"`. Do **not** invent your own community names — graphify already labeled them in plain language. Use those verbatim.
-2. **Nodes from god_nodes only.** A typical graph has hundreds of nodes; do not draw all of them. Use only the `god_nodes` list (high-degree central nodes graphify identified). Each god node → a node inside its community's subgraph.
-3. **Edges from top-weight links.** Among `graph.json` `links`, take only edges where both endpoints are god nodes. Drop the rest. If still too many, take top 8-12 by `weight`.
-4. **New components from PLAN.md.** This feature's new components (the ones in diagram 1 that don't exist as god nodes) → add as `:::new`-classed nodes in the most relevant community subgraph.
-5. **Edges from new components to existing.** For each new component, draw an edge to each existing god node it interacts with (per PLAN.md `Approach Overview`). Use a dashed edge `-.->` to distinguish "new connection" from "existing structure".
+1. **Subgraphs from communities.** Each community in `graph.json` → one `subgraph "<community-label>"`. The labels are the ones the graph assigns — a folder (`core/scripts`, `docs`) or an epic slug — do **not** invent your own; if a label reads awkwardly, keep it and add the plain meaning in the node text instead.
+2. **Nodes from god_nodes only.** A typical graph has hundreds of nodes; do not draw all of them. Use only the `god_nodes` list (highest-degree nodes) plus the plan nodes this feature's `scope:` files belong to. Skip nodes marked `missing: true`.
+3. **Edges from top-weight links.** Among `graph.json` `links`, take `cochange` edges where both endpoints are drawn, highest `weight` first (8–12 at most), and label them with the weight and one evidence slug (`×3 · help-protocol-echo`); add `link` edges between drawn docs.
+4. **New components from PLAN.md.** This feature's new components (the ones in diagram 1 that don't exist in the graph) → add as `:::new`-classed nodes in the most relevant community subgraph (the community of the files they sit next to).
+5. **Edges from new components to existing.** For each new component, draw an edge to each existing drawn node it interacts with (per PLAN.md `Approach Overview`). Use a dashed edge `-.->` to distinguish "new connection" from "existing structure".
 
 **Source = none (skipped)**: this section is omitted entirely (Step 6.3 file template handles the omission).
 
@@ -730,7 +693,7 @@ flowchart TB
 **Anti-patterns to avoid (diagram 2):**
 
 - ❌ Drawing every node from `graph.json` — use god_nodes only.
-- ❌ Inventing community names instead of using graphify's labels.
+- ❌ Inventing community names instead of the labels the graph assigns (folder / epic).
 - ❌ Putting the new feature in a brand-new subgraph far from the rest — place it inside an existing community based on PLAN.md's interaction with that community.
 - ❌ Skipping the `Source:` line in §2 of FEATURE_ARCHITECTURE.md (Step 6.3) — every diagram 2 must declare its basis.
 - ❌ Using solid `-->` for new-component edges — use dashed `-.->` to make new connections visually distinct.
@@ -764,7 +727,7 @@ How this feature's components interact.
 
 Where this feature sits in the system. New components highlighted in yellow.
 
-> Source: <one of: graphify graph (built <YYYY-MM-DD>) | omitted — first diagram only>
+> Source: <one of: scv graph (built <YYYY-MM-DD>) | omitted — first diagram only>
 
 ```mermaid
 %%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#1e1e1e','primaryTextColor':'#fff','primaryBorderColor':'#9096a8','lineColor':'#e7e9f0','secondaryColor':'#2d2d2d','tertiaryColor':'#1e1e1e','background':'#171922','edgeLabelBackground':'#171922'}}}%%
@@ -777,15 +740,15 @@ If diagram 2 was skipped, replace the entire `## 2.` section with:
 ```markdown
 ## 2. Position in whole architecture
 
-> Skipped — no graphify graph available.
-> Run `/graphify` and re-run `/scv:promote` on this folder to generate diagram 2.
+> Skipped — SCV graph off or unavailable (`SCV_GRAPH=off`, or jq missing).
+> Fix that and re-run `/scv:promote` on this folder to generate diagram 2.
 ```
 
 Print one-line confirmation:
 
 ```
 ✓ Created scv/promote/<folder>/FEATURE_ARCHITECTURE.md
-  Diagram 2 source: <graphify | skipped>
+  Diagram 2 source: <scv graph | skipped>
   ⚠ Review Mermaid syntax + node labels — LLM-generated.
 ```
 
@@ -1018,9 +981,9 @@ Checklist (apply once per generated file):
 2. **No inventions**: every node in diagram 1 traces back to PLAN.md. If any node has no PLAN.md basis, remove it.
 3. **Edge labels**: every edge in diagram 1 has a non-empty label (function call / event / SQL / HTTP verb). Bare `-->` arrows get a label or get removed.
 4. **External-vs-internal notation**: cylinder `[(...)]` only for external systems (DB / queue / 3rd-party API), plain `[...]` for internal services. Fix any miscategorized nodes.
-5. **Diagram 2 Source line** (when present): the `> Source:` line in §2 names exactly one of `graphify graph (built YYYY-MM-DD)` / `skipped`. If it carries vague text, pick the actual source.
+5. **Diagram 2 Source line** (when present): the `> Source:` line in §2 names exactly one of `scv graph (built YYYY-MM-DD)` / `skipped`. If it carries vague text, pick the actual source.
 6. **`:::new` class** (diagram 2): every node introduced by this feature has `:::new`. Existing nodes do not.
-7. **Dashed edges** (diagram 2 with graphify source): edges from new components use `-.->` (dashed). Existing-to-existing edges use `-->`.
+7. **Dashed edges** (diagram 2 with scv graph source): edges from new components use `-.->` (dashed). Existing-to-existing edges use `-->`.
 8. **Mermaid fence**: the diagram is inside a ` ```mermaid ` ... ` ``` ` fence (not ` ```markdown ` or unfenced).
 9. **Screen mockups valid JSON** (if §3 present): each `​```screen` fence parses as JSON (a malformed one renders as a visible error callout, not silently). Fix any syntax mistakes.
 10. **Screen mockups faithful**: every nav item / column / field / button label in §3 traces back to PLAN.md / TESTS.md. Remove anything invented.
@@ -1030,7 +993,7 @@ If a fix changed something user-visible (added a missing component / removed an 
 
 ```
 ✓ Created scv/promote/<folder>/FEATURE_ARCHITECTURE.md
-  Diagram 2 source: <graphify | skipped>
+  Diagram 2 source: <scv graph | skipped>
   Self-review: added 1 missing component (RefundEventHandler from Steps).
   ⚠ Review Mermaid syntax + node labels — LLM-generated.
 ```
@@ -1114,8 +1077,8 @@ Summarize:
 
 ## Flag semantics
 
-- `--dry-run` — Emit inventory + diff + plan without calling the graphify skill, writing scaffolds, or updating readpath.json. Safe "what would happen" preview.
-- `--graph-only` — Only refresh the docs graph (if possible); skip dialog, scaffolds, and readpath update.
+- `--dry-run` — Emit inventory + diff + plan without writing scaffolds or updating readpath.json (the graph is still ensured — it is cheap and read-only for the plan). Safe "what would happen" preview.
+- `--graph-only` — Only ensure the SCV graph; skip dialog, scaffolds, and readpath update.
 - `--topic SLUG` — Pre-fills the slug suggestion for a single-folder scenario (still requires user confirmation).
 - `<module>` — Optional leading arg naming a module dir that contains `scv/` (monorepo). `/scv:promote FE` operates on `FE/scv`; omit to use the current dir's `scv/` (or nearest parent).
 
