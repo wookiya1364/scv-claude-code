@@ -140,7 +140,18 @@ EOF2
   chmod +x "$1/graft"
 }
 
-CLEANPATH="$(printf '%s' "$PATH" | tr ':' '\n' | grep -v 'fake-' | tr '\n' ':')"
+# "Graft 가 없는 상태" 는 만들어야 한다 — 개발 기계에 진짜 graft 가 깔려 있으면
+# 경로에서 낱말만 걸러내는 방식으로는 걸러지지 않는다(전역 설치본은 .../bin 에 앉는다).
+# 필요한 도구만 심볼릭 링크로 모아 그것만 경로로 쓴다. node 와 pnpm 은 문서 생성에 필요하다.
+CLEANPATH="$WORK/nograft"
+mkdir -p "$CLEANPATH"
+for _b in bash sh env node pnpm npm jq git python3 sed awk grep head tail tr cut sort \
+          uniq date printf dirname basename mktemp rm mkdir cp mv cat wc find ls chmod \
+          timeout sleep kill; do
+  _p="$(command -v "$_b" 2>/dev/null)"; [[ -n "$_p" ]] && ln -sf "$_p" "$CLEANPATH/$_b"
+done
+unset _b _p
+rm -f "$CLEANPATH/graft"
 build() {  # <계획폴더> <출력> [PATH 앞에 붙일 것]
   local d="$1" out="$2" pre="${3:-}"
   ( cd "$d" && PATH="${pre:+$pre:}$CLEANPATH" node "$DECKDOC/doc.mjs" "$d" --out "$out" --lang korean 2>&1 )
@@ -275,6 +286,30 @@ OUT="$WORK/t11.html"
 ( cd "$WORK" && node "$DECKDOC/doc.mjs" "$P/PLAN.md" --out "$OUT" --lang korean >/dev/null 2>&1 )
 want "T11 결과 파일" "$([[ -f "$OUT" ]] && echo yes || echo no)" "yes"
 hasnt "$OUT" "변경 지도" "T11 — 한 장짜리 문서에는 변경 지도가 없다"
+
+echo ""
+echo "── 실물 Graft (설치돼 있을 때만) ──"
+# 가짜 graft 로는 "어댑터가 우리가 상상한 모양을 읽는다" 까지만 확인된다. 실물이 있으면
+# 그 응답 모양까지 확인한다 — 첫 실사용에서 ask 의 모양(hits[]/pointer/title)이 추정과
+# 달라 후보가 한 건도 안 잡혔고, 그 자리를 검사가 비워 두고 있었다.
+if command -v graft >/dev/null 2>&1 && [[ -d "$(git rev-parse --show-toplevel 2>/dev/null)/graft" ]]; then
+  ROOT="$(git rev-parse --show-toplevel)"
+  q="$(cd "$ROOT" && bash "$ROOT/core/scripts/graft.sh" ask "buildPipelineDiagram" 2>/dev/null)"
+  grep -qE '^[[:space:]]*[^[:space:]]+:[0-9]+ — .' <<<"$q" \
+    && ok "실물 ask 가 '경로:줄 — 이름' 으로 정규화된다" \
+    || bad "실물 ask 정규화 실패: $(head -1 <<<"$q")"
+  grep -q '(후보 없음)' <<<"$q" && bad "실물 ask 가 후보를 못 찾았다 — 응답 모양이 또 바뀌었을 수 있다" || ok "실물 ask 후보 있음"
+  st="$(cd "$ROOT" && bash "$ROOT/core/scripts/graft.sh" status 2>/dev/null)"
+  [[ "$st" == "GRAFT_STATUS: ready" ]] && ok "실물 상태 ready" || bad "실물 상태: $st"
+  # 문서 생성이 저장소 뿌리에서 그래프를 찾는가 — 계획 폴더를 넘기면 ready 를 놓친다.
+  P=$(mkproj treal 1)
+  OUT="$WORK/treal.html"
+  LOG=$(cd "$ROOT" && node "$DECKDOC/doc.mjs" "$P" --out "$OUT" --lang korean 2>&1)
+  grep -q 'graft=ready' <<<"$LOG" && ok "문서 생성이 저장소 뿌리의 그래프를 찾는다" \
+    || bad "문서 생성이 그래프를 못 찾았다: $(grep -o 'graft=[a-z-]*' <<<"$LOG")"
+else
+  echo "  (Graft 가 없어 건너뜀 — 가짜 graft 검사는 위에서 이미 했다)"
+fi
 
 echo ""
 echo "── 언어 ──"

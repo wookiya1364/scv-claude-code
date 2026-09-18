@@ -46,6 +46,21 @@ v="$(scv_graft_ask_summary "$AJ" 10)"; n="$(printf '%s\n' "$v" | grep -c .)"
 top="$(jq -r '.results | sort_by(-.score) | .[0] | "\(.path):\(.line)"' <<<"$AJ")"
 [[ "$n" == "10" && "$(printf '%s\n' "$v" | head -1 | cut -d"$US" -f1)" == "$top" ]] && ok "점수 내림차순 상위 10, path:line" || fail "ask: n=$n first=$(printf '%s\n' "$v" | head -1 | tr "$US" '|') top=$top"
 [[ -z "$(scv_graft_ask_summary '{"results":[]}' 10)" ]] && ok "후보 0 → 빈 출력" || fail "ask empty"
+# graft 0.18 의 실물 모양 — pointer "경로:L12-L34", title "이름 · 종류". 실제로 설치해
+# 확인하기 전까지는 results[]/nodes[] 로 추정하고 있었고, 그래서 후보가 한 건도 안 잡혔다.
+AJ3='{"query":"q","mode":"lexical","hits":[{"kind":"symbol","title":"buildThing \u00b7 function","pointer":"src/a.mjs:L190-L219","snippet":"function buildThing()","score":1.4},{"kind":"symbol","title":"other \u00b7 function","pointer":"src/b.mjs:L7-L9","snippet":"x","score":0.3}]}'
+[[ "$(scv_graft_ask_summary "$AJ3" 10 | head -1)" == "src/a.mjs:190${US}buildThing" ]] \
+  && ok "hits[]/pointer/title 실물 모양을 읽는다" \
+  || fail "ask3: $(scv_graft_ask_summary "$AJ3" 10 | tr "$US" '|' | tr '\n' ' ')"
+# BSD 의 wc 는 숫자 앞에 공백을 붙인다 — 맥에서만 붉었다. 공백을 털고 비교한다.
+n3="$(scv_graft_ask_summary "$AJ3" 10 | wc -l | tr -d '[:space:]')"
+[[ "$n3" == "2" ]] && ok "hits 두 건 모두 읽는다" || fail "ask3 개수: $n3"
+# 종류 꼬리표가 붙지 않은 title 도 그대로 이름으로 쓴다.
+AJ4='{"hits":[{"title":"plain","pointer":"src/c.mjs:L2-L3","score":1}]}'
+[[ "$(scv_graft_ask_summary "$AJ4" 10)" == "src/c.mjs:2${US}plain" ]] && ok "꼬리표 없는 title" || fail "ask4"
+# 줄 번호를 못 읽는 pointer 는 0 으로 떨어지되 버리지 않는다.
+AJ5='{"hits":[{"title":"n","pointer":"src/d.mjs","score":1}]}'
+[[ "$(scv_graft_ask_summary "$AJ5" 10)" == "src/d.mjs:0${US}n" ]] && ok "줄 없는 pointer" || fail "ask5: $(scv_graft_ask_summary "$AJ5" 10 | tr "$US" '|')"
 AJ2='{"nodes":[{"file":"a.py","line":3,"name":"n1","score":0.2},{"file":"b.py","line":4,"name":"n2","score":0.9}]}'
 [[ "$(scv_graft_ask_summary "$AJ2" 10 | head -1)" == "b.py:4${US}n2" ]] && ok "nodes[]/file/name 모양도 읽는다" || fail "ask2: $(scv_graft_ask_summary "$AJ2" 10 | tr "$US" '|' | tr '\n' ' ')"
 
@@ -67,7 +82,20 @@ mkproj() { local p="$WORK/$1"; mkdir -p "$p/scv/raw" "$p/scv/promote/20260917-u-
   printf -- '---\ntitle: "델타 기능"\nslug: 20260917-u-delta\nstatus: planned\nkind: feature\nscope:\n  - "a.ts"\n---\n# 델타\n' > "$p/scv/promote/20260917-u-delta/PLAN.md"; printf '# T\n## How to run\n```bash\ntrue\n```\n' > "$p/scv/promote/20260917-u-delta/TESTS.md"
   printf -- '---\ntitle: "알파"\nslug: 20260901-u-alpha\nstatus: testing\nkind: feature\nscope:\n  - "a.ts"\n---\n# 알파\n' > "$p/scv/archive/20260901-u-alpha/PLAN.md"; printf '# T\n## How to run\n```bash\ntrue\n```\n' > "$p/scv/archive/20260901-u-alpha/TESTS.md"
   ( cd "$p" && git init -q && git add -A && git -c user.name=t -c user.email=t@t commit -qm init ) 2>/dev/null; echo "$p"; }
-CLEANPATH="$(printf '%s' "$PATH" | tr ':' '\n' | grep -v 'graft' | tr '\n' ':')"
+# "graft 가 없는 상태" 는 가정이 아니라 만들어야 한다. 경로 문자열에서 graft 라는 낱말이
+# 든 항목만 빼는 방식은 진짜로 설치된 graft 를 놓친다 — 전역 설치본은 보통 .../bin 에
+# 앉고 그 경로에는 graft 라는 낱말이 없다. 이 검사를 처음 쓸 때는 개발 기계에 graft 가
+# 없었기 때문에 그 구멍이 드러나지 않았고, 실제로 설치하자 세 항목이 붉었다.
+# 그래서 필요한 도구만 심볼릭 링크로 모은 디렉터리를 만들어 그것만 경로로 쓴다.
+CLEANPATH="$WORK/nograft"
+mkdir -p "$CLEANPATH"
+for _b in bash sh env jq git sed awk grep head tail tr cut sort uniq date printf \
+          dirname basename mktemp rm mkdir cp mv cat wc find ls chmod timeout sleep \
+          kill python3 node; do
+  _p="$(command -v "$_b" 2>/dev/null)"; [[ -n "$_p" ]] && ln -sf "$_p" "$CLEANPATH/$_b"
+done
+unset _b _p
+command -v graft >/dev/null 2>&1 && [[ -x "$CLEANPATH/graft" ]] && rm -f "$CLEANPATH/graft"
 run_in() { local p="$1" fake="$2"; shift 2; ( cd "$p" && PATH="${fake:+$fake:}$CLEANPATH" "$@" 2>/dev/null ); }
 WS="$CORE/scripts/work.sh"; PH="$CORE/scripts/promote-helper.sh"; RG="$CORE/scripts/regression.sh"; ID="$CORE/scripts/install-deps.sh"
 
