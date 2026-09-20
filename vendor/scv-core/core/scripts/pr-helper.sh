@@ -251,7 +251,9 @@ if [[ "$ATTACHMENTS_SCOPE" == "slug" && ${#SCREENSHOTS[@]} -eq 0 && ${#VIDEOS[@]
       RERUN_TIMEOUT="${SCV_ATTACHMENTS_RERUN_TIMEOUT:-600}"
       # run-plan-tests.sh 를 거치면 재실행이 실행 기록(run manifest)을 남긴다 —
       # 결과 폴더명이 잘려도 재실행 후에는 반드시 이 슬러그 소속으로 잡힌다.
-      TEST_RESULTS_DIR="$TEST_RESULTS_DIR" bash "$SCRIPT_DIR/run-plan-tests.sh" \
+      # 설정 파일에서 올린 키(SCV_LANG …)는 자식에 넘기지 않는다 — 회귀 실행기와 같은 함수 (0.55.0).
+      _unset=(); while IFS= read -r _a; do _unset+=("$_a"); done < <(env_settings_unset_args)
+      TEST_RESULTS_DIR="$TEST_RESULTS_DIR" env "${_unset[@]}" bash "$SCRIPT_DIR/run-plan-tests.sh" \
         --slug "$SLUG_NAME" --tests "$TESTS_FILE" --timeout "$RERUN_TIMEOUT" >/dev/null 2>&1 \
         || echo "attachments: re-run exited non-zero — continuing without it" >&2
       collect_attachments

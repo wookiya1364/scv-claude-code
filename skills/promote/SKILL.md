@@ -75,7 +75,7 @@ First, gather context:
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/promote-helper.sh" "${SCV_ARGS[@]}"
 ```
 
-Parse the helper output — the lines `MODE:`, `TODAY:`, `AUTHOR:`, `STANDARD_VERSION:`, `GRAPH_STATUS:`, `GRAPH_DIR:`, `GRAFT_STATUS:`, `RAW_FILE_COUNT:`, `RAW_TOPIC_CLUSTERS:`, `SUGGEST_SPLIT:`, `SPLIT_REASON:`, `RAW_STALE_COUNT:`, `RAW_OUTDATED_COUNT:` are the primary signals; section blocks (`=== scv/raw inventory ===` etc.) give you the content to work with.
+Parse the helper output — the lines `MODE:`, `TODAY:`, `AUTHOR:`, `STANDARD_VERSION:`, `GRAPH_STATUS:`, `GRAPH_DIR:`, `GRAFT_STATUS:` (and, when present, `GRAFT_NOTICE:` — relay that line verbatim as the first line of your output; its wording lives once, in the graft library, 0.55.0), `RAW_FILE_COUNT:`, `RAW_TOPIC_CLUSTERS:`, `SUGGEST_SPLIT:`, `SPLIT_REASON:`, `RAW_STALE_COUNT:`, `RAW_OUTDATED_COUNT:` are the primary signals; section blocks (`=== scv/raw inventory ===` etc.) give you the content to work with.
 
 ### Source material — raw / conversations / both (v0.9.0+)
 
@@ -117,6 +117,10 @@ setting now shows there. Want the exact lines?"
 
 This governs everything the user reads: answers, questions, plans, progress
 reports, summaries, and explanations of what went wrong.
+
+## Recording
+
+Turns are recorded per `core/contracts/recording.md`.
 
 ## Protocol
 
