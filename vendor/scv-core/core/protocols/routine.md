@@ -56,6 +56,10 @@ setting now shows there. Want the exact lines?"
 This governs everything the user reads: answers, questions, plans, progress
 reports, summaries, and explanations of what went wrong.
 
+## Recording
+
+Turns are recorded per `core/contracts/recording.md`.
+
 ## Step 0 — Run the helper
 
 ```bash

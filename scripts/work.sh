@@ -127,8 +127,11 @@ GRAPH_STATUS="$(bash "$SCRIPT_DIR/graph.sh" ensure 2>/dev/null | sed -n 's/^GRAP
 echo "GRAPH_STATUS: $GRAPH_STATUS"
 [[ "$GRAPH_STATUS" == "built" ]] && echo "GRAPH_DIR: $GRAPH_DIR"
 # Graft 어댑터 (v0.51.0+, 선택) — 있으면 ready, 없으면 absent 한 줄. 아래 IMPACT 절 뒤에 후보 블록.
-GRAFT_STATUS="$(bash "$SCRIPT_DIR/graft.sh" status 2>/dev/null | sed -n 's/^GRAFT_STATUS: //p' | head -1)"
+GRAFT_OUT="$(bash "$SCRIPT_DIR/graft.sh" status 2>/dev/null)"
+GRAFT_STATUS="$(printf '%s\n' "$GRAFT_OUT" | sed -n 's/^GRAFT_STATUS: //p' | head -1)"
 echo "GRAFT_STATUS: ${GRAFT_STATUS:-absent}"
+# 안내 한 줄 (0.55.0) — graft.sh 가 낸 그대로. 문구는 lib/graft.sh 한 곳.
+printf '%s\n' "$GRAFT_OUT" | grep '^GRAFT_NOTICE: ' | head -1
 
 # ---------- helpers ----------
 

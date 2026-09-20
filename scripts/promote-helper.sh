@@ -85,8 +85,11 @@ GRAPH_STATUS="$(bash "$SCRIPT_DIR/graph.sh" ensure 2>/dev/null | sed -n 's/^GRAP
 echo "GRAPH_STATUS: $GRAPH_STATUS"
 [[ "$GRAPH_STATUS" == "built" ]] && echo "GRAPH_DIR: $GRAPH_DIR"
 # Graft 어댑터 (v0.51.0+, 선택): 있으면 ready — 계획 제목이 정해진 뒤 graft.sh ask 로 후보를 볼 수 있다.
-_graft="$(bash "$SCRIPT_DIR/graft.sh" status 2>/dev/null | sed -n 's/^GRAFT_STATUS: //p' | head -1)"
+_graft_out="$(bash "$SCRIPT_DIR/graft.sh" status 2>/dev/null)"
+_graft="$(printf '%s\n' "$_graft_out" | sed -n 's/^GRAFT_STATUS: //p' | head -1)"
 echo "GRAFT_STATUS: ${_graft:-absent}"
+# 안내 한 줄 (0.55.0) — graft.sh 가 낸 그대로. 문구는 lib/graft.sh 한 곳.
+printf '%s\n' "$_graft_out" | grep '^GRAFT_NOTICE: ' | head -1
 
 # Graph-only mode: stop here after ensuring the graph (the graph is built above; nothing to decide).
 if [[ "$MODE" == "graph-only" ]]; then

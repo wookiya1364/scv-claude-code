@@ -84,6 +84,10 @@ setting now shows there. Want the exact lines?"
 This governs everything the user reads: answers, questions, plans, progress
 reports, summaries, and explanations of what went wrong.
 
+## Recording
+
+Turns are recorded per `core/contracts/recording.md`.
+
 ## Step 0 — Resolve the input markdown
 
 `"${SCV_ARGS[@]}"` is a path to a markdown file, or to a `scv/promote|archive/<slug>/` folder — a folder renders the **picture doc** (`FEATURE_ARCHITECTURE.md`) as the document body, and is a document-only input (`--slides` takes a single file). `PLAN.md` / `TESTS.md` still travel with it as source-panel tabs; `--full` puts all three back in the body. A folder with **no** picture doc builds nothing (see `DECK_SKIPPED` below). If empty:

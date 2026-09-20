@@ -66,6 +66,10 @@ setting now shows there. Want the exact lines?"
 This governs everything the user reads: answers, questions, plans, progress
 reports, summaries, and explanations of what went wrong.
 
+## Recording
+
+Turns are recorded per `core/contracts/recording.md`.
+
 ## Answer shape — the slots the question calls for
 
 `Plain language first` governs the lead — the first 1–2 sentences. This section

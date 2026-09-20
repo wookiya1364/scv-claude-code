@@ -11,11 +11,6 @@ core/template/scv/PROMOTE.md	- [ ] **Touches ≤ 5 lines and stays inside a sing
 core/template/scv/PROMOTE.md	### Team override — `SCV_FAST_PATH_LINE_THRESHOLD`
 core/template/scv/PROMOTE.md	settings_resolve      @pure           네 후보 → 하나          우선순위가 여기에만 있다
 #
-# --- 규칙 우선 관계를 서술하지만 이 계획의 원문 불변 예외(4곳) 밖 — 후속 계획 ②가 참조로 바꾼다 ---
-# work.md 5e: 사용자 지시가 effort 판정을 이긴다 — 7조(사용자에게 양보)의 사례. 참조로 바꿀 것.
-# work.md Step 6: Guardrails 가 원칙을 이긴다 — codegen.md 140행과 같은 문장. 참조로 바꿀 것.
 core/protocols/promote.md	**Nested monorepo module** (e.g. this promote was `action:promote FE`): run every command in this step with the module's paths, exactly as the helper's inventory printed them — prefix the env overrides:
 core/protocols/sync.md	- No backups are taken. A file with uncommitted changes (or any differing file when the project is not a git work tree) is **refused and named** as `DIRTY` — git history is the recovery path for everything sync overwrites, and `--force <file>` overrides a refusal deliberately
-core/protocols/work.md	- Any mode: the user's explicit instruction in the conversation overrides the
-core/protocols/work.md	**Implementation principles** — Core defaults. A plan's Guardrails override them
 core/template/scv/PROMOTE.md	Locking the threshold per team in the settings file removes the per-PR negotiation ("is this 6-line change really fast-path-able?"). When unset, default is 5. The single-function/block rule is **not** overridable — multi-function changes always take the formal loop regardless of line count.
