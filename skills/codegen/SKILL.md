@@ -67,6 +67,10 @@ setting now shows there. Want the exact lines?"
 This governs everything the user reads: answers, questions, plans, progress
 reports, summaries, and explanations of what went wrong.
 
+## Recording
+
+Turns are recorded per `core/contracts/recording.md`.
+
 ## Non-negotiable rules
 
 - **Never modify the body of TESTS.md** during codegen — the test is the spec. If TESTS appear under-specified, stop and ask the user to revise TESTS first; do not infer requirements from PLAN.md alone.

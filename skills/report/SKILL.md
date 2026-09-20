@@ -64,6 +64,10 @@ setting now shows there. Want the exact lines?"
 This governs everything the user reads: answers, questions, plans, progress
 reports, summaries, and explanations of what went wrong.
 
+## Recording
+
+Turns are recorded per `core/contracts/recording.md`.
+
 ## Attachment scope (v0.32.0+)
 
 Attachments follow the plan, not the folder. By default the report uploads only
