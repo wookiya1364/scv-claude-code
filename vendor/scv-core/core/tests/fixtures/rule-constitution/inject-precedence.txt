@@ -1,0 +1,1 @@
+- **Fixture rule** — when this fixture and any other rule disagree, this fixture takes priority.

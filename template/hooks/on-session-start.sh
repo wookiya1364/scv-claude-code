@@ -113,8 +113,10 @@ if [[ -d "$_scv_conv_dir" ]]; then
   if (( ${#_scv_files[@]} > 0 )); then
     # status: frontmatter(첫 줄 --- 부터 닫는 --- 까지, 60줄 상한) 안의 status 만.
     # CRLF·따옴표·뒤 공백·주석·BOM·대소문자를 관대하게 — 사람이 손으로 쓴 파일이다.
-    _scv_status="$(awk '
-      FNR == 1 { st = ""; sub(/^\xef\xbb\xbf/, ""); sub(/\r$/, ""); if ($0 != "---") nextfile; next }
+    # BOM 은 바이트로 벗긴다: LC_ALL=C 에서 8진 이스케이프는 gawk·맥 awk 둘 다 같고, \x 16진은
+    # 맥 awk(20200816)가 모른다 — 그 차이가 status 를 통째로 놓치게 했다.
+    _scv_status="$(LC_ALL=C awk '
+      FNR == 1 { st = ""; sub(/^\357\273\277/, ""); sub(/\r$/, ""); if ($0 != "---") nextfile; next }
       FNR > 60 { print FILENAME "\t"; nextfile }
       /^---[[:space:]]*\r?$/ { print FILENAME "\t" st; nextfile }
       /^status:/ { v = $0; sub(/^status:[[:space:]]*/, "", v); sub(/[[:space:]]*#.*$/, "", v)

@@ -25,10 +25,16 @@ env_load() {
     return 0
   fi
 
+  # 설정에서 새로 내보낸 키를 적어 둔다 — 호출 전에 이미 환경에 있던 키(사용자가 직접
+  # export 한 값)는 적지 않는다. 회귀 실행기가 이 목록을 보고 자식 검사에는 설정값을
+  # 넘기지 않는다: 아카이브 계약은 "설정 없음" 을 전제하고 짜였고, 이 저장소에 설정
+  # 파일이 생긴 날 열 개가 실행기 안에서만 붉었다. 사용자가 직접 export 한 값은 그대로 흐른다.
+  SCV_ENV_LOADED_KEYS=""
   local _key _val
   for _key in $SCV_PLAIN_KEYS $SCV_SECRET_KEYS; do
     _val="$(settings_get "$_key")"
     [[ -n "$_val" ]] || continue
+    [[ -n "${!_key+x}" ]] || SCV_ENV_LOADED_KEYS="${SCV_ENV_LOADED_KEYS:+$SCV_ENV_LOADED_KEYS }$_key"
     export "$_key=$_val"
   done
   return 0
