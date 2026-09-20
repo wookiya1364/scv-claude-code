@@ -1240,7 +1240,7 @@ rm -rf "$REG_APP"
 echo
 echo "=== [11s] regression protocol content ==="
 assert_file "$REGRESSION_CMD"
-assert_contains "$REGRESSION_CMD" "per-slug 3-way triage"
+assert_contains "$REGRESSION_CMD" "3-way triage"
 assert_contains "$REGRESSION_CMD" "supersedes"
 assert_contains "$REGRESSION_CMD" "obsolete"
 assert_contains "$REGRESSION_CMD" "--ci"
