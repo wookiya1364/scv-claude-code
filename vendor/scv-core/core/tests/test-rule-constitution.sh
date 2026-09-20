@@ -42,17 +42,21 @@ rule_files() {  # <core root>
   find "$1/protocols" "$1/contracts" "$1/template" -type f \( -name '*.md' -o -path '*/hooks/*.sh' \) 2>/dev/null \
     | grep -v '/legacy/' | LC_ALL=C sort
 }
-collect_rows() {  # <core root> → "<파일>\t<줄>\t<본문>"
+collect_rows() {  # <core root> → "<파일>\t<줄>\t<본문>" — 호스트 표기는 정규형(action:)으로
   local root="$1" f rel
   while IFS= read -r f; do
     rel="core/${f#"$root"/}"
     awk -v f="$rel" '{ print f "\t" NR "\t" $0 }' "$f"
-  done < <(rule_files "$root")
+  done < <(rule_files "$root") | sed -E "$SCV_RC_CANON_SED"
 }
+# 이 검사가 원본 저장소에서 도는지, 벤더링된 사본에서 도는지. 검사 (b) 의 기준선은 원본의 산물이라
+# 사본(호스트가 문장을 끼워 넣는다)에서는 돌리지 않는다 — (a) 와 문서 검사들은 사본에서도 그대로 돈다.
+REPO_ROOT="$(cd "$CORE/.." && pwd)"
+IS_CORE_REPO=0; [[ -f "$REPO_ROOT/VERSION" && -f "$REPO_ROOT/core/TEMPLATE_DIGEST" && -d "$REPO_ROOT/scv/archive" ]] && IS_CORE_REPO=1
 section_range() {  # <SCV.md 경로> → "<from> <to>" (Top-level rules 절)
   awk '/^## Top-level rules/{f=NR} f&&NR>f&&/^## /{print f, NR-1; exit} END{if(f&&!done)print f, NR}' "$1" | head -1
 }
-strip_comments() { grep -v '^[[:space:]]*#' "$1" 2>/dev/null || true; }
+strip_comments() { grep -v '^[[:space:]]*#' "$1" 2>/dev/null | sed -E "$SCV_RC_CANON_SED" || true; }
 
 run_checks() {  # <core root> <baseline text> → 위반 두 묶음을 전역에 둔다
   local root="$1" base="$2" rows scvmd range from to allow normative keys dups
@@ -76,6 +80,10 @@ if [[ "${1:-}" == "--self-test" ]]; then
   run_checks "$TMP" "$base"
   [[ -z "$A_VIOLATIONS" ]] && ok "사본 그대로: 검사 a 통과" || fail "사본 그대로인데 검사 a 가 실패" "$A_VIOLATIONS"
   [[ -z "$B_NEW" ]]        && ok "사본 그대로: 검사 b 통과" || fail "사본 그대로인데 검사 b 가 실패" "$B_NEW"
+  # 호스트 표기로 바뀐 사본에서도 허용목록이 맞아야 한다 (0.54.1 — 코덱스 사본에서 붉던 것)
+  sed -i.bak -E 's/action:([a-z-]+)/$host:\1/g' "$TMP/protocols/promote.md" && rm -f "$TMP/protocols/promote.md.bak"
+  run_checks "$TMP" "$base"
+  [[ -z "$A_VIOLATIONS" ]] && ok "호스트 접두어로 표기가 바뀐 사본에서도 검사 a 통과" || fail "호스트 표기 사본에서 허용목록이 어긋난다" "$A_VIOLATIONS"
   # (a) 우선순위 문장을 프로토콜 사본에 심는다
   cat "$FIX/inject-precedence.txt" >> "$TMP/protocols/status.md"
   run_checks "$TMP" "$base"
@@ -127,7 +135,9 @@ run_checks "$CORE" "$base"
   || fail "우선순위를 서술하는 줄이 절 밖에 있다 — 참조로 바꾸거나 허용목록에 이유와 함께 적으라" "$A_VIOLATIONS"
 
 echo "── T5. 검사 b — 중복 요구 래칫 ──"
-if [[ ! -f "$BASELINE" ]]; then
+if (( ! IS_CORE_REPO )); then
+  echo "  – 벤더링된 사본 — 기준선은 원본 저장소의 산물이라 건너뛴다 (호스트가 끼워 넣는 문장이 후보로 잡힌다)"
+elif [[ ! -f "$BASELINE" ]]; then
   printf '# 두 파일 이상에 적힌 규범 문장 키(앞 8단어). 첫 실행에 고정 — 줄면 갱신, 늘면 실패.\n%s\n' "$B_CANDIDATES" > "$BASELINE"
   ok "기준선이 없어 만들었다 ($(printf '%s\n' "$B_CANDIDATES" | grep -c .)건) — 첫 실행"
 elif [[ -z "$B_NEW" ]]; then
