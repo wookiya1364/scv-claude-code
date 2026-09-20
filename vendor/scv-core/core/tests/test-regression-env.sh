@@ -137,6 +137,45 @@ out="$( cd "$P" && SCV_LANG=canary9f3a bash "$RUNNER" </dev/null 2>&1 )"
 grep -q 'FAILED_SLUGS: 0' <<<"$out" && pass "T7 a user-exported SCV_LANG still passes through" \
                                     || fail "T7 the hygiene stripped the user's own SCV_LANG" "$out"
 
+echo "=== T8 — pr-helper's evidence re-run strips settings-file keys too (0.55.0) ==="
+# The same leak as T7, one caller over: pr-helper re-runs the plan's How-to-run to produce
+# evidence when test-results has nothing for the slug. It must strip what env_load exported.
+P="$(mk_project t8)"
+( cd "$P" && bash "$CORE/scripts/settings-set.sh" SCV_LANG=japanese >/dev/null 2>&1 )
+mkdir -p "$P/scv/archive/20260920-tester-rerun-probe"
+cat > "$P/scv/archive/20260920-tester-rerun-probe/PLAN.md" <<EOF
+---
+title: rerun-probe
+slug: 20260920-tester-rerun-probe
+author: tester
+created_at: 2026-09-20
+status: done
+kind: feature
+lang: korean
+---
+
+# rerun-probe
+EOF
+cat > "$P/scv/archive/20260920-tester-rerun-probe/TESTS.md" <<EOF
+# Test Plan — rerun-probe
+
+## How to run
+
+\`\`\`bash
+env | sort > "$WORK/t8.env"; true
+\`\`\`
+EOF
+rm -f "$WORK/t8.env"
+( cd "$P" && git checkout -q -b feat/t8 && bash "$CORE/scripts/pr-helper.sh" 20260920-tester-rerun-probe --no-push --no-create </dev/null >/dev/null 2>&1 ) || true
+if [[ -f "$WORK/t8.env" ]]; then
+  grep -q '^SCV_LANG=' "$WORK/t8.env" && fail "T8 SCV_LANG from the settings file reached pr-helper's re-run" || pass "T8 pr-helper's re-run did not see the settings-file SCV_LANG"
+else
+  fail "T8 setup: pr-helper did not re-run the plan (no env dump)"
+fi
+rm -f "$WORK/t8.env"
+( cd "$P" && SCV_LANG=canary9f3a bash "$CORE/scripts/pr-helper.sh" 20260920-tester-rerun-probe --no-push --no-create </dev/null >/dev/null 2>&1 ) || true
+[[ -f "$WORK/t8.env" ]] && grep -q '^SCV_LANG=canary9f3a$' "$WORK/t8.env" && pass "T8 a user-exported SCV_LANG still reaches the re-run" || fail "T8 the user's own SCV_LANG was stripped (or no re-run)"
+
 echo "=== T3 — the runner's own autosync converges once (re-entry guard intact) ==="
 P="$(mk_project t3)"
 mk_fake_slug "$P" "20260819-tester-benign" 'true'

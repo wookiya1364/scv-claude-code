@@ -63,6 +63,10 @@ setting now shows there. Want the exact lines?"
 This governs everything the user reads: answers, questions, plans, progress
 reports, summaries, and explanations of what went wrong.
 
+## Recording
+
+Turns are recorded per `core/contracts/recording.md`.
+
 ## Flags
 
 - `--ack` — After showing changes, overwrite `scv/readpath.json` with the current state. Use this when you've reviewed the changes but are deferring `/scv:promote`.

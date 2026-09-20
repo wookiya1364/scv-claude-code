@@ -300,17 +300,11 @@ read_test_command() {
 declare -A MEMO_RC=()
 MEMO_HITS=0
 MEMO_GATES=0
-# settings_unset_args — env_load 가 설정 파일에서 새로 내보낸 키마다 "-u KEY". 자식 검사는
-# 설정을 보지 않는다(아카이브 계약의 전제). 사용자가 직접 export 한 키는 목록에 없으므로 그대로 흐른다.
-settings_unset_args() {
-  local k
-  for k in ${SCV_ENV_LOADED_KEYS:-}; do printf -- '-u\n%s\n' "$k"; done
-}
 memo_gate_run() {  # memo_gate_run <key> <command> — run once (in THIS shell, so the cache persists); count reuse
   local key="$1" cmd="$2"
   if [[ -z "${MEMO_RC[$key]+x}" ]]; then
     local rc=0
-    local -a unset_args=(); while IFS= read -r a; do unset_args+=("$a"); done < <(settings_unset_args)
+    local -a unset_args=(); while IFS= read -r a; do unset_args+=("$a"); done < <(env_settings_unset_args)
     run_with_timeout "$TIMEOUT" env -u SCV_AUTOSYNC_RUNNING \
       -u SCV_DIR -u RAW_DIR -u STATE_FILE -u PROMOTE_DIR -u ARCHIVE_DIR "${unset_args[@]}" \
       bash -c "$cmd" >/dev/null 2>&1 || rc=$?
@@ -365,7 +359,7 @@ run_scenario_clean() {
   # archived contracts assume "no settings", and ten of them went red inside the
   # runner the day this repo grew a settings file (0.54.0). Keys the user exported
   # before starting the runner are not in that list and still pass through.
-  local -a unset_args=(); while IFS= read -r a; do unset_args+=("$a"); done < <(settings_unset_args)
+  local -a unset_args=(); while IFS= read -r a; do unset_args+=("$a"); done < <(env_settings_unset_args)
   run_with_timeout "$TIMEOUT" env -u SCV_AUTOSYNC_RUNNING \
     -u SCV_DIR -u RAW_DIR -u STATE_FILE -u PROMOTE_DIR -u ARCHIVE_DIR "${unset_args[@]}" \
     bash -c "$1"

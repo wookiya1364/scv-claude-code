@@ -34,6 +34,55 @@ _SCV_GRAFT_JQ_ASK='
     else [] end;
   rows | map(select(.p != "")) | sort_by([-.s, .p, .l]) | .[:$n] | .[] | "\(.p):\(.l)\u001f\(.t)"'
 
+# ---------------------------------------------------------------- 안내 (0.55.0)
+# Graft 가 없을 때 계획·구현 헤더에 한 줄로 알린다 — 무엇이 좋아지는지 + 설치 명령. 강제가 아니다:
+# 묻지도 막지도 않는다. 이 저장소처럼 Graft 가 지원하지 않는 언어만 있는 프로젝트에서는 침묵한다
+# (설치해도 빈 결과가 나오면 신뢰를 잃는다). 문구와 설치 명령은 여기 한 곳에만 있다(4조) —
+# install-deps 와 프로토콜은 이 상수와 이 함수의 출력을 그대로 쓴다.
+
+# 설치 명령 — install-deps.sh 도 이 상수를 찍는다. 두 곳에 각각 적지 않는다.
+SCV_GRAFT_INSTALL_CMD='npm i -g @nanonets/graft && graft init --no-hooks --no-statusline && graft telemetry disable'
+# 그래프만 없을 때(no-graph) 의 명령.
+SCV_GRAFT_INIT_CMD='graft init --no-hooks --no-statusline'
+# Graft 가 인덱싱하는 언어의 파일 확장자. 출처: github.com/nanonets/graft README (2026-09 확인) —
+# 완전 지원: TS/JS(JSX/TSX) · Python · Go · Java · Kotlin · PHP · Swift · R,
+# 넓은 지원: Rust · C · C++ · C# · Ruby · Scala · Elixir · Solidity · OCaml · Zig · Dart · Clojure · Nix · Lua.
+# 셸(bash)은 목록에 없다 — 이 저장소에서는 안내가 나오지 않는 것이 맞다. 목록이 낡으면 여기 한 줄만 고친다.
+SCV_GRAFT_LANG_EXTS='ts tsx js jsx mjs cjs py go java kt kts php swift r R rs c h cpp cc cxx hpp hh cs rb scala ex exs sol ml mli zig dart clj cljs cljc nix lua'
+# awk 프로그램은 함수 밖 상수 — 비교 연산자를 순수성 검사기가 리다이렉션으로 오해하지 않게.
+_SCV_GRAFT_AWK_HIST='{ n=split($0, a, "/"); f=a[n]; d=index(f, "."); if (d==0) next; sub(/^.*\./, "", f); if (f=="") next; c[f]++ } END { for (e in c) print e "\t" c[e] }'
+
+# @deterministic
+# 표준입력: 파일 경로 한 줄에 하나 → "<확장자>\t<개수>" 줄들 (순서 불정). 확장자 없는 파일은 뺀다.
+scv_graft_ext_histogram() {
+  awk "$_SCV_GRAFT_AWK_HIST"
+}
+
+# @pure
+# <히스토그램 텍스트> [지원 확장자 목록=SCV_GRAFT_LANG_EXTS] → 지원 언어 파일 수(정수).
+scv_graft_supported_count() {
+  local hist="${1:-}" exts=" ${2:-$SCV_GRAFT_LANG_EXTS} " ext n total=0
+  while IFS=$'\t' read -r ext n; do
+    [[ -n "$ext" && "$n" =~ ^[0-9]+$ ]] || continue
+    [[ "$exts" == *" $ext "* ]] && total=$(( total + n ))
+  done <<<"$hist"
+  printf '%s' "$total"
+}
+
+# @pure
+# <GRAFT_STATUS> <지원 언어 파일 수> → 안내 한 줄, 또는 빈 문자열. absent/no-graph 이고 지원 파일이 1개 이상일 때만.
+scv_graft_notice() {
+  local status="${1:-absent}" n="${2:-0}"
+  [[ "$n" =~ ^[0-9]+$ ]] || n=0
+  (( n > 0 )) || return 0
+  case "$status" in
+    absent)   printf 'Graft 가 있으면 계획·구현 헤더에 관련 코드 후보와 변경 영향 범위가 붙습니다 (이 저장소는 지원 언어 파일 %s개). 설치: %s' "$n" "$SCV_GRAFT_INSTALL_CMD" ;;
+    no-graph) printf 'Graft 는 있지만 이 저장소에 그래프가 없습니다 — 만들면 계획·구현 헤더에 관련 코드 후보가 붙습니다 (지원 언어 파일 %s개). 실행: %s' "$n" "$SCV_GRAFT_INIT_CMD" ;;
+    *) ;;
+  esac
+  return 0
+}
+
 # @pure
 # <graft 실행 파일 있음 0|1> <graft/ 그래프 있음 0|1> <스위치 auto|off|''> → absent | no-graph | ready | off
 scv_graft_status() {

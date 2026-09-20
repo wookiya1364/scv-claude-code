@@ -43,6 +43,8 @@ set -u
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/host-profile.sh
 source "$SCRIPT_DIR/lib/host-profile.sh"
+# shellcheck source=lib/graft.sh
+[[ -f "$SCRIPT_DIR/lib/graft.sh" ]] && source "$SCRIPT_DIR/lib/graft.sh"   # SCV_GRAFT_INSTALL_CMD (0.55.0)
 # shellcheck source=lib/scvroot.sh
 source "$SCRIPT_DIR/lib/scvroot.sh"
 # Every action start closes a template-version gap when one exists (see
@@ -438,7 +440,8 @@ mode_print() {
   done
 
   echo "optional — code graph (not required by SCV; read when present, v0.51.0+):"
-  echo "  graft: npm i -g @nanonets/graft && graft init --no-hooks --no-statusline && graft telemetry disable"
+  # 설치 명령은 lib/graft.sh 의 상수 한 곳 — 여기서 다시 적지 않는다 (0.55.0).
+  echo "  graft: ${SCV_GRAFT_INSTALL_CMD:-see lib/graft.sh}"
   echo "         (SCV only reads: graft blast / graft ask. It never installs, builds, or hooks it.)"
 
 }
