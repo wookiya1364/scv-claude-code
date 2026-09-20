@@ -101,15 +101,15 @@ WS="$CORE/scripts/work.sh"; PH="$CORE/scripts/promote-helper.sh"; RG="$CORE/scri
 
 echo "── [T4] graft 없음 ──"
 P=$(mkproj p4); rm -f "$WORK/calls.log"
-[[ "$(run_in "$P" "" bash "$GRAFT" status)" == "GRAFT_STATUS: absent" ]] && ok "status → absent" || fail "status: $(run_in "$P" "" bash "$GRAFT" status)"
+o="$(run_in "$P" "" bash "$GRAFT" status)"; [[ "$(sed -n 1p <<<"$o")" == "GRAFT_STATUS: absent" ]] && grep -q '^GRAFT_NOTICE: ' <<<"$o" && grep -q 'npm i -g @nanonets/graft' <<<"$o" && ok "status → absent + 안내 한 줄(설치 명령 포함; 픽스처에 a.ts)" || fail "status: $o"
 [[ -z "$(run_in "$P" "" bash "$GRAFT" blast)" && -z "$(run_in "$P" "" bash "$GRAFT" ask x)" ]] && ( run_in "$P" "" bash "$GRAFT" blast; run_in "$P" "" bash "$GRAFT" ask x ) && ok "blast/ask 빈 출력, exit 0" || fail "blast/ask absent"
-o="$(run_in "$P" "" bash "$WS" 20260917-u-delta)"; [[ "$(grep -c '^GRAFT_STATUS: absent' <<<"$o")" == "1" ]] && ! grep -q 'code candidates' <<<"$o" && ok "work.sh: GRAFT_STATUS: absent 한 줄, 후보 블록 없음" || fail "work absent: $(grep -n 'GRAFT\|candidates' <<<"$o" | head -3)"
-o="$(run_in "$P" "" bash "$PH" --dry-run)"; grep -q '^GRAFT_STATUS: absent' <<<"$o" && ! grep -q 'code candidates' <<<"$o" && ok "promote-helper: absent 한 줄" || fail "promote absent"
+o="$(run_in "$P" "" bash "$WS" 20260917-u-delta)"; [[ "$(grep -c '^GRAFT_STATUS: absent' <<<"$o")" == "1" && "$(grep -c '^GRAFT_NOTICE: ' <<<"$o")" == "1" ]] && ! grep -q 'code candidates' <<<"$o" && ok "work.sh: GRAFT_STATUS: absent + GRAFT_NOTICE 한 줄, 후보 블록 없음" || fail "work absent: $(grep -n 'GRAFT\|candidates' <<<"$o" | head -3)"
+o="$(run_in "$P" "" bash "$PH" --dry-run)"; grep -q '^GRAFT_STATUS: absent' <<<"$o" && [[ "$(grep -c '^GRAFT_NOTICE: ' <<<"$o")" == "1" ]] && ! grep -q 'code candidates' <<<"$o" && ok "promote-helper: absent + 안내 한 줄" || fail "promote absent"
 o="$(run_in "$P" "" bash "$RG" --dry --changed a.ts)"; ! grep -q 'graft' <<<"$o" && ok "regression: graft 블록 없음" || fail "regression absent: $(grep -n 'graft' <<<"$o" | head -2)"
 
 echo "── [T5] graft 있음, 그래프 없음 ──"
 P=$(mkproj p5); F="$WORK/fake-ok"; mkfake "$F" ok; rm -f "$WORK/calls.log"
-[[ "$(run_in "$P" "$F" bash "$GRAFT" status)" == "GRAFT_STATUS: no-graph" ]] && ok "status → no-graph" || fail "status: $(run_in "$P" "$F" bash "$GRAFT" status)"
+o="$(run_in "$P" "$F" bash "$GRAFT" status)"; [[ "$(sed -n 1p <<<"$o")" == "GRAFT_STATUS: no-graph" ]] && grep -q '^GRAFT_NOTICE: .*graft init' <<<"$o" && ! grep -q 'npm i -g' <<<"$o" && ok "status → no-graph + graft init 안내(설치 명령 아님)" || fail "status: $o"
 [[ -z "$(run_in "$P" "$F" bash "$GRAFT" blast)" && ! -e "$WORK/calls.log" ]] && ok "blast 빈 출력, graft 호출 없음" || fail "no-graph 에서 호출됨: $(cat "$WORK/calls.log" 2>/dev/null)"
 
 echo "── [T6] ready — blast 블록 ──"
@@ -146,6 +146,21 @@ jq -e '._doc.SCV_GRAFT and .SCV_GRAFT=="auto"' "$CORE/template/scv/scv_settings.
 if [[ -f "$CORE/scripts/check-purity.sh" ]]; then
   OUT="$(bash "$CORE/scripts/check-purity.sh" "$LIB" 2>&1)"; grep -q '^OK  purity' <<<"$OUT" && ok "순수성 계약 통과" || fail "순수성: $(head -2 <<<"$OUT")"
 fi
+
+echo "── [T10] 안내 한 줄 (0.55.0) — 언제 나오고 언제 침묵하나 ──"
+# 순수부: 지원 파일 수와 상태 → 문구
+h="$(printf 'a/b.ts\nc.sh\nREADME\nd.py\n' | scv_graft_ext_histogram)"; [[ "$(scv_graft_supported_count "$h")" == "2" ]] && ok "히스토그램 → 지원 파일 수 2 (ts, py; sh·확장자 없음 제외)" || fail "supported_count: $(scv_graft_supported_count "$h")"
+[[ -z "$(scv_graft_notice absent 0)" && -z "$(scv_graft_notice ready 5)" && -z "$(scv_graft_notice off 5)" ]] && ok "지원 파일 0 · ready · off → 침묵" || fail "notice 침묵 조건"
+[[ "$(scv_graft_notice absent 3)" == *"$SCV_GRAFT_INSTALL_CMD"* && "$(scv_graft_notice no-graph 3)" == *"$SCV_GRAFT_INIT_CMD"* ]] && ok "absent → 설치 명령, no-graph → init 명령" || fail "notice 문구"
+! scv_graft_notice absent 3 | grep -qiE 'overrid|precedence|우선' && ok "안내 문구에 우선순위 어휘 없음 (규칙 헌법 검사 a)" || fail "안내에 우선순위 어휘"
+# 효과부: 지원 언어가 없는 저장소는 침묵
+P=$(mkproj p10); rm -f "$P/a.ts"; ( cd "$P" && git rm -q --cached a.ts && git -c user.name=t -c user.email=t@t commit -qm rm ) 2>/dev/null; printf 'x\n' > "$P/only.sh"; ( cd "$P" && git add -A && git -c user.name=t -c user.email=t@t commit -qm sh ) 2>/dev/null
+o="$(run_in "$P" "" bash "$GRAFT" status)"; [[ "$o" == "GRAFT_STATUS: absent" ]] && ok "셸 파일만 있는 저장소 → 안내 없음" || fail "shell-only: $o"
+o="$(run_in "$P" "" bash "$WS" 20260917-u-delta)"; ! grep -q '^GRAFT_NOTICE' <<<"$o" && ok "work.sh: 셸만 → 안내 없음" || fail "work shell-only notice"
+# 한 곳: 설치 명령 문자열의 정의는 lib 하나
+n="$(grep -rl 'npm i -g @nanonets/graft' "$CORE" --include='*.sh' --include='*.md' --include='*.json' 2>/dev/null | grep -v '/tests/' | wc -l | tr -d ' ')"; [[ "$n" == "1" ]] && ok "설치 명령 문자열 정의는 lib/graft.sh 한 곳" || fail "설치 명령이 ${n}곳: $(grep -rl 'npm i -g @nanonets/graft' "$CORE" --include='*.sh' --include='*.md' --include='*.json' | grep -v '/tests/')"
+# 프로토콜은 전달만
+[[ "$(grep -c 'GRAFT_NOTICE' "$CORE/protocols/promote.md")" -ge 1 && "$(grep -c 'GRAFT_NOTICE' "$CORE/protocols/work.md")" -ge 1 && "$(grep -c 'GRAFT_NOTICE' "$CORE/protocols/codegen.md")" == "0" ]] && ok "promote·work 에 전달 문장, codegen 은 work verbatim 으로 덮임" || fail "프로토콜 전달 문장"
 
 echo; echo "test-graft-adapter: pass=$PASS fail=$FAIL"
 (( FAIL == 0 ))
