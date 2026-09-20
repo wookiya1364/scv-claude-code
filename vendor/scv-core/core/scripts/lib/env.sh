@@ -40,6 +40,16 @@ env_load() {
   return 0
 }
 
+# env_settings_unset_args — env_load 가 설정 파일에서 새로 내보낸 키마다 "-u" 와 "KEY" 를 한 줄씩 낸다.
+# 자식 프로세스(회귀 검사, pr-helper 의 증거 재실행)는 설정을 보지 않는다 — 아카이브 계약의 전제.
+# 사용자가 직접 export 한 키는 SCV_ENV_LOADED_KEYS 에 없으므로 그대로 흐른다. 호출자 둘(regression.sh,
+# pr-helper.sh)이 같은 함수를 쓴다 — 0.54.0 에는 regression.sh 안에만 있어 pr-helper 가 같은 누출을 탔다.
+# @pure
+env_settings_unset_args() {
+  local k
+  for k in ${SCV_ENV_LOADED_KEYS:-}; do printf -- '-u\n%s\n' "$k"; done
+}
+
 env_require() {
   # Usage: env_require VAR1 VAR2 ...
   # Returns non-zero and prints missing vars to stderr.

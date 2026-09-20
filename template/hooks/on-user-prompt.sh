@@ -55,7 +55,8 @@ if [[ "${_scv_plain:-on}" != "off" ]]; then
 the user gets; (2) then one example; (3) no code values (paths, variable names,
 versions, settings) before the user asks — use plain names; (4) detail after,
 only when wanted. Identifiers the user needs to act on stay exact, after the
-plain summary. Switches: scv/scv_settings.json SCV_PLAIN_LANGUAGE=off (silence),
+plain summary. A step rule of the action being executed comes before this
+always-on text (resolution order: scv/SCV.md Top-level rules). Switches: scv/scv_settings.json SCV_PLAIN_LANGUAGE=off (silence),
 SCV_PLAIN_MAX_SENTENCES=<n> (sentence cap, default 2).
 PLAIN
 fi

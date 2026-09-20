@@ -82,6 +82,10 @@ If `UNFINISHED_CONVERSATIONS:` lists ≥1 file, ask once: [1] "Resume the most r
 <basename>" (read it, append the argument as a follow-up turn) / [2] "Start a new
 conversation" / [3] "List all unfinished and pick". If `(none)`, create a new file.
 
+**Exception (rule-conflicts follow-up):** when the new argument is clearly unrelated to every
+unfinished conversation — no shared topic word with their titles or slugs — do not ask; open a new
+file and say so in one line. This narrower rule is what lets the turn keep its one shape.
+
 **Short turns skip this question entirely.** An acknowledgement or thank-you is appended to
 the session's conversation file — the one this session opened or resumed — with no prompt;
 only when the session has no file yet does a short turn open one.
