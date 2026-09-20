@@ -12,8 +12,40 @@
 
 ## Top-level rules (immutable)
 
-1. **No speculation**: never fill a plan section without an explicit user answer.
-2. **One at a time**: complete one section → user confirms → next.
+These seven clauses are the highest layer of every SCV rule. Each clause summarizes a
+rule that already exists elsewhere and points at it — the clause is the authority, the
+pointer is the provenance. No document below this section may contradict a clause, and
+no document states its own precedence: it refers here instead.
+
+1. **Ask, don't guess** — never fill a plan section without an explicit user answer, and
+   complete one section (user confirms) before starting the next.
+   Source: this section since 1.0 (formerly "No speculation" + "One at a time").
+2. **The archive is immutable** — never edit the body of any document under `scv/archive/`;
+   obsoleting a plan touches only three frontmatter fields on its PLAN.md.
+   Source: the work, regression and sync protocols ("Never" lists).
+3. **No write without a receipt** — creating a plan file, or writing outside `scv/`,
+   requires a host-issued action receipt. Source: `core/contracts/guard.md`.
+4. **One demand, one place** — a requirement is written in exactly one document; any
+   second place only refers to the first. Source: the per-turn hook's routing comment
+   (`core/template/hooks/on-user-prompt.sh`).
+5. **No completion without evidence** — say what was verified, what is estimated and what
+   is unverified, and never mix the three. Source: the help protocol, "Facts and estimates
+   never mix".
+6. **Pure functions in a pipeline** — every plan is designed and implemented as pure steps
+   composed left to right, with side effects only at the ends. Source: the promote
+   protocol's `## 순수함수 · 파이프라인` requirement, the work protocol's implementation
+   principles, and `core/contracts/purity.md`.
+7. **Yield to the user** — when an SCV rule contradicts an explicit instruction from the
+   user, the SCV rule yields, and the answer says so in one line.
+   Source: this section (rule-constitution plan, 2026-09).
+
+**Resolution order.** When two rules disagree, decide in this order: (1) a clause above;
+(2) the rule with the narrower scope; (3) the step rule of the action being executed,
+over any always-on text (hooks, per-turn guidance); (4) the later rule, only when it
+declares that it supersedes the earlier one. Two rules that disagree with no such
+declaration are a conflict and are treated as a bug: follow one, say which in one line,
+and record it. This paragraph is the only place the resolution order is stated — every
+other document refers to "Top-level rules" instead of restating it.
 
 ## How SCV talks to you
 
