@@ -52,7 +52,8 @@ out.markdown = renderChangeMapMarkdown(out.diagram, out.rows);
 process.stdout.write(JSON.stringify(what === "all" ? out : out[what]));
 PROBE
 # `from process.env.CM` 는 문법이 아니다 — 실제 경로로 바꿔 넣는다.
-sed -i "s#from process.env.CM#from \"$DECKDOC/change-map.mjs\"#" "$WORK/probe.mjs"
+# BSD sed 의 -i 는 접미사 인자를 요구해 GNU 식 `sed -i "s#…#"` 가 맥에서 죽는다 — perl -pi 는 양쪽에서 같다.
+perl -pi -e "s#from process.env.CM#from \"$DECKDOC/change-map.mjs\"#" "$WORK/probe.mjs"
 probe() { local what="$1" file="$2"; shift 2; env "$@" node "$WORK/probe.mjs" "$what" "$file" 2>/dev/null; }
 
 # ── 견본 ────────────────────────────────────────────────────────────────────
