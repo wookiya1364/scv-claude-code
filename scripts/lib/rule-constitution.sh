@@ -19,6 +19,10 @@ SCV_RC_PRECEDENCE_RE='overrid|precedence|takes priority|wins over|prevail|우선
 SCV_RC_NORMATIVE_RE='(^|[^a-z])(never|always|must|do not|don.t|only)([^a-z]|$)|금지|반드시|절대'
 # 참조형: 해소 순서를 적는 대신 그 자리를 가리키는 문장.
 SCV_RC_REFERENCE='Top-level rules'
+# 호스트 표기 정규화 (0.54.1): 래퍼는 `action:<이름>` 을 호스트별 접두어(달러 또는 슬래시 + 플러그인 이름)로
+# 바꿔 배송한다. 허용목록은 정규형(`action:`)으로 적고, 비교 전에 양쪽을 이 sed 로 맞춘다 — 벤더링된
+# 사본에서 검사 (a) 가 허용목록 한 줄을 못 알아봐 붉던 것을 고친다. 표준입력 필터로만 쓴다.
+SCV_RC_CANON_SED='s#(\$|/)[a-z][a-z0-9-]*:([a-z][a-z-]*)#action:\2#g'
 
 # scv_rc_is_precedence <본문> — 우선순위 어휘가 있으면 참.
 # @pure
