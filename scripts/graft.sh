@@ -2,6 +2,7 @@
 # graft.sh — Graft 어댑터의 효과부 (v0.51.0+). Graft 가 있으면 쓰고, 없으면 조용히 생략한다.
 #
 #   graft.sh status                          GRAFT_STATUS: absent | no-graph | ready | off
+#                                            + GRAFT_NOTICE: <한 줄>  (absent/no-graph 이고 지원 언어 파일이 있을 때만, 0.55.0)
 #   graft.sh blast [--base <ref>] [--json]   변경의 정적 영향 범위 요약 (ready 일 때만; 아니면 빈 출력)
 #   graft.sh ask <task> [--json]             관련 코드 후보 ≤10 (ready 일 때만; 아니면 빈 출력)
 #
@@ -44,8 +45,18 @@ _call() {  # <args…> → JSON on stdout or empty (+ stderr note)
   printf '%s' "$out"
 }
 
+# 지원 언어 파일 수 — git 이 있고 저장소이면 추적 파일에서, 아니면 0 (안내 없음, 보수적). 입구의 효과는 이 한 줄.
+_supported_count() {
+  local hist
+  hist="$(git ls-files 2>/dev/null | scv_graft_ext_histogram)" || hist=""
+  scv_graft_supported_count "$hist"
+}
+
 case "$CMD" in
-  status) echo "GRAFT_STATUS: $STATUS" ;;
+  status)
+    echo "GRAFT_STATUS: $STATUS"
+    notice="$(scv_graft_notice "$STATUS" "$(_supported_count)")"
+    [[ -n "$notice" ]] && echo "GRAFT_NOTICE: $notice" ;;
   blast)
     [[ "$STATUS" == "ready" ]] || exit 0
     base=""; json=0

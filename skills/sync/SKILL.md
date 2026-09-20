@@ -71,6 +71,16 @@ setting now shows there. Want the exact lines?"
 This governs everything the user reads: answers, questions, plans, progress
 reports, summaries, and explanations of what went wrong.
 
+## Recording
+
+Turns are recorded per `core/contracts/recording.md`.
+
+## Consent rule — one sentence
+
+A refresh that deletes nothing is applied automatically; a refresh that would delete a file
+(the retired standard docs) is previewed and needs one explicit approval. The automatic refresh
+above and Step 0 below are the two faces of this single sentence — neither restates it.
+
 ## Step 0 — mandatory preview and approval
 
 Always run the dry-run first, even when the user omitted `--dry-run`:
