@@ -118,6 +118,25 @@ out="$( cd "$P" && USER_CANARY=9f3a SCV_AUTOSYNC=off bash "$RUNNER" </dev/null 2
 grep -q 'FAILED_SLUGS: 0' <<<"$out" && pass "T2 user-set variables reach the scenario untouched" \
                                     || fail "T2 the hygiene stripped more than the runner's own mark" "$out"
 
+echo "=== T7 — settings-file values never reach a scenario; user exports still do (0.54.0) ==="
+# The runner loads scv/scv_settings.json into its own env (env_load). Archived contracts
+# assume "no settings" — ten of them went red inside the runner the day this repo grew a
+# settings file with SCV_LANG. The child must not see what came from the file.
+P="$(mk_project t7)"
+( cd "$P" && bash "$CORE/scripts/settings-set.sh" SCV_LANG=japanese >/dev/null 2>&1 )
+grep -q '"SCV_LANG"' "$P/scv/scv_settings.json" 2>/dev/null || fail "T7 setup: settings file has no SCV_LANG"
+mk_fake_slug "$P" "20260920-tester-settings-probe" \
+  '[[ -z "${SCV_LANG:-}" ]]'
+out="$(run_runner "$P")"
+grep -q 'FAILED_SLUGS: 0' <<<"$out" && pass "T7 a settings-file SCV_LANG did not reach the scenario" \
+                                    || fail "T7 SCV_LANG from the settings file leaked into the scenario" "$out"
+# The same key exported by the user BEFORE the runner starts is the user's own environment.
+mk_fake_slug "$P" "20260920-tester-settings-probe" \
+  '[[ "${SCV_LANG:-}" == "canary9f3a" ]]'
+out="$( cd "$P" && SCV_LANG=canary9f3a bash "$RUNNER" </dev/null 2>&1 )"
+grep -q 'FAILED_SLUGS: 0' <<<"$out" && pass "T7 a user-exported SCV_LANG still passes through" \
+                                    || fail "T7 the hygiene stripped the user's own SCV_LANG" "$out"
+
 echo "=== T3 — the runner's own autosync converges once (re-entry guard intact) ==="
 P="$(mk_project t3)"
 mk_fake_slug "$P" "20260819-tester-benign" 'true'

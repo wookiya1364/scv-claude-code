@@ -26,7 +26,7 @@ Technical identifiers stay as-is: file paths, skill invocation names, frontmatte
 - **Never modify the body of an archived TESTS.md.** Obsolete marking is done only via 3 frontmatter fields on the archived folder's PLAN.md (`status`, `obsoleted_at`, `obsoleted_by`).
 - **Don't force-run a slug declared in another's `supersedes:`** — it's an intentional skip already.
 - **`--ci` mode must NOT ask interactive questions.** Verdict is via exit code only.
-- **Don't bundle multiple failures into one triage** — each slug gets its own concise question (triage decisions differ per slug).
+- **Independent failures are triaged in one decisions table** — one row per failed slug, every row offering the same three verdicts (regression / obsolete / flaky) plus a recommendation, so the user settles every slug in one reply even when the answers differ. This sentence replaces the earlier "one question per slug" rule (rule-constitution plan, 2026-09). `--ci` mode still asks nothing.
 - Don't auto-mark a failure as obsolete without explicit user approval if there's no `supersedes` declaration covering it.
 
 ## Plain language first
@@ -64,7 +64,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/regression.sh" "${SCV_ARGS[@]}"
 
 Parse the header keys: `MODE:`, `TODAY:`, `SCOPE:`, `TAG_FILTER:`, `TOTAL_SLUGS:`, `SKIPPED_SUPERSEDED:`, `SKIPPED_OBSOLETE:`, `SKIPPED_SCENARIOS:`, `EXECUTED_SLUGS:`, `PASSED_SLUGS:`, `FAILED_SLUGS:`. Blocks: `=== skip list ===`, `=== execution ===`, `=== summary ===`. If failures occur, a `failed_slugs:` line is present.
 
-Hosts with subagent / parallel-workflow support MAY fan out independent slugs to parallel runs (one slug per agent via `--only <slug>`, each slug's `## How to run` is self-contained); skip-graph resolution, verdict rules, and the per-slug triage below are unchanged (v0.22.0+).
+Hosts with subagent / parallel-workflow support MAY fan out independent slugs to parallel runs (one slug per agent via `--only <slug>`, each slug's `## How to run` is self-contained); skip-graph resolution, verdict rules, and the triage table below are unchanged (v0.22.0+).
 
 ## Step 1 — All-pass path
 
@@ -75,14 +75,23 @@ If `FAILED_SLUGS: 0`:
    - Yes → `bash ${CLAUDE_PLUGIN_ROOT}/scripts/report.sh "accumulated-regression" passed --event regression-summary --summary "<n> slugs passed, <m> skipped (superseded/obsolete)"`
    - No → terminate.
 
-## Step 2 — Failures present → per-slug 3-way triage
+## Step 2 — Failures present → 3-way triage in one decisions table
 
-For each slug in `failed_slugs`, ask the user one independent question. Use this template verbatim:
+Ask the user **once**, with one decisions table: one row per slug in `failed_slugs`, and the
+same three verdicts available on every row. The user answers by number, one verdict per row
+(e.g. `1 regression, 2 flaky, 3 obsolete`). A host whose question UI caps the rows per call
+splits the table into consecutive calls of the maximum size — still one table in the
+conversation, never one dialog per slug. Use this template verbatim:
 
 ```
-Question: "TESTS for '<slug>' failed. How should we handle it?"
+TESTS failed for <N> slug(s). Decide each row by number — the same three verdicts apply to every row.
 
-Options:
+| # | slug | failure tail (1–2 lines) | recommendation |
+|---|---|---|---|
+| 1 | <slug-1> | <last lines of its output> | <regression / obsolete / flaky — one reason> |
+| 2 | <slug-2> | <last lines of its output> | <regression / obsolete / flaky — one reason> |
+
+Verdicts (per row):
 [1] "regression — true regression. I'll fix the current code"
     description:
     "The archived TESTS used to pass and is now broken — likely one of the recent changes
@@ -120,7 +129,7 @@ Options:
      caused the failure. Claude Code reruns this slug only, up to 2 times:
      bash ${CLAUDE_PLUGIN_ROOT}/scripts/regression.sh --only <slug>
      - Pass within 2 retries → recorded as 'flaky resolved on retry N' and continue.
-     - Still failing → re-fire this 3-way dialog."
+     - Still failing → put the slug back into the triage table as its only row."
 ```
 
 Answer handling:
@@ -154,9 +163,12 @@ Answer handling:
        as the user explained it in this triage>
      - refs: scv/archive/<slug>/PLAN.md
      ```
-  5. Report one line to the user: "Marked `<slug>` as obsolete (PLAN.md frontmatter + DECISIONS.md entry)."
-  6. Log `[obsolete] <slug>` to triage log.
-- **[3] flaky**: Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/regression.sh --only <slug> --quiet` up to 2 times. On pass, log `[flaky→pass on retry N] <slug>`. If both retries fail, re-fire the 3-way dialog.
+  5. Refresh the archive index so the runner sees the new status now, not after the next archive:
+     `bash ${CLAUDE_PLUGIN_ROOT}/scripts/archive-index.sh` (the runner reads `scv/archive/INDEX.yaml` first; a
+     stale index kept an obsolete slug running — 0.54.0).
+  6. Report one line to the user: "Marked `<slug>` as obsolete (PLAN.md frontmatter + DECISIONS.md entry + index refreshed)."
+  7. Log `[obsolete] <slug>` to triage log.
+- **[3] flaky**: Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/regression.sh --only <slug> --quiet` up to 2 times. On pass, log `[flaky→pass on retry N] <slug>`. If both retries fail, put the slug back into the triage table as its only row.
 
 ## Step 3 — Final summary
 
