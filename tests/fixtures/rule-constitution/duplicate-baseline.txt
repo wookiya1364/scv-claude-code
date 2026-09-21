@@ -1,12 +1,5 @@
 # 두 파일 이상에 적힌 규범 문장 키(앞 8단어). 첫 실행에 고정 — 줄면 갱신, 늘면 실패.
-4 detail comes after and only when wanted
-first time language setup only when is unset
+# 의도된 반복은 duplicate-allowlist.txt 에 이유와 함께 (0.56.0) — 여기 남은 것은 한 곳으로 모아야 할 빚이다.
 never delete or move files outside the scope
 never modify the body of an archived tests
-non blocking guarantee this hook never fails the
-registration/installation is wrapper owned core ships only this
-skip this section only when sets
 tests md archived at md and other files
-the entry reuses the handoff decision format author
-write it with the script never by editing
-write wrappers copying this template must preserve that

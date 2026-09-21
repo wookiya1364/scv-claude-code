@@ -44,7 +44,9 @@ _SCV_GRAFT_JQ_ASK='
 SCV_GRAFT_INSTALL_CMD='npm i -g @nanonets/graft && graft init --no-hooks --no-statusline && graft telemetry disable'
 # 그래프만 없을 때(no-graph) 의 명령.
 SCV_GRAFT_INIT_CMD='graft init --no-hooks --no-statusline'
-# Graft 가 인덱싱하는 언어의 파일 확장자. 출처: github.com/nanonets/graft README (2026-09 확인) —
+# Graft 가 인덱싱하는 언어의 파일 확장자. 출처: github.com/nanonets/graft README (2026-09-21 확인, 23개 언어) —
+# 확인법: README 의 세 층(완전·넓은·LSP) 중 앞 둘의 언어를 아래 두 줄과 대조한다 — LSP 층은 위 언어의 정밀도
+# 옵션이라 새 언어를 더하지 않는다. 다를 때만 값을 고치고, 같으면 확인 날짜만 갱신한다.
 # 완전 지원: TS/JS(JSX/TSX) · Python · Go · Java · Kotlin · PHP · Swift · R,
 # 넓은 지원: Rust · C · C++ · C# · Ruby · Scala · Elixir · Solidity · OCaml · Zig · Dart · Clojure · Nix · Lua.
 # 셸(bash)은 목록에 없다 — 이 저장소에서는 안내가 나오지 않는 것이 맞다. 목록이 낡으면 여기 한 줄만 고친다.

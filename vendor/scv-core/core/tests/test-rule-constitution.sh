@@ -29,6 +29,7 @@ source "$CORE/scripts/lib/rule-constitution.sh"
 FIX="$CORE/tests/fixtures/rule-constitution"
 ALLOWLIST="$FIX/precedence-allowlist.txt"
 BASELINE="$FIX/duplicate-baseline.txt"
+DUP_ALLOW="$FIX/duplicate-allowlist.txt"
 SCVMD_REL="core/template/scv/SCV.md"
 
 PASS=0; FAIL=0
@@ -57,6 +58,10 @@ section_range() {  # <SCV.md 경로> → "<from> <to>" (Top-level rules 절)
   awk '/^## Top-level rules/{f=NR} f&&NR>f&&/^## /{print f, NR-1; exit} END{if(f&&!done)print f, NR}' "$1" | head -1
 }
 strip_comments() { grep -v '^[[:space:]]*#' "$1" 2>/dev/null | sed -E "$SCV_RC_CANON_SED" || true; }
+# 검사 (b) 허용목록 (0.56.0): "<키>\t<이유>" 줄들. 이유 없는 줄은 거부 — 허용은 근거가 있어야 한다.
+# 두 필터 모두 파일 → 줄들: allow_keys 는 유효한 줄의 키(정규형), allow_bad 는 이유 없는 줄 그대로.
+allow_keys() { grep -v '^[[:space:]]*#' "$1" 2>/dev/null | grep -v '^[[:space:]]*$' | awk -F'\t' 'NF>=2 && $2 !~ /^[[:space:]]*$/ {print $1}' | sed -E "$SCV_RC_CANON_SED" || true; }
+allow_bad()  { grep -v '^[[:space:]]*#' "$1" 2>/dev/null | grep -v '^[[:space:]]*$' | awk -F'\t' 'NF<2 || $2 ~ /^[[:space:]]*$/' || true; }
 
 run_checks() {  # <core root> <baseline text> → 위반 두 묶음을 전역에 둔다
   local root="$1" base="$2" rows scvmd range from to allow normative keys dups
@@ -68,7 +73,8 @@ run_checks() {  # <core root> <baseline text> → 위반 두 묶음을 전역에
   keys="$(printf '%s\n' "$rows" | scv_rc_normative_rows | scv_rc_demand_keys)"
   dups="$(printf '%s\n' "$keys" | scv_rc_duplicate_keys)"
   B_CANDIDATES="$dups"
-  B_NEW="$(scv_rc_ratchet_new "$dups" "$base")"
+  B_ALLOWED="$(scv_rc_allowed_out "$dups" "$(allow_keys "$DUP_ALLOW")")"
+  B_NEW="$(scv_rc_ratchet_new "$B_ALLOWED" "$base")"
 }
 
 # ------------------------------------------------------------------ --self-test
@@ -93,6 +99,14 @@ if [[ "${1:-}" == "--self-test" ]]; then
   cat "$FIX/inject-duplicate.txt" >> "$TMP/protocols/deck.md"
   run_checks "$TMP" "$base"
   if [[ -n "$B_NEW" ]]; then ok "심은 중복 요구를 검사 b 가 잡았다 (새 키: $(printf '%s' "$B_NEW" | head -1))"; else fail "심은 중복 요구를 검사 b 가 놓쳤다"; fi
+  # (b) 허용목록 (0.56.0): 심은 키를 허용하면 사라지고, 다른 키는 그대로 남는다 — 순수 함수 한 번
+  planted="$(printf '%s' "$B_NEW" | head -1)"
+  left="$(scv_rc_allowed_out "$B_NEW" "$planted")"
+  if [[ -n "$planted" && "$left" != *"$planted"* ]]; then ok "허용목록에 넣은 키는 후보에서 빠진다"; else fail "허용목록이 후보를 거르지 못한다" "$left"; fi
+  [[ "$(scv_rc_allowed_out $'a b c d e f\ng h i j k l' 'zzz')" == $'a b c d e f\ng h i j k l' ]] && ok "허용목록에 없는 키는 그대로" || fail "allowed_out 이 무관한 키를 지운다"
+  printf '# c\ngood key here six words long\tbecause\nbad key without reason at all\n' > "$TMP/allow.txt"
+  k="$(allow_keys "$TMP/allow.txt")"; b="$(allow_bad "$TMP/allow.txt")"
+  if [[ "$k" == "good key here six words long" && "$b" == *"bad key without reason"* ]]; then ok "이유 없는 허용목록 줄은 거부된다"; else fail "허용목록 이유 검사" "keys=$k bad=$b"; fi
   echo; echo "self-test: $PASS passed, $FAIL failed"
   (( FAIL == 0 )) || exit 1
   exit 0
@@ -140,8 +154,10 @@ if (( ! IS_CORE_REPO )); then
 elif [[ ! -f "$BASELINE" ]]; then
   printf '# 두 파일 이상에 적힌 규범 문장 키(앞 8단어). 첫 실행에 고정 — 줄면 갱신, 늘면 실패.\n%s\n' "$B_CANDIDATES" > "$BASELINE"
   ok "기준선이 없어 만들었다 ($(printf '%s\n' "$B_CANDIDATES" | grep -c .)건) — 첫 실행"
+elif [[ -n "$(allow_bad "$DUP_ALLOW")" ]]; then
+  fail "허용목록 줄에 이유가 없다 — <키>\\t<이유> 로 적으라" "$(allow_bad "$DUP_ALLOW")"
 elif [[ -z "$B_NEW" ]]; then
-  ok "중복 요구 후보 $(printf '%s\n' "$B_CANDIDATES" | grep -c .)건, 기준선 이하"
+  ok "중복 요구 후보 $(printf '%s\n' "$B_CANDIDATES" | grep -c .)건 (허용 $(( $(printf '%s\n' "$B_CANDIDATES" | grep -c .) - $(printf '%s\n' "$B_ALLOWED" | grep -c .) ))건 제외), 기준선 이하"
 else
   fail "중복 요구 후보가 기준선보다 늘었다 — 한 곳으로 모으거나(4조) 의도된 반복이면 리뷰 뒤 기준선 갱신" "$B_NEW"
 fi
