@@ -23,7 +23,7 @@ Resolve the user's preferred language with this priority, then use it for ALL us
 Technical identifiers stay as-is: file paths, skill invocation names, frontmatter keys (`status`, `obsoleted_at`, `obsoleted_by`, `supersedes`), env var names, SCV terms (`promote`, `archive`, `obsolete`, `flaky`). If `scv/scv_settings.json` `SCV_LANG` is unset, suggest `/scv:help` once to lock the preference (don't block — fall back to auto-detect / English for now).
 
 **Non-negotiable rules:**
-- **Never modify the body of an archived TESTS.md.** Obsolete marking is done only via 3 frontmatter fields on the archived folder's PLAN.md (`status`, `obsoleted_at`, `obsoleted_by`).
+- **Boundaries** — which files this action leaves untouched (an archived TESTS.md body, ARCHIVED_AT.md, files outside the triage) — per `core/contracts/boundaries.md`.
 - **Don't force-run a slug declared in another's `supersedes:`** — it's an intentional skip already.
 - **`--ci` mode must NOT ask interactive questions.** Verdict is via exit code only.
 - **Independent failures are triaged in one decisions table** — one row per failed slug, every row offering the same three verdicts (regression / obsolete / flaky) plus a recommendation, so the user settles every slug in one reply even when the answers differ. This sentence replaces the earlier "one question per slug" rule (rule-constitution plan, 2026-09). `--ci` mode still asks nothing.
