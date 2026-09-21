@@ -1,0 +1,20 @@
+# fixture — 과정 계기판 T1. 손으로 계산한 기대값은 ../expected.txt
+generated_at: 2026-09-21T00:00:00Z
+archives:
+  - slug: P1
+    title: "대화 3턴 · 순수 절 있음 · adopted+archived"
+    kind: feature
+    status: done
+  - slug: P2
+    title: "대화 5턴(archive 로 옮겨진 경로) · 순수 절 없음 · adopted 만"
+    kind: feature
+    status: done
+  - slug: P3
+    title: "대화 없음 · 순수 절 있음 · P4 가 대체"
+    kind: feature
+    status: obsolete
+    obsoleted_by: P4
+  - slug: P4
+    title: "대화 없음 · 순수 절 없음 · supersedes [P3]"
+    kind: refactor
+    status: done
