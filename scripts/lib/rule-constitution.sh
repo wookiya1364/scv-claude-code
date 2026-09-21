@@ -115,10 +115,25 @@ scv_rc_duplicate_keys() {
   LC_ALL=C sort -u | awk -F'\t' "$SCV_RC_AWK_DUPS" | LC_ALL=C sort
 }
 
+# scv_rc_allowed_out <후보 키들> <허용 키들> — 허용목록에 있는 키를 뺀 후보만 낸다 (0.56.0).
+# 허용목록은 의도된 반복 — 같은 블록을 모든 프로토콜에 일부러 찍는 것 — 을 이유와 함께 적은 것이다. 래칫 앞에서
+# 걸러 기준선이 진짜 빚만 담게 한다. 골격은 ratchet_new 와 같다.
+# @pure
+scv_rc_allowed_out() {
+  local cand="${1:-}" allow="${2:-}" k allow_nl
+  allow_nl=$'\n'"$allow"$'\n'   # 같은 local 문에서 앞 변수를 쓰면 확장이 먼저라 바깥 값을 본다
+  while IFS= read -r k; do
+    [[ -z "$k" ]] && continue
+    [[ "$allow_nl" == *$'\n'"$k"$'\n'* ]] && continue
+    printf '%s\n' "$k"
+  done <<< "$cand"
+}
+
 # scv_rc_ratchet_new <후보 키들> <기준선 키들> — 기준선에 없는 후보만 낸다. 비면 통과.
 # @pure
 scv_rc_ratchet_new() {
-  local cand="${1:-}" base="${2:-}" k base_nl=$'\n'"$base"$'\n'
+  local cand="${1:-}" base="${2:-}" k base_nl
+  base_nl=$'\n'"$base"$'\n'
   while IFS= read -r k; do
     [[ -z "$k" ]] && continue
     [[ "$base_nl" == *$'\n'"$k"$'\n'* ]] && continue

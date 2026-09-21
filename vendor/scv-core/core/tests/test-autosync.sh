@@ -85,6 +85,11 @@ grep -q "DIRTY.*PROMOTE.md" <<<"$err" && pass "T4b the skipped file is surfaced 
                                       || fail "T4b the refusal was hidden" "$err"
 grep -q "PARTIAL" <<<"$err" && pass "T4b the report says PARTIAL, not refreshed" \
                             || fail "T4b a refused run was reported as a full refresh" "$err"
+grep -q "commit (or discard)" <<<"$err" && pass "T4b the report tells the user to commit (or discard) first (0.56.0)" \
+                                       || fail "T4b no commit guidance next to the refusal" "$err"
+drift="$(cd "$P" && bash -c 'source "'"$CORE"'/scripts/lib/scvroot.sh"; scv_template_drift "$(scv_root_dir)"' 2>&1)"
+grep -q "OUT OF DATE" <<<"$drift" && grep -q "commit (or discard)" <<<"$drift" && pass "T4b the drift line says the same: commit first (0.56.0)" \
+                                                                       || fail "T4b drift line lacks the commit guidance" "$drift"
 [[ "$(stamp_of "$P/scv/SCV.md")" == "2.0.0" ]] && pass "T4b the stamp did not advance past the refusal" \
                                                || fail "T4b the stamp advanced — the refusal would never be retried"
 err="$(call "$P")"

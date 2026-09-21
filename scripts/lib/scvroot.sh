@@ -260,7 +260,7 @@ scv_autosync() {
     if [[ $refused -eq 0 ]]; then
       echo "scv: workflow docs refreshed $what (automatic; the sync action re-runs this by hand)" >&2
     else
-      echo "scv: template refresh $what was PARTIAL — the files below were skipped, and the next action retries:" >&2
+      echo "scv: template refresh $what was PARTIAL — the files below were skipped; commit (or discard) your changes in them and the next action refreshes them:" >&2
       printf '%s\n' "$out" | grep -E '^  (DIRTY|WARN|UNKNOWN)' >&2 || true
     fi
   else
@@ -315,7 +315,7 @@ scv_template_drift() {
   if [[ "${SCV_AUTOSYNC:-on}" == "off" ]]; then
     echo "            automatic refresh is off (SCV_AUTOSYNC=off) — run the sync action"
   else
-    echo "            the refresh could not complete on its own — run the sync action"
+    echo "            the refresh could not complete on its own — a file with uncommitted changes is skipped; commit (or discard) it, or run the sync action"
   fi
 }
 
