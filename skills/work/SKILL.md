@@ -475,14 +475,13 @@ continue. Any deck already sitting in the folder is left untouched. In a nested 
 
 Archiving IS a decision — promote the `--reason` into a decision summary
 instead of leaving a one-line "tests passed". After every successful archive,
-append **one** entry to `scv/DECISIONS.md` (append-only — never edit existing
-entries; seed the file via `/scv:sync` if missing). In a nested module,
-append to `<SCV_DIR>/DECISIONS.md` and write `refs: <SCV_DIR>/archive/<slug>/PLAN.md`.
+append **one** entry to `scv/DECISIONS.md` with the script below; the log's rules
+(append-only, seeding, the shared entry format, the index) are in
+`core/contracts/decisions.md`. In a nested module, append to `<SCV_DIR>/DECISIONS.md`
+and write `refs: <SCV_DIR>/archive/<slug>/PLAN.md`.
 
 Unlike `refs:` / `conversation:`, the `path delta:` line is **never omitted** —
 when the route matched the plan, write `as planned` on one line and move on.
-
-**Write it with the script, never by editing the file:**
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/decisions-append.sh" \
@@ -490,16 +489,8 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/decisions-append.sh" \
   --why "<1–3줄 근거>" [--discarded "…"] [--path-delta "…"] [--refs "…"] [--conversation "…"]
 ```
 
-The script keeps the format identical across the three append points and records
-the entry's position in `scv/INDEX.tsv`, so a single decision can later be read
-back by name without opening the whole log — it is already hundreds of lines in
-mature projects. Nothing here is a judgement call: the three points are the
-three moments a decision is already being made.
-
-
-The entry reuses the handoff decision format. **author is mandatory — never
-write an anonymous entry** (resolve it the same way as `/scv:promote`'s
-AUTHOR: `git config user.name` → `GIT_AUTHOR_NAME` → `USER`):
+**author is mandatory — never write an anonymous entry** (resolve it the same
+way as `/scv:promote`'s AUTHOR: `git config user.name` → `GIT_AUTHOR_NAME` → `USER`):
 
 ```markdown
 ## [<YYYY-MM-DD HH:MM>] <author> — <plan title> archived
