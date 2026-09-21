@@ -1249,7 +1249,9 @@ assert_contains "$REGRESSION_CMD" "--include-obsolete"
 assert_contains "$REGRESSION_CMD" "regression-summary"
 assert_contains "$REGRESSION_CMD" "regression-failure"
 # why: [11s] regression protocol content — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
-assert_contains "$REGRESSION_CMD" "Never modify the body of an archived TESTS.md"
+assert_contains "$REGRESSION_CMD" "contracts/boundaries.md"
+assert_contains "$WORK_CMD" "contracts/boundaries.md"
+assert_contains "$CODEGEN_CMD" "contracts/boundaries.md"
 # why: [11s] regression protocol content — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
 assert_contains "$REGRESSION_CMD" "regression — true regression"
 # why: [11s] regression protocol content — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
