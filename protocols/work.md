@@ -27,11 +27,10 @@ If `scv/scv_settings.json` `SCV_LANG` is unset, you may suggest the user run `/s
 <!-- /SCV:GUIDANCE -->
 
 **Non-negotiable rules:**
-- Never delete or move files outside the scope of this plan.
 - Never archive without either (a) tests passing AND user approval in this conversation, or (b) the user's earlier declarative pre-approval (e.g., "auto-archive when tests pass" / "tests 통과하면 알아서 archive 해").
 - When implementing, respect the user's document-split guidance (see Step 3 below).
 - Always run the tests — do not declare "done" based on reasoning alone.
-- **Never modify the body of an archived TESTS.md.** Obsolete marking is done only via 3 frontmatter fields on that archived folder's PLAN.md (`status: obsolete`, `obsoleted_at`, `obsoleted_by`).
+- **Boundaries** — which files this action leaves untouched (outside-scope files, an archived TESTS.md body, ARCHIVED_AT.md) — per `core/contracts/boundaries.md`.
 - **Never auto-mark on supersede propagation** — always ask the Step 9c confirmation (default Yes).
 
 First, gather context:
