@@ -157,7 +157,7 @@ core/integrations/loop-runner.md:6 — the subject is the user writing their own
 core/template/scv/raw/README.md:110 — forbids hand-creating a plan folder and says why
 core/protocols/promote.md:43 — forbids moving raw originals by hand
 core/protocols/promote.md:114 — forbids hand-editing the settings file; routes the write to a script instead
-core/protocols/promote.md:986 — about mockup colour values, unrelated to workflow artefacts
+core/protocols/promote.md:975 — about mockup colour values, unrelated to workflow artefacts
 ```
 
 ## Failure behavior
