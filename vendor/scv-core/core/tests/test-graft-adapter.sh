@@ -157,6 +157,7 @@ h="$(printf 'a/b.ts\nc.sh\nREADME\nd.py\n' | scv_graft_ext_histogram)"; [[ "$(sc
 P=$(mkproj p10); rm -f "$P/a.ts"; ( cd "$P" && git rm -q --cached a.ts && git -c user.name=t -c user.email=t@t commit -qm rm ) 2>/dev/null; printf 'x\n' > "$P/only.sh"; ( cd "$P" && git add -A && git -c user.name=t -c user.email=t@t commit -qm sh ) 2>/dev/null
 o="$(run_in "$P" "" bash "$GRAFT" status)"; [[ "$o" == "GRAFT_STATUS: absent" ]] && ok "셸 파일만 있는 저장소 → 안내 없음" || fail "shell-only: $o"
 o="$(run_in "$P" "" bash "$WS" 20260917-u-delta)"; ! grep -q '^GRAFT_NOTICE' <<<"$o" && ok "work.sh: 셸만 → 안내 없음" || fail "work shell-only notice"
+grep -q '2026-09-21 확인, 23개 언어' "$LIB" && ok "지원 언어 목록: README 대조 날짜와 언어 수가 상수 옆에 있다 (0.56.0)" || fail "언어 목록 확인 날짜 없음"
 # 한 곳: 설치 명령 문자열의 정의는 lib 하나
 n="$(grep -rl 'npm i -g @nanonets/graft' "$CORE" --include='*.sh' --include='*.md' --include='*.json' 2>/dev/null | grep -v '/tests/' | wc -l | tr -d ' ')"; [[ "$n" == "1" ]] && ok "설치 명령 문자열 정의는 lib/graft.sh 한 곳" || fail "설치 명령이 ${n}곳: $(grep -rl 'npm i -g @nanonets/graft' "$CORE" --include='*.sh' --include='*.md' --include='*.json' | grep -v '/tests/')"
 # 프로토콜은 전달만
