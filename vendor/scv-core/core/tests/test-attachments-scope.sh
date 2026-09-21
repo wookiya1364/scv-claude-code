@@ -105,6 +105,27 @@ grep -q "mkdir -p test-results/$A-flow-chromium" <<<"$CMD" && ok "re-run helper 
 rm -rf "$PRJ/test-results/$A-flow-chromium"
 ( cd "$PRJ" && bash -c "$CMD" ) && [[ -f "$PRJ/test-results/$A-flow-chromium/video.webm" ]] && ok "the extracted block re-creates this slug's evidence" || fail "re-run block did not produce evidence"
 
+
+echo "── [T2b] the evidence re-run names a timeout and an exit code (0.57.0) ──"
+mk_slug() {  # mk_slug <slug> <how-to-run line>
+  mkdir -p "$PRJ/scv/archive/$1"
+  printf -- '---\ntitle: %s\nslug: %s\nauthor: tester\ncreated_at: 2026-09-21\nstatus: done\nkind: feature\nlang: english\n---\n\n# %s\n' "$1" "$1" "$1" > "$PRJ/scv/archive/$1/PLAN.md"
+  printf -- '# Test Plan\n\n## How to run\n\n```bash\n%s\n```\n\n## Pass criteria\n\n- exit 0\n' "$2" > "$PRJ/scv/archive/$1/TESTS.md"
+  ( cd "$PRJ" && git add -A && git commit -qm "add $1" )
+}
+C="20260921-tester-slow"; D="20260921-tester-broken"
+mk_slug "$C" "sleep 3"; mk_slug "$D" "exit 2"
+if command -v timeout >/dev/null 2>&1; then
+  ERR="$(cd "$PRJ" && SCV_ATTACHMENTS_RERUN_TIMEOUT=1 bash "$PRH" "$C" --no-push --no-create 2>&1 >/dev/null)"; RC=$?
+  grep -q "re-run timed out after 1s (SCV_ATTACHMENTS_RERUN_TIMEOUT)" <<<"$ERR" && ok "a timed-out re-run says so and names the setting" || fail "timeout not named: $(grep -i 're-run' <<<"$ERR")"
+  [[ $RC -eq 0 ]] && ok "pr-helper still completes after a timed-out re-run" || fail "pr-helper exit $RC after timeout"
+else
+  echo "  – timeout(1) not on PATH — the timeout wording is not checked on this host"
+fi
+ERR="$(cd "$PRJ" && bash "$PRH" "$D" --no-push --no-create 2>&1 >/dev/null)"; RC=$?
+grep -q "re-run exited 2 — continuing without it" <<<"$ERR" && ok "a failed re-run reports its exit code" || fail "exit code not reported: $(grep -i 're-run' <<<"$ERR")"
+[[ $RC -eq 0 ]] && ok "pr-helper still completes after a failed re-run" || fail "pr-helper exit $RC after failed re-run"
+
 echo "── [T3] collect-artifacts — scope ──"
 CP="$WORK/cp"; mkdir -p "$CP/scv/promote" "$CP/test-results/$A-flow-chromium" "$CP/test-results/$B-login-chromium"
 printf 'x' > "$CP/test-results/$B-login-chromium/video.webm"; sleep 1; printf 'x' > "$CP/test-results/$A-flow-chromium/video.webm"; sleep 1; printf 'x' > "$CP/test-results/$B-login-chromium/shot.png"

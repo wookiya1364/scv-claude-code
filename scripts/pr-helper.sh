@@ -253,9 +253,15 @@ if [[ "$ATTACHMENTS_SCOPE" == "slug" && ${#SCREENSHOTS[@]} -eq 0 && ${#VIDEOS[@]
       # 결과 폴더명이 잘려도 재실행 후에는 반드시 이 슬러그 소속으로 잡힌다.
       # 설정 파일에서 올린 키(SCV_LANG …)는 자식에 넘기지 않는다 — 회귀 실행기와 같은 함수 (0.55.0).
       _unset=(); while IFS= read -r _a; do _unset+=("$_a"); done < <(env_settings_unset_args)
+      _rc=0
       TEST_RESULTS_DIR="$TEST_RESULTS_DIR" env "${_unset[@]}" bash "$SCRIPT_DIR/run-plan-tests.sh" \
-        --slug "$SLUG_NAME" --tests "$TESTS_FILE" --timeout "$RERUN_TIMEOUT" >/dev/null 2>&1 \
-        || echo "attachments: re-run exited non-zero — continuing without it" >&2
+        --slug "$SLUG_NAME" --tests "$TESTS_FILE" --timeout "$RERUN_TIMEOUT" >/dev/null 2>&1 || _rc=$?
+      # 124 is what `timeout` returns — say so, and name the knob (0.57.0). Either way the PR still gets created.
+      if (( _rc == 124 )); then
+        echo "attachments: re-run timed out after ${RERUN_TIMEOUT}s (SCV_ATTACHMENTS_RERUN_TIMEOUT) — continuing without it" >&2
+      elif (( _rc != 0 )); then
+        echo "attachments: re-run exited $_rc — continuing without it" >&2
+      fi
       collect_attachments
     fi
   fi
