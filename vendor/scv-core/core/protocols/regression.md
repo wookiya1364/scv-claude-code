@@ -148,15 +148,10 @@ Answer handling:
   3. Never touch TESTS.md or ARCHIVED_AT.md.
   4. **Decision log append (v0.22.0+)** — the WHY of an obsolete verdict used
      to evaporate with the triage session; record it. Append **one** entry to
-     `scv/DECISIONS.md` (append-only — never edit existing entries; seed the
-     file via `/scv:sync` if missing). The entry reuses the handoff decision
-     format. **author is mandatory — never write an anonymous entry** (resolve
-     via `git config user.name` → `GIT_AUTHOR_NAME` → `USER`).
-
-     Write it with `scripts/decisions-append.sh` (see the promote protocol's
-     decision-log section) — never by editing the file. The script keeps the
-     format identical across the three append points and indexes the entry so
-     it can be read back by name later.
+     `scv/DECISIONS.md` with `scripts/decisions-append.sh` (`--verdict obsolete`);
+     the log's rules (append-only, seeding, entry format, index) are in
+     `core/contracts/decisions.md`. **author is mandatory — never write an
+     anonymous entry** (resolve via `git config user.name` → `GIT_AUTHOR_NAME` → `USER`).
 
      ```markdown
      ## [<YYYY-MM-DD HH:MM>] <author> — <slug> marked obsolete
