@@ -147,17 +147,19 @@ the fix is self-reinforcing — the write and the mint are now the same call.
 
 ## Sanctioned exceptions
 
-Phrases that read like a bypass but are not, anchored to the exact line so an
-excuse cannot outlive the text it excuses. `tests/test-guard-consistency.sh`
-fails when an anchor no longer matches.
+Phrases that read like a bypass but are not, anchored to a phrase unique to the
+excused line so an excuse cannot outlive the text it excuses — and cannot go
+stale when the file above it gets shorter (0.57.0; line numbers did exactly that).
+`tests/test-guard-consistency.sh` fails when a phrase vanishes, matches more than
+one line, or sits on a line that no longer needs excusing.
 
 ```guard:exceptions
-core/protocols/deck.md:184 — forbids hand-editing generated output; the opposite of a sanction
-core/integrations/loop-runner.md:6 — the subject is the user writing their own loop prompt, not the agent authoring a plan
-core/template/scv/raw/README.md:110 — forbids hand-creating a plan folder and says why
-core/protocols/promote.md:43 — forbids moving raw originals by hand
-core/protocols/promote.md:114 — forbids hand-editing the settings file; routes the write to a script instead
-core/protocols/promote.md:975 — about mockup colour values, unrelated to workflow artefacts
+core/protocols/deck.md:"Never edit generated output" — forbids hand-editing generated output; the opposite of a sanction
+core/integrations/loop-runner.md:"사용자가 자유 형식으로 직접 작성" — the subject is the user writing their own loop prompt, not the agent authoring a plan
+core/template/scv/raw/README.md:"계획 폴더를 손으로 만들지 마세요" — forbids hand-creating a plan folder and says why
+core/protocols/promote.md:"Raw originals under" — forbids moving raw originals by hand
+core/protocols/promote.md:"never by hand-editing the settings file" — forbids hand-editing the settings file; routes the write to a script instead
+core/protocols/promote.md:"confirm the user actually said this project has design tokens" — about mockup colour values, unrelated to workflow artefacts
 ```
 
 ## Failure behavior
