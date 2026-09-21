@@ -115,19 +115,31 @@ if [[ $BAD -eq 0 ]]; then ok "OK [T3] $N/$N"; else fail "[T3] $((N - BAD))/$N (�
 
 echo
 echo "T4. 실제 저장소에서 돈다"
-A="$(cd "$REPO_ROOT" && bash "$SCRIPT" 2>/dev/null)"; RCA=$?
-B="$(cd "$REPO_ROOT" && bash "$SCRIPT" 2>/dev/null)"
-NAMES=0
-for name in "계획당 대화 턴 수" "승인→보관 리드타임(분)" "후속 재발률" "순수 절 보유율"; do
-  # 이름에 괄호가 있어 -F 로 찾고, 적용 범위 n/m 꼴은 bash 정규식으로 본다
-  line="$(grep -F "$name | " <<<"$A" | head -1)"
-  [[ "$line" =~ \|\ [0-9]+/[0-9]+\ \| ]] && NAMES=$((NAMES + 1))
-done
-if [[ $RCA -eq 0 && $NAMES -eq 4 && "$A" == "$B" ]]; then
-  ok "OK [T4] real repo: exit 0, 4 metrics, identical"
+# 래퍼가 벤더한 Core 사본에는 scv/archive 가 없다 — 그 자리에서는 "색인 없음" 한 줄과
+# exit 0 이 계약이다 (부르는 쪽을 막지 않는다). 아카이브가 있는 저장소에서만 표를 본다.
+if [[ ! -f "$REPO_ROOT/scv/archive/INDEX.yaml" ]]; then
+  ERR="$(cd "$REPO_ROOT" && bash "$SCRIPT" 2>&1 >/dev/null)"; RCA=$?
+  OUTN="$(cd "$REPO_ROOT" && bash "$SCRIPT" 2>/dev/null)"
+  if [[ $RCA -eq 0 && -z "$OUTN" && "$ERR" == *"no archive index"* ]]; then
+    ok "OK [T4] no archive at repo root (vendored copy): exit 0, stderr notice, empty stdout"
+  else
+    fail "[T4] no-archive case: exit=$RCA stdout=[$OUTN] stderr=[$ERR]"
+  fi
 else
-  fail "[T4] exit=$RCA metrics=$NAMES identical=$([[ "$A" == "$B" ]] && echo yes || echo no)"
-  printf '%s\n' "$A" | sed 's/^/      /'
+  A="$(cd "$REPO_ROOT" && bash "$SCRIPT" 2>/dev/null)"; RCA=$?
+  B="$(cd "$REPO_ROOT" && bash "$SCRIPT" 2>/dev/null)"
+  NAMES=0
+  for name in "계획당 대화 턴 수" "승인→보관 리드타임(분)" "후속 재발률" "순수 절 보유율"; do
+    # 이름에 괄호가 있어 -F 로 찾고, 적용 범위 n/m 꼴은 bash 정규식으로 본다
+    line="$(grep -F "$name | " <<<"$A" | head -1)"
+    [[ "$line" =~ \|\ [0-9]+/[0-9]+\ \| ]] && NAMES=$((NAMES + 1))
+  done
+  if [[ $RCA -eq 0 && $NAMES -eq 4 && "$A" == "$B" ]]; then
+    ok "OK [T4] real repo: exit 0, 4 metrics, identical"
+  else
+    fail "[T4] exit=$RCA metrics=$NAMES identical=$([[ "$A" == "$B" ]] && echo yes || echo no)"
+    printf '%s\n' "$A" | sed 's/^/      /'
+  fi
 fi
 
 echo
