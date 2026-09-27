@@ -137,8 +137,8 @@ Read `<plugin root>/protocols/help/promote-handoff.md` now and follow it.
 
 ## Per-model prompting (v0.59.0+)
 
-`--model "<id>"`: your exact model id from the system prompt (omit if unknown). `GUIDE:`
-(`load`/`loaded`/`none`) says if its offline guide is in context.
+`--model "<id>"`: your exact model id from the system prompt, if known. `GUIDE:` says if its
+guide is in context.
 Read `<plugin root>/protocols/help/prompt-refine.md` now (once per session) and follow it.
 
 ## Deep questions go to a background investigator (switch, v0.46.0+)

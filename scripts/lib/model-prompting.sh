@@ -192,3 +192,97 @@ scv_mp_speaker_label() {
   done
   if [[ -n "$out" ]]; then printf 'assistant · %s' "$out"; else printf 'assistant'; fi
 }
+
+# ---------------------------------------------------------------- 결과로 판정 (v0.60.0+)
+# help 가 원문을 읽으라고 한 턴에 읽음 표시가 없거나, 다시 쓴 요청을 기록했는데 답에 인용이 없으면
+# 멈춤 훅이 다음 턴 경고를 예약한다. 판정은 여기, 읽고 쓰기는 model-prompting.sh stop.
+# 이번 턴 기록 (.help-guide-turn, 한 줄): <지문>\x1f<정규화 모델 id>\x1f<결정 load|loaded>\x1f<키>
+
+# @pure
+# <턴 기록 한 줄> → "<지문>\x1f<모델>\x1f<결정>\x1f<키>" (결정이 load|loaded 가 아니면 빈 값).
+scv_mp_turn_parse() {
+  local s="${1:-}" us=$'\x1f' nonce model dec key rest
+  [[ "$s" == *"$us"*"$us"* ]] || return 0
+  nonce="${s%%"$us"*}"; rest="${s#*"$us"}"
+  model="${rest%%"$us"*}"; rest="${rest#*"$us"}"
+  dec="${rest%%"$us"*}"; key=""; [[ "$rest" == *"$us"* ]] && key="${rest#*"$us"}"
+  key="${key%%"$us"*}"
+  case "$dec" in load|loaded) ;; *) return 0 ;; esac
+  [[ -n "$model" ]] || return 0
+  printf '%s%s%s%s%s%s%s' "$nonce" "$us" "$model" "$us" "$dec" "$us" "$key"
+}
+
+# @pure
+# <턴 기록(파싱됨)> <읽음 기록(파싱됨)> <지금 지문> → 1(이 컨텍스트에서 그 모델을 읽음) | 0.
+# 읽음 기록의 지문이 턴 기록의 지문 또는 지금 지문과 같아야 한다 — 멈춤 훅의 드리프트 재설정이 지금 지문을
+# 먼저 비웠을 수 있고, 규약 재표시가 지문을 옮겼을 수 있어서 둘 다 본다. 빈 지문은 증거가 아니다.
+scv_mp_was_read() {
+  local turn="${1:-}" rec="${2:-}" cur="${3:-}" us=$'\x1f' tnonce tmodel rnonce rmodel
+  tnonce="${turn%%"$us"*}"; tmodel="${turn#*"$us"}"; tmodel="${tmodel%%"$us"*}"
+  rnonce="${rec%%"$us"*}"; rmodel="${rec#*"$us"}"; rmodel="${rmodel%%"$us"*}"
+  if [[ -n "$rnonce" && -n "$rmodel" && "$rmodel" == "$tmodel" ]] \
+     && { [[ "$rnonce" == "$tnonce" ]] || [[ "$rnonce" == "$cur" ]]; }; then
+    printf '1'
+  else
+    printf '0'
+  fi
+}
+
+# @pure
+# <이번 턴 대화 블록 텍스트> → 1(다시 쓴 요청 단락이 있다) | 0. 라벨은 영문 또는 한국어.
+scv_mp_rewrite_recorded() {
+  local text="${1:-}" line
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    case "$line" in
+      "**Rewritten request**:"*|"**다시 쓴 요청**:"*) printf '1'; return 0 ;;
+    esac
+  done <<< "$text"
+  printf '0'
+}
+
+# @pure
+# <턴 기록 한 줄> <옛 지문> <새 지문> → 지문만 바꾼 줄 (옛 지문이 맞지 않거나 형식이 아니면 빈 값).
+# help-state mark 가 같은 턴에 규약을 다시 읽어 지문을 바꿀 때, 이번 턴 기록도 새 지문으로 옮긴다.
+scv_mp_turn_restamp() {
+  local line="${1:-}" old="${2:-}" new="${3:-}" us=$'\x1f' t tn
+  [[ -n "$new" ]] || return 0
+  t="$(scv_mp_turn_parse "$line")"; [[ -n "$t" ]] || return 0
+  tn="${t%%"$us"*}"; [[ "$tn" == "$old" ]] || return 0
+  printf '%s%s%s' "$new" "$us" "${t#*"$us"}"
+}
+
+# @pure
+# <답 본문> → 1(코드 블록 밖에 '>' 로 시작하는 인용 줄이 있다) | 0.
+scv_mp_answer_has_quote() {
+  local text="${1:-}" line fence=0 t q=$'\x3e'   # q = 인용 표시 문자 (순수성 검사가 글자 그대로를 방향 기호로 본다)
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    t="${line#"${line%%[![:space:]]*}"}"
+    if [[ "$t" == '```'* ]]; then fence=$(( 1 - fence )); continue; fi
+    (( fence )) && continue
+    [[ "${t:0:1}" == "$q" ]] && { printf '1'; return 0; }
+  done <<< "$text"
+  printf '0'
+}
+
+# @pure
+# <결정> <읽음 0|1> <다시 쓴 요청 기록됨 0|1> <답 인용 있음 0|1|""(답을 못 얻음)> → 판정 줄들: unread · unshown (없으면 빈 값).
+scv_mp_turn_verdict() {
+  local dec="${1:-}" read="${2:-0}" recorded="${3:-0}" quoted="${4:-}"
+  case "$dec" in load|loaded) ;; *) return 0 ;; esac
+  [[ "$dec" == "load" && "$read" != "1" ]] && printf 'unread\n'
+  [[ "$recorded" == "1" && "$quoted" == "0" ]] && printf 'unshown\n'
+  return 0
+}
+
+# @pure
+# <판정 줄들> <키> → 다음 턴에 실을 경고 문장들 (매 턴 훅이 지시 바로 뒤에 한 번 싣는다).
+scv_mp_warn_lines() {
+  local verdicts="${1:-}" key="${2:-?}" v
+  while IFS= read -r v || [[ -n "$v" ]]; do
+    case "$v" in
+      unread)  printf '%s\n' "[SCV 가이드] 직전 턴에 help 가 이 모델의 프롬프팅 가이드 원문($key)을 읽으라고 했지만 읽음 표시가 없다 — 이번 턴에 GUIDE_FILE 을 먼저 읽고 GUIDE_MARK_CMD 를 실행한 뒤, 그 가이드로 요청을 다시 써라." ;;
+      unshown) printf '%s\n' "[SCV 가이드] 직전 턴에 다시 쓴 요청을 기록만 하고 답에 보이지 않았다 — 이번 턴에는 결론 바로 뒤에 인용 블록으로 보여라." ;;
+    esac
+  done <<< "$verdicts"
+  return 0
+}
