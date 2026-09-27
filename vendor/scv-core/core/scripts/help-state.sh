@@ -95,7 +95,10 @@ case "$cmd" in
           _gt="$JOURNAL_DIR/.help-guide-turn"
           if [[ -f "$_gt" && ! -L "$_gt" && -f "$_mplib" ]] && { declare -F scv_mp_turn_restamp >/dev/null 2>&1 || source "$_mplib" 2>/dev/null; }; then
             _tl="$(head -c 4096 "$_gt" 2>/dev/null | head -1)"; _tnl="$(scv_mp_turn_restamp "$_tl" "$_old" "$_n")"
-            [[ -n "$_tnl" ]] && _put "$_gt" "$_tnl"
+            # v0.60.2: 첫 줄(지문)만 바꾸고 둘째 줄부터(원문 경로 · 표시 명령)는 그대로 둔다 — 0.60.1 은 첫 줄만 다시 써서
+            # 같은 턴에 규약을 다시 읽으면 경고에서 경로 · 명령이 빠졌다(설치본 실측).
+            _trest="$(head -c 4096 "$_gt" 2>/dev/null | tail -n +2)"
+            [[ -n "$_tnl" ]] && _put "$_gt" "$_tnl${_trest:+$'\n'$_trest}"
           fi
           printf '%s\n' "$json" ;;
   stop)   # 인자: --echo on|off · --lint on|off · --cap N · --now ISO · --src host|transcript|none. stdin = 직전 답 본문(없으면 린트 생략).
