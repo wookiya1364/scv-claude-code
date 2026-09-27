@@ -3,7 +3,8 @@
 # 모른 채(래퍼 색인 데이터만 보고) 결정적으로 정하는지, 규약이 다시 쓰기·되묻기 단계를 빠짐없이 싣는지,
 # 멈춤 훅이 답한 모델을 저널에 남기는지 본다.
 #
-# 계획: scv/archive/20260927-wookiya1364-per-model-prompting/TESTS.md (T1~T6)
+# 계획: scv/archive/20260927-wookiya1364-per-model-prompting/TESTS.md (T1~T9)
+#       scv/promote/20260927-wookiya1364-prompting-read-verdict/TESTS.md (결과 판정 — 이 파일의 T10~T14)
 # 픽스처는 중립 id 만 쓴다 — 코어 payload 에 제공자·모델 이름을 넣지 않는다(tests/test-host-neutral.sh).
 #
 # Run: bash core/tests/test-model-prompting.sh
@@ -222,7 +223,7 @@ fi
 echo
 echo "T5. 규약 문서 — 다시 쓰기 · 되묻기 단계"
 c=0; total=7
-grep -q 'GUIDE: load' "$REFINE" && grep -q 'model-prompting.sh" mark' "$REFINE" && c=$((c + 1)) || echo "      (1) read + mark"
+grep -q 'GUIDE: load' "$REFINE" && grep -q 'GUIDE_MARK_CMD:' "$REFINE" && c=$((c + 1)) || echo "      (1) read + mark"
 grep -qi 'short turn' "$REFINE" && c=$((c + 1)) || echo "      (2) short turns"
 grep -qi 'rewrite the request' "$REFINE" && grep -qi 'guide rules applied' "$REFINE" && c=$((c + 1)) || echo "      (3) rewrite + basis"
 grep -qi 'from the conversation, the repository' "$REFINE" && c=$((c + 1)) || echo "      (4) search first"
@@ -298,6 +299,215 @@ if grep -qx 'GUIDE: none' <<<"$oe" && ! grep -q 'secret' <<<"$(grep '^GUIDE_FILE
 else
   fail "[T9]"; printf '%s\n---\n%s\n' "$oe" "$ob" | sed 's/^/      /'
 fi
+
+echo
+echo "T10. 결과 판정 — 순수부 전수 검사"
+N=0; BAD=0
+T10OUT="$(bash -c '
+  source "'"$LIB"'"
+  us=$'"'"'\x1f'"'"'
+  e() { printf "%s\n" "$1=$(printf "%s" "$2" | tr "\037\n" "~|")"; }
+  e tp1 "$(scv_mp_turn_parse "n1${us}vendor-model-a${us}load${us}model-a")"
+  e tp2 "$(scv_mp_turn_parse "${us}vendor-model-a${us}loaded${us}model-a")"
+  e tp3 "$(scv_mp_turn_parse "n1${us}vendor-model-a${us}none${us}model-a")"
+  e tp4 "$(scv_mp_turn_parse "garbage")"
+  e tp5 "$(scv_mp_turn_parse "n1${us}${us}load${us}k")"
+  e tp6 "$(scv_mp_turn_parse "")"
+  T="$(scv_mp_turn_parse "n1${us}vendor-model-a${us}load${us}model-a")"
+  T0="$(scv_mp_turn_parse "${us}vendor-model-a${us}load${us}model-a")"
+  e wr1 "$(scv_mp_was_read "$T" "n1${us}vendor-model-a" "n1")"
+  e wr2 "$(scv_mp_was_read "$T" "n2${us}vendor-model-a" "n2")"
+  e wr3 "$(scv_mp_was_read "$T" "n1${us}vendor-model-a" "")"
+  e wr4 "$(scv_mp_was_read "$T" "n1${us}vendor-model-b" "n1")"
+  e wr5 "$(scv_mp_was_read "$T" "" "n1")"
+  e wr6 "$(scv_mp_was_read "$T0" "${us}vendor-model-a" "")"
+  e wr7 "$(scv_mp_was_read "$T" "n9${us}vendor-model-a" "n1")"
+  e rr1 "$(scv_mp_rewrite_recorded "$(printf "## Turn 3\n\n**Rewritten request**: do x\n")")"
+  e rr2 "$(scv_mp_rewrite_recorded "$(printf "## Turn 3\n**다시 쓴 요청**: x 하기\n")")"
+  e rr3 "$(scv_mp_rewrite_recorded "$(printf "## Turn 3\n**User**: a\n")")"
+  e rr4 "$(scv_mp_rewrite_recorded "")"
+  e aq1 "$(scv_mp_answer_has_quote "$(printf "lead\n\n> rewritten\n")")"
+  e aq2 "$(scv_mp_answer_has_quote "$(printf "lead\n\`\`\`\n> in code\n\`\`\`\n")")"
+  e aq3 "$(scv_mp_answer_has_quote "$(printf "lead only\na -> b\n")")"
+  e aq4 "$(scv_mp_answer_has_quote "   > indented quote")"
+  e aq5 "$(scv_mp_answer_has_quote "")"
+  for d in none load loaded; do for r in 0 1; do for c in 0 1; do for q in 0 1 x; do
+    qq="$q"; [[ "$q" == x ]] && qq=""
+    e "v_${d}_${r}${c}${q}" "$(scv_mp_turn_verdict "$d" "$r" "$c" "$qq")"
+  done; done; done; done
+  e wl1 "$(scv_mp_warn_lines "unread" "model-a")"
+  e wl2 "$(scv_mp_warn_lines "$(printf "unread\nunshown\n")" "model-a")"
+  e wl3 "$(scv_mp_warn_lines "" "model-a")"
+  e ts1 "$(scv_mp_turn_restamp "${us}vendor-model-a${us}load${us}model-a" "" "n2")"
+  e ts2 "$(scv_mp_turn_restamp "n1${us}vendor-model-a${us}load${us}model-a" "n1" "n2")"
+  e ts3 "$(scv_mp_turn_restamp "n0${us}vendor-model-a${us}load${us}model-a" "n1" "n2")"
+  e ts4 "$(scv_mp_turn_restamp "n1${us}vendor-model-a${us}load${us}model-a" "n1" "")"
+  e ts5 "$(scv_mp_turn_restamp "garbage" "" "n2")"
+')"
+g() { printf '%s\n' "$T10OUT" | grep -m1 "^$1=" | sed "s/^$1=//"; }
+eqc "turn parse load" "n1~vendor-model-a~load~model-a" "$(g tp1)"
+eqc "turn parse empty nonce" "~vendor-model-a~loaded~model-a" "$(g tp2)"
+eqc "turn parse none → empty" "" "$(g tp3)"
+eqc "turn parse garbage" "" "$(g tp4)"
+eqc "turn parse no model" "" "$(g tp5)"
+eqc "turn parse empty" "" "$(g tp6)"
+eqc "read same nonce" "1" "$(g wr1)"
+eqc "read restamped (current nonce)" "1" "$(g wr2)"
+eqc "read after drift reset (turn nonce)" "1" "$(g wr3)"
+eqc "read other model" "0" "$(g wr4)"
+eqc "read no record" "0" "$(g wr5)"
+eqc "read empty nonce is no evidence" "0" "$(g wr6)"
+eqc "read stale record" "0" "$(g wr7)"
+eqc "recorded english" "1" "$(g rr1)"
+eqc "recorded korean" "1" "$(g rr2)"
+eqc "recorded none" "0" "$(g rr3)"
+eqc "recorded empty" "0" "$(g rr4)"
+eqc "quote plain" "1" "$(g aq1)"
+eqc "quote inside code ignored" "0" "$(g aq2)"
+eqc "quote arrow is not a quote" "0" "$(g aq3)"
+eqc "quote indented" "1" "$(g aq4)"
+eqc "quote empty" "0" "$(g aq5)"
+for d in none load loaded; do for r in 0 1; do for c in 0 1; do for q in 0 1 x; do
+  want=""
+  if [[ "$d" != none ]]; then
+    [[ "$d" == load && "$r" == 0 ]] && want="unread"
+    if [[ "$c" == 1 && "$q" == 0 ]]; then [[ -n "$want" ]] && want="$want|unshown" || want="unshown"; fi
+  fi
+  eqc "verdict $d r=$r c=$c q=$q" "$want" "$(g "v_${d}_${r}${c}${q}")"
+done; done; done; done
+wl1="$(g wl1)"; wl2="$(g wl2)"
+N=$((N + 1)); [[ "$wl1" == *"model-a"* && "$wl1" == *"GUIDE_MARK_CMD"* && "$wl1" != *"|"?* ]] || { BAD=$((BAD + 1)); echo "      ✖ warn unread: [$wl1]"; }
+N=$((N + 1)); [[ "$(printf '%s' "$wl2" | tr '|' '\n' | grep -c .)" == 2 ]] || { BAD=$((BAD + 1)); echo "      ✖ warn two lines: [$wl2]"; }
+eqc "warn none" "" "$(g wl3)"
+eqc "turn restamp empty old" "n2~vendor-model-a~load~model-a" "$(g ts1)"
+eqc "turn restamp same old" "n2~vendor-model-a~load~model-a" "$(g ts2)"
+eqc "turn restamp stale untouched" "" "$(g ts3)"
+eqc "turn restamp needs new" "" "$(g ts4)"
+eqc "turn restamp garbage" "" "$(g ts5)"
+if [[ $BAD -eq 0 ]]; then ok "OK [T10] $N/$N"; else fail "[T10] $((N - BAD))/$N"; fi
+
+# 멈춤 훅 한 번: <저장소> <답 본문> — 원본 JSONL 에 사람 프롬프트와 답을 두고, 호스트가 준 답으로도 넘긴다.
+stop_hook() {
+  local r="$1" ans="$2" tr="$WORK/tr-$RANDOM.jsonl"
+  printf '{"type":"user","message":{"content":[{"type":"text","text":"q"}]}}\n' > "$tr"
+  jq -cn --arg t "$ans" '{type:"assistant",message:{model:"vendor-model-a",content:[{type:"text",text:$t}]}}' >> "$tr"
+  (cd "$r" && jq -cn --arg p "$tr" --arg a "$ans" '{transcript_path:$p,last_assistant_message:$a}' \
+     | CLAUDE_PLUGIN_ROOT="$CORE" SCV_HOST_PROFILE="$WORK/profile.env" GIT_AUTHOR_NAME="Hook User" bash "$STOP" >/dev/null 2>&1)
+}
+mark_cmd() { grep -m1 '^GUIDE_MARK_CMD: ' <<<"$1" | sed 's/^GUIDE_MARK_CMD: //'; }
+QANS="$(printf 'lead\n\n> 다시 쓴 요청\n')"
+
+echo
+echo "T11. 안 읽음 → 다음 턴 경고 → 다시 load"
+if command -v jq >/dev/null 2>&1; then
+  R="$(new_repo t11)"; (cd "$R" && git init -q . 2>/dev/null)
+  o1="$(help_wc "$R" --model vendor-model-a)"
+  had_turn=0; [[ -f "$R/scv/journal/.help-guide-turn" ]] && had_turn=1
+  stop_hook "$R" "$QANS"
+  hook_out="$(cd "$R" && printf '{"prompt":"next","session_id":"s1"}' | CLAUDE_PLUGIN_ROOT="$CORE" SCV_HOST_PROFILE="$WORK/profile.env" bash "$CORE/template/hooks/on-user-prompt.sh" 2>/dev/null)"
+  o2="$(help_wc "$R" --model vendor-model-a)"
+  c=0
+  grep -qx 'GUIDE: load model-a' <<<"$o1" && [[ -n "$(mark_cmd "$o1")" ]] && [[ $had_turn -eq 1 ]] && c=$((c + 1)) || echo "      (1) help: $o1"
+  grep -q '\[SCV 가이드\].*model-a' <<<"$hook_out" && c=$((c + 1)) || echo "      (2) hook: $(grep -c . <<<"$hook_out") lines, no guide warning"
+  grep -qx 'GUIDE: load model-a' <<<"$o2" && c=$((c + 1)) || echo "      (3) next help: $(grep '^GUIDE' <<<"$o2")"
+  grep -q 'guide=model-a decision=load read=0' "$R/scv/journal/.help-drift" 2>/dev/null && c=$((c + 1)) || echo "      (4) drift log"
+  if [[ $c -eq 4 ]]; then ok "OK [T11] unread→warn→load"; else fail "[T11] $c/4"; fi
+else
+  echo "  · (jq 없음 — T11 생략)"
+fi
+
+echo
+echo "T12. 읽고 표시함 → 경고 없음 (그대로 · 같은 턴 규약 재표시 + 드리프트 재설정 · 드리프트 재설정)"
+if command -v jq >/dev/null 2>&1; then
+  c=0
+  # (a) help load → 준 명령 그대로 실행 → 멈춤 훅
+  R="$(new_repo t12a)"; (cd "$R" && git init -q . 2>/dev/null)
+  o="$(help_wc "$R" --model vendor-model-a)"; cmd="$(mark_cmd "$o")"
+  (cd "$R" && SCV_HOST_PROFILE="$WORK/profile.env" eval "$cmd" >/dev/null 2>&1)
+  stop_hook "$R" "$QANS"
+  [[ ! -f "$R/scv/journal/.help-warn" || -z "$(grep 'SCV 가이드' "$R/scv/journal/.help-warn")" ]] && [[ ! -f "$R/scv/journal/.help-guide-turn" ]] && c=$((c + 1)) || echo "      (a) $(cat "$R/scv/journal/.help-warn" 2>/dev/null)"
+  # (b) 규약을 새로 읽는 턴: 지문 없음 → help load → 원문 표시 → 규약 표시(새 지문) → 멈춤 훅
+  R="$(new_repo t12b)"; (cd "$R" && git init -q . 2>/dev/null)
+  printf '{"session":"s1","protocol":0,"turn":1,"diag":"","diag_at":"","nonce":""}\n' > "$R/scv/journal/.help-state"
+  o="$(help_wc "$R" --model vendor-model-a)"; cmd="$(mark_cmd "$o")"
+  (cd "$R" && export SCV_HOST_PROFILE="$WORK/profile.env" && eval "$cmd" >/dev/null 2>&1 && bash "$HSTATE" mark >/dev/null 2>&1)
+  # 같은 멈춤에서 드리프트 재설정이 지금 지문을 비운다 — 그러면 턴 기록을 새 지문으로 옮겨 둔 것만이 근거다.
+  printf '{"session":"s1","protocol":0,"turn":1,"diag":"","diag_at":"","nonce":""}\n' > "$R/scv/journal/.help-state"
+  stop_hook "$R" "$QANS"
+  { [[ ! -f "$R/scv/journal/.help-warn" ]] || ! grep -q 'SCV 가이드' "$R/scv/journal/.help-warn"; } && c=$((c + 1)) || echo "      (b) $(cat "$R/scv/journal/.help-warn")"
+  # (c) 드리프트 재설정이 먼저 지금 지문을 비운 경우 — 판정만 직접 부른다
+  R="$(new_repo t12c)"
+  o="$(help_wc "$R" --model vendor-model-a)"; cmd="$(mark_cmd "$o")"
+  (cd "$R" && SCV_HOST_PROFILE="$WORK/profile.env" eval "$cmd" >/dev/null 2>&1)
+  printf '{"session":"s1","protocol":0,"turn":3,"diag":"","diag_at":"","nonce":""}\n' > "$R/scv/journal/.help-state"
+  v="$(cd "$R" && printf '%s' "$QANS" | SCV_HOST_PROFILE="$WORK/profile.env" bash "$MP" stop 2>/dev/null)"
+  [[ "$v" == "GUIDE_VERDICT: ok" ]] && c=$((c + 1)) || echo "      (c) $v"
+  if [[ $c -eq 3 ]]; then ok "OK [T12] 3/3 no false warning"; else fail "[T12] $c/3"; fi
+else
+  echo "  · (jq 없음 — T12 생략)"
+fi
+
+echo
+echo "T13. 다시 쓴 요청 — 기록했는데 답에 인용이 없을 때만 경고"
+verdict_for() {  # <이름> <대화 블록> <답> → 판정 줄
+  local R; R="$(new_repo "$1")"
+  help_wc "$R" --model vendor-model-a >/dev/null
+  (cd "$R" && SCV_HOST_PROFILE="$WORK/profile.env" bash "$MP" mark --model vendor-model-a >/dev/null 2>&1)
+  if [[ -n "$2" ]]; then mkdir -p "$R/scv/conversations"; printf '%s\n' "$2" > "$R/scv/conversations/20260927-000000-x.md"; fi
+  (cd "$R" && printf '%s' "$3" | SCV_HOST_PROFILE="$WORK/profile.env" bash "$MP" stop 2>/dev/null)
+}
+BLK="$(printf -- '---\nslug: x\n---\n\n## Turn 1 — t\nprotocol: abcd1234\n\n**User**: 로그인 고쳐\n\n**다시 쓴 요청**: 목표 · 끝 조건\n\n**Assistant**: 답\n')"
+OLDBLK="$(printf -- '## Turn 1 — t\n**다시 쓴 요청**: 옛 턴\n\n## Turn 2 — t\n**User**: 짧은 확인\n')"
+c=0
+v1="$(verdict_for t13a "$BLK" "$(printf 'lead only\n')")"; [[ "$v1" == "GUIDE_VERDICT: unshown" ]] && c=$((c + 1)) || echo "      (1) $v1"
+v2="$(verdict_for t13b "$BLK" "$QANS")";                    [[ "$v2" == "GUIDE_VERDICT: ok" ]] && c=$((c + 1)) || echo "      (2) $v2"
+v3="$(verdict_for t13c "$(printf '## Turn 1\n**User**: a\n')" "lead only")"; [[ "$v3" == "GUIDE_VERDICT: ok" ]] && c=$((c + 1)) || echo "      (3) $v3"
+v4="$(verdict_for t13d "$OLDBLK" "lead only")";             [[ "$v4" == "GUIDE_VERDICT: ok" ]] && c=$((c + 1)) || echo "      (4) last block only: $v4"
+v5="$(verdict_for t13e "$BLK" "")";                          [[ "$v5" == "GUIDE_VERDICT: ok" ]] && c=$((c + 1)) || echo "      (5) no answer body: $v5"
+# 멈춤 훅 경유: 호스트가 준 마지막 메시지엔 인용이 없어도, 같은 턴 앞 메시지(도구 호출 전)에 있으면 보인 것이다.
+if command -v jq >/dev/null 2>&1; then
+  hook_verdict() {  # <이름> <첫 메시지> <마지막 메시지> → 드리프트 로그의 verdict 값
+    local R tr; R="$(new_repo "$1")"; (cd "$R" && git init -q . 2>/dev/null); tr="$WORK/tr-$1.jsonl"
+    help_wc "$R" --model vendor-model-a >/dev/null
+    (cd "$R" && SCV_HOST_PROFILE="$WORK/profile.env" bash "$MP" mark --model vendor-model-a >/dev/null 2>&1)
+    mkdir -p "$R/scv/conversations"; printf '%s\n' "$BLK" > "$R/scv/conversations/20260927-000000-x.md"
+    { printf '{"type":"user","message":{"content":[{"type":"text","text":"q"}]}}\n'
+      jq -cn --arg t "$2" '{type:"assistant",message:{model:"vendor-model-a",content:[{type:"text",text:$t}]}}'
+      printf '{"type":"user","message":{"content":[{"type":"tool_result","content":"x"}]}}\n'
+      jq -cn --arg t "$3" '{type:"assistant",message:{model:"vendor-model-a",content:[{type:"text",text:$t}]}}'; } > "$tr"
+    (cd "$R" && jq -cn --arg p "$tr" --arg a "$3" '{transcript_path:$p,last_assistant_message:$a}' \
+       | CLAUDE_PLUGIN_ROOT="$CORE" SCV_HOST_PROFILE="$WORK/profile.env" GIT_AUTHOR_NAME="Hook User" bash "$STOP" >/dev/null 2>&1)
+    grep -o 'verdict=[a-z,]*' "$R/scv/journal/.help-drift" 2>/dev/null | tail -1
+  }
+  h1="$(hook_verdict t13f "$QANS" "done")";      [[ "$h1" == "verdict=ok" ]] && c=$((c + 1)) || echo "      (6) quote in first message: $h1"
+  h2="$(hook_verdict t13g "lead only" "done")";  [[ "$h2" == "verdict=unshown" ]] && c=$((c + 1)) || echo "      (7) no quote anywhere: $h2"
+else c=$((c + 2)); fi
+if [[ $c -eq 7 ]]; then ok "OK [T13] unshown only when recorded and not quoted"; else fail "[T13] $c/7"; fi
+
+echo
+echo "T14. 조용해야 할 때 — 판정할 것이 없으면 읽지도 쓰지도 않는다"
+c=0
+R="$(new_repo t14)"
+printf 'earlier warning\n' > "$R/scv/journal/.help-warn"
+help_wc "$R" --model other-model >/dev/null
+[[ ! -f "$R/scv/journal/.help-guide-turn" ]] && c=$((c + 1)) || echo "      (a) none left a turn record"
+printf '{\n  "SCV_MODEL_PROMPTING": "off"\n}\n' > "$R/scv/scv_settings.json"
+help_wc "$R" --model vendor-model-a >/dev/null
+[[ ! -f "$R/scv/journal/.help-guide-turn" ]] && c=$((c + 1)) || echo "      (b) switch off left a turn record"
+rm -f "$R/scv/scv_settings.json"
+o="$(cd "$R" && printf 'x' | SCV_HOST_PROFILE="$WORK/profile.env" bash "$MP" stop 2>/dev/null; echo "rc=$?")"
+[[ "$o" == "rc=0" ]] && c=$((c + 1)) || echo "      (c) no turn record: $o"
+printf 'garbage' > "$R/scv/journal/.help-guide-turn"
+o="$(cd "$R" && printf 'x' | SCV_HOST_PROFILE="$WORK/profile.env" bash "$MP" stop 2>/dev/null; echo "rc=$?")"
+[[ "$o" == "rc=0" && ! -f "$R/scv/journal/.help-guide-turn" ]] && c=$((c + 1)) || echo "      (d) broken turn record: $o"
+if command -v jq >/dev/null 2>&1; then
+  (cd "$R" && printf 'not json' | CLAUDE_PLUGIN_ROOT="$CORE" bash "$STOP" >/dev/null 2>&1) && c=$((c + 1)) || echo "      (e) broken hook input"
+else c=$((c + 1)); fi
+# 판정이 경고를 쓸 때 이전 경고를 지우지 않는다
+help_wc "$R" --model vendor-model-a >/dev/null
+(cd "$R" && printf 'x' | SCV_HOST_PROFILE="$WORK/profile.env" bash "$MP" stop >/dev/null 2>&1)
+grep -qx 'earlier warning' "$R/scv/journal/.help-warn" && grep -q 'SCV 가이드' "$R/scv/journal/.help-warn" && c=$((c + 1)) || echo "      (f) warn file: $(cat "$R/scv/journal/.help-warn")"
+if [[ $c -eq 6 ]]; then ok "OK [T14] silent · append-only"; else fail "[T14] $c/6"; fi
 
 echo
 echo "T7. 순수성 계약"

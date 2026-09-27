@@ -71,7 +71,7 @@ case "$cmd" in
   reset)  st="$(scv_hstate_reload "$st" "" reset 0)"; json="$(scv_hstate_render "$st")"; _write "$json"
           # 지문은 컨텍스트에 묶인 값 — 컨텍스트가 비워졌으니 파일도 비운다. 예약된 경고도 의미를 잃는다.
           # v0.59.0+: 모델별 가이드 읽음 기록도 컨텍스트에 묶인 값 — 비워서 다음 help 가 원문을 다시 읽게 한다.
-          for _f in "$NONCE_FILE" "$WARN_FILE" "$JOURNAL_DIR/.help-guide"; do [[ -f "$_f" && ! -L "$_f" ]] && rm -f "$_f" 2>/dev/null; done
+          for _f in "$NONCE_FILE" "$WARN_FILE" "$JOURNAL_DIR/.help-guide" "$JOURNAL_DIR/.help-guide-turn"; do [[ -f "$_f" && ! -L "$_f" ]] && rm -f "$_f" 2>/dev/null; done
           printf '%s\n' "$json" ;;
   mark)   _old="$(scv_hstate_nonce "$st")"
           _n="$(_nonce_new)"; st="$(scv_hstate_mark "$st" "$_n")"; json="$(scv_hstate_render "$st")"; _write "$json"
@@ -81,6 +81,12 @@ case "$cmd" in
           if [[ -f "$_gf" && ! -L "$_gf" && -f "$_mplib" ]] && source "$_mplib" 2>/dev/null; then
             _gl="$(head -c 4096 "$_gf" 2>/dev/null | head -1)"; _nl="$(scv_mp_restamp "$_gl" "$_old" "$_n")"
             [[ -n "$_nl" ]] && _put "$_gf" "$_nl"
+          fi
+          # v0.60.0+: 이번 턴 기록(종료 훅의 판정 근거)도 새 지문으로 옮긴다 — 안 옮기면 판정이 옛 지문을 본다.
+          _gt="$JOURNAL_DIR/.help-guide-turn"
+          if [[ -f "$_gt" && ! -L "$_gt" && -f "$_mplib" ]] && { declare -F scv_mp_turn_restamp >/dev/null 2>&1 || source "$_mplib" 2>/dev/null; }; then
+            _tl="$(head -c 4096 "$_gt" 2>/dev/null | head -1)"; _tnl="$(scv_mp_turn_restamp "$_tl" "$_old" "$_n")"
+            [[ -n "$_tnl" ]] && _put "$_gt" "$_tnl"
           fi
           printf '%s\n' "$json" ;;
   stop)   # 인자: --echo on|off · --lint on|off · --cap N · --now ISO · --src host|transcript|none. stdin = 직전 답 본문(없으면 린트 생략).
