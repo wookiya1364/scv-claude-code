@@ -1,0 +1,7 @@
+# fixture index — neutral ids only (core payload must not name providers or models)
+@refresh	refresh.sh
+vendor-model-a	model-a	model-a.md	https://example.invalid/model-a.md	2026-09-01
+vendor-model-a-5	model-a-5	model-a-5.md	https://example.invalid/model-a-5.md	2026-09-01
+vendor-model-b	model-b	model-b.md	https://example.invalid/model-b.md	2026-05-01
+vendor-model-gone	model-gone	model-gone.md	https://example.invalid/model-gone.md	2026-09-01
+*	common	common.md	https://example.invalid/common.md	2026-09-01

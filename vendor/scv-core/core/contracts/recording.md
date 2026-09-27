@@ -16,7 +16,9 @@ help 만 기록하고 나머지 액션은 기록하지 않던 때, sync 를 돌�
 2. **어디에** — 이 세션이 help 로 열었거나 이어 받은 대화 파일이 있으면 그 파일에 덧붙인다. 없으면 저널
    한 줄(`scripts/journal-append.sh`)로 남긴다. 새 대화 파일을 여는 것은 help 의 몫이다.
 3. **형식** — 대화 파일에는 help 와 같은 Turn 블록(`## Turn <N> — <ISO>` · `protocol:` · `**User**` ·
-   `**<host agent>**` — help 가 쓰는 그 이름). 저널은 한 줄.
+   `**<host agent>**` — help 가 쓰는 그 이름). 저널은 한 줄. 모델별 프롬프팅이 켜진 help 턴(v0.59.0+)은
+   `**Rewritten request**:`(해석된 언어로, 예: `**다시 쓴 요청**:`) 단락을 더한다 — 모양은
+   `protocols/help/prompt-refine.md` 7단계.
 4. **리댁션** — 양쪽 모두 `journal-append.sh --redact-only` 를 거친 출력만 쓴다. 필터는 그물이지 면허가 아니다:
    비밀은 처음부터 적지 않는다.
 5. **짧은 턴** — 상태 출력만 있거나 한 낱말 확인이면 한 줄 요약으로 충분하다. 덧붙이되 새 파일을 열지 않는다.

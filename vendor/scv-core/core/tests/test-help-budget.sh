@@ -44,7 +44,7 @@ FULL_MAX="${SCV_HELP_FULL_MAX:-9000}"      # 세션당 1회 읽는 full.md 상�
 TOTAL_MAX="${SCV_HELP_TOTAL_MAX:-32000}"
 TURN_MAX="${SCV_HELP_TURN_MAX:-9500}"     # v0.51.0: 진단 변동 없는 턴(훅 한 줄) 기준
 WC_MAX="${SCV_HELP_WITH_CONTEXT_MAX:-1000}"
-SUBS="language-setup legacy-migration hydrate archive-search promote-handoff"
+SUBS="language-setup legacy-migration hydrate archive-search promote-handoff prompt-refine"
 
 PROTO="$CORE/protocols/help.md"
 SUBDIR="$CORE/protocols/help"
@@ -141,7 +141,7 @@ if [[ -f "$FULL" ]]; then
   FULL_BYTES=$(wc -c < "$FULL" | tr -d '[:space:]')
   v="$(scv_help_budget "$FULL_BYTES" "$FULL_MAX" full.md)"; [[ -z "$v" ]] && ok "full.md ${FULL_BYTES}B ≤ ${FULL_MAX}B" || fail "$v"
   REFS_FULL="$(scv_help_refs "$(cat "$FULL")")"
-  v="$(scv_help_check_refs "$REFS_FULL" "legacy-migration hydrate archive-search promote-handoff" "$(printf '%s' "${ACTUAL# }" | tr ' ' '\n' | grep -vxE 'full|language-setup' | tr '\n' ' ')")"
+  v="$(scv_help_check_refs "$REFS_FULL" "legacy-migration hydrate archive-search promote-handoff prompt-refine" "$(printf '%s' "${ACTUAL# }" | tr ' ' '\n' | grep -vxE 'full|language-setup' | tr '\n' ' ')")"
   [[ -z "$v" ]] && ok "full.md 가 분기 넷을 각 1회 참조 · 고아 없음" || fail "full.md 참조: $(printf '%s' "$v" | tr '\n' ';')"
 else
   fail "full.md 없음"

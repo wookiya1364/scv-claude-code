@@ -18,6 +18,8 @@
     "SCV_GRAPH_DOCS": "그래프에 넣을 문서 위치(공백 구분). 폴더는 안의 *.md 전부, 그 외는 글롭. 기본 \"docs README.md README.*.md core/contracts\".",
     "SCV_GRAFT": "Graft 어댑터: auto(기본) | off. graft 가 PATH 에 있고 graft/ 그래프가 있을 때만 회귀 앞단(blast)·계획/구현 헤더(ask)에 코드 영향·후보를 덧붙인다. SCV 는 설치·init·훅을 하지 않는다. SCV_GRAFT_TIMEOUT(초, 기본 20).",
     "SCV_RESUME_RECAP": "비운 뒤 되찾기: on(기본) | off. off 만 끕니다. 대화를 지우거나(/clear) 컨텍스트가 압축되거나 세션을 재개한 직후, 진행 중 계획·최근 결정 5건·활성 대화 1건(전문)을 모델에 다시 실어 보냅니다. 아무 것도 새로 쓰지 않습니다 — 이미 저장된 것을 조립할 뿐. 새 세션 시작에는 뜨지 않습니다(첫 메시지의 preflight 가 맡음).",
+    "SCV_MODEL_PROMPTING": "모델별 프롬프팅: on(기본) | off. 래퍼가 싣는 공식 프롬프팅 가이드 원문(오프라인 사본) 중 지금 답하는 모델의 것을 help 가 읽게 하고(모델이 바뀌거나 압축·/clear·재개 뒤 한 번), 요청을 그 가이드 기준으로 다시 써 답 앞에 보인다. 가이드가 요구하는 요소를 대화·저장소에서 못 찾을 때만 추천 답과 함께 한 번 묻는다. 래퍼에 가이드가 없거나 모델을 모르면 조용하다. off 면 help 가 GUIDE: none.",
+    "SCV_MODEL_PROMPTING_MAX_AGE_DAYS": "가이드 원문 사본의 유효 기간(일). 기본 90. 가져온 날짜가 이보다 오래되면 help 가 갱신 명령을 한 줄 알린다(막지 않는다).",
     "NOTIFIER_PROVIDER": "팀 보고 채널: slack | discord. 비우면 보고 기능 꺼짐. 토큰·채널 ID 는 비밀 파일에.",
     "NOTIFIER_DRY_RUN": "1 이면 보고를 보내지 않고 내용만 찍음. 기본 0.",
     "NOTIFIER_RETRY_MAX": "보고 전송·첨부 업로드 재시도 횟수. 기본 3.",
@@ -61,6 +63,8 @@
   "SCV_GRAPH_DOCS": "docs README.md README.*.md core/contracts",
   "SCV_GRAFT": "auto",
   "SCV_RESUME_RECAP": "on",
+  "SCV_MODEL_PROMPTING": "on",
+  "SCV_MODEL_PROMPTING_MAX_AGE_DAYS": "90",
 
   "NOTIFIER_PROVIDER": "",
   "NOTIFIER_DRY_RUN": "0",

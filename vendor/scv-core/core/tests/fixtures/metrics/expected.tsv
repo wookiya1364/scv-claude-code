@@ -15,4 +15,7 @@ purity_section	P1	1
 purity_section	P2	0
 purity_section	P3	1
 purity_section	P4	0
+model_answers	vendor-model-a	3
+model_answers	vendor-model-b	2
+model_answers	-	1
 unmatched	archived	29818680
