@@ -275,14 +275,31 @@ scv_mp_turn_verdict() {
 }
 
 # @pure
-# <판정 줄들> <키> → 다음 턴에 실을 경고 문장들 (매 턴 훅이 지시 바로 뒤에 한 번 싣는다).
+# <판정 줄들> <키> [<상세 줄들>] → 다음 턴에 실을 경고 문장들 (매 턴 훅이 지시 바로 뒤에 한 번 싣는다).
+# 상세 줄(v0.60.1+)은 help 가 그 턴에 실제로 낸 `GUIDE_FILE:` · `GUIDE_MARK_CMD:` 줄 — 안 읽음 경고 뒤에 두 칸 들여 붙여,
+# help 출력을 보지 않고도 경고만으로 따라 할 수 있게 한다. 들여 쓴 줄은 초기화 때 경고와 함께 남는다(scv_mp_warn_keep).
 scv_mp_warn_lines() {
-  local verdicts="${1:-}" key="${2:-?}" v
+  local verdicts="${1:-}" key="${2:-?}" detail="${3:-}" v d
   while IFS= read -r v || [[ -n "$v" ]]; do
     case "$v" in
-      unread)  printf '%s\n' "[SCV 가이드] 직전 턴에 help 가 이 모델의 프롬프팅 가이드 원문($key)을 읽으라고 했지만 읽음 표시가 없다 — 이번 턴에 GUIDE_FILE 을 먼저 읽고 GUIDE_MARK_CMD 를 실행한 뒤, 그 가이드로 요청을 다시 써라." ;;
+      unread)  printf '%s\n' "[SCV 가이드] 직전 턴에 help 가 이 모델의 프롬프팅 가이드 원문($key)을 읽으라고 했지만 읽음 표시가 없다 — 이번 턴에 아래 원문을 끝까지 읽고 아래 명령을 실행한 뒤, 그 가이드로 요청을 다시 써라."
+               while IFS= read -r d || [[ -n "$d" ]]; do [[ -n "${d//[[:space:]]/}" ]] && printf '  %s\n' "$d"; done <<< "$detail" ;;
       unshown) printf '%s\n' "[SCV 가이드] 직전 턴에 다시 쓴 요청을 기록만 하고 답에 보이지 않았다 — 이번 턴에는 결론 바로 뒤에 인용 블록으로 보여라." ;;
     esac
   done <<< "$verdicts"
+  return 0
+}
+
+# @pure
+# <경고 파일 내용> → 초기화(재개 · 압축 · 지우기) 뒤에도 남길 줄들: `[SCV 가이드]` 로 시작하는 줄과 그 뒤에 이어지는 두 칸
+# 들여 쓴 줄. 나머지(규약 지문 · 답 모양 경고)는 버린다 — 규약은 어차피 다시 읽히지만, 가이드 원문을 건너뛴 사실은
+# 초기화로 사라지지 않는다(0.60.0 실측: 재개 훅이 경고를 지워 다음 턴 모델에게 닿지 않았다).
+scv_mp_warn_keep() {
+  local text="${1:-}" line keep=0
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" == "[SCV 가이드]"* ]]; then keep=1; printf '%s\n' "$line"; continue; fi
+    if (( keep )) && [[ "$line" == "  "* ]]; then printf '%s\n' "$line"; continue; fi
+    keep=0
+  done <<< "$text"
   return 0
 }
