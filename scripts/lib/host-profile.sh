@@ -16,6 +16,8 @@ SCV_ROOT_ENV="CLAUDE_PLUGIN_ROOT"
 SCV_GRAPH_SKILL_PATHS=""
 SCV_UPDATE_OWNER="adapter"
 SCV_MODEL_POLICY_OWNER="adapter"
+# 0.59.0+ 선택 키: 래퍼가 싣는 모델별 프롬프팅 가이드 폴더(코어 루트 기준 상대 경로 또는 절대 경로). 비면 기능이 조용하다.
+SCV_PROMPTING_GUIDES=""
 
 _scv_profile_assign() {
   local key="$1" value="$2"
@@ -31,6 +33,7 @@ _scv_profile_assign() {
     SCV_GRAPH_SKILL_PATHS) SCV_GRAPH_SKILL_PATHS="$value" ;;
     SCV_UPDATE_OWNER) SCV_UPDATE_OWNER="$value" ;;
     SCV_MODEL_POLICY_OWNER) SCV_MODEL_POLICY_OWNER="$value" ;;
+    SCV_PROMPTING_GUIDES) SCV_PROMPTING_GUIDES="$value" ;;
   esac
 }
 

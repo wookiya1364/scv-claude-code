@@ -4,11 +4,12 @@
 # 이미 디스크에 있는 기록만 읽는다 — 아카이브 색인, 계획서, 대화 파일, 결정 로그.
 # 어떤 파일도 쓰지 않고, 시각·난수·네트워크를 읽지 않는다. 같은 입력에 같은 출력.
 #
-# 지표 넷 (각각 적용 범위 n/m 과 함께):
+# 지표 다섯 (각각 적용 범위 n/m 과 함께):
 #   계획당 대화 턴 수      — 계획서 raw_sources 가 가리키는 대화 파일들의 Turn 수 합
 #   승인→보관 리드타임(분) — 결정 로그의 같은 slug adopted → archived 시각 차
 #   후속 재발률            — obsoleted_by 의 대상이거나 supersedes 가 비어 있지 않은 계획
 #   순수 절 보유율         — 계획서에 "## 순수함수 · 파이프라인" 절이 있는 계획
+#   모델별 답 수 (0.59.0+) — 저널 답 기록 머리줄의 모델 표기("assistant · <id>")별 답 수
 #
 # 이것은 각 프로젝트가 자기 파일로 자기를 재는 계기판이지 제품 통계가 아니다.
 # 데이터가 없는 계획은 0 이 아니라 none — 적용 범위의 분모에만 든다.
@@ -31,7 +32,7 @@ MODE="table"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --tsv) MODE="tsv"; shift ;;
-    -h|--help) sed -n '2,23p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,24p' "$0"; exit 0 ;;
     *) echo "metrics.sh: unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -87,6 +88,16 @@ while IFS=$'\t' read -r slug status obs || [[ -n "$slug" ]]; do
   purity_lines+="$slug	$purity"$'\n'
 done <<< "$index_lines"
 
+# v0.59.0+: 저널의 답 기록 머리줄 — 모델별 답 수. 숨김 파일(.help-*)은 훅 상태라 읽지 않는다.
+journal_text=""
+if [[ -d "$SCV_DIR/journal" ]]; then
+  for jf in "$SCV_DIR/journal"/*.md; do
+    [[ -f "$jf" && ! -L "$jf" ]] || continue
+    journal_text+="$(<"$jf")"$'\n'
+  done
+fi
+answer_lines="$(scv_mx_count_answers "$journal_text")"
+
 # ---------------------------------------------------------------- 순수: 지표 → 요약
 
 lead_lines="$(scv_mx_metric_lead_time "$index_lines" "$decision_lines")"
@@ -100,6 +111,9 @@ if [[ "$MODE" == "tsv" ]]; then
   scv_mx_render_tsv lead_time_minutes "$lead_lines"
   scv_mx_render_tsv followup "$followup_lines"
   scv_mx_render_tsv purity_section "$purity_lines"
+  while IFS=$'\t' read -r alabel acount || [[ -n "$alabel" ]]; do
+    [[ -n "$alabel" ]] && printf 'model_answers\t%s\t%s\n' "$alabel" "$acount"
+  done <<< "$answer_lines"
   while IFS=$'\t' read -r dslug verdict mins || [[ -n "$dslug" ]]; do
     [[ "$dslug" == "unmatched" ]] && printf 'unmatched\t%s\t%s\n' "$verdict" "$mins"
   done <<< "$decision_lines"
@@ -111,3 +125,4 @@ scv_mx_render_table \
   "$(scv_mx_aggregate "$lead_lines")" \
   "$(scv_mx_aggregate "$followup_lines")" \
   "$(scv_mx_aggregate "$purity_lines")"
+scv_mx_render_models "$answer_lines"
