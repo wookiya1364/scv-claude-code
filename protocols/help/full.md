@@ -135,6 +135,12 @@ the user asks to move on, or 8+ turns have passed), hand the conversation to
 `/scv:promote`; the branch file carries the question and Steps B4–B6.
 Read `<plugin root>/protocols/help/promote-handoff.md` now and follow it.
 
+## Per-model prompting (v0.59.0+)
+
+`--model "<id>"`: your exact model id from the system prompt (omit if unknown). `GUIDE:` says
+whether that model's offline prompting guide is in context (`load`/`loaded`/`none`).
+Read `<plugin root>/protocols/help/prompt-refine.md` now (once per session) and follow it.
+
 ## Deep questions go to a background investigator (switch, v0.46.0+)
 
 Skip this section unless `scv/scv_settings.json` sets `SCV_DELEGATE_EFFORT=on`. When on,
