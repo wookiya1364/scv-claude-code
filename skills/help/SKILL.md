@@ -128,7 +128,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/help.sh"
 With a request:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/help.sh" --with-context
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/help.sh" --with-context --model "<id>"
 ```
 
 Parse `ARG_CONTEXT:` (`none` → Mode A · `provided` → Mode B/B'), `UNFINISHED_CONVERSATIONS:`,

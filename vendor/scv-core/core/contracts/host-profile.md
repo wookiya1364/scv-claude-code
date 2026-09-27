@@ -19,6 +19,12 @@ Required keys:
 | `SCV_UPDATE_OWNER` | Must be `adapter`. |
 | `SCV_MODEL_POLICY_OWNER` | Must be `adapter`. |
 
+Optional keys:
+
+| Key | Contract |
+|---|---|
+| `SCV_PROMPTING_GUIDES` | **0.59.0+.** Folder holding the wrapper's per-model prompting guides and their `INDEX.tsv`, as a path relative to the Core root (the directory that holds `host-profile.env`) or absolute. Path characters only (`A-Z a-z 0-9 . _ / -`). When absent or empty the per-model prompting step stays silent (`GUIDE: none`). The guides themselves stay in the wrapper — Core payload never carries provider or model names. Index format: `protocols/help/prompt-refine.md`. |
+
 Unknown or duplicate keys, shell substitutions, command separators, and
 multiline values are rejected. The two adapter-owned actions stay outside the
 canonical payload because installation and model selection are runtime
