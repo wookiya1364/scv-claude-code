@@ -150,10 +150,12 @@ fi
     SCV_HOST_PROFILE_API SCV_HOST_ID SCV_HOST_LABEL SCV_ACTION_TEMPLATE \
     SCV_ARGUMENT_STYLE \
     SCV_STATE_INDEX SCV_LEGACY_STATE_INDEXES SCV_ROOT_ENV \
-    SCV_GRAPH_SKILL_PATHS SCV_UPDATE_OWNER SCV_MODEL_POLICY_OWNER; do
+    SCV_GRAPH_SKILL_PATHS SCV_UPDATE_OWNER SCV_MODEL_POLICY_OWNER \
+    SCV_PROMPTING_GUIDES; do
     value="$(profile_get "$key")"
-    if [[ "$key" == "SCV_LEGACY_STATE_INDEXES" && -z "$value" ]] \
-      && ! grep -q '^SCV_LEGACY_STATE_INDEXES=' "$PROFILE"; then
+    # 선택 키는 프로필에 없으면 쓰지 않는다 — 없는 키를 빈 값으로 만들어 넣지 않는다.
+    if [[ ( "$key" == "SCV_LEGACY_STATE_INDEXES" || "$key" == "SCV_PROMPTING_GUIDES" ) && -z "$value" ]] \
+      && ! grep -q "^$key=" "$PROFILE"; then
       continue
     fi
     printf '%s=%s\n' "$key" "$value"

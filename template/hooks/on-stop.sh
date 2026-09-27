@@ -125,5 +125,16 @@ fi
 
 [[ -n "${SUMMARY//[[:space:]]/}" ]] || exit 0
 
-printf '%s\n' "$SUMMARY" | bash "$JOURNAL_APPEND" --speaker assistant >/dev/null 2>&1 || true
+# v0.59.0+ — 답한 모델을 화자 이름에 붙인다 (계기판의 모델별 답 수). 대화 기록의 마지막 답 메시지에
+# 모델 id 가 있을 때만: "assistant · <id>". 없으면 이전과 같은 "assistant". 이름을 만드는 판단은 순수부.
+_scv_speaker="assistant"
+_scv_mplib="${SCV_CORE_ROOT:-$SCRIPT_DIR/../..}/scripts/lib/model-prompting.sh"
+# shellcheck disable=SC1090
+if [[ -f "$_scv_mplib" ]] && source "$_scv_mplib" 2>/dev/null; then
+  _scv_model="$(tail -n 200 "$TRANSCRIPT" 2>/dev/null \
+    | jq -Rr 'fromjson? | select(.type? == "assistant") | (.message.model // empty) | strings' 2>/dev/null \
+    | tail -n 1 || true)"
+  _scv_speaker="$(scv_mp_speaker_label "$_scv_model")"
+fi
+printf '%s\n' "$SUMMARY" | bash "$JOURNAL_APPEND" --speaker "$_scv_speaker" >/dev/null 2>&1 || true
 exit 0

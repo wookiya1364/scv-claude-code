@@ -27,6 +27,7 @@ SCV_ROOT_ENV=""
 SCV_GRAPH_SKILL_PATHS=""
 SCV_UPDATE_OWNER=""
 SCV_MODEL_POLICY_OWNER=""
+SCV_PROMPTING_GUIDES=""
 line_no=0
 while IFS= read -r line || [[ -n "$line" ]]; do
   line_no=$((line_no + 1))
@@ -44,7 +45,8 @@ while IFS= read -r line || [[ -n "$line" ]]; do
   case "$key" in
     SCV_HOST_PROFILE_API|SCV_HOST_ID|SCV_HOST_LABEL|SCV_ACTION_TEMPLATE|\
     SCV_ARGUMENT_STYLE|SCV_STATE_INDEX|SCV_LEGACY_STATE_INDEXES|SCV_ROOT_ENV|\
-    SCV_GRAPH_SKILL_PATHS|SCV_UPDATE_OWNER|SCV_MODEL_POLICY_OWNER) ;;
+    SCV_GRAPH_SKILL_PATHS|SCV_UPDATE_OWNER|SCV_MODEL_POLICY_OWNER|\
+    SCV_PROMPTING_GUIDES) ;;
     *) echo "profile:$line_no: unknown key: $key" >&2; exit 1 ;;
   esac
   case "|$seen_keys|" in
@@ -82,6 +84,12 @@ done
   || { echo "profile: SCV_UPDATE_OWNER must be adapter" >&2; exit 1; }
 [[ "$SCV_MODEL_POLICY_OWNER" == "adapter" ]] \
   || { echo "profile: SCV_MODEL_POLICY_OWNER must be adapter" >&2; exit 1; }
+
+# 선택 키 (0.59.0+): 모델별 프롬프팅 가이드 폴더. 경로 글자만 — 공백·셸 문자 없음.
+if [[ -n "$SCV_PROMPTING_GUIDES" ]]; then
+  [[ "$SCV_PROMPTING_GUIDES" =~ ^[A-Za-z0-9._/-]+$ ]] \
+    || { echo "profile: invalid SCV_PROMPTING_GUIDES (path characters only)" >&2; exit 1; }
+fi
 
 template="$SCV_ACTION_TEMPLATE"
 without_one="${template/\{action\}/}"

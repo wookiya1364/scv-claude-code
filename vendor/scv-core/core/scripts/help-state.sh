@@ -70,10 +70,19 @@ case "$cmd" in
   prompt) st="$(scv_hstate_reload "$st" "${1:-}" prompt "${2:-0}")"; json="$(scv_hstate_render "$st")"; _write "$json"; printf '%s\n' "$json" ;;
   reset)  st="$(scv_hstate_reload "$st" "" reset 0)"; json="$(scv_hstate_render "$st")"; _write "$json"
           # 지문은 컨텍스트에 묶인 값 — 컨텍스트가 비워졌으니 파일도 비운다. 예약된 경고도 의미를 잃는다.
-          for _f in "$NONCE_FILE" "$WARN_FILE"; do [[ -f "$_f" && ! -L "$_f" ]] && rm -f "$_f" 2>/dev/null; done
+          # v0.59.0+: 모델별 가이드 읽음 기록도 컨텍스트에 묶인 값 — 비워서 다음 help 가 원문을 다시 읽게 한다.
+          for _f in "$NONCE_FILE" "$WARN_FILE" "$JOURNAL_DIR/.help-guide"; do [[ -f "$_f" && ! -L "$_f" ]] && rm -f "$_f" 2>/dev/null; done
           printf '%s\n' "$json" ;;
-  mark)   _n="$(_nonce_new)"; st="$(scv_hstate_mark "$st" "$_n")"; json="$(scv_hstate_render "$st")"; _write "$json"
-          _put "$NONCE_FILE" "$_n"; printf '%s\n' "$json" ;;
+  mark)   _old="$(scv_hstate_nonce "$st")"
+          _n="$(_nonce_new)"; st="$(scv_hstate_mark "$st" "$_n")"; json="$(scv_hstate_render "$st")"; _write "$json"
+          _put "$NONCE_FILE" "$_n"
+          # v0.59.0+: 같은 턴(같은 컨텍스트)에 모델별 가이드 원문을 먼저 읽고 표시했다면, 그 읽음 기록을 새 지문으로 옮긴다.
+          _gf="$JOURNAL_DIR/.help-guide"; _mplib="$SCRIPT_DIR/lib/model-prompting.sh"
+          if [[ -f "$_gf" && ! -L "$_gf" && -f "$_mplib" ]] && source "$_mplib" 2>/dev/null; then
+            _gl="$(head -c 4096 "$_gf" 2>/dev/null | head -1)"; _nl="$(scv_mp_restamp "$_gl" "$_old" "$_n")"
+            [[ -n "$_nl" ]] && _put "$_gf" "$_nl"
+          fi
+          printf '%s\n' "$json" ;;
   stop)   # 인자: --echo on|off · --lint on|off · --cap N · --now ISO · --src host|transcript|none. stdin = 직전 답 본문(없으면 린트 생략).
           _esw=on; _lsw=on; _cap=2; _now=""; _src=""
           while [[ $# -gt 0 ]]; do

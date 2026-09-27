@@ -16,7 +16,15 @@ WANT_INDEX=0
 # the user typed after /scv:help). If empty, /scv:help runs in diagnosis mode.
 # If non-empty, /scv:help enters conversation mode (the help protocol handles).
 CONV_ARG=""
+# v0.59.0+: --model <id> (또는 --model=<id>) — 답하는 모델이 자기 모델 id 를 넘긴다. 헤더 끝에
+# GUIDE 줄들(이 모델의 프롬프팅 가이드 원문을 읽어야 하나)이 붙는다. 없으면 출력은 이전과 바이트 단위로 같다.
+MODEL_ID=""; HAS_MODEL=0; _want_model=0
 for a in "$@"; do
+  if [[ $_want_model -eq 1 ]]; then MODEL_ID="$a"; HAS_MODEL=1; _want_model=0; continue; fi
+  case "$a" in
+    --model) _want_model=1; HAS_MODEL=1; continue ;;
+    --model=*) MODEL_ID="${a#--model=}"; HAS_MODEL=1; continue ;;
+  esac
   case "$a" in
     --verbose|-v) VERBOSE=1 ;;
     --with-context) HAS_CONTEXT=1; HEADER_ONLY=1 ;;
@@ -176,6 +184,10 @@ if [[ $HEADER_ONLY -eq 1 ]]; then
     scv_hstate_protocol_line "$(scv_hstate_parse "$_hs_raw")" "$_hs_sw"; echo
   else
     echo "PROTOCOL: load"
+  fi
+  # v0.59.0+ — GUIDE: load|loaded|none (+ GUIDE_FILE / GUIDE_STALE / GUIDE_MISSING). 판단은 lib/model-prompting.sh.
+  if [[ $HAS_MODEL -eq 1 ]]; then
+    bash "$SCRIPT_DIR/model-prompting.sh" guide --model "$MODEL_ID" 2>/dev/null || echo "GUIDE: none"
   fi
   exit 0
 fi
