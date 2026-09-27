@@ -116,10 +116,18 @@ if [[ "${_scv_always:-on}" != "off" ]] && declare -F scv_force_routing >/dev/nul
   # v0.50.0+ — 종료 훅이 예약한 경고(규약 지문 없음 · 답 모양 위반)를 지시 바로 뒤에 한 번 싣고 지운다.
   # 표식은 이미 protocol=0 이라 이번 help 호출이 규약 전체를 다시 읽는다 — 이 줄은 그 이유를 말할 뿐이다.
   _scv_warn="${SCV_JOURNAL_DIR:-scv/journal}/.help-warn"
+  # v0.61.0+ — 이 컨텍스트에서 아직 가이드 원문을 안 읽었으면, help 가 마지막으로 본 모델의 원문 경로 · 표시 명령을 싣는다.
+  # 경고 파일을 지우기 전에 판단한다(가이드 경고가 이미 있으면 같은 내용이라 싣지 않는다). 어떤 실패도 아무것도 안 싣는다.
+  _scv_guide_first=""
+  if [[ -f "$CORE_HOME/scripts/model-prompting.sh" ]]; then
+    _scv_psid=""; command -v jq >/dev/null 2>&1 && _scv_psid="$(printf '%s' "$INPUT" | jq -r 'try (.session_id // empty)' 2>/dev/null || true)"
+    _scv_guide_first="$(bash "$CORE_HOME/scripts/model-prompting.sh" prompt --session "$_scv_psid" 2>/dev/null | head -c 2048 || true)"
+  fi
   if [[ -f "$_scv_warn" && ! -L "$_scv_warn" ]]; then
     head -c 2048 "$_scv_warn" 2>/dev/null; printf '\n'
     rm -f "$_scv_warn" 2>/dev/null || true
   fi
+  [[ -n "${_scv_guide_first//[[:space:]]/}" ]] && printf '%s\n\n' "$_scv_guide_first"
   _scv_emit_delegate
   if [[ "$_scv_pre" == "on" ]]; then
     printf '%s\n' "$(scv_force_banner "$_scv_pre")"

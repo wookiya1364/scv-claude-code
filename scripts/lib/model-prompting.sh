@@ -303,3 +303,21 @@ scv_mp_warn_keep() {
   done <<< "$text"
   return 0
 }
+
+# ---------------------------------------------------------------- 첫 턴 안내 (v0.61.0+)
+# 매 턴 훅은 모델이 거르지 못하는 통로다(0.60.2 실측: 둘째 턴 훅의 경로 · 명령을 받자 원문을 읽었다). 훅 입력에는 모델
+# 이름이 없으므로, help 가 마지막으로 본 모델의 원문 경로 · 표시 명령 기록(.help-guide-last)을 새 컨텍스트의 첫 턴에 싣는다.
+# 기록: 첫 줄 = 모델 id 또는 "none", 둘째 줄부터 = help 가 낸 GUIDE_FILE · GUIDE_MARK_CMD 줄.
+
+# @pure
+# <스위치 on|off> <읽음 0|1> <가이드 경고 예약됨 0|1> <기록 전문> → 매 턴 훅이 실을 블록 (싣지 않으면 빈 값).
+scv_mp_first_turn_lines() {
+  local sw="${1:-on}" read="${2:-0}" warned="${3:-0}" rec="${4:-}" model detail d
+  [[ "$sw" == "on" && "$read" != "1" && "$warned" != "1" ]] || return 0
+  model="${rec%%$'\n'*}"; detail=""; [[ "$rec" == *$'\n'* ]] && detail="${rec#*$'\n'}"
+  model="${model//[[:space:]]/}"
+  [[ -n "$model" && "$model" != "none" && -n "${detail//[[:space:]]/}" ]] || return 0
+  printf '%s\n' "[SCV 가이드] 이 컨텍스트에서 아직 이 모델의 프롬프팅 가이드 원문을 읽지 않았다 — 답하기 전에 아래 원문을 끝까지 읽고 아래 명령을 실행하라(지난 모델 $model 기준 — 지금 모델이 다르면 help 의 GUIDE 줄을 따르라)."
+  while IFS= read -r d || [[ -n "$d" ]]; do [[ -n "${d//[[:space:]]/}" ]] && printf '  %s\n' "$d"; done <<< "$detail"
+  return 0
+}
