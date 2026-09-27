@@ -5,7 +5,8 @@
 #
 # 계획: scv/archive/20260927-wookiya1364-per-model-prompting/TESTS.md (T1~T9)
 #       scv/archive/20260927-wookiya1364-prompting-read-verdict/TESTS.md (결과 판정 — 이 파일의 T10~T14)
-#       scv/promote/20260927-wookiya1364-prompting-warn-delivery/TESTS.md (경고 전달 — 이 파일의 T15~T16)
+#       scv/archive/20260927-wookiya1364-prompting-warn-delivery/TESTS.md (경고 전달 — 이 파일의 T15~T17)
+#       scv/promote/20260928-wookiya1364-prompting-first-turn/TESTS.md (첫 턴 안내 — 이 파일의 T18~T19)
 # 픽스처는 중립 id 만 쓴다 — 코어 payload 에 제공자·모델 이름을 넣지 않는다(tests/test-host-neutral.sh).
 #
 # Run: bash core/tests/test-model-prompting.sh
@@ -583,6 +584,64 @@ if command -v jq >/dev/null 2>&1; then
 else
   echo "  · (jq 없음 — T17 생략)"
 fi
+
+echo
+echo "T18. 첫 턴 안내 — 순수부"
+N=0; BAD=0
+T18OUT="$(bash -c '
+  source "'"$LIB"'"
+  e() { printf "%s\n" "$1=$(printf "%s" "$2" | tr "\n" "|")"; }
+  REC="$(printf "vendor-model-a\nGUIDE_FILE: /g/a.md\nGUIDE_FILE: /g/c.md\nGUIDE_MARK_CMD: bash \"/s/model-prompting.sh\" mark --model \"vendor-model-a\"")"
+  e f1 "$(scv_mp_first_turn_lines on 0 0 "$REC")"
+  e f2 "$(scv_mp_first_turn_lines off 0 0 "$REC")"
+  e f3 "$(scv_mp_first_turn_lines on 1 0 "$REC")"
+  e f4 "$(scv_mp_first_turn_lines on 0 1 "$REC")"
+  e f5 "$(scv_mp_first_turn_lines on 0 0 "")"
+  e f6 "$(scv_mp_first_turn_lines on 0 0 "none")"
+  e f7 "$(scv_mp_first_turn_lines on 0 0 "vendor-model-a")"
+')"
+g() { printf '%s\n' "$T18OUT" | grep -m1 "^$1=" | sed "s/^$1=//"; }
+H="[SCV 가이드] 이 컨텍스트에서 아직 이 모델의 프롬프팅 가이드 원문을 읽지 않았다 — 답하기 전에 아래 원문을 끝까지 읽고 아래 명령을 실행하라(지난 모델 vendor-model-a 기준 — 지금 모델이 다르면 help 의 GUIDE 줄을 따르라)."
+eqc "block when unread" "$H|  GUIDE_FILE: /g/a.md|  GUIDE_FILE: /g/c.md|  GUIDE_MARK_CMD: bash \"/s/model-prompting.sh\" mark --model \"vendor-model-a\"" "$(g f1)"
+eqc "switch off" "" "$(g f2)"
+eqc "already read" "" "$(g f3)"
+eqc "guide warning already scheduled" "" "$(g f4)"
+eqc "no record" "" "$(g f5)"
+eqc "record none" "" "$(g f6)"
+eqc "record without lines" "" "$(g f7)"
+if [[ $BAD -eq 0 ]]; then ok "OK [T18] $N/$N"; else fail "[T18] $((N - BAD))/$N"; fi
+
+echo
+echo "T19. 첫 턴 안내 — 새 세션 첫 턴에 싣고, 읽은 뒤 · none · 경고 예약 · 스위치 off 에서는 싣지 않는다"
+hook_first() {  # <저장소> <세션> → 매 턴 훅 출력
+  (cd "$1" && printf '{"prompt":"q","session_id":"%s"}' "$2" | CLAUDE_PLUGIN_ROOT="$CORE" SCV_HOST_PROFILE="$WORK/profile.env" bash "$CORE/template/hooks/on-user-prompt.sh" 2>/dev/null)
+}
+new_session() { (cd "$1" && printf '{"source":"startup","session_id":"%s"}' "$2" | CLAUDE_PLUGIN_ROOT="$CORE" bash "$CORE/template/hooks/on-session-start.sh" >/dev/null 2>&1); }
+c=0
+# (a) 앞 세션에서 help 를 부른 적이 있다 → 새 세션 첫 턴에 블록
+R="$(new_repo t19a)"; o1="$(help_wc "$R" --model vendor-model-a)"; new_session "$R" s2
+h="$(hook_first "$R" s2)"
+grep -q '^\[SCV 가이드\] 이 컨텍스트에서 아직' <<<"$h" && grep -qx "  GUIDE_FILE: $WORK/guides/model-a.md" <<<"$h" \
+  && grep -qF "  $(grep -m1 '^GUIDE_MARK_CMD: ' <<<"$o1")" <<<"$h" && c=$((c + 1)) || echo "      (a) no block on the first turn of a new session"
+# (b) 그 턴에 규약 표시 + 블록의 명령 실행 → 같은 세션 다음 턴에는 블록 없음
+cmd="$(grep -m1 '^  GUIDE_MARK_CMD: ' <<<"$h" | sed 's/^  GUIDE_MARK_CMD: //')"
+(cd "$R" && bash "$HSTATE" mark >/dev/null 2>&1 && SCV_HOST_PROFILE="$WORK/profile.env" eval "$cmd" >/dev/null 2>&1)
+h2="$(hook_first "$R" s2)"; ! grep -q 'SCV 가이드' <<<"$h2" && c=$((c + 1)) || echo "      (b) block repeated after read"
+# (c) 가이드가 없는 모델을 본 뒤 → none → 새 세션에도 블록 없음
+R="$(new_repo t19c)"; help_wc "$R" --model other-model >/dev/null; new_session "$R" s2
+[[ "$(head -1 "$R/scv/journal/.help-guide-last" 2>/dev/null)" == "none" ]] && ! grep -q 'SCV 가이드' <<<"$(hook_first "$R" s2)" && c=$((c + 1)) || echo "      (c) none record or block"
+# (d) 가이드 경고가 예약돼 있으면 경고 한 번만(블록 중복 없음)
+R="$(new_repo t19d)"; (cd "$R" && git init -q . 2>/dev/null); help_wc "$R" --model vendor-model-a >/dev/null
+stop_hook "$R" "$QANS"; new_session "$R" s2; h="$(hook_first "$R" s2)"
+[[ "$(grep -c '^\[SCV 가이드\]' <<<"$h")" == 1 ]] && grep -q '읽음 표시가 없다' <<<"$h" && c=$((c + 1)) || echo "      (d) duplicate or missing: $(grep -c '^\[SCV 가이드\]' <<<"$h")"
+# (e) 세션 시작 훅 없이 세션 번호만 바뀌어도 안 읽음으로 본다
+R="$(new_repo t19e)"; help_wc "$R" --model vendor-model-a >/dev/null; mp "$R" mark --model vendor-model-a >/dev/null
+! grep -q 'SCV 가이드' <<<"$(hook_first "$R" s1)" && grep -q '^\[SCV 가이드\] 이 컨텍스트에서' <<<"$(hook_first "$R" s9)" && c=$((c + 1)) || echo "      (e) session switch"
+# (f) 스위치 off
+R="$(new_repo t19f)"; help_wc "$R" --model vendor-model-a >/dev/null; new_session "$R" s2
+printf '{\n  "SCV_MODEL_PROMPTING": "off"\n}\n' > "$R/scv/scv_settings.json"
+! grep -q 'SCV 가이드' <<<"$(hook_first "$R" s2)" && c=$((c + 1)) || echo "      (f) switch off"
+if [[ $c -eq 6 ]]; then ok "OK [T19] 6/6 first-turn block"; else fail "[T19] $c/6"; fi
 
 echo
 echo "T7. 순수성 계약"

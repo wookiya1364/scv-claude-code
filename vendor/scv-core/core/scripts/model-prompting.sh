@@ -4,6 +4,8 @@
 #   model-prompting.sh guide --model <id>   help 가 부른다: 이 모델의 가이드 원문을 읽어야 하나 → GUIDE 줄들
 #   model-prompting.sh mark  --model <id>   모델이 원문을 읽은 뒤: 이 컨텍스트(지금 규약 지문)에서 이 모델을 읽음으로 기록
 #   model-prompting.sh status [--model <id>] 사람이 본다: 가이드 폴더 · 색인 행 수 · 읽음 기록 · (모델이 있으면) 결정
+#   model-prompting.sh prompt              (v0.61.0+) 매 턴 훅이 부른다: 이 컨텍스트에서 아직 원문을 안 읽었으면, help 가
+#                                            마지막으로 본 모델의 원문 경로 · 표시 명령 블록을 낸다(아니면 아무것도)
 #   model-prompting.sh stop < 답본문        (v0.60.0+) 종료 훅이 부른다: 이번 턴에 원문을 읽었는지 · 다시 쓴 요청을
 #                                            답에 보였는지 결과로 판정 → 어긋나면 다음 턴 경고(.help-warn 에 덧붙임)
 #
@@ -26,12 +28,14 @@ source "$SCRIPT_DIR/lib/settings.sh" 2>/dev/null || true
 JOURNAL_DIR="${SCV_JOURNAL_DIR:-scv/journal}"
 READ_FILE="$JOURNAL_DIR/.help-guide"
 TURN_FILE="$JOURNAL_DIR/.help-guide-turn"
+LAST_FILE="$JOURNAL_DIR/.help-guide-last"   # v0.61.0+: help 가 마지막으로 본 모델 — 컨텍스트에 묶이지 않아 초기화가 지우지 않는다
 STATE_FILE="$JOURNAL_DIR/.help-state"
 
 cmd="${1:-guide}"; shift || true
-MODEL_RAW=""
+MODEL_RAW=""; SESSION_ARG=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --session) SESSION_ARG="${2:-}"; shift 2 || shift ;;
     --model)   MODEL_RAW="${2:-}"; shift 2 || shift ;;
     --model=*) MODEL_RAW="${1#--model=}"; shift ;;
     *) shift ;;
@@ -62,7 +66,8 @@ if [[ -n "$GUIDES_DIR" && -f "$GUIDES_DIR/INDEX.tsv" && ! -L "$GUIDES_DIR/INDEX.
   INDEX="$(head -c 65536 "$INDEX_FILE" 2>/dev/null)"
 fi
 # 지금 규약 지문 — help 표식의 여섯째 필드. 컨텍스트가 바뀌면 비워진다(lib 머리말 참조).
-NONCE="$(scv_hstate_nonce "$(scv_hstate_parse "$(_first_line "$STATE_FILE")")")"
+_ST="$(scv_hstate_parse "$(_first_line "$STATE_FILE")")"
+NONCE="$(scv_hstate_nonce "$_ST")"; STATE_SESSION="${_ST%%$'\x1f'*}"
 RECORD="$(scv_mp_read_parse "$(_first_line "$READ_FILE")")"
 TODAY="${SCV_TODAY:-$(date +%Y-%m-%d 2>/dev/null)}"
 
@@ -99,12 +104,18 @@ case "$cmd" in
     # 종료 훅이 결과로 판정할 근거다(load · loaded 일 때만. none 이면 판정할 것이 없다).
     # v0.60.1+: load 이면 턴 기록 둘째 줄부터 지금 낸 GUIDE_FILE · GUIDE_MARK_CMD 줄을 그대로 담는다 — 멈춤 훅은 다른 실행
     # 위치(벤더 코어)에서 돌아 경로를 다시 계산하면 틀릴 수 있으니, 경고에는 help 가 실제로 낸 값을 싣는다.
-    _detail=""
-    if [[ "$DEC" == "load" && -z "$MISSING" ]]; then
+    _detail=""; _all=""
+    if [[ ( "$DEC" == "load" || "$DEC" == "loaded" ) && -z "$MISSING" && -n "$MPATH" ]]; then
       _cmd="$(printf 'GUIDE_MARK_CMD: bash "%s" mark --model "%s"' "$SCRIPT_DIR/model-prompting.sh" "$ID")"
-      printf '%s\n' "$_cmd"
-      _detail="GUIDE_FILE: $MPATH"; [[ -n "$CPATH" ]] && _detail="$_detail"$'\n'"GUIDE_FILE: $CPATH"
-      _detail="$_detail"$'\n'"$_cmd"
+      _all="GUIDE_FILE: $MPATH"; [[ -n "$CPATH" ]] && _all="$_all"$'\n'"GUIDE_FILE: $CPATH"
+      _all="$_all"$'\n'"$_cmd"
+      if [[ "$DEC" == "load" ]]; then printf '%s\n' "$_cmd"; _detail="$_all"; fi
+    fi
+    # v0.61.0+: 마지막으로 본 모델 — 새 컨텍스트의 첫 턴에 매 턴 훅이 싣는다(prompt). 가이드가 없는 모델이면 none.
+    if [[ -n "$_all" ]]; then
+      _put "$LAST_FILE" "$ID"$'\n'"$_all"
+    elif [[ -z "$ROW" && -n "$ID" && "$SWITCH" == "on" ]]; then
+      _put "$LAST_FILE" "none"
     fi
     if [[ "$DEC" == "load" || "$DEC" == "loaded" ]] && [[ -z "$MISSING" ]]; then
       _tl="$(printf '%s\x1f%s\x1f%s\x1f%s' "$NONCE" "$ID" "$DEC" "$KEY")"
@@ -136,6 +147,16 @@ case "$cmd" in
     if [[ -n "$ID" ]]; then
       echo "MODEL: $ID -> ${KEY:-(no guide)}"
     fi
+    ;;
+  prompt)
+    # 읽음: 읽음 기록의 지문이 지금 지문과 같다(빈 지문은 증거가 아니다). 가이드 경고가 이미 예약돼 있으면 그것이 같은 내용을 싣는다.
+    # 훅은 표식 갱신(세션 비교)보다 먼저 부른다 — 세션이 바뀌었으면 갱신이 지문을 비울 것이니 안 읽음으로 본다.
+    _rn="${RECORD%%$'\x1f'*}"; _read=0; [[ -n "$_rn" && "$_rn" == "$NONCE" ]] && _read=1
+    [[ -n "$SESSION_ARG" && "$SESSION_ARG" != "$STATE_SESSION" ]] && _read=0
+    _warned=0; _w="$JOURNAL_DIR/.help-warn"
+    [[ -f "$_w" && ! -L "$_w" ]] && head -c 4096 "$_w" 2>/dev/null | grep -q '^\[SCV 가이드\]' && _warned=1
+    _rec=""; [[ -f "$LAST_FILE" && ! -L "$LAST_FILE" ]] && _rec="$(head -c 4096 "$LAST_FILE" 2>/dev/null)"
+    scv_mp_first_turn_lines "$SWITCH" "$_read" "$_warned" "$_rec"
     ;;
   stop)
     # 이번 턴에 help 가 가이드를 내지 않았으면 판정할 것이 없다 — 아무 것도 읽지도 쓰지도 않는다.
@@ -174,6 +195,6 @@ case "$cmd" in
       && printf '%s guide=%s decision=%s read=%s recorded=%s quoted=%s verdict=%s\n' "$_now" "${TKEY:-?}" "$TDEC" "$WAS_READ" "$RECORDED" "${QUOTED:-?}" "${_vs:-ok}" >> "$_drift" 2>/dev/null
     echo "GUIDE_VERDICT: ${_vs:-ok}"
     ;;
-  *) echo "usage: model-prompting.sh guide|mark|status|stop --model <id>" >&2 ;;
+  *) echo "usage: model-prompting.sh guide|mark|status|prompt|stop --model <id>" >&2 ;;
 esac
 exit 0
