@@ -1,0 +1,12 @@
+# SCV per-model prompting guides — offline copies of the official guides (see refresh.sh).
+# Format (tab-separated): <model id> <key> <file> <source .md url> <fetched YYYY-MM-DD>. "*" = common guide for every model.
+# Model ids match exactly after lowercasing and dropping a trailing [..] marker — never by prefix.
+@holder	Anthropic PBC
+@refresh	refresh.sh
+claude-fable-5-1	fable-5-1	fable-5-1.md	https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-1.md	2026-09-27
+claude-fable-5	fable-5	fable-5.md	https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5.md	2026-09-27
+claude-opus-5-5	opus-5-5	opus-5-5.md	https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5-5.md	2026-09-27
+claude-opus-5	opus-5	opus-5.md	https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5.md	2026-09-27
+claude-opus-4-8	opus-4-8	opus-4-8.md	https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-4-8.md	2026-09-27
+claude-sonnet-5	sonnet-5	sonnet-5.md	https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-sonnet-5.md	2026-09-27
+*	best-practices	best-practices.md	https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices.md	2026-09-27
