@@ -311,3 +311,42 @@ scv_mx_render_tsv() {
     printf '%s\t%s\t%s\n' "$name" "$slug" "$v"
   done <<< "$lines"
 }
+
+# @pure
+# <저널 텍스트(여러 파일 이어붙임)> → "라벨\t답 수" 줄들, 답 수가 많은 순(같으면 처음 나온 순 — 안정 정렬).
+# 답 기록 머리줄 "### [HH:MM:SS] assistant · <모델 id>" 의 모델 id 가 라벨이다(v0.59.0+).
+# 모델 표기가 없는 옛 답("### [..] assistant")은 라벨 "-" 로 센다.
+scv_mx_count_answers() {
+  local text="${1:-}" line label labels=() counts=() i j n=0 tl tc
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ "$line" =~ ^\#\#\#\ \[[0-9:]+\]\ assistant(\ ·\ (.+))?$ ]] || continue
+    label="${BASH_REMATCH[2]:--}"
+    for (( i = 0; i < n; i++ )); do [[ "${labels[$i]}" == "$label" ]] && break; done
+    if (( i == n )); then labels[$n]="$label"; counts[$n]=0; n=$((n + 1)); fi
+    counts[$i]=$(( ${counts[$i]} + 1 ))
+  done <<< "$text"
+  # 삽입 정렬: 답 수 내림차순, 같으면 처음 나온 순 (안정 — sort 를 부르지 않는다)
+  for (( i = 1; i < n; i++ )); do
+    tl="${labels[$i]}"; tc="${counts[$i]}"; j=$((i - 1))
+    while (( j >= 0 )); do
+      if (( ${counts[$j]} < tc )); then
+        labels[$((j + 1))]="${labels[$j]}"; counts[$((j + 1))]="${counts[$j]}"; j=$((j - 1))
+      else break; fi
+    done
+    labels[$((j + 1))]="$tl"; counts[$((j + 1))]="$tc"
+  done
+  for (( i = 0; i < n; i++ )); do printf '%s\t%s\n' "${labels[$i]}" "${counts[$i]}"; done
+}
+
+# @pure
+# <"라벨\t답 수" 줄들> → 표의 한 줄: "모델별 답 수 | A 3 · B 2 · 표기 없음 1 | <표기된 답>/<모든 답> | —".
+# 답이 하나도 없으면 "모델별 답 수 | — | 0/0 | —".
+scv_mx_render_models() {
+  local lines="${1:-}" label c parts="" tagged=0 total=0
+  while IFS=$'\t' read -r label c || [[ -n "$label" ]]; do
+    [[ -n "$label" && "$c" =~ ^[0-9]+$ ]] || continue
+    total=$((total + c))
+    if [[ "$label" == "-" ]]; then parts+="${parts:+ · }표기 없음 $c"; else tagged=$((tagged + c)); parts+="${parts:+ · }$label $c"; fi
+  done <<< "$lines"
+  printf '%s\n' "모델별 답 수 | ${parts:-—} | $tagged/$total | —"
+}
