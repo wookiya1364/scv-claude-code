@@ -4,7 +4,8 @@
 # 멈춤 훅이 답한 모델을 저널에 남기는지 본다.
 #
 # 계획: scv/archive/20260927-wookiya1364-per-model-prompting/TESTS.md (T1~T9)
-#       scv/promote/20260927-wookiya1364-prompting-read-verdict/TESTS.md (결과 판정 — 이 파일의 T10~T14)
+#       scv/archive/20260927-wookiya1364-prompting-read-verdict/TESTS.md (결과 판정 — 이 파일의 T10~T14)
+#       scv/promote/20260927-wookiya1364-prompting-warn-delivery/TESTS.md (경고 전달 — 이 파일의 T15~T16)
 # 픽스처는 중립 id 만 쓴다 — 코어 payload 에 제공자·모델 이름을 넣지 않는다(tests/test-host-neutral.sh).
 #
 # Run: bash core/tests/test-model-prompting.sh
@@ -376,7 +377,7 @@ for d in none load loaded; do for r in 0 1; do for c in 0 1; do for q in 0 1 x; 
   eqc "verdict $d r=$r c=$c q=$q" "$want" "$(g "v_${d}_${r}${c}${q}")"
 done; done; done; done
 wl1="$(g wl1)"; wl2="$(g wl2)"
-N=$((N + 1)); [[ "$wl1" == *"model-a"* && "$wl1" == *"GUIDE_MARK_CMD"* && "$wl1" != *"|"?* ]] || { BAD=$((BAD + 1)); echo "      ✖ warn unread: [$wl1]"; }
+N=$((N + 1)); [[ "$wl1" == *"model-a"* && "$wl1" != *"|"?* ]] || { BAD=$((BAD + 1)); echo "      ✖ warn unread: [$wl1]"; }
 N=$((N + 1)); [[ "$(printf '%s' "$wl2" | tr '|' '\n' | grep -c .)" == 2 ]] || { BAD=$((BAD + 1)); echo "      ✖ warn two lines: [$wl2]"; }
 eqc "warn none" "" "$(g wl3)"
 eqc "turn restamp empty old" "n2~vendor-model-a~load~model-a" "$(g ts1)"
@@ -508,6 +509,61 @@ help_wc "$R" --model vendor-model-a >/dev/null
 (cd "$R" && printf 'x' | SCV_HOST_PROFILE="$WORK/profile.env" bash "$MP" stop >/dev/null 2>&1)
 grep -qx 'earlier warning' "$R/scv/journal/.help-warn" && grep -q 'SCV 가이드' "$R/scv/journal/.help-warn" && c=$((c + 1)) || echo "      (f) warn file: $(cat "$R/scv/journal/.help-warn")"
 if [[ $c -eq 6 ]]; then ok "OK [T14] silent · append-only"; else fail "[T14] $c/6"; fi
+
+echo
+echo "T15. 경고 전달 — 상세 줄 · 초기화 보존 (순수부)"
+N=0; BAD=0
+T15OUT="$(bash -c '
+  source "'"$LIB"'"
+  e() { printf "%s\n" "$1=$(printf "%s" "$2" | tr "\n" "|")"; }
+  DET="$(printf "GUIDE_FILE: /g/a.md\nGUIDE_FILE: /g/c.md\nGUIDE_MARK_CMD: bash \"/s/model-prompting.sh\" mark --model \"m\"\n")"
+  e wd1 "$(scv_mp_warn_lines "unread" "k" "$DET")"
+  e wd2 "$(scv_mp_warn_lines "unshown" "k" "$DET")"
+  e wd3 "$(scv_mp_warn_lines "unread" "k" "")"
+  G1="$(scv_mp_warn_lines "unread" "k" "$DET")"
+  e wk1 "$(scv_mp_warn_keep "$G1")"
+  e wk2 "$(scv_mp_warn_keep "[SCV 규약] 지문이 없다 — 다시 읽는다")"
+  e wk3 "$(scv_mp_warn_keep "$(printf "[SCV 규약] 지문 경고\n%s\n[SCV 답 모양] 줄 넘침\n  들여 쓴 다른 줄\n" "$G1")")"
+  e wk4 "$(scv_mp_warn_keep "")"
+  e wk5 "$(scv_mp_warn_keep "$(printf "  떠도는 들여쓰기\n[SCV 가이드] 안 보임\n")")"
+')"
+g() { printf '%s\n' "$T15OUT" | grep -m1 "^$1=" | sed "s/^$1=//"; }
+W="[SCV 가이드] 직전 턴에 help 가 이 모델의 프롬프팅 가이드 원문(k)을 읽으라고 했지만 읽음 표시가 없다 — 이번 턴에 아래 원문을 끝까지 읽고 아래 명령을 실행한 뒤, 그 가이드로 요청을 다시 써라."
+D='  GUIDE_FILE: /g/a.md|  GUIDE_FILE: /g/c.md|  GUIDE_MARK_CMD: bash "/s/model-prompting.sh" mark --model "m"'
+eqc "warn unread carries detail" "$W|$D" "$(g wd1)"
+eqc "warn unshown ignores detail" "[SCV 가이드] 직전 턴에 다시 쓴 요청을 기록만 하고 답에 보이지 않았다 — 이번 턴에는 결론 바로 뒤에 인용 블록으로 보여라." "$(g wd2)"
+eqc "warn unread without detail" "$W" "$(g wd3)"
+eqc "keep guide block whole" "$W|$D" "$(g wk1)"
+eqc "keep drops protocol warning" "" "$(g wk2)"
+eqc "keep only guide block from a mix" "$W|$D" "$(g wk3)"
+eqc "keep empty" "" "$(g wk4)"
+eqc "keep ignores stray indent" "[SCV 가이드] 안 보임" "$(g wk5)"
+if [[ $BAD -eq 0 ]]; then ok "OK [T15] $N/$N"; else fail "[T15] $((N - BAD))/$N"; fi
+
+echo
+echo "T16. 재개를 건너 경고가 닿는다 — help load → 표시 없이 멈춤 → 세션 시작(재개) → 매 턴 훅"
+if command -v jq >/dev/null 2>&1; then
+  R="$(new_repo t16)"; (cd "$R" && git init -q . 2>/dev/null)
+  o1="$(help_wc "$R" --model vendor-model-a)"
+  stop_hook "$R" "$QANS"
+  printf '[SCV 규약] 지문 경고 — 재개 뒤에는 사라져야 한다\n' | cat - "$R/scv/journal/.help-warn" > "$R/scv/journal/.w" && mv "$R/scv/journal/.w" "$R/scv/journal/.help-warn"
+  (cd "$R" && printf '{"source":"resume","session_id":"s2"}' | CLAUDE_PLUGIN_ROOT="$CORE" bash "$CORE/template/hooks/on-session-start.sh" >/dev/null 2>&1)
+  hook_out="$(cd "$R" && printf '{"prompt":"next","session_id":"s2"}' | CLAUDE_PLUGIN_ROOT="$CORE" SCV_HOST_PROFILE="$WORK/profile.env" bash "$CORE/template/hooks/on-user-prompt.sh" 2>/dev/null)"
+  c=0
+  grep -q '^\[SCV 가이드\].*model-a' <<<"$hook_out" && c=$((c + 1)) || echo "      (1) no guide warning after resume"
+  grep -qx "  GUIDE_FILE: $WORK/guides/model-a.md" <<<"$hook_out" && grep -qx "  GUIDE_FILE: $WORK/guides/common.md" <<<"$hook_out" && c=$((c + 1)) || echo "      (2) no file lines"
+  grep -qF "  $(grep -m1 '^GUIDE_MARK_CMD: ' <<<"$o1")" <<<"$hook_out" && c=$((c + 1)) || echo "      (3) no mark command line"
+  ! grep -q '지문 경고 — 재개 뒤에는' <<<"$hook_out" && c=$((c + 1)) || echo "      (4) protocol warning survived resume"
+  [[ ! -f "$R/scv/journal/.help-warn" ]] && c=$((c + 1)) || echo "      (5) warn file not consumed"
+  # 경고에 실린 명령을 그대로 실행하면 다음 help 는 loaded
+  cmd="$(grep -m1 '^  GUIDE_MARK_CMD: ' <<<"$hook_out" | sed 's/^  GUIDE_MARK_CMD: //')"
+  printf '{"session":"s2","protocol":1,"turn":1,"diag":"","diag_at":"","nonce":"ffff0000"}\n' > "$R/scv/journal/.help-state"
+  (cd "$R" && SCV_HOST_PROFILE="$WORK/profile.env" eval "$cmd" >/dev/null 2>&1)
+  grep -qx 'GUIDE: loaded model-a' <<<"$(help_wc "$R" --model vendor-model-a)" && c=$((c + 1)) || echo "      (6) command from the warning did not mark"
+  if [[ $c -eq 6 ]]; then ok "OK [T16] warning survives resume with files and command"; else fail "[T16] $c/6"; printf '%s\n' "$hook_out" | grep -n 'SCV\|GUIDE' | sed 's/^/      /'; fi
+else
+  echo "  · (jq 없음 — T16 생략)"
+fi
 
 echo
 echo "T7. 순수성 계약"
