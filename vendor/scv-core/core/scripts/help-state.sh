@@ -71,7 +71,16 @@ case "$cmd" in
   reset)  st="$(scv_hstate_reload "$st" "" reset 0)"; json="$(scv_hstate_render "$st")"; _write "$json"
           # 지문은 컨텍스트에 묶인 값 — 컨텍스트가 비워졌으니 파일도 비운다. 예약된 경고도 의미를 잃는다.
           # v0.59.0+: 모델별 가이드 읽음 기록도 컨텍스트에 묶인 값 — 비워서 다음 help 가 원문을 다시 읽게 한다.
-          for _f in "$NONCE_FILE" "$WARN_FILE" "$JOURNAL_DIR/.help-guide" "$JOURNAL_DIR/.help-guide-turn"; do [[ -f "$_f" && ! -L "$_f" ]] && rm -f "$_f" 2>/dev/null; done
+          for _f in "$NONCE_FILE" "$JOURNAL_DIR/.help-guide" "$JOURNAL_DIR/.help-guide-turn"; do [[ -f "$_f" && ! -L "$_f" ]] && rm -f "$_f" 2>/dev/null; done
+          # v0.60.1+: 경고는 가이드 경고 블록만 남긴다 — 원문을 건너뛴 사실은 초기화로 사라지지 않는다(재개마다 지워져
+          # 다음 턴 모델에게 닿지 않던 0.60.0 실측). 남길 것이 없거나 라이브러리가 없으면 이전처럼 지운다.
+          if [[ -f "$WARN_FILE" && ! -L "$WARN_FILE" ]]; then
+            _kept=""; _mplib="$SCRIPT_DIR/lib/model-prompting.sh"
+            if [[ -f "$_mplib" ]] && source "$_mplib" 2>/dev/null; then
+              _kept="$(scv_mp_warn_keep "$(head -c 4096 "$WARN_FILE" 2>/dev/null)")"
+            fi
+            if [[ -n "${_kept//[[:space:]]/}" ]]; then _put "$WARN_FILE" "$_kept"; else rm -f "$WARN_FILE" 2>/dev/null; fi
+          fi
           printf '%s\n' "$json" ;;
   mark)   _old="$(scv_hstate_nonce "$st")"
           _n="$(_nonce_new)"; st="$(scv_hstate_mark "$st" "$_n")"; json="$(scv_hstate_render "$st")"; _write "$json"

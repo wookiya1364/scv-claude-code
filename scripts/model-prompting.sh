@@ -97,11 +97,19 @@ case "$cmd" in
     scv_mp_guide_lines "$DEC" "$KEY" "$MPATH" "$CPATH" "$AGE" "$MAX_AGE" "$REFRESH" "$MISSING"
     # v0.60.0+: 읽음 표시 명령을 절대 경로 그대로 준다 — 모델이 경로를 짓다 빠뜨리지 않게. 이번 턴 기록은
     # 종료 훅이 결과로 판정할 근거다(load · loaded 일 때만. none 이면 판정할 것이 없다).
+    # v0.60.1+: load 이면 턴 기록 둘째 줄부터 지금 낸 GUIDE_FILE · GUIDE_MARK_CMD 줄을 그대로 담는다 — 멈춤 훅은 다른 실행
+    # 위치(벤더 코어)에서 돌아 경로를 다시 계산하면 틀릴 수 있으니, 경고에는 help 가 실제로 낸 값을 싣는다.
+    _detail=""
     if [[ "$DEC" == "load" && -z "$MISSING" ]]; then
-      printf 'GUIDE_MARK_CMD: bash "%s" mark --model "%s"\n' "$SCRIPT_DIR/model-prompting.sh" "$ID"
+      _cmd="$(printf 'GUIDE_MARK_CMD: bash "%s" mark --model "%s"' "$SCRIPT_DIR/model-prompting.sh" "$ID")"
+      printf '%s\n' "$_cmd"
+      _detail="GUIDE_FILE: $MPATH"; [[ -n "$CPATH" ]] && _detail="$_detail"$'\n'"GUIDE_FILE: $CPATH"
+      _detail="$_detail"$'\n'"$_cmd"
     fi
     if [[ "$DEC" == "load" || "$DEC" == "loaded" ]] && [[ -z "$MISSING" ]]; then
-      _put "$TURN_FILE" "$(printf '%s\x1f%s\x1f%s\x1f%s' "$NONCE" "$ID" "$DEC" "$KEY")"
+      _tl="$(printf '%s\x1f%s\x1f%s\x1f%s' "$NONCE" "$ID" "$DEC" "$KEY")"
+      [[ -n "$_detail" ]] && _tl="$_tl"$'\n'"$_detail"
+      _put "$TURN_FILE" "$_tl"
     else
       _drop "$TURN_FILE"
     fi
@@ -133,6 +141,7 @@ case "$cmd" in
     # 이번 턴에 help 가 가이드를 내지 않았으면 판정할 것이 없다 — 아무 것도 읽지도 쓰지도 않는다.
     TURN="$(scv_mp_turn_parse "$(_first_line "$TURN_FILE")")"
     [[ -n "$TURN" ]] || { _drop "$TURN_FILE"; exit 0; }
+    DETAIL="$(head -c 4096 "$TURN_FILE" 2>/dev/null | tail -n +2)"   # v0.60.1+: help 가 낸 GUIDE_FILE · GUIDE_MARK_CMD 줄
     ANSWER="$(head -c 65536 2>/dev/null || true)"
     IFS=$'\x1f' read -r _tn TMODEL TDEC TKEY <<< "$TURN"
     WAS_READ="$(scv_mp_was_read "$TURN" "$RECORD" "$NONCE")"
@@ -157,7 +166,7 @@ case "$cmd" in
     if [[ -n "$VERDICT" ]]; then
       mkdir -p "$JOURNAL_DIR" 2>/dev/null || exit 0
       _warn="$JOURNAL_DIR/.help-warn"
-      [[ -L "$_warn" ]] || scv_mp_warn_lines "$VERDICT" "$TKEY" >> "$_warn" 2>/dev/null
+      [[ -L "$_warn" ]] || scv_mp_warn_lines "$VERDICT" "$TKEY" "$DETAIL" >> "$_warn" 2>/dev/null
     fi
     _drift="$JOURNAL_DIR/.help-drift"; _now="$(date -Iseconds 2>/dev/null || date +%Y-%m-%dT%H:%M:%S)"
     _vs="$(printf '%s' "$VERDICT" | tr '\n' ',' | sed 's/,$//')"
