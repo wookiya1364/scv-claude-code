@@ -88,6 +88,7 @@ jobs:
       - name: Cross-platform smoke
         run: |
           bash .github/scripts/test-ci-fast-lanes.sh
+          bash .github/scripts/test-prompting-guides.sh
           bash tests/test-apply-model-policy.sh
           bash tests/test-help-workspace.sh
           bash tests/test-workspace.sh
