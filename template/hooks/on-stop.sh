@@ -79,6 +79,17 @@ fi
 # "원본은 비동기로 적혀 늦을 수 있으니 이 값을 쓰라" 고 명시한다. (2) 그 값이 없는 호스트에서는 원본에서
 # 마지막 사람 프롬프트 이후의 어시스턴트 텍스트만 보고, 아직 안 적혔으면 짧게(4회 × 250ms) 다시 읽는다.
 # (3) 그래도 없으면 이번 턴 린트를 생략한다 — 낡은 답(한 턴 전)을 보느니 안 본다. 지문 검사는 그대로 돈다.
+# 원본 → 턴 스트림: 줄마다 "U"(사람이 쓴 프롬프트) 또는 "A\x1f<텍스트, 줄바꿈은 \x1e>". 자르기는 scv_turn_slice.
+_scv_turn_stream() {
+  tail -n 400 "$TRANSCRIPT" 2>/dev/null \
+    | jq -Rr 'fromjson? | if .type? == "user" then
+                (if ((.message.content|type) == "string")
+                    or ((.message.content|type) == "array" and any(.message.content[]?; .type? == "text"))
+                 then "U" else empty end)
+              elif .type? == "assistant" then
+                ("A\u001f" + ([.message.content[]? | select(.type? == "text") | .text] | join("\n") | gsub("\n"; "\u001e")))
+              else empty end' 2>/dev/null || true
+}
 _scv_core="${SCV_CORE_ROOT:-$SCRIPT_DIR/../..}"
 _scv_hs="$_scv_core/scripts/help-state.sh"
 _scv_hslib="$_scv_core/scripts/lib/help-state.sh"
@@ -102,14 +113,7 @@ if [[ -f "$_scv_hs" && -f "$_scv_hslib" ]]; then
       _scv_turn=""
       if [[ -z "${_scv_host//[[:space:]]/}" ]]; then
         for _scv_try in 1 2 3 4; do
-          _scv_stream="$(tail -n 400 "$TRANSCRIPT" 2>/dev/null \
-            | jq -Rr 'fromjson? | if .type? == "user" then
-                        (if ((.message.content|type) == "string")
-                            or ((.message.content|type) == "array" and any(.message.content[]?; .type? == "text"))
-                         then "U" else empty end)
-                      elif .type? == "assistant" then
-                        ("A\u001f" + ([.message.content[]? | select(.type? == "text") | .text] | join("\n") | gsub("\n"; "\u001e")))
-                      else empty end' 2>/dev/null || true)"
+          _scv_stream="$(_scv_turn_stream)"
           _scv_turn="$(scv_turn_slice "$_scv_stream" | head -c 65536)"
           [[ -n "${_scv_turn//[[:space:]]/}" ]] && break
           [[ "$_scv_try" -lt 4 ]] && sleep 0.25
@@ -122,6 +126,22 @@ if [[ -f "$_scv_hs" && -f "$_scv_hslib" ]]; then
   fi
 fi
 # ---------- /drift check -----------------------------------------------------
+
+# v0.60.0+ — 모델별 가이드를 결과로 판정한다. help 가 이번 턴에 가이드를 냈을 때만(.help-guide-turn) 읽음 표시와
+# 답의 인용을 보고, 어긋나면 다음 턴 경고를 덧붙인다. 답 본문은 위 드리프트 검사가 고른 것을 그대로 쓴다(없으면 빈 값 —
+# 그러면 "보였나" 는 판정하지 않는다). 어떤 실패도 막지 않는다.
+_scv_mp="${SCV_CORE_ROOT:-$SCRIPT_DIR/../..}/scripts/model-prompting.sh"
+if [[ -f "$_scv_mp" && -f "${SCV_JOURNAL_DIR:-scv/journal}/.help-guide-turn" ]]; then
+  _scv_ans="${_scv_last:-}"   # 린트가 꺼져 본문을 안 골랐으면 호스트가 준 답만 본다
+  [[ -n "${_scv_ans//[[:space:]]/}" ]] || _scv_ans="$(printf '%s' "$INPUT" | jq -r 'try (.last_assistant_message // empty)' 2>/dev/null | head -c 65536 || true)"
+  # 호스트가 준 답은 마지막 메시지뿐이다 — 도구를 부르기 전 첫 메시지에 인용을 보였을 수 있으니, 원본에서 이번 턴의
+  # 답 텍스트 전부도 덧붙여 본다(이미 적힌 앞 메시지만 필요하므로 다시 읽기는 하지 않는다).
+  if declare -F scv_turn_slice >/dev/null 2>&1; then
+    _scv_all="$(scv_turn_slice "$(_scv_turn_stream)" | head -c 65536)"
+    [[ -n "${_scv_all//[[:space:]]/}" ]] && _scv_ans="$(printf '%s\n\n%s' "$_scv_ans" "$_scv_all")"
+  fi
+  printf '%s' "$_scv_ans" | bash "$_scv_mp" stop >/dev/null 2>&1 || true
+fi
 
 [[ -n "${SUMMARY//[[:space:]]/}" ]] || exit 0
 
