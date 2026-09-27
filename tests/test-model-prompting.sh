@@ -566,6 +566,25 @@ else
 fi
 
 echo
+echo "T17. 같은 턴 규약 재표시(지문 옮기기)가 경고의 원문 경로 · 명령을 지우지 않는다 (0.60.1 실측 재현)"
+if command -v jq >/dev/null 2>&1; then
+  R="$(new_repo t17)"; (cd "$R" && git init -q . 2>/dev/null)
+  printf '{"session":"s1","protocol":0,"turn":1,"diag":"","diag_at":"","nonce":""}\n' > "$R/scv/journal/.help-state"
+  o1="$(help_wc "$R" --model vendor-model-a)"
+  (cd "$R" && bash "$HSTATE" mark >/dev/null 2>&1)          # PROTOCOL: load 인 턴 — 규약을 읽고 표시, 원문은 건너뜀
+  stop_hook "$R" "$QANS"
+  (cd "$R" && printf '{"source":"resume","session_id":"s2"}' | CLAUDE_PLUGIN_ROOT="$CORE" bash "$CORE/template/hooks/on-session-start.sh" >/dev/null 2>&1)
+  hook_out="$(cd "$R" && printf '{"prompt":"next","session_id":"s2"}' | CLAUDE_PLUGIN_ROOT="$CORE" SCV_HOST_PROFILE="$WORK/profile.env" bash "$CORE/template/hooks/on-user-prompt.sh" 2>/dev/null)"
+  c=0
+  grep -q '^\[SCV 가이드\].*model-a' <<<"$hook_out" && c=$((c + 1)) || echo "      (1) no guide warning"
+  grep -qx "  GUIDE_FILE: $WORK/guides/model-a.md" <<<"$hook_out" && c=$((c + 1)) || echo "      (2) file line lost across the protocol re-mark"
+  grep -qF "  $(grep -m1 '^GUIDE_MARK_CMD: ' <<<"$o1")" <<<"$hook_out" && c=$((c + 1)) || echo "      (3) mark command lost across the protocol re-mark"
+  if [[ $c -eq 3 ]]; then ok "OK [T17] detail survives the same-turn protocol re-mark"; else fail "[T17] $c/3"; fi
+else
+  echo "  · (jq 없음 — T17 생략)"
+fi
+
+echo
 echo "T7. 순수성 계약"
 if bash "$CORE/scripts/check-purity.sh" "$LIB" "$CORE/scripts/lib/metrics.sh" >/dev/null 2>&1; then ok "OK [T7] check-purity"; else fail "[T7] purity"; bash "$CORE/scripts/check-purity.sh" "$LIB" 2>&1 | sed 's/^/      /'; fi
 
