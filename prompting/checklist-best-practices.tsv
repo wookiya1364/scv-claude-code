@@ -1,0 +1,9 @@
+# source: best-practices.md
+goal	State exactly what you want done	The more precisely you explain what you want, the better the result.
+context	Explain why: the background and motivation behind the request	Providing context or motivation behind your instructions, such as explaining to Claude why such behavior is important, can help Claude better understand your goals and deliver more targeted responses.
+finish	State what counts as done (success criteria)	Define what constitutes a successful answer to your research question.
+scope	State what is in and out of scope, and what not to touch	Scope: Don't add features, refactor code, or make "improvements" beyond what was
+output	State the desired output format and constraints	Be specific about the desired output format and constraints.
+stop	State when to stop or ask before acting (e.g., risky or irreversible steps)	If you want Claude Opus 4.6 to confirm before taking potentially risky actions, add guidance to your prompt:
+act-or-suggest	Say whether to make the changes or only suggest them	If you say "can you suggest some changes," Claude will sometimes provide suggestions rather than implementing them, even if making changes might be what you intended.
+depth	Say how far beyond the basics to go (minimal vs. fully featured)	If you want "above and beyond" behavior, explicitly request it rather than relying on the model to infer this from vague prompts.
