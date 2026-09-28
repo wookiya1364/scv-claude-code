@@ -6,7 +6,8 @@
 # 계획: scv/archive/20260927-wookiya1364-per-model-prompting/TESTS.md (T1~T9)
 #       scv/archive/20260927-wookiya1364-prompting-read-verdict/TESTS.md (결과 판정 — 이 파일의 T10~T14)
 #       scv/archive/20260927-wookiya1364-prompting-warn-delivery/TESTS.md (경고 전달 — 이 파일의 T15~T17)
-#       scv/promote/20260928-wookiya1364-prompting-first-turn/TESTS.md (첫 턴 안내 — 이 파일의 T18~T19)
+#       scv/archive/20260928-wookiya1364-prompting-first-turn/TESTS.md (첫 턴 안내 — 이 파일의 T18~T19)
+#       scv/promote/20260928-wookiya1364-prompting-every-turn-checklist/TESTS.md (매 턴 비교 · 등록 — 이 파일의 T20~T23)
 # 픽스처는 중립 id 만 쓴다 — 코어 payload 에 제공자·모델 이름을 넣지 않는다(tests/test-host-neutral.sh).
 #
 # Run: bash core/tests/test-model-prompting.sh
@@ -226,7 +227,7 @@ echo
 echo "T5. 규약 문서 — 다시 쓰기 · 되묻기 단계"
 c=0; total=7
 grep -q 'GUIDE: load' "$REFINE" && grep -q 'GUIDE_MARK_CMD:' "$REFINE" && c=$((c + 1)) || echo "      (1) read + mark"
-grep -qi 'short turn' "$REFINE" && c=$((c + 1)) || echo "      (2) short turns"
+grep -qi 'every message, however short' "$REFINE" && grep -q 'register' "$REFINE" && c=$((c + 1)) || echo "      (2) every message + register"
 grep -qi 'rewrite the request' "$REFINE" && grep -qi 'guide rules applied' "$REFINE" && c=$((c + 1)) || echo "      (3) rewrite + basis"
 grep -qi 'from the conversation, the repository' "$REFINE" && c=$((c + 1)) || echo "      (4) search first"
 grep -qi 'single most consequential gap' "$REFINE" && grep -qi 'recommended answer' "$REFINE" && c=$((c + 1)) || echo "      (5) one question + recommendation"
@@ -642,6 +643,139 @@ R="$(new_repo t19f)"; help_wc "$R" --model vendor-model-a >/dev/null; new_sessio
 printf '{\n  "SCV_MODEL_PROMPTING": "off"\n}\n' > "$R/scv/scv_settings.json"
 ! grep -q 'SCV 가이드' <<<"$(hook_first "$R" s2)" && c=$((c + 1)) || echo "      (f) switch off"
 if [[ $c -eq 6 ]]; then ok "OK [T19] 6/6 first-turn block"; else fail "[T19] $c/6"; fi
+
+# ---------------------------------------------------------------- 매 턴 비교 · 등록 (v0.62.0+)
+# 요구 항목 목록이 있는 가이드 폴더 사본 — 기존 검사에 영향이 없도록 따로 둔다.
+cp -R "$FIX/guides" "$WORK/guides-cl"
+printf '# source: common.md\ngoal\tState the goal\tfixture quote a\nfinish\tState the done condition\tfixture quote b\n' > "$WORK/guides-cl/checklist-common.tsv"
+printf '# source: model-a.md\nfinish\tState the done condition precisely\tfixture quote c\nsources\tName the sources to check\tfixture quote d\n' > "$WORK/guides-cl/checklist-model-a.tsv"
+{ cat "$FIX/profile.env"; printf 'SCV_PROMPTING_GUIDES=%s\n' "$WORK/guides-cl"; } > "$WORK/profile-cl.env"
+mpc() { (cd "$1" && shift && SCV_HOST_PROFILE="$WORK/profile-cl.env" SCV_TODAY=2026-09-27 bash "$MP" "$@" 2>/dev/null); }
+hook_cl() { (cd "$1" && printf '{"prompt":"%s","session_id":"s1"}' "${2:-응}" | CLAUDE_PLUGIN_ROOT="$CORE" SCV_HOST_PROFILE="$WORK/profile-cl.env" bash "$CORE/template/hooks/on-user-prompt.sh" 2>/dev/null); }
+SUB_OK="$(printf 'goal | msg | fix the login bug\nfinish | ctx | conversation turn 2: the test passes\nsources | asked | which log file? (recommended: app.log)\nrewrite | - | Fix the login bug until the login test passes\n')"
+
+echo
+echo "T20. 매 턴 비교 · 등록 — 순수부"
+N=0; BAD=0
+T20OUT="$(bash -c '
+  source "'"$LIB"'"
+  e() { printf "%s\n" "$1=$(printf "%s" "$2" | tr "\t\n" "~|")"; }
+  C="$(printf "# c\ngoal\tG\tq\nfinish\tF\tq\nBad Id\tx\tq\nnolabel\n")"
+  M="$(printf "finish\tF2\tq\nsources\tS\tq\n")"
+  e m1 "$(scv_mp_checklist_merge "$C" "$M")"
+  e m2 "$(scv_mp_checklist_merge "$C" "")"
+  e m3 "$(scv_mp_checklist_merge "" "$M")"
+  L="$(scv_mp_checklist_merge "$C" "$M")"
+  e n1 "$(scv_mp_register_normalize "$(printf "goal | msg | a | b\n  finish\tctx\tturn 2  \n\n")")"
+  e p1 "$(scv_mp_register_problems "$L" "$(printf "goal\tmsg\ta\nfinish\tctx\tb\nsources\tasked\tc\nrewrite\t-\tR\n")")"
+  e p2 "$(scv_mp_register_problems "$L" "$(printf "goal\tmsg\ta\nrewrite\t-\tR\n")")"
+  e p3 "$(scv_mp_register_problems "$L" "$(printf "goal\tyes\ta\nfinish\tctx\t \nsources\tasked\tc\n")")"
+  e r1 "$(scv_mp_register_rewrite "$(printf "goal\tmsg\ta\nrewrite\t-\tDo X until Y\n")")"
+  e s1 "$(scv_mp_answer_shows_rewrite "$(printf "lead\n\n> **Rewritten request**: Do X\n")" "Do X")"
+  e s2 "$(scv_mp_answer_shows_rewrite "$(printf "lead\n\n> Do X until Y fully\n")" "Do X until Y")"
+  e s3 "$(scv_mp_answer_shows_rewrite "$(printf "lead\nDo X until Y\n")" "Do X until Y")"
+  e s4 "$(scv_mp_answer_shows_rewrite "$(printf "\`\`\`\n> Rewritten request: x\n\`\`\`\n")" "x")"
+  for r in 0 1; do for sh in 0 1 x; do for a in 0 1; do ss="$sh"; [[ "$sh" == x ]] && ss=""; e "g_${r}${sh}${a}" "$(scv_mp_stop_gate "$r" "$ss" "$a")"; done; done; done
+  e c1 "$(scv_mp_guides_candidates /p/v/c prompting)"
+  e c2 "$(scv_mp_guides_candidates /p/v/c /abs/g)"
+  e c3 "$(scv_mp_guides_candidates /p/v/c "")"
+  e k1 "$(scv_mp_common_key "$(printf "a\tka\tf\n*\tcommon\tc.md\n")")"
+  e b1 "$(scv_mp_turn_block off t m "$L" /s/mp.sh)"
+  e b2 "$(scv_mp_turn_block on "" m "$L" /s/mp.sh)"
+  B3="$(scv_mp_turn_block on t7 vendor-x "$L" /s/mp.sh)"; e b3n "$(printf "%s\n" "$B3" | grep -c .)"
+  e b3i "$(printf "%s\n" "$B3" | grep "항목 \[vendor-x")"
+  B4="$(scv_mp_turn_block on t7 "" "" /s/mp.sh)"; e b4 "$(printf "%s\n" "$B4" | grep -c "checklist --model")"
+')"
+g() { printf '%s\n' "$T20OUT" | grep -m1 "^$1=" | sed "s/^$1=//"; }
+eqc "merge: common order, model label wins, model extra appended" "goal~G|finish~F2|sources~S" "$(g m1)"
+eqc "merge: common only (bad lines dropped)" "goal~G|finish~F" "$(g m2)"
+eqc "merge: model only" "finish~F2|sources~S" "$(g m3)"
+eqc "normalize: pipes and tabs, trims, drops blanks" "goal~msg~a | b|finish~ctx~turn 2" "$(g n1)"
+eqc "problems: complete" "" "$(g p1)"
+eqc "problems: missing items" "missing finish|missing sources" "$(g p2)"
+eqc "problems: bad status, empty, no rewrite" "bad-status goal|empty finish|missing rewrite" "$(g p3)"
+eqc "rewrite extracted" "Do X until Y" "$(g r1)"
+eqc "shown: label in quote" "1" "$(g s1)"
+eqc "shown: rewrite text in quote" "1" "$(g s2)"
+eqc "shown: not quoted" "0" "$(g s3)"
+eqc "shown: code block ignored" "0" "$(g s4)"
+for r in 0 1; do for sh in 0 1 x; do for a in 0 1; do
+  want=block; if [[ "$r" == 1 && "$sh" != 0 ]]; then want=ok; elif [[ "$a" == 1 ]]; then want=warn; fi
+  eqc "stop gate reg=$r shown=$sh active=$a" "$want" "$(g "g_${r}${sh}${a}")"
+done; done; done
+eqc "candidates relative (4 levels)" "/p/v/c/prompting|/p/v/c/../prompting|/p/v/c/../../prompting|/p/v/c/../../../prompting" "$(g c1)"
+eqc "candidates absolute" "/abs/g" "$(g c2)"
+eqc "candidates empty" "" "$(g c3)"
+eqc "common key" "common" "$(g k1)"
+eqc "block: switch off" "" "$(g b1)"
+eqc "block: no token" "" "$(g b2)"
+eqc "block: known model has 3 lines" "3" "$(g b3n)"
+eqc "block: item line" "  항목 [vendor-x — 다르면 checklist --model]: goal(G) finish(F2) sources(S)" "$(g b3i)"
+eqc "block: unknown model points to checklist" "1" "$(g b4)"
+if [[ $BAD -eq 0 ]]; then ok "OK [T20] $N/$N"; else fail "[T20] $((N - BAD))/$N"; fi
+
+echo
+echo "T21. 매 턴 비교 · 등록 — 흐름 (표 → 목록 → 불완전 등록 → 완전 등록 → 다음 턴 새 표)"
+c=0
+R="$(new_repo t21)"
+h1="$(hook_cl "$R" "응")"; tok1="$(head -1 "$R/scv/journal/.help-turn" 2>/dev/null)"
+[[ -n "$tok1" ]] && grep -q "^\[SCV 프롬프트\] 이 턴 메시지(짧아도)" <<<"$h1" && grep -q 'checklist --model' <<<"$h1" && ! grep -qF "$tok1" <<<"$h1" && c=$((c + 1)) || echo "      (1) short message still gets the block (token written, not printed)"
+cl="$(mpc "$R" checklist --model vendor-model-a)"
+grep -qx 'finish | State the done condition precisely' <<<"$cl" && grep -qx 'sources | Name the sources to check' <<<"$cl" && grep -qx 'goal | State the goal' <<<"$cl" && c=$((c + 1)) || echo "      (2) checklist: $cl"
+ri="$(cd "$R" && printf 'goal | msg | x\nrewrite | - | y\n' | SCV_HOST_PROFILE="$WORK/profile-cl.env" bash "$MP" register --model vendor-model-a 2>/dev/null)"
+grep -q '^REGISTER: incomplete' <<<"$ri" && grep -q 'missing finish' <<<"$ri" && grep -q 'missing sources' <<<"$ri" && [[ ! -f "$R/scv/journal/.help-rewrite" ]] && c=$((c + 1)) || echo "      (3) incomplete: $ri"
+rc="$(cd "$R" && printf '%s\n' "$SUB_OK" | SCV_HOST_PROFILE="$WORK/profile-cl.env" bash "$MP" register --model vendor-model-a 2>/dev/null)"
+grep -q "^REGISTERED: turn $tok1 · model vendor-model-a · 3 item(s)" <<<"$rc" && grep -qx 'REWRITE: Fix the login bug until the login test passes' <<<"$rc" && c=$((c + 1)) || echo "      (4) complete: $rc"
+[[ -z "$(mpc "$R" gate)" ]] && c=$((c + 1)) || echo "      (5) gate after register"
+hook_cl "$R" "다음" >/dev/null; tok2="$(head -1 "$R/scv/journal/.help-turn")"
+[[ "$tok2" != "$tok1" && -n "$(mpc "$R" gate)" ]] && c=$((c + 1)) || echo "      (6) new turn needs a new registration"
+if [[ $c -eq 6 ]]; then ok "OK [T21] 6/6 register flow"; else fail "[T21] $c/6"; fi
+
+echo
+echo "T22. 보장 두 겹 — 등록 전 파일 쓰기 거절 · 등록 · 인용 없는 종료 차단(같은 턴 한 번)"
+if command -v jq >/dev/null 2>&1; then
+  c=0
+  R="$(new_repo t22)"; (cd "$R" && git init -q . 2>/dev/null); mkdir -p "$R/src" "$R/scv/promote"   # 가드는 SCV 가 설치된 프로젝트에서만 돈다
+  hook_cl "$R" "로그인 고쳐" >/dev/null
+  gw() { (cd "$R" && printf '{"cwd":"%s","session_id":"s1","tool_name":"Write","tool_input":{"file_path":"%s/src/a.js"}}' "$R" "$R" \
+          | SCV_HOST_PROFILE="$WORK/profile-cl.env" SCV_GUARD_STATE="$WORK/gstate" SCV_GUARD_RULE_B=off SCV_GUARD_SCRIPTS="$CORE/scripts" SCV_GUARD_MODE=gate-write bash "$CORE/template/hooks/guard.sh" 2>/dev/null); }
+  o="$(gw)"; grep -q '"permissionDecision":"deny"' <<<"$o" && grep -q 'register --model' <<<"$o" && c=$((c + 1)) || echo "      (1) write before register not denied: $o"
+  # 0.62.0 개발 중 결함 재현: 가드는 set -u 라 스크립트 경로 변수가 없으면 죽었다(모든 거절이 풀림) — 없어도 거절해야 한다.
+  o="$(cd "$R" && printf '{"cwd":"%s","session_id":"s1","tool_name":"Write","tool_input":{"file_path":"%s/src/a.js"}}' "$R" "$R" \
+        | env -u SCV_GUARD_SCRIPTS SCV_HOST_PROFILE="$WORK/profile-cl.env" SCV_GUARD_STATE="$WORK/gstate" SCV_GUARD_RULE_B=off SCV_GUARD_MODE=gate-write bash "$CORE/template/hooks/guard.sh" 2>/dev/null)"
+  grep -q '"permissionDecision":"deny"' <<<"$o" && c=$((c + 1)) || echo "      (1b) guard without SCV_GUARD_SCRIPTS must still deny: [$o]"
+  (cd "$R" && printf '%s\n' "$SUB_OK" | SCV_HOST_PROFILE="$WORK/profile-cl.env" bash "$MP" register --model vendor-model-a >/dev/null 2>&1)
+  o="$(gw)"; ! grep -q '"permissionDecision":"deny"' <<<"$o" && c=$((c + 1)) || echo "      (2) write after register denied: $o"
+  stop_cl() {  # <저장소> <답> <계속 중 true|false> → 종료 훅 stdout
+    local r="$1" tr="$WORK/tr22-$RANDOM.jsonl"
+    printf '{"type":"user","message":{"content":[{"type":"text","text":"q"}]}}\n' > "$tr"
+    jq -cn --arg t "$2" '{type:"assistant",message:{model:"vendor-model-a",content:[{type:"text",text:$t}]}}' >> "$tr"
+    (cd "$r" && jq -cn --arg p "$tr" --arg a "$2" --argjson act "$3" '{transcript_path:$p,last_assistant_message:$a,stop_hook_active:$act}' \
+       | CLAUDE_PLUGIN_ROOT="$CORE" SCV_HOST_PROFILE="$WORK/profile-cl.env" GIT_AUTHOR_NAME="Hook User" bash "$STOP" 2>/dev/null)
+  }
+  o="$(stop_cl "$R" "$(printf 'done\n\n> **Rewritten request**: Fix the login bug until the login test passes\n')" false)"
+  [[ -z "$o" ]] && c=$((c + 1)) || echo "      (3) registered + quoted should pass: $o"
+  o="$(stop_cl "$R" "done without quote" false)"
+  [[ "$(jq -r .decision <<<"$o" 2>/dev/null)" == block ]] && grep -q '인용' <<<"$o" && c=$((c + 1)) || echo "      (4) registered but not shown should block: $o"
+  hook_cl "$R" "다음 턴" >/dev/null   # 새 표 — 등록 없음
+  o="$(stop_cl "$R" "answer" false)"
+  [[ "$(jq -r .decision <<<"$o" 2>/dev/null)" == block ]] && grep -q 'checklist --model' <<<"$o" && c=$((c + 1)) || echo "      (5) unregistered should block: $o"
+  rm -f "$R/scv/journal/.help-warn"
+  o="$(stop_cl "$R" "answer" true)"
+  [[ -z "$o" ]] && grep -q '^\[SCV 가이드\] 직전 턴:' "$R/scv/journal/.help-warn" 2>/dev/null && c=$((c + 1)) || echo "      (6) already continuing: must not block, must warn next turn: [$o]"
+  if [[ $c -eq 7 ]]; then ok "OK [T22] 7/7 gate + stop block (once)"; else fail "[T22] $c/7"; fi
+else
+  echo "  · (jq 없음 — T22 생략)"
+fi
+
+echo
+echo "T23. 벤더 배치 — 가이드 폴더가 코어 루트 세 단계 위(래퍼 최상위 기준 값)여도 찾는다"
+PL="$WORK/plugin"; mkdir -p "$PL/vendor/scv-core/core"; cp -R "$CORE/scripts" "$PL/vendor/scv-core/core/scripts"
+cp -R "$WORK/guides-cl" "$PL/prompting"
+{ cat "$FIX/profile.env"; printf 'SCV_PROMPTING_GUIDES=prompting\n'; } > "$WORK/profile-rel.env"
+R="$(new_repo t23)"
+o="$(cd "$R" && SCV_HOST_PROFILE="$WORK/profile-rel.env" bash "$PL/vendor/scv-core/core/scripts/model-prompting.sh" checklist --model vendor-model-a 2>/dev/null)"
+if grep -qx 'sources | Name the sources to check' <<<"$o"; then ok "OK [T23] vendored layout finds the wrapper guides"; else fail "[T23] $o"; fi
 
 echo
 echo "T7. 순수성 계약"

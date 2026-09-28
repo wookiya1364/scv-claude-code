@@ -321,3 +321,159 @@ scv_mp_first_turn_lines() {
   while IFS= read -r d || [[ -n "$d" ]]; do [[ -n "${d//[[:space:]]/}" ]] && printf '  %s\n' "$d"; done <<< "$detail"
   return 0
 }
+
+# ---------------------------------------------------------------- 매 턴 1:1 비교 · 등록 (v0.62.0+)
+# 모든 사용자 메시지(길이와 무관)를 그 모델 버전의 요구 항목 목록과 1:1 비교해 등록하게 하고, 등록 전 파일 쓰기와 등록 · 인용
+# 없는 종료를 막는다. 목록은 래퍼 데이터: 가이드 폴더의 checklist-<키>.tsv — "<id>\t<label>\t<원문 인용>" (# 줄은 주석).
+# 제출(등록) 형식: 줄마다 "<id>\t<msg|ctx|asked|na>\t<값>", 그리고 "rewrite\t-\t<다시 쓴 요청>" 한 줄. na = 이번 요청에 해당 없음(값에 이유).
+
+# @pure
+# <색인 텍스트> → 공통(*) 행의 키 또는 빈 값.
+scv_mp_common_key() {
+  local index="${1:-}" mid key rest
+  while IFS=$'\t' read -r mid key rest || [[ -n "$mid" ]]; do
+    if [[ "$mid" == "*" && -n "$key" ]]; then printf '%s' "$key"; return 0; fi
+  done <<< "$index"
+  return 0
+}
+
+# @pure
+# <코어 루트> <프로필 값> → 가이드 폴더 후보들(한 줄에 하나, 앞에서부터 시도). 절대 경로면 그것 하나. 상대 경로면 코어 루트
+# 기준과, 그 위로 세 단계까지 — 클로드 래퍼는 플러그인 최상위 기준 값(prompting)을 쓰는데 훅은 벤더 코어에서 돈다.
+scv_mp_guides_candidates() {
+  local root="${1:-}" v="${2:-}" up="" i
+  [[ -n "$v" ]] || return 0
+  case "$v" in /*) printf '%s\n' "$v"; return 0 ;; esac
+  root="${root%/}"
+  for i in 0 1 2 3; do
+    printf '%s%s/%s\n' "$root" "$up" "$v"
+    up="$up/.."
+  done
+  return 0
+}
+
+# @pure
+# <공통 목록 tsv> <모델 목록 tsv> → 병합된 "id\tlabel" 줄들. 주석 · 빈 줄 · 형식이 깨진 줄(id · label 없음)은 버린다.
+# 순서: 공통 순서대로, 같은 id 는 모델 쪽 label 이 이긴다, 그 뒤 모델에만 있는 항목. id 는 소문자 · 숫자 · - 만.
+scv_mp_checklist_merge() {
+  local common="${1:-}" model="${2:-}" id label rest out="" mids="" mlabels="" line
+  _ok_id() { [[ -n "$1" ]] || return 1; local t="${1//[a-z0-9-]/}"; [[ -z "$t" ]]; }
+  while IFS=$'\t' read -r id label rest || [[ -n "$id" ]]; do
+    [[ -z "$id" || "$id" == \#* || -z "$label" ]] && continue; _ok_id "$id" || continue
+    mids="$mids|$id|"; mlabels="$mlabels$id"$'\t'"$label"$'\n'
+  done <<< "$model"
+  while IFS=$'\t' read -r id label rest || [[ -n "$id" ]]; do
+    [[ -z "$id" || "$id" == \#* || -z "$label" ]] && continue; _ok_id "$id" || continue
+    [[ "$out" == *$'\n'"$id"$'\t'* || "$out" == "$id"$'\t'* ]] && continue
+    if [[ "$mids" == *"|$id|"* ]]; then
+      line="$(printf '%s' "$mlabels" | while IFS=$'\t' read -r a b; do [[ "$a" == "$id" ]] && { printf '%s' "$b"; break; }; done)"
+      out="$out$id"$'\t'"$line"$'\n'
+    else
+      out="$out$id"$'\t'"$label"$'\n'
+    fi
+  done <<< "$common"
+  while IFS=$'\t' read -r id label || [[ -n "$id" ]]; do
+    [[ -z "$id" ]] && continue
+    [[ "$out" == *$'\n'"$id"$'\t'* || "$out" == "$id"$'\t'* ]] && continue
+    out="$out$id"$'\t'"$label"$'\n'
+  done <<< "$mlabels"
+  printf '%s' "$out"
+}
+
+# @pure
+# <병합 목록> <제출 텍스트> → 문제 줄들(없으면 빈 값 = 통과): "missing <id>" · "bad-status <id>" · "empty <id>" · "missing rewrite".
+scv_mp_register_problems() {
+  local list="${1:-}" sub="${2:-}" id label st val seen="" rw=0 out=""
+  while IFS=$'\t' read -r id st val || [[ -n "$id" ]]; do
+    [[ -z "$id" || "$id" == \#* ]] && continue
+    if [[ "$id" == "rewrite" ]]; then [[ -n "${val//[[:space:]]/}" ]] && rw=1; continue; fi
+    case "$st" in
+      msg|ctx|asked|na) [[ -n "${val//[[:space:]]/}" ]] && seen="$seen|$id|" || out="${out}empty $id"$'\n' ;;
+      *) out="${out}bad-status $id"$'\n' ;;
+    esac
+  done <<< "$sub"
+  while IFS=$'\t' read -r id label || [[ -n "$id" ]]; do
+    [[ -z "$id" ]] && continue
+    [[ "$seen" == *"|$id|"* ]] && continue
+    [[ "$out" == *" $id"$'\n'* ]] && continue
+    out="${out}missing $id"$'\n'
+  done <<< "$list"
+  (( rw )) || out="${out}missing rewrite"$'\n'
+  printf '%s' "$out"
+}
+
+# @pure
+# <제출 텍스트> → 다시 쓴 요청 한 줄(rewrite 행의 값) 또는 빈 값.
+scv_mp_register_rewrite() {
+  local sub="${1:-}" id st val
+  while IFS=$'\t' read -r id st val || [[ -n "$id" ]]; do
+    [[ "$id" == "rewrite" && -n "${val//[[:space:]]/}" ]] && { printf '%s' "$val"; return 0; }
+  done <<< "$sub"
+  return 0
+}
+
+# @pure
+# <답 본문> <다시 쓴 요청> → 1(코드 블록 밖 인용 줄에 다시 쓴 요청이 보인다) | 0. 인용 줄이 "다시 쓴 요청" · "Rewritten request"
+# 라벨을 담거나, 다시 쓴 요청의 앞 16글자(공백 제외)를 담으면 보인 것으로 본다.
+scv_mp_answer_shows_rewrite() {
+  local text="${1:-}" rw="${2:-}" line t fence=0 q=$'\x3e' key="" flat
+  key="${rw//[[:space:]]/}"; key="${key:0:16}"
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    t="${line#"${line%%[![:space:]]*}"}"
+    if [[ "$t" == '```'* ]]; then fence=$(( 1 - fence )); continue; fi
+    (( fence )) && continue
+    [[ "${t:0:1}" == "$q" ]] || continue
+    case "$t" in *"다시 쓴 요청"*|*"Rewritten request"*) printf '1'; return 0 ;; esac
+    flat="${t//[[:space:]]/}"
+    [[ -n "$key" && "$flat" == *"$key"* ]] && { printf '1'; return 0; }
+  done <<< "$text"
+  printf '0'
+}
+
+# @pure
+# <등록됨 0|1> <보임 0|1|""(답을 못 얻음)> <이미 계속 중 0|1> → ok | block | warn.
+# 계속 중이면 절대 막지 않는다(같은 턴 한 번) — 다음 턴 경고로 넘긴다. 답을 못 얻었으면 "보임" 은 판정하지 않는다.
+scv_mp_stop_gate() {
+  local reg="${1:-0}" shown="${2:-}" active="${3:-0}" bad=0
+  [[ "$reg" == "1" ]] || bad=1
+  [[ "$shown" == "0" ]] && bad=1
+  (( bad )) || { printf 'ok'; return 0; }
+  [[ "$active" == "1" ]] && printf 'warn' || printf 'block'
+}
+
+# @pure
+# <스위치> <토큰> <모델 id 또는 ""> <병합 목록 또는 ""> <스크립트 경로> → 매 턴 훅이 싣는 블록(스위치 off · 토큰 없음이면 빈 값).
+# 토큰은 싣지 않는다 — 같은 상태면 출력이 늘 같아야 한다(등록은 표 파일을 스스로 읽는다).
+scv_mp_turn_block() {
+  local sw="${1:-on}" tok="${2:-}" model="${3:-}" list="${4:-}" cmd="${5:-model-prompting.sh}" id label items="" q=$'\x3e'
+  [[ "$sw" == "on" && -n "$tok" ]] || return 0
+  local mid="${model:-{지금 모델 id\}}"
+  printf '%s\n' "[SCV 프롬프트] 이 턴 메시지(짧아도)를 모델 가이드 요구 항목과 1:1 비교 · 등록한 뒤 일하라 — 등록 전 파일 쓰기는 거절, 등록 · 인용 없는 종료는 차단."
+  printf '%s\n' "  항목마다 msg · ctx(출처) · na(이유) · asked(못 찾은 것 중 가장 영향 큰 하나만, 추천 답과 함께) → bash \"$cmd\" register --model \"$mid\" (stdin \"id | 상태 | 값\" 줄들 + \"rewrite | - | 다시 쓴 요청\") → 결론 바로 뒤 '$q **다시 쓴 요청**: …' 인용(ctx · asked 항목 표시), 그것으로 일한다."
+  if [[ -n "$model" && -n "$list" ]]; then
+    while IFS=$'\t' read -r id label || [[ -n "$id" ]]; do [[ -n "$id" ]] && items="$items$id($label) "; done <<< "$list"
+    printf '%s\n' "  항목 [$model — 다르면 checklist --model]: ${items% }"
+  else
+    printf '%s\n' "  항목: bash \"$cmd\" checklist --model \"{지금 모델 id}\""
+  fi
+  return 0
+}
+
+# @pure
+# <제출 텍스트> → 탭 구분으로 맞춘 제출. 탭이 없는 줄은 " | " 로 나눈다(앞 두 번만 — 값에는 | 가 들어갈 수 있다). 앞뒤 공백은 잘라낸다.
+scv_mp_register_normalize() {
+  local sub="${1:-}" line a b c sep=" | "
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ -z "${line//[[:space:]]/}" ]] && continue
+    if [[ "$line" != *$'\t'* && "$line" == *"$sep"*"$sep"* ]]; then
+      a="${line%%"$sep"*}"; line="${line#*"$sep"}"; b="${line%%"$sep"*}"; c="${line#*"$sep"}"
+    else
+      IFS=$'\t' read -r a b c <<< "$line"
+    fi
+    a="${a#"${a%%[![:space:]]*}"}"; a="${a%"${a##*[![:space:]]}"}"
+    b="${b#"${b%%[![:space:]]*}"}"; b="${b%"${b##*[![:space:]]}"}"
+    c="${c#"${c%%[![:space:]]*}"}"; c="${c%"${c##*[![:space:]]}"}"
+    printf '%s\t%s\t%s\n' "$a" "$b" "$c"
+  done <<< "$sub"
+  return 0
+}
