@@ -1,0 +1,5 @@
+# source: opus-5-5.md
+explore-sources	Name the sources to check, or ask it to look around before acting	Claude Opus 5.5 tends to get to work quickly, and on loosely specified tasks it helps to tell the model to look through the relevant sources before acting.
+pasted-text	Mark which text is your own and which was pasted from elsewhere	To get that behavior, mark which text is the user's own and which was pasted from somewhere else.
+design-direction	For frontend work, give design direction and name specific styles to avoid	Asked for frontend work without design direction, Claude Opus 5.5 falls back on a few default styles, and a general instruction such as "avoid a generic AI look" mostly swaps one default for another.
+progress-updates	Say how often to report progress (e.g., intent up front, recap at end)	if you want more frequent or predictable updates, such as a one-line statement of intent before the first tool call and a short recap at the end, say so in the system prompt

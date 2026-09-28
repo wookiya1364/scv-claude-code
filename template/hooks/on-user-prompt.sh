@@ -119,8 +119,10 @@ if [[ "${_scv_always:-on}" != "off" ]] && declare -F scv_force_routing >/dev/nul
   # v0.61.0+ — 이 컨텍스트에서 아직 가이드 원문을 안 읽었으면, help 가 마지막으로 본 모델의 원문 경로 · 표시 명령을 싣는다.
   # 경고 파일을 지우기 전에 판단한다(가이드 경고가 이미 있으면 같은 내용이라 싣지 않는다). 어떤 실패도 아무것도 안 싣는다.
   _scv_guide_first=""
-  if [[ -f "$CORE_HOME/scripts/model-prompting.sh" ]]; then
-    _scv_psid=""; command -v jq >/dev/null 2>&1 && _scv_psid="$(printf '%s' "$INPUT" | jq -r 'try (.session_id // empty)' 2>/dev/null || true)"
+  # v0.62.0+: 이번 턴 표를 쓰므로 사람이 쓴 프롬프트가 있는 입력에서만 부른다 — 깨진 입력은 아무것도 쓰지 않는다.
+  if [[ -f "$CORE_HOME/scripts/model-prompting.sh" && -n "$INPUT" ]] && command -v jq >/dev/null 2>&1 \
+     && [[ "$(printf '%s' "$INPUT" | jq -r 'try (.prompt | type == "string" and length > 0) catch false' 2>/dev/null)" == "true" ]]; then
+    _scv_psid="$(printf '%s' "$INPUT" | jq -r 'try (.session_id // empty)' 2>/dev/null || true)"
     _scv_guide_first="$(bash "$CORE_HOME/scripts/model-prompting.sh" prompt --session "$_scv_psid" 2>/dev/null | head -c 2048 || true)"
   fi
   if [[ -f "$_scv_warn" && ! -L "$_scv_warn" ]]; then

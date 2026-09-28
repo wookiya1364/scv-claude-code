@@ -6,6 +6,9 @@
 #   model-prompting.sh status [--model <id>] 사람이 본다: 가이드 폴더 · 색인 행 수 · 읽음 기록 · (모델이 있으면) 결정
 #   model-prompting.sh prompt              (v0.61.0+) 매 턴 훅이 부른다: 이 컨텍스트에서 아직 원문을 안 읽었으면, help 가
 #                                            마지막으로 본 모델의 원문 경로 · 표시 명령 블록을 낸다(아니면 아무것도)
+#   model-prompting.sh checklist --model <id> (v0.62.0+) 이 모델의 요구 항목 목록(공통 + 모델) — 매 턴 1:1 비교의 기준
+#   model-prompting.sh register --model <id> < 제출  (v0.62.0+) 이번 턴 비교 결과를 등록 — 항목이 모두 채워졌을 때만
+#   model-prompting.sh gate                 (v0.62.0+) 가드가 부른다: 이번 턴 등록 전이면 거절 사유를 낸다(아니면 아무것도)
 #   model-prompting.sh stop < 답본문        (v0.60.0+) 종료 훅이 부른다: 이번 턴에 원문을 읽었는지 · 다시 쓴 요청을
 #                                            답에 보였는지 결과로 판정 → 어긋나면 다음 턴 경고(.help-warn 에 덧붙임)
 #
@@ -28,14 +31,17 @@ source "$SCRIPT_DIR/lib/settings.sh" 2>/dev/null || true
 JOURNAL_DIR="${SCV_JOURNAL_DIR:-scv/journal}"
 READ_FILE="$JOURNAL_DIR/.help-guide"
 TURN_FILE="$JOURNAL_DIR/.help-guide-turn"
-LAST_FILE="$JOURNAL_DIR/.help-guide-last"   # v0.61.0+: help 가 마지막으로 본 모델 — 컨텍스트에 묶이지 않아 초기화가 지우지 않는다
+LAST_FILE="$JOURNAL_DIR/.help-guide-last"
+TOKEN_FILE="$JOURNAL_DIR/.help-turn"          # v0.62.0+: 매 턴 훅이 새로 쓰는 이번 턴 표 — 등록이 이 턴 것인지 가른다
+REG_FILE="$JOURNAL_DIR/.help-rewrite"         # v0.62.0+: 이번 턴 등록(첫 줄 표\x1f모델, 다음 줄부터 제출)   # v0.61.0+: help 가 마지막으로 본 모델 — 컨텍스트에 묶이지 않아 초기화가 지우지 않는다
 STATE_FILE="$JOURNAL_DIR/.help-state"
 
 cmd="${1:-guide}"; shift || true
-MODEL_RAW=""; SESSION_ARG=""
+MODEL_RAW=""; SESSION_ARG=""; ACTIVE_ARG="0"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --session) SESSION_ARG="${2:-}"; shift 2 || shift ;;
+    --active)  ACTIVE_ARG="${2:-0}"; shift 2 || shift ;;
     --model)   MODEL_RAW="${2:-}"; shift 2 || shift ;;
     --model=*) MODEL_RAW="${1#--model=}"; shift ;;
     *) shift ;;
@@ -59,7 +65,12 @@ _mtime() { stat -c '%Y' "$1" 2>/dev/null || stat -f '%m' "$1" 2>/dev/null || pri
 ID="$(scv_mp_normalize_id "$MODEL_RAW")"
 SWITCH="$(scv_mp_switch "$(_setting SCV_MODEL_PROMPTING)")"
 MAX_AGE="$(_setting SCV_MODEL_PROMPTING_MAX_AGE_DAYS)"; [[ "$MAX_AGE" =~ ^[0-9]+$ ]] || MAX_AGE=90
-GUIDES_DIR="$(scv_mp_guides_dir "$CORE_ROOT" "${SCV_PROMPTING_GUIDES:-}")"
+# v0.62.0+: 후보를 앞에서부터 시도해 INDEX.tsv 가 있는 첫 폴더 — 벤더 코어에서 도는 훅도 래퍼 최상위 기준 값을 찾는다.
+GUIDES_DIR=""
+while IFS= read -r _c; do
+  [[ -n "$_c" && -f "$_c/INDEX.tsv" && ! -L "$_c/INDEX.tsv" ]] && { GUIDES_DIR="$_c"; break; }   # 경로는 정규화하지 않는다(출력 글자 그대로)
+done <<< "$(scv_mp_guides_candidates "$CORE_ROOT" "${SCV_PROMPTING_GUIDES:-}")"
+[[ -n "$GUIDES_DIR" ]] || GUIDES_DIR="$(scv_mp_guides_dir "$CORE_ROOT" "${SCV_PROMPTING_GUIDES:-}")"
 INDEX_FILE=""; INDEX=""
 if [[ -n "$GUIDES_DIR" && -f "$GUIDES_DIR/INDEX.tsv" && ! -L "$GUIDES_DIR/INDEX.tsv" ]]; then
   INDEX_FILE="$GUIDES_DIR/INDEX.tsv"
@@ -79,6 +90,15 @@ MFILE_RAW="$MFILE"; MFILE="$(scv_mp_safe_name "$MFILE")"
 COMMON="$(scv_mp_common "$INDEX")"; CFILE=""; CDATE=""
 [[ -n "$COMMON" ]] && IFS=$'\t' read -r CFILE CDATE <<< "$COMMON"
 CFILE="$(scv_mp_safe_name "$CFILE")"
+_cl_file() { local k; k="$(scv_mp_safe_name "checklist-${1:-}.tsv")"; [[ -n "${1:-}" && -n "$k" && -f "$GUIDES_DIR/$k" && ! -L "$GUIDES_DIR/$k" ]] && head -c 16384 "$GUIDES_DIR/$k" 2>/dev/null; }
+_checklist_for() {  # <모델 키 또는 ""> → 병합 목록 (공통 목록이 없으면 빈 값 — 이 호스트에 요구 항목 데이터가 없다)
+  local common; common="$(_cl_file "$(scv_mp_common_key "$INDEX")")"
+  [[ -n "${common//[[:space:]]/}" ]] || return 0
+  scv_mp_checklist_merge "$common" "$(_cl_file "${1:-}")"
+}
+_token_new() { local n; n="$(head -c 4 /dev/urandom 2>/dev/null | od -An -tx1 2>/dev/null | tr -d ' \n')"; [[ "$n" =~ ^[0-9a-f]{8}$ ]] || n="$(printf '%04x%04x' "$RANDOM" "$RANDOM")"; printf '%s' "$n"; }
+_last_model() { local m; m="$(_first_line "$LAST_FILE")"; m="${m//[[:space:]]/}"; [[ "$m" == "none" ]] && m=""; printf '%s' "$m"; }
+_key_of() { local r; r="$(scv_mp_lookup "$(scv_mp_normalize_id "${1:-}")" "$INDEX")"; printf '%s' "${r%%$'\t'*}"; }
 
 case "$cmd" in
   guide)
@@ -156,14 +176,80 @@ case "$cmd" in
     _warned=0; _w="$JOURNAL_DIR/.help-warn"
     [[ -f "$_w" && ! -L "$_w" ]] && head -c 4096 "$_w" 2>/dev/null | grep -q '^\[SCV 가이드\]' && _warned=1
     _rec=""; [[ -f "$LAST_FILE" && ! -L "$LAST_FILE" ]] && _rec="$(head -c 4096 "$LAST_FILE" 2>/dev/null)"
+    # v0.62.0+: 매 턴(모든 메시지) 새 표를 쓰고 1:1 비교 · 등록 블록을 싣는다 — 요구 항목 데이터가 있는 호스트에서만.
+    if [[ "$SWITCH" == "on" && -n "$(_checklist_for "")" ]]; then
+      _tok="$(_token_new)"; _put "$TOKEN_FILE" "$_tok"
+      _lm="$(_last_model)"; _list=""; [[ -n "$_lm" ]] && _list="$(_checklist_for "$(_key_of "$_lm")")"
+      scv_mp_turn_block "$SWITCH" "$_tok" "$_lm" "$_list" "$SCRIPT_DIR/model-prompting.sh"
+    fi
     scv_mp_first_turn_lines "$SWITCH" "$_read" "$_warned" "$_rec"
     ;;
+  checklist)
+    _list="$(_checklist_for "$KEY")"
+    [[ -n "$_list" ]] || { echo "CHECKLIST: none (this host ships no requirement list)"; exit 0; }
+    echo "CHECKLIST: ${KEY:-common} (model ${ID:-?})"
+    printf '%s\n' "$_list" | while IFS=$'\t' read -r _i _l; do [[ -n "$_i" ]] && printf '%s | %s\n' "$_i" "$_l"; done
+    echo "REGISTER: bash \"$SCRIPT_DIR/model-prompting.sh\" register --model \"${ID:-<id>}\" — stdin: id | msg|ctx|asked|na | value, then rewrite | - | <rewritten request>"
+    ;;
+  register)
+    _list="$(_checklist_for "$KEY")"
+    [[ -n "$_list" ]] || { echo "REGISTER: skipped (no requirement list)"; exit 0; }
+    [[ -n "$ID" ]] || { echo "REGISTER: refused — pass --model <your exact model id>"; exit 0; }
+    _sub="$(head -c 16384 2>/dev/null || true)"
+    _sub="$(scv_mp_register_normalize "$_sub")"
+    _prob="$(scv_mp_register_problems "$_list" "$_sub")"
+    if [[ -n "$_prob" ]]; then
+      echo "REGISTER: incomplete — fix and run again:"
+      printf '%s\n' "$_prob" | sed 's/^/  /'
+      echo "CHECKLIST (${KEY:-common}):"
+      printf '%s\n' "$_list" | while IFS=$'\t' read -r _i _l; do [[ -n "$_i" ]] && printf '  %s | %s\n' "$_i" "$_l"; done
+      exit 0
+    fi
+    _tok="$(_first_line "$TOKEN_FILE")"
+    _red="$_sub"; [[ -f "$SCRIPT_DIR/journal-append.sh" ]] && _red="$(printf '%s' "$_sub" | bash "$SCRIPT_DIR/journal-append.sh" --redact-only 2>/dev/null || printf '%s' "$_sub")"
+    _put "$REG_FILE" "$(printf '%s\x1f%s' "$_tok" "$ID")"$'\n'"$_red"
+    _n="$(printf '%s\n' "$_list" | grep -c . || true)"
+    echo "REGISTERED: turn ${_tok:-?} · model $ID · $_n item(s)"
+    echo "REWRITE: $(scv_mp_register_rewrite "$_red")"
+    ;;
+  gate)
+    [[ "$SWITCH" == "on" && -n "$(_checklist_for "")" ]] || exit 0
+    _tok="$(_first_line "$TOKEN_FILE")"; [[ -n "$_tok" ]] || exit 0
+    _rt="$(_first_line "$REG_FILE")"; [[ "${_rt%%$'\x1f'*}" == "$_tok" ]] && exit 0
+    _lm="$(_last_model)"
+    echo "SCV 프롬프트: 이번 턴($_tok)의 요청을 아직 모델 가이드 요구 항목과 비교 · 등록하지 않아 파일 쓰기를 거절한다. 먼저 bash \"$SCRIPT_DIR/model-prompting.sh\" checklist --model \"${_lm:-<지금 모델 id>}\" 로 항목을 받아 비교하고, bash \"$SCRIPT_DIR/model-prompting.sh\" register --model \"${_lm:-<지금 모델 id>}\" 로 등록한 뒤(stdin: id | msg|ctx|asked|na | 값, 끝에 rewrite | - | 다시 쓴 요청) 다시 시도하라."
+    ;;
   stop)
-    # 이번 턴에 help 가 가이드를 내지 않았으면 판정할 것이 없다 — 아무 것도 읽지도 쓰지도 않는다.
+    ANSWER="$(head -c 65536 2>/dev/null || true)"
+    # v0.62.0+ — 매 턴 등록 판정: 이번 턴 표가 있고(매 턴 훅이 씀) 요구 항목 데이터가 있을 때만. ok | block | warn.
+    if [[ "$SWITCH" == "on" && -n "$(_checklist_for "")" ]]; then
+      _tok="$(_first_line "$TOKEN_FILE")"
+      if [[ -n "$_tok" ]]; then
+        _rt="$(_first_line "$REG_FILE")"; _reg=0; [[ "${_rt%%$'\x1f'*}" == "$_tok" ]] && _reg=1
+        _rw=""; (( _reg )) && _rw="$(scv_mp_register_rewrite "$(head -c 16384 "$REG_FILE" 2>/dev/null | tail -n +2)")"
+        _shown=""; [[ -n "${ANSWER//[[:space:]]/}" ]] && _shown="$(scv_mp_answer_shows_rewrite "$ANSWER" "$_rw")"
+        _sg="$(scv_mp_stop_gate "$_reg" "$_shown" "$ACTIVE_ARG")"
+        echo "STOP_GATE: $_sg"
+        _lm="$(_last_model)"
+        if [[ "$_sg" != "ok" ]]; then
+          if (( _reg )); then
+            _why="이번 턴에 등록한 다시 쓴 요청을 답에 보이지 않았다 — 결론 바로 뒤에 인용 블록으로 보여라(REWRITE 줄 그대로)."
+          else
+            _why="이번 턴($_tok)의 요청을 모델 가이드 요구 항목과 비교 · 등록하지 않았다 — bash \"$SCRIPT_DIR/model-prompting.sh\" checklist --model \"${_lm:-<지금 모델 id>}\" 로 항목을 받아 비교하고, register 로 등록한 뒤, 다시 쓴 요청을 결론 바로 뒤 인용으로 보이고 그것으로 답하라."
+          fi
+          echo "STOP_REASON: [SCV 프롬프트] $_why"
+          if [[ "$_sg" == "warn" ]]; then
+            mkdir -p "$JOURNAL_DIR" 2>/dev/null && [[ ! -L "$JOURNAL_DIR/.help-warn" ]] && printf '%s\n' "[SCV 가이드] 직전 턴: $_why" >> "$JOURNAL_DIR/.help-warn" 2>/dev/null
+          fi
+        fi
+        # 판정은 파일에 남기지 않는다 — 종료 훅이 쓰는 것은 저널과(계속 중일 때만) 다음 턴 경고뿐이라는 약속을 지킨다.
+        # 막을 때의 사유는 호스트가 대화 기록에 남긴다.
+      fi
+    fi
+    # 이번 턴에 help 가 가이드를 내지 않았으면 원문 읽음 판정은 할 것이 없다.
     TURN="$(scv_mp_turn_parse "$(_first_line "$TURN_FILE")")"
     [[ -n "$TURN" ]] || { _drop "$TURN_FILE"; exit 0; }
     DETAIL="$(head -c 4096 "$TURN_FILE" 2>/dev/null | tail -n +2)"   # v0.60.1+: help 가 낸 GUIDE_FILE · GUIDE_MARK_CMD 줄
-    ANSWER="$(head -c 65536 2>/dev/null || true)"
     IFS=$'\x1f' read -r _tn TMODEL TDEC TKEY <<< "$TURN"
     WAS_READ="$(scv_mp_was_read "$TURN" "$RECORD" "$NONCE")"
     # 다시 쓴 요청이 기록됐나: 가장 최근에 바뀐 대화 파일이 이번 턴 기록보다 나중(같은 초 포함)에 바뀌었을 때만
@@ -195,6 +281,6 @@ case "$cmd" in
       && printf '%s guide=%s decision=%s read=%s recorded=%s quoted=%s verdict=%s\n' "$_now" "${TKEY:-?}" "$TDEC" "$WAS_READ" "$RECORDED" "${QUOTED:-?}" "${_vs:-ok}" >> "$_drift" 2>/dev/null
     echo "GUIDE_VERDICT: ${_vs:-ok}"
     ;;
-  *) echo "usage: model-prompting.sh guide|mark|status|prompt|stop --model <id>" >&2 ;;
+  *) echo "usage: model-prompting.sh guide|mark|status|prompt|checklist|register|gate|stop --model <id>" >&2 ;;
 esac
 exit 0
