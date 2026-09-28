@@ -252,6 +252,20 @@ if [[ "$MODE" == "gate-bash" ]]; then
   :
 fi
 
+# ---------- Rule P (v0.62.0+): this turn's request must be registered first ---
+# Model-prompting: every user message is compared 1:1 with the answering model's
+# guide requirement list and registered before any editor-style write. The
+# decision lives in model-prompting.sh gate (it prints a reason, or nothing);
+# no requirement data, no turn token, switch off, or any failure → no opinion.
+if [[ "$MODE" == "gate-write" && "${SCV_GUARD_RULE_P:-on}" != "off" ]]; then
+  _scv_mp_dir="${SCV_GUARD_SCRIPTS:-}"; _scv_mp_dir="${_scv_mp_dir%%:*}"
+  [[ -n "$_scv_mp_dir" ]] || _scv_mp_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../scripts" 2>/dev/null && pwd)"
+  if [[ -f "$_scv_mp_dir/model-prompting.sh" && -d "$PROJECT_ROOT" ]]; then
+    _scv_mp_why="$(cd "$PROJECT_ROOT" && bash "$_scv_mp_dir/model-prompting.sh" gate 2>/dev/null | head -c 2048 || true)"
+    [[ -n "${_scv_mp_why//[[:space:]]/}" ]] && deny "$_scv_mp_why"
+  fi
+fi
+
 # ---------- Rule A: creating a plan file needs a receipt --------------------
 while IFS= read -r raw; do
   [[ -n "$raw" ]] || continue

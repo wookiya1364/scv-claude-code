@@ -41,5 +41,21 @@ while IFS=$'\t' read -r mid key file url fetched || [[ -n "$mid" ]]; do
     rm -f "$tmpl" "$tmpr"
   fi
 done < "$INDEX"
+# v0.62.0+ (core) — 요구 항목 목록: 색인의 키마다 checklist-<키>.tsv 가 있고, 첫 줄 출처가 그 키의 원문이며,
+# 항목마다 id · label · 인용이 있고, 인용이 그 원문에 글자 그대로 있는지(매 턴 1:1 비교의 기준이 원문에서 왔다는 증거).
+nitem=0; seenkeys=" "
+while IFS=$'\t' read -r mid key file url fetched || [[ -n "$mid" ]]; do
+  [[ -z "$mid" || "$mid" == \#* || "$mid" == @* || -z "$key" || -z "$file" ]] && continue
+  [[ "$seenkeys" == *" $key "* ]] && continue; seenkeys+="$key "
+  cl="$DIR/checklist-$key.tsv"
+  [[ -f "$cl" ]] || { err "missing checklist: checklist-$key.tsv"; continue; }
+  head -1 "$cl" | grep -qxF "# source: $file" || err "checklist-$key.tsv: first line must be '# source: $file'"
+  while IFS=$'\t' read -r cid clabel cquote extra || [[ -n "$cid" ]]; do
+    [[ -z "$cid" || "$cid" == \#* ]] && continue
+    [[ "$cid" =~ ^[a-z0-9-]+$ && -n "$clabel" && -n "$cquote" && -z "${extra:-}" ]] || { err "checklist-$key.tsv: bad line: $cid"; continue; }
+    grep -qF -- "$cquote" "$DIR/$file" || err "checklist-$key.tsv: $cid quote is not verbatim in $file"
+    nitem=$((nitem + 1))
+  done < "$cl"
+done < "$INDEX"
 (( fail )) && exit 1
-echo "OK prompting guides: $nid model id(s), $nfile file(s)$( (( ONLINE )) && echo ', bodies match the source')"
+echo "OK prompting guides: $nid model id(s), $nfile file(s), $nitem checklist item(s)$( (( ONLINE )) && echo ', bodies match the source')"
