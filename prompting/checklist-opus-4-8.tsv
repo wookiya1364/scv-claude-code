@@ -1,0 +1,5 @@
+# source: opus-4-8.md
+instruction-breadth	Say how broadly each instruction applies (every item, not just the first)	If you need Claude to apply an instruction broadly, state the scope explicitly (for example, "Apply this formatting to every section, not just the first one").
+tool-use	Say which tools to use and when (e.g., web search, running tests)	For scenarios where you want more tool use, you can also adjust your prompt to explicitly instruct the model about when and how to properly use its tools.
+design-direction	For design work, give a concrete visual spec, not generic style words	Generic instructions ("don't use cream," "make it clean and minimal") tend to shift the model to a different fixed palette rather than producing variety.
+review-bar	For code reviews, state a concrete bar for which findings to report	If you do want the model to self-filter in a single pass, be concrete about where the bar is rather than using qualitative terms like "important"
