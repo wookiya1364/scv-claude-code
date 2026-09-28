@@ -130,8 +130,12 @@ fi
 # v0.60.0+ — 모델별 가이드를 결과로 판정한다. help 가 이번 턴에 가이드를 냈을 때만(.help-guide-turn) 읽음 표시와
 # 답의 인용을 보고, 어긋나면 다음 턴 경고를 덧붙인다. 답 본문은 위 드리프트 검사가 고른 것을 그대로 쓴다(없으면 빈 값 —
 # 그러면 "보였나" 는 판정하지 않는다). 어떤 실패도 막지 않는다.
+# v0.62.0+ — 매 턴 등록 판정도 같은 호출이 한다: 이번 턴 요청을 등록하지 않았거나 다시 쓴 요청을 답에 보이지 않았으면
+# 끝내기를 막고 계속하게 한다(같은 턴 한 번 — 호스트가 이미 계속 중이라고 알리면 막지 않고 다음 턴 경고). 막는 출력은
+# 저널 기록을 마친 뒤, 훅이 끝날 때 한 번 낸다.
 _scv_mp="${SCV_CORE_ROOT:-$SCRIPT_DIR/../..}/scripts/model-prompting.sh"
-if [[ -f "$_scv_mp" && -f "${SCV_JOURNAL_DIR:-scv/journal}/.help-guide-turn" ]]; then
+_scv_block_reason=""
+if [[ -f "$_scv_mp" ]]; then
   _scv_ans="${_scv_last:-}"   # 린트가 꺼져 본문을 안 골랐으면 호스트가 준 답만 본다
   [[ -n "${_scv_ans//[[:space:]]/}" ]] || _scv_ans="$(printf '%s' "$INPUT" | jq -r 'try (.last_assistant_message // empty)' 2>/dev/null | head -c 65536 || true)"
   # 호스트가 준 답은 마지막 메시지뿐이다 — 도구를 부르기 전 첫 메시지에 인용을 보였을 수 있으니, 원본에서 이번 턴의
@@ -140,8 +144,19 @@ if [[ -f "$_scv_mp" && -f "${SCV_JOURNAL_DIR:-scv/journal}/.help-guide-turn" ]];
     _scv_all="$(scv_turn_slice "$(_scv_turn_stream)" | head -c 65536)"
     [[ -n "${_scv_all//[[:space:]]/}" ]] && _scv_ans="$(printf '%s\n\n%s' "$_scv_ans" "$_scv_all")"
   fi
-  printf '%s' "$_scv_ans" | bash "$_scv_mp" stop >/dev/null 2>&1 || true
+  _scv_active=0
+  [[ "$(printf '%s' "$INPUT" | jq -r 'try (.stop_hook_active // false)' 2>/dev/null)" == "true" ]] && _scv_active=1
+  _scv_gate="$(printf '%s' "$_scv_ans" | bash "$_scv_mp" stop --active "$_scv_active" 2>/dev/null || true)"
+  if grep -qx 'STOP_GATE: block' <<<"$_scv_gate"; then
+    _scv_block_reason="$(grep -m1 '^STOP_REASON: ' <<<"$_scv_gate" | sed 's/^STOP_REASON: //')"
+    [[ -n "$_scv_block_reason" ]] || _scv_block_reason="[SCV 프롬프트] 이번 턴 요청을 비교 · 등록하고 다시 쓴 요청을 보여라."
+  fi
 fi
+_scv_emit_block() {
+  [[ -n "${_scv_block_reason:-}" ]] || return 0
+  jq -cn --arg r "$_scv_block_reason" '{decision:"block",reason:$r}' 2>/dev/null || true
+}
+trap '_scv_emit_block' EXIT
 
 [[ -n "${SUMMARY//[[:space:]]/}" ]] || exit 0
 
