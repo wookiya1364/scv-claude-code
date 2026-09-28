@@ -1,0 +1,3 @@
+# source: fable-5.md
+verified-progress	For long runs, ask that each progress claim be backed by tool evidence	On long autonomous runs, instruct Claude Fable 5 to audit progress against actual tool results.
+verification-method	For long runs, state how and how often to check the work against the spec	Make self-verification explicit in long-run prompts.

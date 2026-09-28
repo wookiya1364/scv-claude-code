@@ -198,3 +198,13 @@ The guard is inert where SCV is not adopted: resolve the workflow root by walkin
 up from the payload's working directory, and allow immediately when there is
 none. Do not test for a directory relative to the current directory — a caller
 one level down would silently disable the guard.
+
+## Rule P — this turn's request must be registered first (v0.62.0+)
+
+In `gate-write` mode only, before Rule A, the guard asks `scripts/model-prompting.sh gate` whether
+this turn's user message has been compared with the answering model's requirement checklist and
+registered. The script prints a deny reason (with the exact `checklist` / `register` commands) or
+nothing. It has no opinion — and the guard falls through to Rules A and B — when the host ships no
+checklist, when no turn token exists (the prompt hook did not run), when `SCV_MODEL_PROMPTING=off`,
+or on any failure. `SCV_GUARD_RULE_P=off` disables this rule alone. Shell commands are not gated by
+Rule P; the Stop hook's once-per-turn block is the net for a turn that never registered.

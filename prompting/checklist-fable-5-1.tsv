@@ -1,0 +1,5 @@
+# source: fable-5-1.md
+progress-updates	Say when to post progress updates and what each should contain	add a short system prompt line that says when you want user-facing text from the model and what each update should contain
+prose-style	Ask for plain, direct prose (no mannered phrasing) when writing matters	An instruction that defines the anti-pattern, mannered prose, helps. Add it to a user message (preferred) or the system prompt:
+tests	Say whether new tests should be added or committed for the change	Commit tests only where the task asks for them or this repository already keeps tests for this kind of change
+targeted-edits	For file changes, ask for targeted edits rather than whole-file rewrites	If Claude Fable 5.1 rewrites whole files for small changes, append the following instruction to the system prompt or the first user message.
