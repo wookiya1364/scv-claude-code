@@ -1,0 +1,5 @@
+# source: opus-5.md
+response-length	State how long the reply should be	To control response length, prompt for it explicitly.
+document-length	State how long any written document or report should be	If your product includes Claude-authored documents, add explicit length calibration:
+progress-updates	Say how and when to report progress while working	It benefits from explicit guidance on how to communicate with the user during a task.
+review-bar	For code reviews, ask for every finding instead of only severe ones	If your review prompt says "only report high-severity issues" or "be conservative," the model may follow that instruction literally and report less; ask it to report everything and filter in a separate pass instead.
