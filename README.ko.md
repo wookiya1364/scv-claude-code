@@ -42,6 +42,16 @@
 - **Linux / WSL**: 할 것 없음. **Windows 네이티브**: 미지원 — WSL 또는 Git Bash.
 - 권장 CLI: `git`, `curl`, `jq`, `gh` (또는 `glab`). 없으면 SCV가 알려줍니다.
 
+**업데이트**는 Claude Code 안에서 바로 합니다 — 다시 시작할 필요 없습니다:
+
+```bash
+/plugin marketplace update scv-claude-code
+/reload-plugins
+```
+
+`/scv:update`가 최신인지 알려 줍니다. 업데이트 뒤 각 프로젝트는 첫 액션에서
+SCV 파일을 스스로 갱신하고, 갱신했다고 말해 줍니다.
+
 ## 쓰는 법
 
 **그냥 말 걸면 됩니다.** 외울 명령이 없습니다 — SCV가 대화에 스스로 끼어듭니다:
@@ -53,9 +63,21 @@ SCV:  (대화 모드 진입 — 목표 / 범위 / 인수 기준을 묻고,
 ```
 
 만들고 싶은 걸 말하면 계획으로 다듬어 주고, 다음에 뭘 할지 물으면 프로젝트를
-진단하고, "작년에 환불 어떻게 처리했었지?"라고 물으면 아카이브를 검색합니다.
-`/scv:help`는 같은 일을 명시적으로 하는 입구이고, `scv/scv_settings.json`의
-`SCV_ALWAYS_ON=off`가 명령 전용 동작으로 되돌립니다.
+진단하고, "작년에 환불 어떻게 처리했었지?"라고 물으면 지난 작업을 찾습니다 —
+제목만이 아니라 계획 본문, 테스트, 결정, 대화까지 훑습니다. `/scv:help`는 같은
+일을 명시적으로 하는 입구이고, `scv/scv_settings.json`의 `SCV_ALWAYS_ON=off`가
+명령 전용 동작으로 되돌립니다.
+
+SCV는 매 턴 이런 일도 합니다:
+
+- **쉬운 말로 답합니다** — 한두 문장의 결론이 먼저, 그다음 예시 하나, 코드 값은
+  물어볼 때만 (`SCV_PLAIN_LANGUAGE`);
+- **모델 회사가 권하는 방식으로 모델에 요청합니다** — 쓰고 있는 모델의 공식
+  프롬프팅 가이드를 싣고, 요청을 그 가이드의 요구 항목과 하나씩 비교해 다시 쓴
+  요청을 결론 바로 뒤에 인용합니다. 이번 턴이 등록되기 전에는 파일을 쓰지
+  않습니다 (`SCV_MODEL_PROMPTING`);
+- **하던 곳에서 이어 갑니다** — `/clear`, 압축, 재개 뒤에 진행 중인 계획, 최근
+  결정, 미결 항목, 진행 중인 대화를 다시 실어 줍니다 (`SCV_RESUME_RECAP`).
 
 대화 뒤에서는 루프 하나가 모든 것을 돌립니다:
 
@@ -84,8 +106,12 @@ flowchart LR
 |---|---|
 | AI 디프를 믿기 전에 직접 돌려봐야 한다 | PR에 e2e 영상/GIF가 이미 붙어서 온다 — 증적은 파일 이름이 아니라 실제 테스트 실행 기록을 따른다 |
 | 같은 변경이 티켓 · PR · 채팅에서 다르게 적혀 있다 | `PLAN.md`가 단일 원본; 티켓은 `refs:` 링크, PR과 보고는 여기서 생성 |
-| 결정이 세션과 함께 사라진다 | `scv/DECISIONS.md` — 추가 전용, 계획 승인 / 아카이브 / 폐기 시점에 자동 기록 |
+| 결정이 세션과 함께 사라진다 | `scv/DECISIONS.md` — 추가 전용, 계획 승인 / 아카이브 / 폐기 시점에 자동 기록, 교훈도 함께 |
 | 옛 기능이 소리 없이 깨진다 | 아카이브된 모든 계획의 테스트가 하나의 회귀 스위트로 재실행 |
+| 계획서가 글자 벽이다 | `/scv:deck`이 계획의 그림 문서(`FEATURE_ARCHITECTURE.md`)를 번호식 화면설계서로 그린다 — 큰 그림 하나, 부분마다 번호, 번호 옆에 설명 |
+| 변경이 어디까지 닿을지 모른다 | 문서 · 계획 · 함께 바뀌는 파일을 잇는 SCV 자체 그래프를 자동으로 다시 만든다 (`SCV_GRAPH`); Graft가 설치돼 있으면 계획 · 구현 머리말에 코드 후보도 붙는다 (`SCV_GRAFT`) |
+| "이거 전에 해 봤나?" | 지난 작업 찾기가 계획 본문, 테스트, 결정, 대화까지 읽는다 — [지난 작업 찾기](vendor/scv-core/core/protocols/help/archive-search.md) 참조 |
+| 과정이 잘 돌고 있는지 모른다 | `metrics.sh`가 프로젝트의 기록을 과정 숫자로 바꿔 보여 준다 — 읽기만 한다 |
 
 ## 설정
 
@@ -97,15 +123,21 @@ ID)은 git 무시되는 별도 파일로 갑니다. `.env`는 읽지도 쓰지�
 |---|---|---|
 | `SCV_ALWAYS_ON` | `on` | 일반 대화에도 SCV가 끼어듦; `off` = 명령 전용 |
 | `SCV_PLAIN_LANGUAGE` | `on` | 쉬운말 우선 답 모양(+매 턴 알림); `off`로 끔 |
+| `SCV_MODEL_PROMPTING` | `on` | 모델별 프롬프팅: 모델의 가이드를 읽고 매 요청을 비교 · 등록 |
+| `SCV_RESUME_RECAP` | `on` | `/clear` · 압축 · 재개 뒤 진행 상황을 다시 실음 |
+| `SCV_DELEGATE_EFFORT` | `off` | 깊은 질문을 배경 조사 담당에게 넘김; 보고서는 `scv/raw/`에 |
 | `SCV_LANG` | 자동 | 출력 언어: `english` · `korean` · `japanese` |
 | `NOTIFIER_PROVIDER` | 꺼짐 | 팀 보고 채널: `slack` 또는 `discord` |
 
+나머지 키와 기본값:
+[`scv_settings.example.json`](vendor/scv-core/core/template/scv/scv_settings.example.json).
 스크립트로 쓰면 비밀이 알맞은 파일로 저절로 갈라집니다:
 
 ```bash
 CORE="$HOME/.claude/plugins/cache/scv-claude-code/scv/<version>/vendor/scv-core/core"
 bash "$CORE/scripts/settings-set.sh" NOTIFIER_PROVIDER=slack
 bash "$CORE/scripts/settings-set.sh" SLACK_BOT_TOKEN=xoxb-...   # → 비밀 파일
+bash "$CORE/scripts/metrics.sh"                                 # 과정 숫자
 ```
 
 ## 명령 참조
@@ -114,13 +146,13 @@ bash "$CORE/scripts/settings-set.sh" SLACK_BOT_TOKEN=xoxb-...   # → 비밀 파
 
 | 명령 | 하는 일 |
 |---|---|
-| `/scv:help` | 프로젝트 진단 · 아이디어 다듬기 · 아카이브 검색 |
+| `/scv:help` | 프로젝트 진단 · 아이디어 다듬기 · 지난 작업 찾기 |
 | `/scv:status` | 진행 중인 것: raw 변화, 활성 계획, 에픽, handoff |
 | `/scv:promote` | 자료 → 계획 폴더 (`PLAN.md` + `TESTS.md` + 다이어그램) |
 | `/scv:work <slug>` | 구현 · 테스트 · 아카이브 · 증적 붙은 PR |
 | `/scv:codegen <slug>` | TDD-first 변형: 테스트가 코드를 이끈다, Red → Green |
 | `/scv:regression` | 아카이브된 모든 계획의 테스트를 하나의 스위트로 실행 |
-| `/scv:deck [<md>]` | 마크다운 → 자체 완결 기획서 문서 (또는 슬라이드) |
+| `/scv:deck [<md>]` | 계획 → 번호식 화면설계서 (아무 마크다운 → 기획서 문서 · 슬라이드도) |
 | `/scv:report` | 페이즈 결과를 Slack/Discord에 증적과 함께 보고 |
 | `/scv:sync` | SCV 템플릿 갱신 + 코드↔계획 드리프트 감지 |
 | `/scv:routine [<name>]` | 파일 하나짜리 유지보수 루틴 실행 |
@@ -129,12 +161,15 @@ bash "$CORE/scripts/settings-set.sh" SLACK_BOT_TOKEN=xoxb-...   # → 비밀 파
 
 ## 가드레일
 
-워크플로를 정직하게 지키는 두 겹:
+워크플로를 정직하게 지키는 세 겹:
 
 - **세션 안**: `PreToolUse` 가드가 손으로 만든 계획 파일과 `scv/` 밖 쓰기를
   거부합니다 — 세션에서 SCV 액션이 한 번이라도 돌기 전까지 (`/scv:status`면
   충분). 내부 오류에는 열리는 쪽으로, SCV 미도입 프로젝트에서는 무반응.
   끄기: 프로세스 환경변수 `SCV_GUARD=off`.
+- **매 턴**: 이번 턴의 요청이 모델의 요구 항목과 비교 · 등록되기 전까지 파일
+  쓰기를 기다리게 하고, 다시 쓴 요청 없이 끝나는 턴은 그것을 더하도록 한 번
+  멈춥니다 (`SCV_MODEL_PROMPTING=off`면 둘 다 꺼짐).
 - **머지 시점**: CI 게이트가 아카이브된 계획 없는 코드 변경 PR을 거부하고
   (`[no-plan: <이유>]`로 예외 선언), 손으로 다시 쓴 벤더 코어를 거부합니다
   (`[manual-vendor: <이유>]`).
@@ -183,9 +218,12 @@ my-project/
 공유 동작은 체크섬·버전 고정된
 [scv-core](https://github.com/wookiya1364/scv-core) 릴리스를 플러그인 안에
 벤더링한 것에서 옵니다 — 런타임에 아무것도 내려받지 않습니다. 이 저장소는
-Claude Code 어댑터: 슬래시 명령, 훅 등록, 설치/업데이트 UX. 훅 stdout이 매 턴
-항상 끼어들기 라우팅과 쉬운말 알림을 전달하고, 저널 훅은 기록 전에 레댁션을
-거쳐 대화를 남깁니다.
+Claude Code 어댑터입니다: 슬래시 명령, 훅 등록, 설치/업데이트 UX, 배경 조사
+에이전트, 그리고 `prompting/` 아래의 모델 프롬프팅 가이드(공식 가이드 원문
+그대로; 요구 항목의 인용이 원문에 글자 그대로 있는지 CI가 검사). 훅 stdout이
+매 턴 라우팅, 프로젝트 진단, 프롬프팅 블록, 쉬운말 알림을 전달하고, 세션 시작
+훅이 재개 요약을 다시 싣고, 종료 훅이 답 모양과 이번 턴의 등록을 검사하며, 저널
+훅은 기록 전에 레댁션을 거쳐 대화를 남깁니다.
 
 ## 기여
 
