@@ -42,6 +42,16 @@
 - **Linux / WSL**: 何も不要。**Windows ネイティブ**: 非対応 — WSL か Git Bash を。
 - 推奨 CLI: `git`, `curl`, `jq`, `gh` (または `glab`)。足りなければ SCV が知らせます。
 
+**更新**は Claude Code の中でそのまま行えます — 再起動は不要です:
+
+```bash
+/plugin marketplace update scv-claude-code
+/reload-plugins
+```
+
+`/scv:update` が最新かどうかを知らせます。更新後、各プロジェクトは最初の
+アクションで SCV のファイルを自ら更新し、更新したことを伝えます。
+
 ## 使い方
 
 **普通に話しかけるだけ。** 覚えるコマンドはありません — SCV が会話に自ら加わります:
@@ -53,9 +63,21 @@ SCV:    (会話モードに入り、目標 / 範囲 / 受け入れ基準を質�
 ```
 
 作りたいことを話せば計画に磨き上げ、次に何をすべきか聞けばプロジェクトを
-診断し、「去年の払い戻しはどう処理した?」と聞けばアーカイブを検索します。
-`/scv:help` は同じことを明示的に行う入口で、`scv/scv_settings.json` の
+診断し、「去年の払い戻しはどう処理した?」と聞けば過去の作業を探します —
+タイトルだけでなく、計画の本文、テスト、決定、会話まで調べます。`/scv:help`
+は同じことを明示的に行う入口で、`scv/scv_settings.json` の
 `SCV_ALWAYS_ON=off` でコマンド専用の動作に戻せます。
+
+SCV は毎ターン、次のことも行います:
+
+- **やさしい言葉で答えます** — 一、二文の結論が先、次に例を一つ、コードの値は
+  聞かれたときだけ (`SCV_PLAIN_LANGUAGE`);
+- **モデルの提供元が勧めるやり方でモデルに依頼します** — 使っているモデルの公式
+  プロンプティングガイドを同梱し、依頼をそのガイドの要求項目と一つずつ照合して、
+  書き直した依頼を結論のすぐ後に引用します。そのターンが登録されるまで
+  ファイルは書きません (`SCV_MODEL_PROMPTING`);
+- **中断したところから続けます** — `/clear`、圧縮、再開のあとに、進行中の計画、
+  最近の決定、未決事項、進行中の会話を載せ直します (`SCV_RESUME_RECAP`)。
 
 会話の裏では、ひとつのループがすべてを回しています:
 
@@ -84,8 +106,12 @@ flowchart LR
 |---|---|
 | AI の diff を信じる前に自分で動かして確かめている | PR には e2e 動画/GIF が添付済みで届く — 証跡はファイル名ではなく実際のテスト実行記録に従う |
 | 同じ変更がチケット · PR · チャットで違って書かれている | `PLAN.md` が単一の原本; チケットは `refs:` リンク、PR とレポートはそこから生成 |
-| 決定がセッションとともに消える | `scv/DECISIONS.md` — 追記専用、計画承認 / アーカイブ / 廃止の時点で自動記録 |
+| 決定がセッションとともに消える | `scv/DECISIONS.md` — 追記専用、計画承認 / アーカイブ / 廃止の時点で自動記録、教訓も一緒に |
 | 古い機能が音もなく壊れる | アーカイブされた全計画のテストがひとつの回帰スイートとして再実行 |
+| 計画書が文字の壁になる | `/scv:deck` が計画の図の文書 (`FEATURE_ARCHITECTURE.md`) を番号付き画面設計書として描く — 大きな図一枚、部分ごとに番号、番号の横に説明 |
+| 変更がどこまで及ぶかわからない | 文書 · 計画 · 一緒に変わるファイルをつなぐ SCV 独自のグラフを自動で作り直す (`SCV_GRAPH`); Graft が入っていれば計画 · 実装のヘッダーにコード候補も付く (`SCV_GRAFT`) |
+| 「これ、前に試した?」 | 過去の作業の検索が計画本文、テスト、決定、会話まで読む — [過去の作業の検索](vendor/scv-core/core/protocols/help/archive-search.md) を参照 |
+| プロセスがうまく回っているかわからない | `metrics.sh` がプロジェクトの記録をプロセスの数字にして見せる — 読むだけ |
 
 ## 設定
 
@@ -97,15 +123,21 @@ flowchart LR
 |---|---|---|
 | `SCV_ALWAYS_ON` | `on` | 自由会話にも SCV が加わる; `off` = コマンド専用 |
 | `SCV_PLAIN_LANGUAGE` | `on` | やさしい言葉優先の答えの形 (+毎ターンのリマインド); `off` で停止 |
+| `SCV_MODEL_PROMPTING` | `on` | モデル別プロンプティング: モデルのガイドを読み、毎回の依頼を照合 · 登録 |
+| `SCV_RESUME_RECAP` | `on` | `/clear` · 圧縮 · 再開のあとに進捗を載せ直す |
+| `SCV_DELEGATE_EFFORT` | `off` | 深い質問をバックグラウンドの調査担当へ渡す; 報告は `scv/raw/` に |
 | `SCV_LANG` | 自動 | 出力言語: `english` · `korean` · `japanese` |
 | `NOTIFIER_PROVIDER` | オフ | チームレポート先: `slack` か `discord` |
 
+その他のキーと既定値:
+[`scv_settings.example.json`](vendor/scv-core/core/template/scv/scv_settings.example.json)。
 スクリプト経由で書けば、秘密は正しいファイルへ自動で振り分けられます:
 
 ```bash
 CORE="$HOME/.claude/plugins/cache/scv-claude-code/scv/<version>/vendor/scv-core/core"
 bash "$CORE/scripts/settings-set.sh" NOTIFIER_PROVIDER=slack
 bash "$CORE/scripts/settings-set.sh" SLACK_BOT_TOKEN=xoxb-...   # → secret ファイル
+bash "$CORE/scripts/metrics.sh"                                 # プロセスの数字
 ```
 
 ## コマンド一覧
@@ -114,13 +146,13 @@ bash "$CORE/scripts/settings-set.sh" SLACK_BOT_TOKEN=xoxb-...   # → secret フ
 
 | コマンド | 役割 |
 |---|---|
-| `/scv:help` | プロジェクト診断 · アイデアの具体化 · アーカイブ検索 |
+| `/scv:help` | プロジェクト診断 · アイデアの具体化 · 過去の作業の検索 |
 | `/scv:status` | 進行中のもの: raw の変化、アクティブな計画、epic、handoff |
 | `/scv:promote` | 資料 → 計画フォルダ (`PLAN.md` + `TESTS.md` + 図) |
 | `/scv:work <slug>` | 実装 · テスト · アーカイブ · 証跡つき PR |
 | `/scv:codegen <slug>` | TDD-first 変種: テストがコードを導く、Red → Green |
 | `/scv:regression` | アーカイブされた全計画のテストをひとつのスイートで実行 |
-| `/scv:deck [<md>]` | Markdown → 自己完結の企画書ドキュメント (またはスライド) |
+| `/scv:deck [<md>]` | 計画 → 番号付き画面設計書 (任意の Markdown → 企画書ドキュメント · スライドも) |
 | `/scv:report` | フェーズ結果を Slack/Discord へ証跡つきで報告 |
 | `/scv:sync` | SCV テンプレート更新 + コード↔計画のドリフト検知 |
 | `/scv:routine [<name>]` | 1 ファイルのメンテナンスルーチンを実行 |
@@ -129,12 +161,15 @@ bash "$CORE/scripts/settings-set.sh" SLACK_BOT_TOKEN=xoxb-...   # → secret フ
 
 ## ガードレール
 
-ワークフローを正直に保つ二層:
+ワークフローを正直に保つ三層:
 
 - **セッション内**: `PreToolUse` ガードが、手作りの計画ファイルと `scv/` 外への
   書き込みを拒否します — セッションで SCV アクションが一度でも動くまで
   (`/scv:status` で十分)。内部エラー時は開く側へ、SCV 未導入プロジェクトでは
   不活性。停止: プロセス環境変数 `SCV_GUARD=off`。
+- **毎ターン**: そのターンの依頼がモデルの要求項目と照合 · 登録されるまで
+  ファイルの書き込みを待たせ、書き直した依頼なしで終わるターンは、それを
+  加えるよう一度止めます (`SCV_MODEL_PROMPTING=off` で両方とも停止)。
 - **マージ時**: CI ゲートが、アーカイブ済み計画のないコード変更 PR を拒否し
   (`[no-plan: <理由>]` で例外宣言)、手書きで書き換えられたベンダーコアを拒否
   します (`[manual-vendor: <理由>]`)。
@@ -183,8 +218,12 @@ README の GIF 制作用で、プラグイン利用者には不要です。
 共有動作は、チェックサム・バージョン固定された
 [scv-core](https://github.com/wookiya1364/scv-core) リリースをプラグイン内に
 ベンダリングしたものから来ます — 実行時に何も取得しません。このリポジトリは
-Claude Code アダプター: スラッシュコマンド、フック登録、インストール/更新 UX。
-フックの stdout が毎ターン常時介入ルーティングとやさしい言葉リマインドを届け、
+Claude Code アダプターです: スラッシュコマンド、フック登録、インストール/更新
+UX、バックグラウンド調査エージェント、そして `prompting/` 以下のモデル
+プロンプティングガイド (公式ガイドの原文そのまま; 要求項目の引用が原文に一字
+一句あるかを CI が検査)。フックの stdout が毎ターン、ルーティング、プロジェクト
+診断、プロンプティングブロック、やさしい言葉のリマインドを届け、セッション開始
+フックが再開サマリーを載せ直し、終了フックが答えの形とそのターンの登録を検査し、
 ジャーナルフックは書き込み前のリダクションを経て会話を記録します。
 
 ## コントリビューション
