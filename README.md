@@ -42,6 +42,16 @@ Six months later, a test nobody remembers still catches the break.
 - **Linux / WSL**: nothing to do. **Windows native**: unsupported — use WSL or Git Bash.
 - Recommended CLIs: `git`, `curl`, `jq`, `gh` (or `glab`). SCV tells you if one is missing.
 
+**Update** to the latest release from inside Claude Code — no restart needed:
+
+```bash
+/plugin marketplace update scv-claude-code
+/reload-plugins
+```
+
+`/scv:update` tells you whether you are behind. After an update, each project
+refreshes its SCV files on the first action — and says so.
+
 ## How you use it
 
 **Just talk.** No command to memorize — SCV joins the conversation by itself:
@@ -54,8 +64,22 @@ SCV:  (enters conversation mode, asks goal / scope / acceptance,
 
 Say what you want to build and SCV refines it into a plan. Ask what to do next
 and it diagnoses the project. Ask "how did we handle refunds last year?" and
-it searches the archive. `/scv:help` does the same thing explicitly, and
+it searches past work — plan bodies, tests, decisions, and conversations, not
+only titles. `/scv:help` does the same thing explicitly, and
 `SCV_ALWAYS_ON=off` in `scv/scv_settings.json` restores command-only behavior.
+
+Every turn, SCV also:
+
+- **answers in plain language** — a one- or two-sentence conclusion first,
+  then one example, code values only when you ask (`SCV_PLAIN_LANGUAGE`);
+- **prompts your model the way its vendor recommends** — SCV ships the
+  official prompting guide for the model you run, compares each request with
+  that guide's checklist item by item, and quotes the rewritten request right
+  after the conclusion. File writes wait until the turn is registered
+  (`SCV_MODEL_PROMPTING`);
+- **picks up where you left off** — after `/clear`, compaction, or a resume,
+  it re-injects active plans, recent decisions, open items, and the active
+  conversation (`SCV_RESUME_RECAP`).
 
 Behind the conversation, one loop runs everything:
 
@@ -84,8 +108,12 @@ flowchart LR
 |---|---|
 | An AI diff you have to run yourself before trusting | The PR arrives with the e2e video/GIF already attached — evidence follows the actual test run, not file names |
 | The same change described differently in ticket · PR · chat | `PLAN.md` is the single source; tickets are linked via `refs:`, PR and reports are generated from it |
-| Decisions vanish with the session | `scv/DECISIONS.md` — append-only, automatic at plan approval / archive / obsolete |
+| Decisions vanish with the session | `scv/DECISIONS.md` — append-only, automatic at plan approval / archive / obsolete, plus lessons |
 | Old features silently break | Every archived plan's tests re-run on demand as one regression suite |
+| Plans that read as a wall of text | `/scv:deck` renders the plan's picture doc (`FEATURE_ARCHITECTURE.md`) as a numbered screen spec — one big picture, a number per part, the detail beside each number |
+| Not knowing what a change will touch | SCV's own graph of docs, plans, and files that change together, rebuilt automatically (`SCV_GRAPH`); with Graft installed, plan and work headers also list code candidates (`SCV_GRAFT`) |
+| "Did we already try this?" | Past-work search reads plan bodies, tests, decisions, and conversations — see [archive search](vendor/scv-core/core/protocols/help/archive-search.md) |
+| No idea whether the process works | `metrics.sh` turns the project's own records into process numbers — read-only |
 
 ## Settings
 
@@ -98,15 +126,21 @@ is never read or written.
 |---|---|---|
 | `SCV_ALWAYS_ON` | `on` | SCV joins free conversation; `off` = commands only |
 | `SCV_PLAIN_LANGUAGE` | `on` | plain-first answer shape (+ per-turn reminder); `off` silences |
+| `SCV_MODEL_PROMPTING` | `on` | per-model prompting: read the model's guide, compare and register every request |
+| `SCV_RESUME_RECAP` | `on` | re-inject progress after `/clear`, compaction, or resume |
+| `SCV_DELEGATE_EFFORT` | `off` | deep questions go to a background investigator; its report lands in `scv/raw/` |
 | `SCV_LANG` | auto | output language: `english` · `korean` · `japanese` |
 | `NOTIFIER_PROVIDER` | off | `slack` or `discord` for team reports |
 
+Every other key and its default:
+[`scv_settings.example.json`](vendor/scv-core/core/template/scv/scv_settings.example.json).
 Write through the script — it routes secrets to the right file automatically:
 
 ```bash
 CORE="$HOME/.claude/plugins/cache/scv-claude-code/scv/<version>/vendor/scv-core/core"
 bash "$CORE/scripts/settings-set.sh" NOTIFIER_PROVIDER=slack
 bash "$CORE/scripts/settings-set.sh" SLACK_BOT_TOKEN=xoxb-...   # → secret file
+bash "$CORE/scripts/metrics.sh"                                 # process numbers
 ```
 
 ## Commands
@@ -115,13 +149,13 @@ You never need this table — conversation routes for you. For explicit control:
 
 | Command | Does |
 |---|---|
-| `/scv:help` | Diagnose the project · refine an idea · search the archive |
+| `/scv:help` | Diagnose the project · refine an idea · search past work |
 | `/scv:status` | What's in flight: raw changes, active plans, epics, handoffs |
 | `/scv:promote` | Materials → plan folder (`PLAN.md` + `TESTS.md` + diagrams) |
 | `/scv:work <slug>` | Implement · run tests · archive · PR with evidence |
 | `/scv:codegen <slug>` | TDD-first variant: tests drive the code, Red → Green |
 | `/scv:regression` | Run every archived plan's tests as one suite |
-| `/scv:deck [<md>]` | Markdown → self-contained planning document (or slides) |
+| `/scv:deck [<md>]` | Plan → numbered screen spec (or any markdown → planning document / slides) |
 | `/scv:report` | Post a phase result to Slack/Discord with artifacts |
 | `/scv:sync` | Refresh SCV templates + detect code↔plan drift |
 | `/scv:routine [<name>]` | Run a one-file maintenance routine |
@@ -130,12 +164,16 @@ You never need this table — conversation routes for you. For explicit control:
 
 ## Guardrails
 
-Two layers keep the workflow honest:
+Three layers keep the workflow honest:
 
 - **In-session**: a `PreToolUse` guard refuses hand-created plan files and
   writes outside `scv/` until any SCV action has run in the session
   (`/scv:status` is enough). Fails open on internal errors; inert where SCV
   isn't adopted. Off switch: `SCV_GUARD=off` in the process environment.
+- **Every turn**: file writes wait until the turn's request is registered
+  against the model's checklist, and a turn that ends without the rewritten
+  request is stopped once so it can be added (`SCV_MODEL_PROMPTING=off`
+  turns both off).
 - **At merge**: CI gates deny a PR that changes code without an archived plan
   (`[no-plan: <reason>]` declares an exception) and a hand-rewritten vendored
   core (`[manual-vendor: <reason>]`).
@@ -184,9 +222,14 @@ in this repository only builds the README GIFs — plugin users never need it.
 Shared behavior comes from a checksummed, version-pinned
 [scv-core](https://github.com/wookiya1364/scv-core) release vendored into this
 plugin — nothing is fetched at runtime. This repository is the Claude Code
-adapter: slash commands, hooks registration, install/update UX. Hook stdout
-delivers the always-on routing and plain-language reminders every turn; the
-journal hooks capture conversation with redaction before anything hits disk.
+adapter: slash commands, hooks registration, install/update UX, the
+background investigator agent, and the model prompting guides under
+`prompting/` (verbatim copies of the official guides; CI checks that every
+checklist quote appears in them word for word). Hook stdout delivers the
+per-turn routing, the project diagnosis, the prompting block, and the
+plain-language reminder; the session-start hook re-injects the recap; the stop
+hook checks the answer's shape and the turn's registration; the journal hooks
+capture conversation with redaction before anything hits disk.
 
 ## Contributing
 
