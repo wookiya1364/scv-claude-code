@@ -4,6 +4,9 @@ on:
   push:
     branches: [main, stage, develop]
     paths:
+      - 'README.md'
+      - 'README.ko.md'
+      - 'README.ja.md'
       - 'adapter/**'
       - 'vendor/scv-core/**'
       - 'scripts/**'
@@ -13,6 +16,9 @@ on:
   pull_request:
     branches: [main, stage, develop]
     paths:
+      - 'README.md'
+      - 'README.ko.md'
+      - 'README.ja.md'
       - 'adapter/**'
       - 'vendor/scv-core/**'
       - 'core.lock'
@@ -62,6 +68,12 @@ jobs:
 
       - name: Verify pinned core and Claude adapter
         run: bash tests/test-core-contract.sh
+
+      # Core 0.63.0+: the README check ships in the vendored Core. It reads the root README set
+      # (commands, settings, links, topics, the three language editions). The root README paths are
+      # in the triggers above so a README-only PR still runs it.
+      - name: README check (vendored Core tool)
+        run: bash vendor/scv-core/tools/check-readme.sh --profile claude .
 
       # Plugin structure gate (core 0.47.0+): the same check a marketplace
       # submission runs. --strict turns unrecognized frontmatter fields and
