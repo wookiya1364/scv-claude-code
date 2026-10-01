@@ -42,6 +42,8 @@ source "$SCRIPT_DIR/lib/env.sh"
 source "$SCRIPT_DIR/lib/attachments.sh"
 # shellcheck source=lib/pr-platform.sh
 source "$SCRIPT_DIR/lib/pr-platform.sh"
+# shellcheck source=lib/pr-flow.sh
+source "$SCRIPT_DIR/lib/pr-flow.sh"   # v0.63.0+: 대상 브랜치 · 커밋 범위의 순수 판단
 
 # shellcheck source=lib/scvroot.sh
 source "$SCRIPT_DIR/lib/scvroot.sh"
@@ -193,6 +195,35 @@ case "$LANG_PREF" in
     PASS_CRITERIA_REGEX="^## (Pass criteria|통과 판정)"
     ;;
 esac
+
+# ---- (v0.63.0+) 대상 브랜치 · 커밋 범위 — 첨부 수집 · 검사 재실행 · GIF 보다 먼저 ----
+# 대상 브랜치: 에픽 > 설정 SCV_PR_BASE > origin 기본 브랜치 > main (lib/pr-flow.sh).
+# 커밋 범위: 이 도구는 보관 폴더와 SCV 기록(작업 기록 · 대화 · 결정 · 색인)만 올린다. 그 밖에 커밋 안 된 변경(구현 코드 등)이
+# 남아 있으면 코드 없는 PR 이 열리므로, 아무것도 하기 전에 멈추고 목록을 보인다 — 판정이 검사 재실행 뒤에 오면 재실행이 만든
+# 파일까지 "밖"으로 잡히고 최대 10분을 허비했다. --dry-run 은 경고만 한다.
+# 상태는 -z 로 읽는다: 경로가 그대로 온다(한글 폴더의 8진수 이스케이프 · 이름 안의 " -> " 문제 없음). 추적 안 된 파일만 있는
+# 하위 모듈은 커밋으로 풀 수 없으니 보지 않는다.
+_pr_dir() {  # <폴더 경로> → 저장소 최상위 기준 상대 경로 + "/" (없는 폴더면 지금 폴더 기준)
+  local p="${1%/}" top abs
+  top="$(git rev-parse --show-toplevel 2>/dev/null)" || return 0
+  if [[ -d "$p" ]]; then abs="$(cd "$p" 2>/dev/null && pwd -P)"
+  elif [[ "$p" == /* ]]; then abs="$p"
+  else abs="$(pwd -P)/${p#./}"; fi
+  printf '%s/' "${abs#"$top"/}"
+}
+STRAY=""
+if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  _pr_allowed="$(printf '%s\n%s\n%s\n' "$(_pr_dir "$SCV_DIR")" "$(_pr_dir "$TEST_RESULTS_DIR")" "$(_pr_dir "$ARTIFACTS_DIR")")"
+  STRAY="$(scv_pr_stray_changes "$(git -c core.quotepath=off status --porcelain -z --ignore-submodules=untracked 2>/dev/null | tr '\0' '\n')" "$_pr_allowed")"
+fi
+_pr_origin_head="$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||')"
+BASE_BRANCH="$(scv_pr_base_branch "$EPIC" "${SCV_PR_BASE:-}" "$_pr_origin_head")"
+if [[ -n "$STRAY" && $DRY_RUN -eq 0 ]]; then
+  echo "ERROR: uncommitted changes outside the SCV records — the PR would open without them. Commit them first:" >&2
+  printf '%s\n' "$STRAY" | sed 's/^/  · /' >&2
+  echo "  then re-run this step. Nothing was moved, committed, pushed or created." >&2
+  exit 1
+fi
 
 # ---- collect screenshots + videos from test-results/ (SCV's standard folder) ----
 # SCV's standard E2E framework is Playwright (Step 5b). Playwright's default
@@ -477,12 +508,13 @@ if [[ $DRY_RUN -eq 1 ]]; then
   fi
   echo ""
   echo "=== PR base branch ==="
-  if [[ -n "$EPIC" ]]; then
-    echo "epic/$EPIC"
-  else
-    echo "main"
-  fi
+  echo "$BASE_BRANCH"
   echo ""
+  if [[ -n "$STRAY" ]]; then
+    echo "=== WARNING: uncommitted changes outside the SCV records (a real run stops here) ==="
+    printf '%s\n' "$STRAY" | sed 's/^/  · /'
+    echo ""
+  fi
   echo "=== Screenshots to attach ==="
   if [[ ${#SCREENSHOTS[@]} -gt 0 ]]; then
     printf '  · %s\n' "${SCREENSHOTS[@]}"
@@ -537,12 +569,7 @@ if [[ -z "$CURRENT_BRANCH" || "$CURRENT_BRANCH" == "HEAD" ]]; then
   exit 1
 fi
 
-if [[ -n "$EPIC" ]]; then
-  BASE_BRANCH="epic/$EPIC"
-else
-  BASE_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||')
-  [[ -z "$BASE_BRANCH" ]] && BASE_BRANCH="main"
-fi
+# BASE_BRANCH 는 위(대상 브랜치 · 커밋 범위)에서 정했다 — 에픽 > SCV_PR_BASE > origin 기본 > main.
 
 if [[ "$CURRENT_BRANCH" == "$BASE_BRANCH" ]]; then
   echo "ERROR: current branch ($CURRENT_BRANCH) equals base branch ($BASE_BRANCH). Switch to a feature branch first." >&2
@@ -552,6 +579,11 @@ fi
 
 # ---- stage + commit ----
 git add "$TARGET_DIR" 2>/dev/null || true
+# v0.63.0+: SCV 기록도 같은 커밋에 — 무시 목록은 git 이 거른다. 세션 표식 파일(journal/.help-*)은 저널을 공유하는
+# 프로젝트(무시 목록에서 scv/journal/ 을 지운 곳)에서도 올리지 않는다 — 세션마다 바뀌는 잡음이라 PR 마다 충돌한다.
+# 비밀 설정 파일도 무시 목록과 상관없이 올리지 않는다(손으로 만들었거나 무시 줄을 지운 경우의 마지막 방어선).
+# 무시된 경로가 섞이면 git 은 나머지를 다 올리고도 1 로 끝난다 — 그래서 || true 를 지운다면 안 된다.
+git add -- "$SCV_DIR" ":(exclude)${SCV_DIR%/}/journal/.help-*" ":(exclude)${SCV_DIR%/}/scv_settings.secret.json" 2>/dev/null || true
 [[ -d "$DEST_ARTIFACTS_DIR" ]] && git add "$DEST_ARTIFACTS_DIR" 2>/dev/null
 if git diff --cached --quiet; then
   echo "(no staged changes — assuming already committed)"

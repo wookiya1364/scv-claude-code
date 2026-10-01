@@ -412,6 +412,123 @@ scv_mp_register_rewrite() {
   return 0
 }
 
+# ---------------------------------------------------------------- 자동 입력 턴 (v0.63.0+)
+# 호스트가 스스로 보낸 입력(배경 작업 완료 알림 등)은 사람 턴이 아니다 — 태그 이름은 래퍼 호스트 설정 SCV_AUTO_PROMPT_TAGS 가 준다.
+
+# @pure
+# <프롬프트> <태그 이름 목록(공백으로 나눔)> → auto | human. 입력이 태그 블록과 공백만으로 이뤄질 때만 auto — 앞뒤 공백을 빼고
+# 목록의 "<이름>" · "<이름 " 으로 시작하고 "</이름>" 으로 끝나며, 어느 닫는 태그 뒤에도(공백 다음) 태그가 아닌 글이 오지 않아야
+# 한다. 알림 앞 · 뒤 · 사이에 사람이 쓴 글이 있으면 사람 턴이다(그 요청은 등록돼야 한다). 실제 알림 입력은 태그 블록 하나뿐이다
+# (2026-10-01 작업 기록 7건으로 확인). 판별이 틀리면 안전한 쪽(이전 동작)으로 간다.
+# 속도: 앞뒤는 1024자 창에서만 보고(공백 제거 관용구는 공백이 길면 제곱 시간 — 창을 넘는 공백이면 사람 턴), 닫는 태그 뒤 검사는
+# 정규식 검색 한 번(64KB 에 약 12ms, bash 3.2 · 5 측정 — 패턴으로 잘라 내기는 같은 길이에 약 2초라 쓰지 않는다).
+# 태그 이름은 영문 · 숫자 · _ · - 만 받는다(정규식 · 글로브 글자가 든 이름은 무시). 꺾쇠는 글자 코드로 적는다(순수성 검사가
+# < > 를 리다이렉션으로 본다). 목록은 직접 나눈다 — 따옴표 없는 전개는 글로브를 탄다.
+scv_mp_prompt_kind() {
+  local p="${1:-}" list="${2:-}" rest t lt=$'\x3c' gt=$'\x3e' w=1024 s e re names="" head=0 tail=0
+  s="${p:0:$w}"; e="$p"; [[ ${#p} -gt $w ]] && e="${p:${#p}-$w}"
+  s="${s#"${s%%[![:space:]]*}"}"; e="${e%"${e##*[![:space:]]}"}"
+  [[ -n "$s" && -n "$e" ]] || { printf 'human'; return 0; }
+  rest="$list"
+  while [[ -n "$rest" ]]; do
+    rest="${rest#"${rest%%[![:space:]]*}"}"
+    [[ -n "$rest" ]] || break
+    t="${rest%%[[:space:]]*}"; rest="${rest#"$t"}"
+    [[ "$t" =~ ^[A-Za-z0-9_-]+$ ]] || continue
+    names="$names $t"
+    [[ "$s" == "$lt$t$gt"* || "$s" == "$lt$t "* ]] && head=1
+    [[ "$e" == *"$lt/$t$gt" ]] && tail=1
+  done
+  (( head && tail )) || { printf 'human'; return 0; }
+  for t in $names; do
+    re="$lt/$t$gt[[:space:]]*[^[:space:]$lt]"
+    [[ "$p" =~ $re ]] && { printf 'human'; return 0; }
+  done
+  printf 'auto'
+}
+
+# ---------------------------------------------------------------- 다시 쓴 요청의 SCV 원칙 (v0.63.0+)
+# 원칙 문구는 contracts/rewrite-principle.md 한 곳에만 있다. 여기는 그 본문을 받아 고르고 붙이는 판단만 한다.
+
+# @pure
+# <코어 루트> → 원칙 파일 후보(한 줄에 하나): 코어 루트 아래, 그다음 래퍼가 벤더링한 코어 아래 —
+# 투영된 플러그인 루트에서 도는 스크립트도 벤더 사본의 원칙 파일을 찾는다.
+scv_mp_principle_candidates() {
+  local root="${1:-}"
+  [[ -n "$root" ]] || return 0
+  root="${root%/}"
+  printf '%s\n' "$root/contracts/rewrite-principle.md" "$root/vendor/scv-core/core/contracts/rewrite-principle.md"
+}
+
+# @pure
+# <SCV_LANG 값> → 원칙 구역 이름(korean | english | japanese | 소문자 그대로). 짧은 표기(ko · en · ja)도 받는다.
+scv_mp_principle_lang() {
+  local v
+  v="$(scv_mp_normalize_id "${1:-}")"; v="${v//\"/}"; v="${v//\'/}"
+  case "$v" in
+    ko|kr|korean) printf 'korean' ;;
+    en|english|"") printf 'english' ;;
+    ja|jp|japanese) printf 'japanese' ;;
+    *) printf '%s' "$v" ;;
+  esac
+}
+
+# @pure
+# <원칙 파일 본문> <구역 이름> → 그 구역(표식 줄 + 전문, 끝 줄바꿈 없음). 없으면 빈 값.
+scv_mp_principle_pick() {
+  # 꺾쇠는 글자 코드로 적는다 — 순수성 검사가 < > 를 파일 리다이렉션으로 본다(scv_mp_answer_shows_rewrite 와 같은 방식).
+  local body="${1:-}" want="${2:-}" line name on=0 out="" open=$'\x3c'"!-- principle:" close=" --"$'\x3e'
+  [[ -n "$want" ]] || return 0
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" == "$open"*"$close" ]]; then
+      (( on )) && break
+      name="${line#"$open"}"; name="${name%"$close"}"
+      [[ "$name" == "$want" ]] && on=1
+      continue
+    fi
+    (( on )) && out="$out$line"$'\n'
+  done <<< "$body"
+  printf '%s' "${out%$'\n'}"
+}
+
+# @pure
+# <원칙 파일 본문> <SCV_LANG 값> → 그 언어의 구역. 구역이 없는 언어는 english 구역, 그것도 없으면 빈 값.
+scv_mp_principle_section() {
+  local body="${1:-}" lang out
+  lang="$(scv_mp_principle_lang "${2:-}")"
+  out="$(scv_mp_principle_pick "$body" "$lang")"
+  [[ -n "$out" ]] || out="$(scv_mp_principle_pick "$body" english)"
+  printf '%s' "$out"
+}
+
+# @pure
+# <구역> → 표식(첫 줄 "tag: " 뒤). 표식 줄이 없으면 빈 값.
+scv_mp_principle_tag() {
+  local first="${1:-}"
+  first="${first%%$'\n'*}"
+  case "$first" in "tag: "?*) printf '%s' "${first#tag: }" ;; esac
+  return 0
+}
+
+# @pure
+# <구역> → 원칙 전문(표식 줄을 뺀 나머지). 표식 줄이 없으면 구역 전체.
+scv_mp_principle_text() {
+  local sec="${1:-}" first
+  first="${sec%%$'\n'*}"
+  case "$first" in
+    "tag: "*) [[ "$sec" == *$'\n'* ]] && printf '%s' "${sec#*$'\n'}" ;;
+    *) printf '%s' "$sec" ;;
+  esac
+  return 0
+}
+
+# @pure
+# <다시 쓴 요청> <스위치 on|off> <표식> → REWRITE 줄 값. off · 표식 없음 · 요청 없음이면 요청 그대로(이 기능 전과 같다).
+scv_mp_rewrite_tagged() {
+  local rw="${1:-}" sw="${2:-on}" tag="${3:-}"
+  if [[ "$sw" == "on" && -n "$tag" && -n "$rw" ]]; then printf '%s %s' "$rw" "$tag"; else printf '%s' "$rw"; fi
+}
+
 # @pure
 # <답 본문> <다시 쓴 요청> → 1(코드 블록 밖 인용 줄에 다시 쓴 요청이 보인다) | 0. 인용 줄이 "다시 쓴 요청" · "Rewritten request"
 # 라벨을 담거나, 다시 쓴 요청의 앞 16글자(공백 제외)를 담으면 보인 것으로 본다.
