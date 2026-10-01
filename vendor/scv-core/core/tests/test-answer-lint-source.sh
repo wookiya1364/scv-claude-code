@@ -6,7 +6,8 @@
 # 비동기로 적어 훅보다 늦을 수 있으므로, 낡은 답(한 턴 전)을 보는 일이 0 이어야 한다. 함께 따옴표·괄호
 # 안 마침표를 문장으로 세던 오탐, 드리프트 줄의 src 토큰, 스위치·비차단 보장을 본다.
 #
-# Covers TESTS.md T1~T10 of 20260916-wookiya1364-answer-lint-turn-race (T11 은 test-help-echo.sh).
+# Covers TESTS.md T1~T10 of 20260916-wookiya1364-answer-lint-turn-race (T11 은 test-help-echo.sh),
+#   and T19 (lint path) of 20261001-wookiya1364-restore-choice-questions as [T11] below.
 # Run: bash core/tests/test-answer-lint-source.sh
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -39,13 +40,15 @@ append() {  # <proj> <n> <지문|''>
   { printf '\n## Turn %s — 2026-09-16T10:00:00+09:00\n' "$2"; [[ -n "$3" ]] && printf 'protocol: %s\n' "$3"; printf '\n**User**: 안녕\n\n**Claude Code**: 답.\n'; } >> "$fl"
   [[ -f "$1/scv/journal/.help-state" ]] && touch -t 202001010000 "$1/scv/journal/.help-state"
 }
-# 원본(JSONL) 한 줄씩: U:<text> 사람 프롬프트 · R 도구 결과(사람 아님) · A:<text> 어시스턴트 텍스트 · T 도구 호출만
+# 원본(JSONL) 한 줄씩: U:<text> 사람 프롬프트 · R 도구 결과(사람 아님) · A:<text> 어시스턴트 텍스트 · T 도구 호출만 ·
+# M:<text> 호스트의 내부 메시지(isMeta — 스킬을 불러올 때 기록되는 사용자 몫 글, 사람 아님, v0.64.0+)
 tr_line() {
   case "$1" in
     U:*) jq -cn --arg t "${1#U:}" '{type:"user",message:{content:$t}}' ;;
     R)   jq -cn '{type:"user",message:{content:[{type:"tool_result",content:"x"}]}}' ;;
     A:*) jq -cn --arg t "${1#A:}" '{type:"assistant",message:{content:[{type:"text",text:$t}]}}' ;;
     T)   jq -cn '{type:"assistant",message:{content:[{type:"tool_use",name:"Bash"}]}}' ;;
+    M:*) jq -cn --arg t "${1#M:}" '{type:"user",isMeta:true,message:{content:[{type:"text",text:$t}]}}' ;;
   esac
 }
 tr_write() { local f="$1"; shift; : > "$f"; local l; for l in "$@"; do tr_line "$l" >> "$f"; done; }
@@ -160,6 +163,15 @@ NOJQ="$WORK/nojq"; mkdir -p "$NOJQ"; for b in bash sed awk grep head tail tr cut
 rc="$( cd "$P" && printf '{"transcript_path":"%s"}' "$WORK/t2.jsonl" | PATH="$NOJQ" CLAUDE_PLUGIN_ROOT="$CORE" bash "$STOP_HOOK" >/dev/null 2>&1; echo $? )"
 [[ "$rc" == "0" ]] && ok "jq 없음 → exit 0" || fail "jq 없음 rc=$rc"
 [[ "$(snap "$P")" == "$S0" ]] && ok "scv/journal 밖에 새 파일 없음" || fail "밖에 파일 생김"
+
+echo "── [T11] 호스트의 내부 메시지(isMeta)는 턴 경계가 아니다 (v0.64.0+) ──"
+# restore-choice-questions T19: 스킬을 불러오며 기록된 내부 메시지를 사람 프롬프트로 세면, 그보다 앞서 쓴 이번 턴의 답이 빠진다.
+P=$(ready t11); TR="$WORK/t11.jsonl"; tr_write "$TR" "U:안녕" "A:$BAD4" "M:Base directory for this skill: /x" "T" "R"
+stop_in "$P" "$(jq -cn --arg p "$TR" '{transcript_path:$p}')" >/dev/null; L="$(drift_last "$P")"
+[[ "$L" == *"lint=1 reload=1 src=transcript" ]] && ok "내부 메시지 앞의 답도 이번 턴으로 본다" || fail "T11 줄: $L"
+P=$(ready t11b); TR="$WORK/t11b.jsonl"; tr_write "$TR" "U:안녕" "A:$BAD4" "U:다음"
+stop_in "$P" "$(jq -cn --arg p "$TR" '{transcript_path:$p}')" >/dev/null; L="$(drift_last "$P")"
+[[ "$L" == *"lint=0 reload=0 src=none" ]] && ok "진짜 사람 프롬프트는 지금처럼 경계" || fail "T11b 줄: $L"
 
 echo; echo "test-answer-lint-source: pass=$PASS fail=$FAIL skip=$SKIP"
 (( FAIL == 0 ))

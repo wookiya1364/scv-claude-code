@@ -39,7 +39,7 @@ Technical identifiers stay as-is: file paths, skill invocation names, frontmatte
 - **Boundaries** — which files this action leaves untouched (an archived TESTS.md body, ARCHIVED_AT.md, files outside the triage) — per `core/contracts/boundaries.md`.
 - **Don't force-run a slug declared in another's `supersedes:`** — it's an intentional skip already.
 - **`--ci` mode must NOT ask interactive questions.** Verdict is via exit code only.
-- **Independent failures are triaged in one decisions table** — one row per failed slug, every row offering the same three verdicts (regression / obsolete / flaky) plus a recommendation, so the user settles every slug in one reply even when the answers differ. This sentence replaces the earlier "one question per slug" rule (rule-constitution plan, 2026-09). `--ci` mode still asks nothing.
+- **Independent failures are triaged in one decisions table** — one row per failed slug, every row offering the same three verdicts (regression / obsolete / flaky) plus a recommendation, so the user settles every slug in one reply even when the answers differ. This sentence replaces the earlier "one question per slug" rule (rule-constitution plan, 2026-09). When the host names a choice tool, the triage goes through it instead (`core/contracts/choices.md`). `--ci` mode still asks nothing.
 - Don't auto-mark a failure as obsolete without explicit user approval if there's no `supersedes` declaration covering it.
 
 ## Plain language first
@@ -98,7 +98,9 @@ Ask the user **once**, with one decisions table: one row per slug in `failed_slu
 same three verdicts available on every row. The user answers by number, one verdict per row
 (e.g. `1 regression, 2 flaky, 3 obsolete`). A host whose question UI caps the rows per call
 splits the table into consecutive calls of the maximum size — still one table in the
-conversation, never one dialog per slug. Use this template verbatim:
+conversation, never one dialog per slug. When the host names a choice tool, ask through it per
+`core/contracts/choices.md` — one question per failed slug with the three verdicts as options, the
+recommended one first, four slugs per call — and skip the table. Otherwise use this template verbatim:
 
 ```
 TESTS failed for <N> slug(s). Decide each row by number — the same three verdicts apply to every row.
@@ -214,7 +216,7 @@ Do not auto-add tags to existing PLANs. The user owns the tag taxonomy.
 - `--ci` — No user interaction. Failures exit 2. Auto-writes `test-results/regression-summary.json`.
 - `--quiet` — Trims output of passing scenarios. Used by `/scv:work`'s Step 9a pre-flight.
 - `--json <path>` — Write JSON summary to a specific path (works outside `--ci` too).
-- `--timeout <sec>` — Per-scenario timeout. Default 300.
+- `--timeout <sec>` — Per-scenario timeout (a whole-suite gate runs once under it). Default 1200.
 
 ## Never
 
