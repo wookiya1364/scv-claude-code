@@ -372,7 +372,9 @@ unset -f _scv_check_dep
 
 
 if [[ ${#DEP_MISSING_HARD[@]} -gt 0 || ${#DEP_MISSING_SOFT[@]} -gt 0 ]]; then
-  ALL_MISSING=("${DEP_MISSING_HARD[@]}" "${DEP_MISSING_SOFT[@]}")
+  # 빈 목록은 ${a[@]+...} 로 읽는다(v0.63.0) — bash 3.2 + set -u 는 빈 "${a[@]}" 를 unbound 로 보고 여기서 멈춰,
+  # 매 턴 훅의 진단 아래쪽(자료 · 계획 · 보관 개수)이 잘렸다. bash 4.4+ 출력은 그대로다.
+  ALL_MISSING=(${DEP_MISSING_HARD[@]+"${DEP_MISSING_HARD[@]}"} ${DEP_MISSING_SOFT[@]+"${DEP_MISSING_SOFT[@]}"})
   echo "    Install hint: run '/scv:install-deps' for OS-specific commands, or:"
   echo "      macOS:          brew install ${ALL_MISSING[*]}"
   echo "      Debian/Ubuntu:  sudo apt install ${ALL_MISSING[*]}"
