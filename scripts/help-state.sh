@@ -79,7 +79,7 @@ case "$cmd" in
             if [[ -f "$_mplib" ]] && source "$_mplib" 2>/dev/null; then
               _kept="$(scv_mp_warn_keep "$(head -c 4096 "$WARN_FILE" 2>/dev/null)")"
             fi
-            if [[ -n "${_kept//[[:space:]]/}" ]]; then _put "$WARN_FILE" "$_kept"; else rm -f "$WARN_FILE" 2>/dev/null; fi
+            if [[ "$_kept" == *[![:space:]]* ]]; then _put "$WARN_FILE" "$_kept"; else rm -f "$WARN_FILE" 2>/dev/null; fi
           fi
           printf '%s\n' "$json" ;;
   mark)   _old="$(scv_hstate_nonce "$st")"
@@ -120,14 +120,14 @@ case "$cmd" in
           IFS=$'\x1f' read -r _s _p _t _d _at _n <<<"$st"
           _rec="$(_turn_record)"; _app="${_rec%%$'\x1f'*}"; _got="${_rec#*$'\x1f'}"
           _echo="$(scv_echo_check "$_got" "${_n:-}" "${_p:-0}" "$_app")"
-          _viol=""; [[ "$_lsw" == "on" && -n "${_text//[[:space:]]/}" ]] && _viol="$(scv_answer_lint "$_text" "$_cap")"
+          _viol=""; [[ "$_lsw" == "on" && "$_text" == *[![:space:]]* ]] && _viol="$(scv_answer_lint "$_text" "$_cap")"
           _dec="$(scv_drift_decide "$_echo" "$_viol" "$_esw" "$_lsw")"; _reload="${_dec%%$'\x1f'*}"; _warn="${_dec#*$'\x1f'}"
           if [[ "$_reload" == "1" ]]; then
             st="$(scv_hstate_reload "$st" "" reset 0)"   # protocol=0 · 지문 비움 — 다음 mark 가 새 지문을 만든다
             _write "$(scv_hstate_render "$st")"; _put "$WARN_FILE" "$_warn"
           fi
           mkdir -p "$JOURNAL_DIR" 2>/dev/null && [[ ! -L "$DRIFT_FILE" ]] && { scv_drift_line "$_now" "${_t:-0}" "$_echo" "$_viol" "$_reload" "$_src"; echo; } >> "$DRIFT_FILE" 2>/dev/null
-          _nv=0; [[ -n "${_viol//[[:space:]]/}" ]] && _nv="$(printf '%s\n' "$_viol" | grep -c . || true)"
+          _nv=0; [[ "$_viol" == *[![:space:]]* ]] && _nv="$(printf '%s\n' "$_viol" | grep -c . || true)"
           printf 'echo=%s lint=%s reload=%s\n' "$_echo" "$_nv" "$_reload" ;;
   diag)   text="$(cat 2>/dev/null || true)"; r="$(scv_hstate_diag "$st" "$text" "${1:-}")"; mode="${r%%$'\x1f'*}"; st="${r#*$'\x1f'}"
           json="$(scv_hstate_render "$st")"; _write "$json"

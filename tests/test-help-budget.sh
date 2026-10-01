@@ -39,11 +39,13 @@ ok()   { echo "  ✓ $1"; PASS=$((PASS + 1)); }
 fail() { echo "  ✖ FAIL: $1"; FAIL=$((FAIL + 1)); }
 skip() { echo "  – SKIP: $1"; SKIP=$((SKIP + 1)); }
 
-BODY_MAX="${SCV_HELP_BODY_MAX:-7500}"      # v0.51.0: 라우터(매 턴) 상한 — 답 모양 절은 매 턴 남기고 나머지는 압축
+BODY_MAX="${SCV_HELP_BODY_MAX:-8000}"      # v0.51.0: 라우터(매 턴) 상한 — 답 모양 절은 매 턴 남기고 나머지는 압축. v0.64.0: 7500 → 8000 (선택지 규칙, 사용자 결정)
 FULL_MAX="${SCV_HELP_FULL_MAX:-9000}"      # 세션당 1회 읽는 full.md 상한 (v0.51.0: 배경 조사 절 수용)
-TOTAL_MAX="${SCV_HELP_TOTAL_MAX:-32000}"
-TURN_MAX="${SCV_HELP_TURN_MAX:-11000}"    # v0.51.0: 진단 변동 없는 턴(훅 한 줄) 기준. v0.62.0: 9500 → 11000 — 요구 항목 목록을 싣는
+TOTAL_MAX="${SCV_HELP_TOTAL_MAX:-33000}"   # v0.64.0: 32000 → 33000 — 답 모양 절의 선택지 규칙(사용자 결정 2026-10-01)
+TURN_MAX="${SCV_HELP_TURN_MAX:-12000}"    # v0.51.0: 진단 변동 없는 턴(훅 한 줄) 기준. v0.62.0: 9500 → 11000 — 요구 항목 목록을 싣는
                                           # 래퍼에서는 매 턴 1:1 비교 · 등록 블록(약 0.7~1.3KB)이 실린다(사용자 결정: 모든 메시지에 매 턴)
+                                          # v0.64.0: 11000 → 12000 — 클로드 래퍼 실측 매 턴 약 10.7KB(요구 항목 블록 1.5KB) 에 선택지 안내
+                                          # 한 줄 · 도움말 결정 자리 문구가 더해진다(사용자 결정 2026-10-01)
 WC_MAX="${SCV_HELP_WITH_CONTEXT_MAX:-1000}"
 SUBS="language-setup legacy-migration hydrate archive-search promote-handoff prompt-refine"
 
@@ -218,6 +220,20 @@ if [[ -f "$PROMPT_HOOK" ]]; then
   echo "  · hook=${HOOK_BYTES}B body=${BODY_BYTES}B with-context=${WC_BYTES}B → turn=${TURN}B"
   v="$(scv_help_budget "$TURN" "$TURN_MAX" turn)"
   [[ -z "$v" ]] && ok "매 턴 스택 ${TURN}B ≤ ${TURN_MAX}B" || fail "$v"
+  # (v0.64.0+) 호스트 설정에 선택지 도구가 있으면 안내 한 줄이 더 실린다 — 그 상태로도 상한 안이어야 한다. 이름은 15자짜리 중립 이름.
+  _bp="$WORK/profile-choice.env"
+  if [[ -f "$CORE/tests/fixtures/model-prompting/profile.env" ]]; then
+    { cat "$CORE/tests/fixtures/model-prompting/profile.env"; printf 'SCV_CHOICE_TOOL=PickFromOptions\n'; } > "$_bp"
+    CHOICE_OUT="$(cd "$WORK/p" && printf '{"prompt":"안녕","session_id":"t"}' \
+      | CLAUDE_PLUGIN_ROOT="$CORE" SCV_HOST_PROFILE="$_bp" SCV_GUARD_STATE="$WORK/state" bash "$PROMPT_HOOK" 2>/dev/null)"
+    CHOICE_BYTES=$(printf '%s' "$CHOICE_OUT" | wc -c | tr -d '[:space:]')
+    TURN_C=$((CHOICE_BYTES + BODY_BYTES + WC_BYTES))
+    echo "  · with a choice tool: hook=${CHOICE_BYTES}B (+$((CHOICE_BYTES - HOOK_BYTES))B) → turn=${TURN_C}B"
+    v="$(scv_help_budget "$TURN_C" "$TURN_MAX" turn-with-choice)"
+    [[ -z "$v" ]] && ok "선택지 도구가 있어도 매 턴 스택 ${TURN_C}B ≤ ${TURN_MAX}B" || fail "$v"
+    (( CHOICE_BYTES - HOOK_BYTES <= 400 )) && ok "선택지 안내 줄 $((CHOICE_BYTES - HOOK_BYTES))B ≤ 400B (래퍼의 요구 항목 블록 1.5KB 와 함께 상한 안)" \
+      || fail "선택지 안내 줄이 $((CHOICE_BYTES - HOOK_BYTES))B — 400B 를 넘으면 래퍼에서 매 턴 상한을 넘을 수 있다"
+  fi
 else
   skip "프롬프트 훅 없음 — 매 턴 합 생략"
 fi

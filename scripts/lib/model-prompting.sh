@@ -283,7 +283,7 @@ scv_mp_warn_lines() {
   while IFS= read -r v || [[ -n "$v" ]]; do
     case "$v" in
       unread)  printf '%s\n' "[SCV 가이드] 직전 턴에 help 가 이 모델의 프롬프팅 가이드 원문($key)을 읽으라고 했지만 읽음 표시가 없다 — 이번 턴에 아래 원문을 끝까지 읽고 아래 명령을 실행한 뒤, 그 가이드로 요청을 다시 써라."
-               while IFS= read -r d || [[ -n "$d" ]]; do [[ -n "${d//[[:space:]]/}" ]] && printf '  %s\n' "$d"; done <<< "$detail" ;;
+               while IFS= read -r d || [[ -n "$d" ]]; do [[ "$d" == *[![:space:]]* ]] && printf '  %s\n' "$d"; done <<< "$detail" ;;
       unshown) printf '%s\n' "[SCV 가이드] 직전 턴에 다시 쓴 요청을 기록만 하고 답에 보이지 않았다 — 이번 턴에는 결론 바로 뒤에 인용 블록으로 보여라." ;;
     esac
   done <<< "$verdicts"
@@ -316,9 +316,9 @@ scv_mp_first_turn_lines() {
   [[ "$sw" == "on" && "$read" != "1" && "$warned" != "1" ]] || return 0
   model="${rec%%$'\n'*}"; detail=""; [[ "$rec" == *$'\n'* ]] && detail="${rec#*$'\n'}"
   model="${model//[[:space:]]/}"
-  [[ -n "$model" && "$model" != "none" && -n "${detail//[[:space:]]/}" ]] || return 0
+  [[ -n "$model" && "$model" != "none" && "$detail" == *[![:space:]]* ]] || return 0
   printf '%s\n' "[SCV 가이드] 이 컨텍스트에서 아직 이 모델의 프롬프팅 가이드 원문을 읽지 않았다 — 답하기 전에 아래 원문을 끝까지 읽고 아래 명령을 실행하라(지난 모델 $model 기준 — 지금 모델이 다르면 help 의 GUIDE 줄을 따르라)."
-  while IFS= read -r d || [[ -n "$d" ]]; do [[ -n "${d//[[:space:]]/}" ]] && printf '  %s\n' "$d"; done <<< "$detail"
+  while IFS= read -r d || [[ -n "$d" ]]; do [[ "$d" == *[![:space:]]* ]] && printf '  %s\n' "$d"; done <<< "$detail"
   return 0
 }
 
@@ -386,9 +386,9 @@ scv_mp_register_problems() {
   local list="${1:-}" sub="${2:-}" id label st val seen="" rw=0 out=""
   while IFS=$'\t' read -r id st val || [[ -n "$id" ]]; do
     [[ -z "$id" || "$id" == \#* ]] && continue
-    if [[ "$id" == "rewrite" ]]; then [[ -n "${val//[[:space:]]/}" ]] && rw=1; continue; fi
+    if [[ "$id" == "rewrite" ]]; then [[ "$val" == *[![:space:]]* ]] && rw=1; continue; fi
     case "$st" in
-      msg|ctx|asked|na) [[ -n "${val//[[:space:]]/}" ]] && seen="$seen|$id|" || out="${out}empty $id"$'\n' ;;
+      msg|ctx|asked|na) [[ "$val" == *[![:space:]]* ]] && seen="$seen|$id|" || out="${out}empty $id"$'\n' ;;
       *) out="${out}bad-status $id"$'\n' ;;
     esac
   done <<< "$sub"
@@ -407,7 +407,7 @@ scv_mp_register_problems() {
 scv_mp_register_rewrite() {
   local sub="${1:-}" id st val
   while IFS=$'\t' read -r id st val || [[ -n "$id" ]]; do
-    [[ "$id" == "rewrite" && -n "${val//[[:space:]]/}" ]] && { printf '%s' "$val"; return 0; }
+    [[ "$id" == "rewrite" && "$val" == *[![:space:]]* ]] && { printf '%s' "$val"; return 0; }
   done <<< "$sub"
   return 0
 }
@@ -559,12 +559,49 @@ scv_mp_stop_gate() {
 }
 
 # @pure
+# <답> → 1 | 0. (v0.64.0+) 코드 블록 · 인용 줄 밖에 문제 표 머리('위치' 와 '깨지는 것' 칸)나 '생길 수 있는 문제' 칸이
+# 있는가 — 한국어 · 영어 · 일본어. SCV 원칙은 문제를 따로 보이지 않고 해결책 안에서 막는다(사용자 결정 2026-10-01).
+scv_mp_answer_has_problem_table() {
+  local text="${1:-}" line t fence=0 q=$'\x3e' hit=0 nc=0
+  shopt -q nocasematch && nc=1
+  shopt -s nocasematch
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    t="${line#"${line%%[![:space:]]*}"}"
+    if [[ "$t" == '```'* ]]; then fence=$(( 1 - fence )); continue; fi
+    (( fence )) && continue
+    [[ "${t:0:1}" == "$q" ]] && continue
+    [[ "${t:0:1}" == "|" ]] || continue
+    if [[ "$t" == *"생길 수 있는 문제"* || "$t" == *"possible problems"* || "$t" == *"起こりうる問題"* ]] \
+       || [[ "$t" == *"위치"* && "$t" == *"깨지는 것"* ]] \
+       || [[ "$t" == *"location"* && "$t" == *"what breaks"* ]] \
+       || [[ "$t" == *"場所"* && "$t" == *"壊れるもの"* ]]; then hit=1; break; fi
+  done <<< "$text"
+  (( nc )) || shopt -u nocasematch
+  printf '%s' "$hit"
+}
+
+# @pure
+# <문제 표 있음 0|1> <원칙 스위치 on|off> <이미 계속 중 0|1> → ok | block | warn. 같은 턴 한 번 — 계속 중이면 다음 턴 경고.
+scv_mp_principle_gate() {
+  local hit="${1:-0}" sw="${2:-on}" active="${3:-0}"
+  [[ "$sw" == "on" && "$hit" == "1" ]] || { printf 'ok'; return 0; }
+  if [[ "$active" == "1" ]]; then printf 'warn'; else printf 'block'; fi
+}
+
+# @pure
+# → 막는 이유 한 줄. 모델이 이것만 읽고 다시 쓸 수 있게 원칙 요지를 담는다.
+scv_mp_principle_reason() {
+  printf '%s' "[SCV 원칙] 답에 문제 표나 '생길 수 있는 문제' 칸을 넣었다 — 문제는 보여 주지 말고 해결책 안에서 막아 다시 써라: '단위 | 해결책 | 추천' 세 칸, 방법마다 그 방법이 부를 문제를 막는 길을 담고, 정할 것은 선택지로 묻고, 남는 한계는 추천 칸 이유에 한 줄(contracts/rewrite-principle.md)."
+}
+
+# @pure
 # <스위치> <토큰> <모델 id 또는 ""> <병합 목록 또는 ""> <스크립트 경로> → 매 턴 훅이 싣는 블록(스위치 off · 토큰 없음이면 빈 값).
 # 토큰은 싣지 않는다 — 같은 상태면 출력이 늘 같아야 한다(등록은 표 파일을 스스로 읽는다).
 scv_mp_turn_block() {
   local sw="${1:-on}" tok="${2:-}" model="${3:-}" list="${4:-}" cmd="${5:-model-prompting.sh}" id label items="" q=$'\x3e'
   [[ "$sw" == "on" && -n "$tok" ]] || return 0
-  local mid="${model:-{지금 모델 id\}}"
+  local ph='{지금 모델 id}' mid   # 기본값을 따로 둔다 — "${x:-{…\}}" 의 \} 를 bash 3.2 는 글자 그대로 남긴다(5 는 지운다)
+  mid="${model:-$ph}"
   printf '%s\n' "[SCV 프롬프트] 이 턴 메시지(짧아도)를 모델 가이드 요구 항목과 1:1 비교 · 등록한 뒤 일하라 — 등록 전 파일 쓰기는 거절, 등록 · 인용 없는 종료는 차단."
   printf '%s\n' "  항목마다 msg · ctx(출처) · na(이유) · asked(못 찾은 것 중 가장 영향 큰 하나만, 추천 답과 함께) → bash \"$cmd\" register --model \"$mid\" (stdin \"id | 상태 | 값\" 줄들 + \"rewrite | - | 다시 쓴 요청\") → 결론 바로 뒤 '$q **다시 쓴 요청**: …' 인용(ctx · asked 항목 표시), 그것으로 일한다."
   if [[ -n "$model" && -n "$list" ]]; then
@@ -581,7 +618,7 @@ scv_mp_turn_block() {
 scv_mp_register_normalize() {
   local sub="${1:-}" line a b c sep=" | "
   while IFS= read -r line || [[ -n "$line" ]]; do
-    [[ -z "${line//[[:space:]]/}" ]] && continue
+    [[ "$line" != *[![:space:]]* ]] && continue
     if [[ "$line" != *$'\t'* && "$line" == *"$sep"*"$sep"* ]]; then
       a="${line%%"$sep"*}"; line="${line#*"$sep"}"; b="${line%%"$sep"*}"; c="${line#*"$sep"}"
     else
