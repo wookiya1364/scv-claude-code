@@ -105,9 +105,29 @@ _scv_emit_delegate() {
 }
 # ---------- /delegate --------------------------------------------------------
 
+# ---------- auto turns (v0.63.0+) --------------------------------------------
+# 호스트가 스스로 보낸 입력(배경 작업 완료 알림 등 — 래퍼 호스트 프로필 SCV_AUTO_PROMPT_TAGS)은 사람 턴이 아니다.
+# 새 턴 표를 쓰지 않고(직전 사람 턴의 등록이 그대로 유효) "이번 턴은 자동" 표시만 남긴 뒤, 지시 · 진단 · 가이드
+# 안내 · 위임 블록 · help 다시 읽기 횟수 · 예약 경고 소비를 모두 건너뛴다(경고는 다음 사람 턴에 실린다).
+# 판별은 모델별 프롬프팅 명령이 한다 — 호스트 프로필을 읽는 곳. 태그가 없으면(기본) 늘 사람 턴이라 이전과 같다.
+# 전체 스위치가 꺼져 있으면 사람 턴도 표를 새로 쓰지 않으므로, 자동 표시도 남기지 않는다(표시가 옛 표에 눌어붙지 않게).
+_scv_kind="human"
+_scv_mp_sh="$CORE_HOME/scripts/model-prompting.sh"
+if [[ -f "$_scv_mp_sh" && -n "$INPUT" ]] && command -v jq >/dev/null 2>&1; then
+  _scv_kind="$(printf '%s' "$INPUT" | jq -r 'try (.prompt // "") catch ""' 2>/dev/null | bash "$_scv_mp_sh" kind 2>/dev/null || true)"
+  [[ "$_scv_kind" == "auto" ]] || _scv_kind="human"
+fi
+# 사람 입력이면 지난 자동 표시를 지운다 — 표를 새로 쓰지 않는 입력(빈 프롬프트 등)에서도 이 턴의 검사가 꺼지지 않게.
+if [[ "$_scv_kind" != "auto" ]]; then
+  _scv_af="${SCV_JOURNAL_DIR:-scv/journal}/.help-turn-auto"
+  if [[ -f "$_scv_af" && ! -L "$_scv_af" ]]; then rm -f "$_scv_af" 2>/dev/null || true; fi
+fi
+if [[ "$_scv_kind" == "auto" ]]; then
+  if [[ "${_scv_always:-on}" != "off" ]]; then bash "$_scv_mp_sh" prompt --auto >/dev/null 2>&1 || true; fi
+# ---------- /auto turns ------------------------------------------------------
 # 전체 스위치가 꺼져 있으면 여기서 끝난다 — 지시도 진단도 없다. 대체된 계획의
 # 검사에 있던 성질이고, 새 검사가 이어받는다. (위임 블록만은 자기 스위치로 따로 실린다.)
-if [[ "${_scv_always:-on}" != "off" ]] && declare -F scv_force_routing >/dev/null 2>&1; then
+elif [[ "${_scv_always:-on}" != "off" ]] && declare -F scv_force_routing >/dev/null 2>&1; then
   _scv_pre="$(scv_force_switch "$(_scv_read SCV_FORCE_HELP)")"
   # 지시가 먼저, 진단이 나중이다. 0.40.0 은 반대였고 명령이 40줄 뒤에 묻혀
   # 무시됐다. 읽는 쪽에서 명령은 맨 앞에 와야 한다.
