@@ -97,4 +97,32 @@ for i in $(seq 1 10); do hook "$P" S >/dev/null; [[ $i -eq 5 ]] && start "$P" co
 P=$(mkproj t6b); loads=0
 for i in $(seq 1 10); do hook "$P" S >/dev/null; if [[ "$(wc_line "$P")" == "PROTOCOL: load" ]]; then loads=$((loads+1)); ( cd "$P" && bash "$STATE_SH" mark >/dev/null ); fi; done
 [[ $loads -eq 2 ]] && ok "기본 N=10: load 2회 (첫 턴 · 10턴째)" || fail "N=10: load ${loads}회"
+
+echo "── [T7] 시스템 bash(맥 기본 3.2)로 훅을 돌려도 턴을 세고 같은 세션은 loaded (v0.63.0) ──"
+# 훅은 PATH 의 bash 로 돈다 — 맥 기본 PATH 면 bash 3.2. 0.62.0 까지는 스위치의 소문자 변환(bash 4 전용)에서 깨져
+# 턴 세기 · 진단 줄이기가 통째로 꺼졌다. 리눅스의 /bin/bash 는 최신이라 그냥 통과하고, 맥 CI 가 이 줄을 지킨다.
+if [[ -x /bin/bash ]]; then
+  SYSB="$WORK/sysbash"; mkdir -p "$SYSB"; ln -sf /bin/bash "$SYSB/bash"
+  v="$(/bin/bash -c 'echo "$BASH_VERSION"')"
+  o="$(/bin/bash -c 'source "$1"; printf "%s %s %s" "$(scv_hstate_switch " \"OFF\" ")" "$(scv_hstate_switch Off)" "$(scv_hstate_switch "")"' _ "$LIB" 2>&1)"
+  [[ "$o" == "off off on" ]] && ok "스위치 — 시스템 bash $v" || fail "스위치(시스템 bash $v): $o"
+  hook_sys() { ( cd "$1" && printf '{"prompt":"안녕","session_id":"%s"}' "$2" | PATH="$SYSB:$PATH" CLAUDE_PLUGIN_ROOT="$CORE" SCV_GUARD_STATE="$WORK/gs" /bin/bash "$PROMPT_HOOK" 2>/dev/null ); }
+  P=$(mkproj t7); hook_sys "$P" A >/dev/null; ( cd "$P" && bash "$STATE_SH" mark >/dev/null ); hook_sys "$P" A >/dev/null
+  t="$( cd "$P" && bash "$STATE_SH" read | grep -o '"turn":[0-9]*' )"
+  [[ "$(wc_line "$P")" == "PROTOCOL: loaded" && "$t" == '"turn":2' ]] && ok "훅 전체를 시스템 bash $v 로: 턴 2 · loaded" || fail "훅(시스템 bash $v): $(wc_line "$P") $t"
+  # 진단이 끝까지 나와야 "변동 없음" 판정이 맞다. 빠진 도구가 한 갈래에만 있으면(다른 갈래는 빈 목록) 0.62.0 의 help 는
+  # bash 3.2 에서 "unbound variable" 로 멈춰 진단 아래쪽이 잘렸다. 선택 도구는 가짜로 채워 필수 갈래(glab)만 비게 만든다.
+  if ! command -v glab >/dev/null 2>&1; then
+    FAKED="$WORK/fakedeps"; mkdir -p "$FAKED"
+    for d in ffmpeg python3; do command -v "$d" >/dev/null 2>&1 || { printf '#!/bin/sh\nexit 0\n' > "$FAKED/$d"; chmod +x "$FAKED/$d"; }; done
+    P=$(mkproj t7d); touch "$P/scv/raw/a.md"
+    o="$( cd "$P" && PATH="$SYSB:$FAKED:$PATH" CLAUDE_PLUGIN_ROOT="$CORE" /bin/bash "$HELP_SH" 2>&1 )"
+    grep -q 'scv/raw has 1 item' <<<"$o" && ! grep -q 'unbound variable' <<<"$o" && ok "help 진단이 시스템 bash $v 로 끝까지(빠진 도구 한 갈래)" \
+      || fail "help 진단 잘림(시스템 bash $v): $(grep -m1 'unbound' <<<"$o")"
+  else
+    skip "glab 이 설치돼 있어 빈 목록 조건을 만들 수 없음"
+  fi
+else
+  skip "/bin/bash 없음"
+fi
 echo "─────────────────────────────"; echo "  통과 $PASS · 실패 $FAIL · 생략 $SKIP"; [[ $FAIL -eq 0 ]] && { echo "  ALL GATES OK"; exit 0; } || exit 1

@@ -8,6 +8,8 @@
 #       scv/archive/20260927-wookiya1364-prompting-warn-delivery/TESTS.md (경고 전달 — 이 파일의 T15~T17)
 #       scv/archive/20260928-wookiya1364-prompting-first-turn/TESTS.md (첫 턴 안내 — 이 파일의 T18~T19)
 #       scv/promote/20260928-wookiya1364-prompting-every-turn-checklist/TESTS.md (매 턴 비교 · 등록 — 이 파일의 T20~T23)
+#       scv/promote/20260930-wookiya1364-rewrite-direct-feedback-principle/TESTS.md (SCV 원칙 — 이 파일의 T24~T31)
+#       scv/promote/20261001-wookiya1364-auto-turns-pr-base-fixes/TESTS.md (자동 입력 턴 T1~T7 — 이 파일의 T32~T38, 독립 검토 결함 — T39~T42)
 # 픽스처는 중립 id 만 쓴다 — 코어 payload 에 제공자·모델 이름을 넣지 않는다(tests/test-host-neutral.sh).
 #
 # Run: bash core/tests/test-model-prompting.sh
@@ -653,6 +655,11 @@ printf '# source: model-a.md\nfinish\tState the done condition precisely\tfixtur
 mpc() { (cd "$1" && shift && SCV_HOST_PROFILE="$WORK/profile-cl.env" SCV_TODAY=2026-09-27 bash "$MP" "$@" 2>/dev/null); }
 hook_cl() { (cd "$1" && printf '{"prompt":"%s","session_id":"s1"}' "${2:-응}" | CLAUDE_PLUGIN_ROOT="$CORE" SCV_HOST_PROFILE="$WORK/profile-cl.env" bash "$CORE/template/hooks/on-user-prompt.sh" 2>/dev/null); }
 SUB_OK="$(printf 'goal | msg | fix the login bug\nfinish | ctx | conversation turn 2: the test passes\nsources | asked | which log file? (recommended: app.log)\nrewrite | - | Fix the login bug until the login test passes\n')"
+# (v0.63.0+) SCV 원칙 — 기대값은 원칙 파일에서 꺼낸다(문구를 검사에 다시 적지 않는다: Top-level rules 4조).
+PRIN="$CORE/contracts/rewrite-principle.md"
+psec()  { bash -c 'source "$1"; scv_mp_principle_section "$(cat "$2")" "$3"' _ "$LIB" "$PRIN" "$1"; }
+ptag()  { bash -c 'source "$1"; scv_mp_principle_tag "$2"' _ "$LIB" "$1"; }
+ptext() { bash -c 'source "$1"; scv_mp_principle_text "$2"' _ "$LIB" "$1"; }
 
 echo
 echo "T20. 매 턴 비교 · 등록 — 순수부"
@@ -725,7 +732,8 @@ grep -qx 'finish | State the done condition precisely' <<<"$cl" && grep -qx 'sou
 ri="$(cd "$R" && printf 'goal | msg | x\nrewrite | - | y\n' | SCV_HOST_PROFILE="$WORK/profile-cl.env" bash "$MP" register --model vendor-model-a 2>/dev/null)"
 grep -q '^REGISTER: incomplete' <<<"$ri" && grep -q 'missing finish' <<<"$ri" && grep -q 'missing sources' <<<"$ri" && [[ ! -f "$R/scv/journal/.help-rewrite" ]] && c=$((c + 1)) || echo "      (3) incomplete: $ri"
 rc="$(cd "$R" && printf '%s\n' "$SUB_OK" | SCV_HOST_PROFILE="$WORK/profile-cl.env" bash "$MP" register --model vendor-model-a 2>/dev/null)"
-grep -q "^REGISTERED: turn $tok1 · model vendor-model-a · 3 item(s)" <<<"$rc" && grep -qx 'REWRITE: Fix the login bug until the login test passes' <<<"$rc" && c=$((c + 1)) || echo "      (4) complete: $rc"
+# v0.63.0: 원칙 스위치 기본 on — REWRITE 줄 끝에 원칙 표식이 붙는다(설정 없음 → english 구역). 끄면 그대로인지는 T26.
+grep -q "^REGISTERED: turn $tok1 · model vendor-model-a · 3 item(s)" <<<"$rc" && grep -qxF "REWRITE: Fix the login bug until the login test passes $(ptag "$(psec english)")" <<<"$rc" && c=$((c + 1)) || echo "      (4) complete: $rc"
 [[ -z "$(mpc "$R" gate)" ]] && c=$((c + 1)) || echo "      (5) gate after register"
 hook_cl "$R" "다음" >/dev/null; tok2="$(head -1 "$R/scv/journal/.help-turn")"
 [[ "$tok2" != "$tok1" && -n "$(mpc "$R" gate)" ]] && c=$((c + 1)) || echo "      (6) new turn needs a new registration"
@@ -776,6 +784,399 @@ cp -R "$WORK/guides-cl" "$PL/prompting"
 R="$(new_repo t23)"
 o="$(cd "$R" && SCV_HOST_PROFILE="$WORK/profile-rel.env" bash "$PL/vendor/scv-core/core/scripts/model-prompting.sh" checklist --model vendor-model-a 2>/dev/null)"
 if grep -qx 'sources | Name the sources to check' <<<"$o"; then ok "OK [T23] vendored layout finds the wrapper guides"; else fail "[T23] $o"; fi
+
+# ---------------------------------------------------------------- 다시 쓴 요청의 SCV 원칙 (v0.63.0+)
+reg_cl() { (cd "$1" && printf '%s\n' "$SUB_OK" | SCV_HOST_PROFILE="$WORK/profile-cl.env" bash "${2:-$MP}" register --model vendor-model-a 2>/dev/null); }
+
+echo
+echo "T24. SCV 원칙 — 순수부 (구역 고르기 · 표식 · 전문 · 붙이기 · 후보 · 언어 이름)"
+N=0; BAD=0
+T24OUT="$(bash -c '
+  source "$1"
+  e() { printf "%s\n" "$1=$(printf "%s" "$2" | tr "\t\n" "~|")"; }
+  B="$(printf "head\n<!-- principle:korean -->\ntag: [K]\nK1\nK2\n<!-- principle:english -->\ntag: [E]\nE1\n<!-- principle:x -->\nX1\n")"
+  e s1 "$(scv_mp_principle_section "$B" korean)"
+  e s2 "$(scv_mp_principle_section "$B" "  Korean ")"
+  e s3 "$(scv_mp_principle_section "$B" ko)"
+  e s4 "$(scv_mp_principle_section "$B" french)"
+  e s5 "$(scv_mp_principle_section "$B" "")"
+  e s6 "$(scv_mp_principle_section "" korean)"
+  e s7 "$(scv_mp_principle_section "$(printf "<!-- principle:korean -->\ntag: [K]\nK1\n")" japanese)"
+  e s8 "$(scv_mp_principle_section "$B" x)"
+  e t1 "$(scv_mp_principle_tag "$(printf "tag: [K]\nK1\n")")"
+  e t2 "$(scv_mp_principle_tag "$(printf "K1\nK2")")"
+  e t3 "$(scv_mp_principle_tag "tag: ")"
+  e x1 "$(scv_mp_principle_text "$(printf "tag: [K]\nK1\nK2")")"
+  e x2 "$(scv_mp_principle_text "$(printf "X1\nX2")")"
+  e x3 "$(scv_mp_principle_text "tag: [K]")"
+  e w1 "$(scv_mp_rewrite_tagged "Do X" on "[T]")"
+  e w2 "$(scv_mp_rewrite_tagged "Do X" off "[T]")"
+  e w3 "$(scv_mp_rewrite_tagged "Do X" on "")"
+  e w4 "$(scv_mp_rewrite_tagged "" on "[T]")"
+  e c1 "$(scv_mp_principle_candidates /p/c/)"
+  e c2 "$(scv_mp_principle_candidates "")"
+  e l1 "$(scv_mp_principle_lang JA)"
+  e l2 "$(scv_mp_principle_lang spanish)"
+  e l3 "$(scv_mp_principle_lang "\"korean\"")"
+' _ "$LIB")"
+g() { printf '%s\n' "$T24OUT" | grep -m1 "^$1=" | sed "s/^$1=//"; }
+eqc "section: korean" "tag: [K]|K1|K2" "$(g s1)"
+eqc "section: trims and lowercases" "tag: [K]|K1|K2" "$(g s2)"
+eqc "section: short name ko" "tag: [K]|K1|K2" "$(g s3)"
+eqc "section: unknown language falls back to english" "tag: [E]|E1" "$(g s4)"
+eqc "section: empty language is english" "tag: [E]|E1" "$(g s5)"
+eqc "section: empty body" "" "$(g s6)"
+eqc "section: no english section to fall back to" "" "$(g s7)"
+eqc "section: stops at the file end, no tag line" "X1" "$(g s8)"
+eqc "tag: first line" "[K]" "$(g t1)"
+eqc "tag: none" "" "$(g t2)"
+eqc "tag: empty value" "" "$(g t3)"
+eqc "text: without the tag line" "K1|K2" "$(g x1)"
+eqc "text: section without a tag" "X1|X2" "$(g x2)"
+eqc "text: tag only" "" "$(g x3)"
+eqc "tagged: on" "Do X [T]" "$(g w1)"
+eqc "tagged: off" "Do X" "$(g w2)"
+eqc "tagged: no tag" "Do X" "$(g w3)"
+eqc "tagged: no rewrite" "" "$(g w4)"
+eqc "candidates: core root, then the vendored core" "/p/c/contracts/rewrite-principle.md|/p/c/vendor/scv-core/core/contracts/rewrite-principle.md" "$(g c1)"
+eqc "candidates: no root" "" "$(g c2)"
+eqc "lang: JA" "japanese" "$(g l1)"
+eqc "lang: other value kept" "spanish" "$(g l2)"
+eqc "lang: quotes stripped" "korean" "$(g l3)"
+if [[ $BAD -eq 0 ]]; then ok "OK [T24] $N/$N"; else fail "[T24] $((N - BAD))/$N"; fi
+
+echo
+echo "T25. SCV 원칙 — 등록 결과에 표식 · 전문, 저장된 제출은 그대로"
+c=0
+R="$(new_repo t25)"; printf '{\n  "SCV_LANG": "korean"\n}\n' > "$R/scv/scv_settings.json"
+hook_cl "$R" "로그인 고쳐" >/dev/null; tok="$(head -1 "$R/scv/journal/.help-turn" 2>/dev/null)"
+out="$(reg_cl "$R")"
+SK="$(psec korean)"; TK="$(ptag "$SK")"; XK="$(ptext "$SK")"
+[[ -n "$TK" ]] && grep -qxF "REWRITE: Fix the login bug until the login test passes $TK" <<<"$out" && c=$((c + 1)) || echo "      (1) tag: $out"
+got="$(printf '%s\n' "$out" | sed -n '/^PRINCIPLE:$/,$p' | sed '1d')"
+[[ -n "$XK" && "$got" == "$XK" ]] && c=$((c + 1)) || echo "      (2) principle text differs from the korean section"
+! grep -qF "$TK" "$R/scv/journal/.help-rewrite" && ! grep -qF "$(printf '%s\n' "$XK" | head -1)" "$R/scv/journal/.help-rewrite" && c=$((c + 1)) || echo "      (3) saved submission must not carry the principle"
+[[ "$(printf '%s\n' "$out" | head -1)" == "REGISTERED: turn $tok · model vendor-model-a · 3 item(s)" ]] && c=$((c + 1)) || echo "      (4) first line: $(printf '%s\n' "$out" | head -1)"
+if [[ $c -eq 4 ]]; then ok "OK [T25] 4/4 principle attached to the register output"; else fail "[T25] $c/4"; fi
+
+echo
+echo "T26. SCV 원칙 — 끄면 등록 결과가 이 기능 전과 같다"
+R="$(new_repo t26)"; printf '{\n  "SCV_REWRITE_PRINCIPLE": "off",\n  "SCV_LANG": "korean"\n}\n' > "$R/scv/scv_settings.json"
+hook_cl "$R" "로그인 고쳐" >/dev/null; tok="$(head -1 "$R/scv/journal/.help-turn" 2>/dev/null)"
+out="$(reg_cl "$R")"
+want="$(printf 'REGISTERED: turn %s · model vendor-model-a · 3 item(s)\nREWRITE: Fix the login bug until the login test passes' "$tok")"
+if [[ -n "$tok" && "$out" == "$want" ]]; then ok "OK [T26] off → the pre-feature output, byte for byte"; else fail "[T26] $out"; fi
+
+echo
+echo "T27. SCV 원칙 — 표식이 붙은 다시 쓴 요청을 인용하면 종료 훅을 지나고, 인용이 없으면 지금처럼 막힌다"
+if command -v jq >/dev/null 2>&1; then
+  c=0
+  R="$(new_repo t27)"; (cd "$R" && git init -q . 2>/dev/null); mkdir -p "$R/src" "$R/scv/promote"
+  hook_cl "$R" "로그인 고쳐" >/dev/null
+  rw="$(reg_cl "$R" | sed -n 's/^REWRITE: //p')"
+  o="$(stop_cl "$R" "$(printf 'done\n\n> **Rewritten request**: %s\n' "$rw")" false)"
+  [[ "$rw" == *"$(ptag "$(psec english)")" && -z "$o" ]] && c=$((c + 1)) || echo "      (1) tagged quote should pass: [$rw] [$o]"
+  o="$(stop_cl "$R" "done without quote" false)"
+  [[ "$(jq -r .decision <<<"$o" 2>/dev/null)" == block ]] && c=$((c + 1)) || echo "      (2) no quote should still block: [$o]"
+  if [[ $c -eq 2 ]]; then ok "OK [T27] 2/2 stop gate unchanged by the tag"; else fail "[T27] $c/2"; fi
+else
+  echo "  · (jq 없음 — T27 생략)"
+fi
+
+echo
+echo "T28. SCV 원칙 — 언어별 구역 (korean · english · japanese · 모르는 값은 english)"
+c=0
+for L in korean english japanese spanish; do
+  R="$(new_repo "t28-$L")"; printf '{\n  "SCV_LANG": "%s"\n}\n' "$L" > "$R/scv/scv_settings.json"
+  hook_cl "$R" "x" >/dev/null
+  exp="$L"; [[ "$L" == spanish ]] && exp=english
+  T="$(ptag "$(psec "$exp")")"
+  [[ -n "$T" ]] && grep -qxF "REWRITE: Fix the login bug until the login test passes $T" <<<"$(reg_cl "$R")" && c=$((c + 1)) || echo "      ($L) expected the $exp tag"
+done
+[[ "$(ptag "$(psec korean)")" != "$(ptag "$(psec english)")" && "$(ptag "$(psec japanese)")" != "$(ptag "$(psec english)")" ]] && c=$((c + 1)) || echo "      (distinct) the three tags must differ"
+if [[ $c -eq 5 ]]; then ok "OK [T28] 5/5 language sections"; else fail "[T28] $c/5"; fi
+
+echo
+echo "T29. SCV 원칙 — 세 구역 모두 필수 요소를 담는다 (요소 하나를 지운 사본은 붉다)"
+principle_missing() {  # <구역> <언어> → 빠진 요소, 한 줄에 하나
+  local s="$1" m
+  case "$2" in
+    korean) set -- "정확한 피드백" "듣기 좋은 말 대신 사실" "작은 단위" "단위 | 해결책 | 추천 | 생길 수 있는 문제" "번호를 붙여 모두" "고른 이유" "다를 수 있다" "문제 번호" \
+              "번호 | 위치 | 조건 | 깨지는 것 | 확인" "파일:줄" "확인:" "추정:" "찾아서 위치" "찾아본 범위와 방법" "없음(확인한 범위" "80칸" "줄글처럼 풀려" "번호 메모" "항목 표 대신" ;;
+    english) set -- "accurate feedback" "facts instead of pleasing words" "small units" "Unit | Solutions | Recommendation | Possible problems" \
+              "every usable solution, numbered" "why it was chosen" "can differ" "problem numbers only" "No. | Location | Condition | What breaks | Check" \
+              "file:line" "Checked:" "Estimate:" "search and name the place" "range and method searched" "None (range checked" "80 columns" \
+              "unfolds into plain prose" "numbered notes" "replaces the help answer's item table" ;;
+    japanese) set -- "正確なフィードバック" "事実を述べよ" "小さな単位" "単位 | 解決策 | 推奨 | 起こりうる問題" "番号を付けてすべて" "選んだ理由" "異なりうる" "問題番号" \
+              "番号 | 場所 | 条件 | 壊れるもの | 確認" "ファイル:行" "確認:" "推定:" "探して場所を示し" "探した範囲と方法" "なし（確認した範囲" "約80桁" "文章のように崩れて" "番号付きメモ" "項目表の代わり" ;;
+    *) set -- "(unknown language)" ;;
+  esac
+  for m in "$@"; do [[ "$s" == *"$m"* ]] || printf '%s\n' "$m"; done
+}
+c=0
+for L in korean english japanese; do
+  miss="$(principle_missing "$(psec "$L")" "$L")"
+  [[ -z "$miss" ]] && c=$((c + 1)) || echo "      ($L) missing: $(printf '%s' "$miss" | tr '\n' ';')"
+done
+mut="$(psec korean | sed 's/80칸/여러 칸/')"
+[[ -n "$(principle_missing "$mut" korean)" ]] && c=$((c + 1)) || echo "      (mutation) a section without an element must be red"
+if [[ $c -eq 4 ]]; then ok "OK [T29] 4/4 required elements"; else fail "[T29] $c/4"; fi
+
+echo
+echo "T30. SCV 원칙 — 문구는 원칙 파일 한 곳에만, 규약은 가리키기만, 도움말 답 모양 절은 그대로"
+c=0
+for L in korean english japanese; do
+  first="$(ptext "$(psec "$L")" | head -1)"
+  hits="$(grep -rlF -- "$first" "$CORE" 2>/dev/null | grep -vxF "$PRIN" || true)"
+  [[ -n "$first" && -z "$hits" ]] && c=$((c + 1)) || echo "      ($L) also found in: $hits"
+done
+grep -qF 'contracts/rewrite-principle.md' "$REFINE" && grep -qF 'principle tag included' "$REFINE" && c=$((c + 1)) || echo "      (refine) the exception and the tag line are missing"
+# 도움말 답 모양 절은 2026-09-16 잠금으로 바이트 그대로(test-help-router-diet) — 표 통일은 다시 쓰기 규약("원칙대로 답하라")과
+# 원칙 파일의 "항목 표 대신" 선언이 맡는다(사용자 결정 2026-10-01, Top-level rules 해소 순서 4).
+grep -qF 'answer by it' "$REFINE" && [[ "$(psec korean)" == *"항목 표 대신"* ]] && c=$((c + 1)) || echo "      (help) refine must say answer by it, and the principle must replace the help item table"
+if [[ $c -eq 5 ]]; then ok "OK [T30] 5/5 one place"; else fail "[T30] $c/5"; fi
+
+echo
+echo "T31. SCV 원칙 — 투영된 플러그인 루트(원칙 파일 없음)에서도 벤더 사본의 원칙 파일을 찾는다"
+PL2="$WORK/plugin2"; mkdir -p "$PL2/vendor/scv-core/core/contracts"; cp -R "$CORE/scripts" "$PL2/scripts"
+cp "$PRIN" "$PL2/vendor/scv-core/core/contracts/rewrite-principle.md"
+R="$(new_repo t31)"; hook_cl "$R" "x" >/dev/null
+o="$(reg_cl "$R" "$PL2/scripts/model-prompting.sh")"
+if grep -qx 'PRINCIPLE:' <<<"$o" && grep -qxF "REWRITE: Fix the login bug until the login test passes $(ptag "$(psec english)")" <<<"$o"; then
+  ok "OK [T31] a projected root finds the vendored principle"
+else
+  fail "[T31] $o"
+fi
+
+# ---------------------------------------------------------------- 자동 입력 턴 (v0.63.0+)
+# 호스트가 스스로 보낸 입력(래퍼 호스트 프로필 SCV_AUTO_PROMPT_TAGS)은 새 턴을 열지 않는다. 픽스처는 중립 태그만 쓴다.
+{ cat "$WORK/profile-cl.env"; printf 'SCV_AUTO_PROMPT_TAGS=machine-event other-event\n'; } > "$WORK/profile-auto.env"
+{ cat "$WORK/profile-cl.env"; printf 'SCV_AUTO_PROMPT_TAGS=\n'; } > "$WORK/profile-empty.env"
+AUTO_IN="$(printf '<machine-event>\n<id>b1</id>\n<status>completed</status>\n</machine-event>')"
+kind_of() { bash -c 'source "$1"; scv_mp_prompt_kind "$2" "$3"' _ "$LIB" "$1" "$2"; }
+tok_of()  { head -1 "$1/scv/journal/.help-turn" 2>/dev/null; }
+hook_p() {  # <저장소> <프로필> <프롬프트> → 매 턴 훅 출력. 프롬프트는 jq 로 싣는다(줄바꿈 · 꺾쇠 그대로).
+  (cd "$1" && jq -cn --arg p "$3" '{prompt:$p,session_id:"s1"}' \
+     | CLAUDE_PLUGIN_ROOT="$CORE" SCV_HOST_PROFILE="$2" bash "$CORE/template/hooks/on-user-prompt.sh" 2>/dev/null)
+}
+stop_p() {  # <저장소> <프로필> <답> <계속 중 true|false> → 종료 훅 stdout
+  local r="$1" tr="$WORK/tr-auto-$RANDOM.jsonl"
+  printf '{"type":"user","message":{"content":[{"type":"text","text":"q"}]}}\n' > "$tr"
+  jq -cn --arg t "$3" '{type:"assistant",message:{model:"vendor-model-a",content:[{type:"text",text:$t}]}}' >> "$tr"
+  (cd "$r" && jq -cn --arg p "$tr" --arg a "$3" --argjson act "$4" '{transcript_path:$p,last_assistant_message:$a,stop_hook_active:$act}' \
+     | CLAUDE_PLUGIN_ROOT="$CORE" SCV_HOST_PROFILE="$2" GIT_AUTHOR_NAME="Hook User" bash "$STOP" 2>/dev/null)
+}
+reg_p() { (cd "$1" && printf '%s\n' "$SUB_OK" | SCV_HOST_PROFILE="$2" bash "$MP" register --model vendor-model-a >/dev/null 2>&1); }
+QUOTED_ANS="$(printf 'done\n\n> **Rewritten request**: Fix the login bug until the login test passes\n')"
+
+echo
+echo "T32. 자동 입력 판별 — 순수부"
+N=0; BAD=0
+TG="machine-event other-event"
+eqc "a block of the tag" "auto" "$(kind_of "<machine-event>x</machine-event>" "$TG")"
+eqc "tag with attributes" "auto" "$(kind_of '<machine-event id="3">x</machine-event>' "$TG")"
+eqc "leading and trailing whitespace" "auto" "$(kind_of "$(printf '  \n\t<machine-event>x</machine-event>\n\n')" "$TG")"
+eqc "second tag" "auto" "$(kind_of "<other-event>done</other-event>" "$TG")"
+eqc "tabs between tag names" "auto" "$(kind_of "<other-event>d</other-event>" "$(printf 'machine-event\tother-event')")"
+eqc "two blocks of different tags" "auto" "$(kind_of "$(printf '<machine-event>a</machine-event>\n<other-event>b</other-event>')" "$TG")"
+eqc "person text after the block" "human" "$(kind_of "$(printf '<machine-event>x</machine-event>\n\nfix the payment bug too')" "$TG")"
+eqc "person text between two blocks" "human" "$(kind_of "$(printf '<machine-event>a</machine-event>\nfix the payment bug\n<other-event>b</other-event>')" "$TG")"
+eqc "tag names with glob or regex characters are ignored" "human" "$(kind_of "<a.b>x</a.b>" "a.b")"
+eqc "person text before the block" "human" "$(kind_of "$(printf 'look:\n<machine-event>x</machine-event>')" "$TG")"
+eqc "unclosed block" "human" "$(kind_of "<machine-event>x" "$TG")"
+eqc "tag in the middle" "human" "$(kind_of "see <machine-event> here" "$TG")"
+eqc "longer name is another tag" "human" "$(kind_of "<machine-events>x</machine-events>" "$TG")"
+eqc "unclosed name" "human" "$(kind_of "<machine-event" "$TG")"
+eqc "no tags configured" "human" "$(kind_of "<machine-event>x</machine-event>" "")"
+eqc "empty input" "human" "$(kind_of "" "$TG")"
+eqc "whitespace only" "human" "$(kind_of "$(printf ' \n\t ')" "$TG")"
+# 공백이 길어도 빨리 끝난다(창 1024자) — 0.63.0 개발 중 독립 검토: 앞 공백 6만 자에 턴마다 6초.
+_sp="$(printf '%60000s' '')"; _t0=$SECONDS
+eqc "60000 leading spaces (past the window → person)" "human" "$(kind_of "$_sp<machine-event>x</machine-event>" "$TG")"
+eqc "60000 spaces inside the block" "auto" "$(kind_of "<machine-event>$_sp</machine-event>" "$TG")"
+eqc "long whitespace is bounded (≤ 3 s for both)" "fast" "$( (( SECONDS - _t0 <= 3 )) && echo fast || echo "slow $((SECONDS - _t0))s")"
+if [[ $BAD -eq 0 ]]; then ok "OK [T32] $N/$N"; else fail "[T32] $((N - BAD))/$N"; fi
+
+echo
+echo "T33. kind — 호스트 프로필의 태그를 읽고, 모델별 프롬프팅 스위치와 무관하다"
+c=0
+R="$(new_repo t33)"
+kd() { (cd "$R" && printf '%s' "$2" | SCV_HOST_PROFILE="$1" bash "$MP" kind 2>/dev/null); }
+[[ "$(kd "$WORK/profile-auto.env" "$AUTO_IN")" == auto ]] && c=$((c + 1)) || echo "      (1) tagged input with tags → auto"
+[[ "$(kd "$WORK/profile-auto.env" "로그인 고쳐")" == human ]] && c=$((c + 1)) || echo "      (2) person input → human"
+[[ "$(kd "$WORK/profile-cl.env" "$AUTO_IN")" == human ]] && c=$((c + 1)) || echo "      (3) no tag key → human"
+[[ "$(kd "$WORK/profile-empty.env" "$AUTO_IN")" == human ]] && c=$((c + 1)) || echo "      (4) empty tag value → human"
+printf '{"SCV_MODEL_PROMPTING": "off"}\n' > "$R/scv/scv_settings.json"
+[[ "$(kd "$WORK/profile-auto.env" "$AUTO_IN")" == auto ]] && c=$((c + 1)) || echo "      (5) prompting switch off → still auto"
+if [[ $c -eq 5 ]]; then ok "OK [T33] 5/5 kind reads the host profile"; else fail "[T33] $c/5"; fi
+
+if command -v jq >/dev/null 2>&1; then
+  echo
+  echo "T34. 자동 입력 턴 — 새 턴을 열지 않는다(표 그대로 · 블록 없음 · 자동 표시 · 파일 쓰기 거절 없음)"
+  c=0
+  R="$(new_repo t34)"; (cd "$R" && git init -q . 2>/dev/null); mkdir -p "$R/src" "$R/scv/promote"   # 가드는 SCV 가 설치된 프로젝트에서만 돈다
+  gw_p() { (cd "$R" && printf '{"cwd":"%s","session_id":"s1","tool_name":"Write","tool_input":{"file_path":"%s/src/a.js"}}' "$R" "$R" \
+          | SCV_HOST_PROFILE="$WORK/profile-auto.env" SCV_GUARD_STATE="$WORK/gstate34" SCV_GUARD_RULE_B=off SCV_GUARD_SCRIPTS="$CORE/scripts" SCV_GUARD_MODE=gate-write bash "$CORE/template/hooks/guard.sh" 2>/dev/null); }
+  hook_p "$R" "$WORK/profile-auto.env" "로그인 고쳐" >/dev/null; tok1="$(tok_of "$R")"
+  reg_p "$R" "$WORK/profile-auto.env"
+  stop_p "$R" "$WORK/profile-auto.env" "$QUOTED_ANS" false >/dev/null   # 사람 턴이 끝난다(막지 않음 → 끝난 턴 표)
+  o="$(hook_p "$R" "$WORK/profile-auto.env" "$AUTO_IN")"
+  [[ -n "$tok1" && "$(tok_of "$R")" == "$tok1" ]] && c=$((c + 1)) || echo "      (1) turn token changed on an automatic turn"
+  ! grep -qF '[SCV 프롬프트]' <<<"$o" && ! grep -qF 'SCV: 이 턴의 첫 행동' <<<"$o" && ! grep -qF '[SCV preflight]' <<<"$o" && c=$((c + 1)) \
+    || echo "      (2) blocks on an automatic turn: $(grep -E '^\[SCV|═' <<<"$o" | head -3)"
+  [[ "$(head -1 "$R/scv/journal/.help-turn-auto" 2>/dev/null)" == "$tok1" ]] && c=$((c + 1)) || echo "      (3) auto marker must equal the turn token"
+  ! grep -q '"permissionDecision":"deny"' <<<"$(gw_p)" && c=$((c + 1)) || echo "      (4) write denied on an automatic turn after a registered turn"
+  hook_p "$R" "$WORK/profile-auto.env" "다음 일" >/dev/null
+  grep -q '"permissionDecision":"deny"' <<<"$(gw_p)" && c=$((c + 1)) || echo "      (5) a person turn without registration must still be denied"
+  # 직전 사람 턴이 등록 없이 끝났어도(계속 중 경고로 끝난 턴) 자동 턴에는 등록할 요청이 없다 — 거절하지 않는다.
+  stop_p "$R" "$WORK/profile-auto.env" "answer" true >/dev/null     # 계속 중 → 경고로 끝남(끝난 턴 표)
+  hook_p "$R" "$WORK/profile-auto.env" "$AUTO_IN" >/dev/null
+  ! grep -q '"permissionDecision":"deny"' <<<"$(gw_p)" && c=$((c + 1)) || echo "      (6) an automatic turn after an unregistered turn must not be denied"
+  # 전체 스위치가 꺼진 프로젝트는 사람 턴도 표를 새로 쓰지 않는다 — 자동 표시도 남기지 않는다(옛 표에 눌어붙지 않게).
+  R2="$(new_repo t34off)"; printf '{"SCV_ALWAYS_ON": "off"}\n' > "$R2/scv/scv_settings.json"
+  printf 'tok-old\n' > "$R2/scv/journal/.help-turn"
+  hook_p "$R2" "$WORK/profile-auto.env" "$AUTO_IN" >/dev/null
+  [[ ! -f "$R2/scv/journal/.help-turn-auto" ]] && c=$((c + 1)) || echo "      (7) always-on off: no auto marker"
+  if [[ $c -eq 7 ]]; then ok "OK [T34] 7/7 an automatic turn opens no turn"; else fail "[T34] $c/7"; fi
+
+  echo
+  echo "T35. 종료 훅 — 자동 턴은 판정을 건너뛰고, 다음 사람 턴은 지금처럼 막는다"
+  c=0
+  R="$(new_repo t35)"
+  hook_p "$R" "$WORK/profile-auto.env" "로그인 고쳐" >/dev/null; tok1="$(tok_of "$R")"
+  reg_p "$R" "$WORK/profile-auto.env"
+  stop_p "$R" "$WORK/profile-auto.env" "$QUOTED_ANS" false >/dev/null
+  hook_p "$R" "$WORK/profile-auto.env" "$AUTO_IN" >/dev/null
+  # 등록은 있지만 인용이 없는 답 — 사람 턴이면 막힌다(T22 (4)). 자동 턴은 막지 않는다.
+  o="$(stop_p "$R" "$WORK/profile-auto.env" "background task finished" false)"
+  [[ -z "$o" ]] && c=$((c + 1)) || echo "      (1) automatic turn blocked: $o"
+  o="$(cd "$R" && printf 'x' | SCV_HOST_PROFILE="$WORK/profile-auto.env" bash "$MP" stop 2>/dev/null)"
+  grep -qx 'STOP_GATE: auto' <<<"$o" && c=$((c + 1)) || echo "      (2) stop verdict: $o"
+  hook_p "$R" "$WORK/profile-auto.env" "다음 일" >/dev/null
+  [[ -n "$(tok_of "$R")" && "$(tok_of "$R")" != "$tok1" && ! -f "$R/scv/journal/.help-turn-auto" ]] && c=$((c + 1)) \
+    || echo "      (3) person turn: a new token and the marker dropped"
+  o="$(stop_p "$R" "$WORK/profile-auto.env" "answer" false)"
+  [[ "$(jq -r .decision <<<"$o" 2>/dev/null)" == block ]] && grep -q 'checklist --model' <<<"$o" && c=$((c + 1)) \
+    || echo "      (4) an unregistered person turn must block: $o"
+  if [[ $c -eq 4 ]]; then ok "OK [T35] 4/4 stop skips only the automatic turn"; else fail "[T35] $c/4"; fi
+
+  echo
+  echo "T36. 예약 경고 — 자동 턴은 싣지도 지우지도 않고, 다음 사람 턴이 싣고 지운다"
+  c=0
+  R="$(new_repo t36)"
+  hook_p "$R" "$WORK/profile-auto.env" "로그인 고쳐" >/dev/null
+  printf '[SCV 가이드] 직전 턴: fixture-warning-36\n' > "$R/scv/journal/.help-warn"
+  o="$(hook_p "$R" "$WORK/profile-auto.env" "$AUTO_IN")"
+  ! grep -qF 'fixture-warning-36' <<<"$o" && [[ -f "$R/scv/journal/.help-warn" ]] && c=$((c + 1)) || echo "      (1) the automatic turn consumed the warning"
+  o="$(hook_p "$R" "$WORK/profile-auto.env" "다음 일")"
+  grep -qF 'fixture-warning-36' <<<"$o" && [[ ! -f "$R/scv/journal/.help-warn" ]] && c=$((c + 1)) || echo "      (2) the person turn must carry and clear the warning"
+  if [[ $c -eq 2 ]]; then ok "OK [T36] 2/2 warning waits for the person turn"; else fail "[T36] $c/2"; fi
+
+  echo
+  echo "T37. 도움말 다시 읽기 횟수 — 자동 턴은 세지 않는다(간격 2)"
+  c=0
+  R="$(new_repo t37)"   # 표식: 세션 s1 · protocol 1 · turn 3
+  printf '{"SCV_HELP_RELOAD_EVERY": "2"}\n' > "$R/scv/scv_settings.json"
+  hs() { jq -r '"\(.turn) \(.protocol)"' "$R/scv/journal/.help-state" 2>/dev/null; }
+  for _i in 1 2 3; do hook_p "$R" "$WORK/profile-auto.env" "$AUTO_IN" >/dev/null; done
+  [[ "$(hs)" == "3 1" ]] && c=$((c + 1)) || echo "      (1) automatic turns were counted: $(hs)"
+  hook_p "$R" "$WORK/profile-auto.env" "다음 일" >/dev/null
+  [[ "$(hs)" == "4 0" ]] && c=$((c + 1)) || echo "      (2) the person turn must count (and reach the interval): $(hs)"
+  if [[ $c -eq 2 ]]; then ok "OK [T37] 2/2 only person turns count"; else fail "[T37] $c/2"; fi
+
+  echo
+  echo "T38. 태그가 비면 지금과 같다 — 태그로 시작하는 입력도 사람 턴"
+  c=0
+  _norm() { sed -E 's/[0-9]{2}:[0-9]{2}/HH:MM/g'; }
+  rm -rf "$WORK/t38"; R="$(new_repo t38)"; o1="$(hook_p "$R" "$WORK/profile-cl.env" "$AUTO_IN" | _norm)"
+  rm -rf "$WORK/t38"; R="$(new_repo t38)"; o2="$(hook_p "$R" "$WORK/profile-empty.env" "$AUTO_IN" | _norm)"
+  [[ -n "$o1" && "$o1" == "$o2" ]] && c=$((c + 1)) || { echo "      (1) no key vs empty value differ:"; diff <(printf '%s\n' "$o1") <(printf '%s\n' "$o2") | head -5 | sed 's/^/        /'; }
+  [[ -n "$(tok_of "$R")" && ! -f "$R/scv/journal/.help-turn-auto" ]] && grep -qF '[SCV 프롬프트]' <<<"$o2" && grep -qF 'SCV: 이 턴의 첫 행동' <<<"$o2" && c=$((c + 1)) \
+    || echo "      (2) the tagged input must open a turn as before"
+  o="$(stop_p "$R" "$WORK/profile-empty.env" "answer" false)"
+  [[ "$(jq -r .decision <<<"$o" 2>/dev/null)" == block ]] && c=$((c + 1)) || echo "      (3) stop must judge it as before: $o"
+  # 기능 전 훅을 이 파일에서 만든다: 자동 턴 구간(표식 사이)을 빼고 elif 를 if 로. 같은 입력 · 같은 상태에서 바이트가 같아야
+  # 한다 — 새 코드끼리만 비교하면 사람 턴 출력이 바뀌어도 못 잡는다(0.63.0 개발 중 독립 검토).
+  BASE_HOOK="$WORK/hook-base/on-user-prompt.sh"; mkdir -p "$WORK/hook-base"
+  sed -e '/^# ---------- auto turns/,/^# ---------- \/auto turns/d' \
+      -e 's/^elif \[\[ "\${_scv_always:-on}" != "off" \]\]/if [[ "${_scv_always:-on}" != "off" ]]/' \
+      "$CORE/template/hooks/on-user-prompt.sh" > "$BASE_HOOK"
+  hook_with() {  # <훅> <저장소> <프로필> <프롬프트> → 출력(시각은 HH:MM)
+    (cd "$2" && jq -cn --arg p "$4" '{prompt:$p,session_id:"s1"}' | CLAUDE_PLUGIN_ROOT="$CORE" SCV_HOST_PROFILE="$3" bash "$1" 2>/dev/null) | _norm
+  }
+  same_as_base() {  # <프로필> <프롬프트> → 새 훅과 기능 전 훅의 출력 · 턴 표 유무가 같으면 0
+    local a b ta tb
+    rm -rf "$WORK/t38b"; R="$(new_repo t38b)"; a="$(hook_with "$CORE/template/hooks/on-user-prompt.sh" "$R" "$1" "$2")"; ta="$([[ -s "$R/scv/journal/.help-turn" ]] && echo y)"
+    rm -rf "$WORK/t38b"; R="$(new_repo t38b)"; b="$(hook_with "$BASE_HOOK" "$R" "$1" "$2")"; tb="$([[ -s "$R/scv/journal/.help-turn" ]] && echo y)"
+    [[ -n "$a" && "$a" == "$b" && "$ta" == "$tb" ]] || { diff <(printf '%s\n' "$b") <(printf '%s\n' "$a") | head -5 | sed 's/^/        /'; return 1; }
+  }
+  grep -q '^if \[\[ "\${_scv_always:-on}" != "off" \]\]' "$BASE_HOOK" && ! grep -q '_scv_kind' "$BASE_HOOK" && c=$((c + 1)) || echo "      (4) baseline hook could not be derived"
+  same_as_base "$WORK/profile-empty.env" "$AUTO_IN" && c=$((c + 1)) || echo "      (5) empty tags: the tagged input must match the pre-feature hook"
+  same_as_base "$WORK/profile-auto.env" "로그인 고쳐" && c=$((c + 1)) || echo "      (6) tags set: a person input must match the pre-feature hook"
+  if [[ $c -eq 6 ]]; then ok "OK [T38] 6/6 empty tags change nothing · person turns match the pre-feature hook"; else fail "[T38] $c/6"; fi
+
+  echo
+  echo "T39. 사람 턴 도중의 자동 입력 — 그 사람 턴의 등록 · 인용 검사는 꺼지지 않는다"
+  c=0
+  R="$(new_repo t39)"; (cd "$R" && git init -q . 2>/dev/null); mkdir -p "$R/src" "$R/scv/promote"
+  gw39() { (cd "$R" && printf '{"cwd":"%s","session_id":"s1","tool_name":"Write","tool_input":{"file_path":"%s/src/a.js"}}' "$R" "$R" \
+          | SCV_HOST_PROFILE="$WORK/profile-auto.env" SCV_GUARD_STATE="$WORK/gstate39" SCV_GUARD_RULE_B=off SCV_GUARD_SCRIPTS="$CORE/scripts" SCV_GUARD_MODE=gate-write bash "$CORE/template/hooks/guard.sh" 2>/dev/null); }
+  hook_p "$R" "$WORK/profile-auto.env" "로그인 고쳐" >/dev/null; tok1="$(tok_of "$R")"
+  hook_p "$R" "$WORK/profile-auto.env" "$AUTO_IN" >/dev/null      # 종료 판정 전에 끼어든 알림
+  [[ -n "$tok1" && "$(tok_of "$R")" == "$tok1" && ! -f "$R/scv/journal/.help-turn-auto" ]] && c=$((c + 1)) || echo "      (1) a mid-turn automatic input must not mark the person turn"
+  grep -q '"permissionDecision":"deny"' <<<"$(gw39)" && c=$((c + 1)) || echo "      (2) the person turn's write gate must still deny"
+  o="$(stop_p "$R" "$WORK/profile-auto.env" "answer" false)"
+  [[ "$(jq -r .decision <<<"$o" 2>/dev/null)" == block ]] && c=$((c + 1)) || echo "      (3) the person turn's stop must still block: $o"
+  if [[ $c -eq 3 ]]; then ok "OK [T39] 3/3 a mid-turn input keeps the person turn's checks"; else fail "[T39] $c/3"; fi
+
+  echo
+  echo "T40. 표를 새로 쓰지 않는 사람 입력(빈 프롬프트)도 자동 표시를 지운다"
+  c=0
+  R="$(new_repo t40)"
+  hook_p "$R" "$WORK/profile-auto.env" "로그인 고쳐" >/dev/null
+  reg_p "$R" "$WORK/profile-auto.env"
+  stop_p "$R" "$WORK/profile-auto.env" "$QUOTED_ANS" false >/dev/null
+  hook_p "$R" "$WORK/profile-auto.env" "$AUTO_IN" >/dev/null
+  [[ -f "$R/scv/journal/.help-turn-auto" ]] && c=$((c + 1)) || echo "      (1) setup: the automatic turn should be marked"
+  hook_p "$R" "$WORK/profile-auto.env" "" >/dev/null
+  [[ ! -f "$R/scv/journal/.help-turn-auto" ]] && c=$((c + 1)) || echo "      (2) an empty person prompt must drop the marker"
+  o="$(cd "$R" && printf 'x' | SCV_HOST_PROFILE="$WORK/profile-auto.env" bash "$MP" stop 2>/dev/null)"
+  ! grep -qx 'STOP_GATE: auto' <<<"$o" && c=$((c + 1)) || echo "      (3) stop must not treat it as automatic: $o"
+  # 전체 스위치가 꺼진 프로젝트에서도 사람 입력은 남아 있던 표시를 지운다(표를 새로 쓰지 않는 쪽이라 더 필요하다).
+  R2="$(new_repo t40off)"; printf '{"SCV_ALWAYS_ON": "off"}\n' > "$R2/scv/scv_settings.json"
+  printf 'tok-old\n' > "$R2/scv/journal/.help-turn"; printf 'tok-old\n' > "$R2/scv/journal/.help-turn-auto"
+  hook_p "$R2" "$WORK/profile-auto.env" "다음 일" >/dev/null
+  [[ ! -f "$R2/scv/journal/.help-turn-auto" ]] && c=$((c + 1)) || echo "      (4) always-on off: a person input must still drop the marker"
+  if [[ $c -eq 4 ]]; then ok "OK [T40] 4/4 the marker is dropped on any person input"; else fail "[T40] $c/4"; fi
+
+  echo
+  echo "T41. 막힌 종료 뒤의 알림 — 사람 턴이 끝나지 않았으니 표시하지 않는다(이어지는 사람 턴의 검사가 그대로)"
+  c=0
+  R="$(new_repo t41)"; (cd "$R" && git init -q . 2>/dev/null); mkdir -p "$R/src" "$R/scv/promote"
+  gw41() { (cd "$R" && printf '{"cwd":"%s","session_id":"s1","tool_name":"Write","tool_input":{"file_path":"%s/src/a.js"}}' "$R" "$R" \
+          | SCV_HOST_PROFILE="$WORK/profile-auto.env" SCV_GUARD_STATE="$WORK/gstate41" SCV_GUARD_RULE_B=off SCV_GUARD_SCRIPTS="$CORE/scripts" SCV_GUARD_MODE=gate-write bash "$CORE/template/hooks/guard.sh" 2>/dev/null); }
+  hook_p "$R" "$WORK/profile-auto.env" "로그인 고쳐" >/dev/null
+  o="$(stop_p "$R" "$WORK/profile-auto.env" "answer" false)"       # 등록 없음 → 막힘(사람 턴은 계속된다)
+  [[ "$(jq -r .decision <<<"$o" 2>/dev/null)" == block && ! -f "$R/scv/journal/.help-turn-done" ]] && c=$((c + 1)) || echo "      (1) a blocked stop must not record the turn as ended: $o"
+  hook_p "$R" "$WORK/profile-auto.env" "$AUTO_IN" >/dev/null
+  [[ ! -f "$R/scv/journal/.help-turn-auto" ]] && c=$((c + 1)) || echo "      (2) a notification after a blocked stop must not mark"
+  grep -q '"permissionDecision":"deny"' <<<"$(gw41)" && c=$((c + 1)) || echo "      (3) the continuing person turn's write gate must still deny"
+  if [[ $c -eq 3 ]]; then ok "OK [T41] 3/3 a blocked stop keeps the turn open"; else fail "[T41] $c/3"; fi
+
+  echo
+  echo "T42. 태그가 없으면 끝난 턴 표를 쓰지 않는다 — 기능 전과 같은 파일들"
+  c=0
+  for pf in profile-cl profile-empty; do
+    R="$(new_repo "t42-$pf")"
+    hook_p "$R" "$WORK/$pf.env" "로그인 고쳐" >/dev/null
+    (cd "$R" && printf '%s\n' "$SUB_OK" | SCV_HOST_PROFILE="$WORK/$pf.env" bash "$MP" register --model vendor-model-a >/dev/null 2>&1)
+    stop_p "$R" "$WORK/$pf.env" "$QUOTED_ANS" false >/dev/null
+    [[ ! -e "$R/scv/journal/.help-turn-done" && ! -e "$R/scv/journal/.help-turn-auto" ]] && c=$((c + 1)) || echo "      ($pf) a tag-less host wrote a new state file"
+  done
+  if [[ $c -eq 2 ]]; then ok "OK [T42] 2/2 no new state files without tags"; else fail "[T42] $c/2"; fi
+else
+  echo "  · (jq 없음 — T34~T42 생략)"
+fi
 
 echo
 echo "T7. 순수성 계약"
