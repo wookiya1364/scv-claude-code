@@ -8,14 +8,16 @@ template, DeckUI, assets, and shared regression suite. A wrapper pins an
 immutable Core release, materializes a validated host profile, and adds only
 the runtime-specific adapter.
 
-Current versions:
+Versions live in files, so this page never goes stale:
 
-| Contract | Version | Meaning |
-|---|---:|---|
-| SCV Core | `0.35.0` | Shared behavior and release payload |
-| Core API | `1` | Wrapper/core integration contract |
-| Template | `2.3.0` | Hydrated project-template schema |
+| Contract | File | Meaning |
+|---|---|---|
+| SCV Core | [`VERSION`](VERSION) | Shared behavior and release payload |
+| Core API | [`CORE_API`](CORE_API) | Wrapper/core integration contract |
+| Template | [`TEMPLATE_VERSION`](TEMPLATE_VERSION) | Hydrated project-template schema |
 
+The latest published Core is on the
+[releases page](https://github.com/wookiya1364/scv-core/releases/latest).
 The installable plugins live in:
 
 - [SCV for Claude Code](https://github.com/wookiya1364/scv-claude-code)
@@ -36,13 +38,70 @@ Core owns 13 of the 15 SCV actions. `update` and `set-models` are deliberately
 adapter-owned because installation and model selection depend on the host.
 Canonical protocols use `action:<name>` and `{{SCV_ARGS}}`; wrapper syntax and
 argument transport are supplied only through a validated host profile.
+`scv/SCV.md` opens with the top-level rules and the order in which conflicting
+rules are resolved; every protocol defers to it.
 
-Commands are no longer the only entrance (0.35.0+): a per-turn hook routes free
-conversation through the help action unless the project's settings file says
-`SCV_ALWAYS_ON=off`, and the same hook carries the plain-language answer-shape
-reminder (0.31.0+). Project settings live in `scv/scv_settings.json` (+ a
-git-ignored secret file), created automatically with every key documented
-(0.34.0+); the project `.env` is not read.
+### Every turn
+
+Commands are not the only entrance. A per-turn hook routes free conversation
+through the help action (`SCV_ALWAYS_ON`, default on) and injects a short
+project diagnosis, so the model starts from the real state instead of asking
+for it. The full help protocol is read once per session; the hooks keep a
+fingerprint of it and reload it when a recorded turn loses the fingerprint or
+an answer breaks the answer shape (`SCV_HELP_LOAD_ONCE`,
+`SCV_HELP_RELOAD_EVERY`).
+
+- **Plain language** — answers lead with a one- or two-sentence conclusion,
+  then one example, and show code values only when asked
+  (`SCV_PLAIN_LANGUAGE`, `SCV_PLAIN_MAX_SENTENCES`). The stop hook checks the
+  answer's shape (`SCV_ANSWER_LINT`).
+- **Per-model prompting** — when a wrapper ships a model's official prompting
+  guide (a verbatim offline copy), help reads it once per context and rewrites
+  the request as the best prompt for that model. Every turn, the request is
+  compared item by item with the model's requirement checklist — each item
+  quotes the guide verbatim, and the wrapper's CI checks the quotes — and
+  registered. File writes before the turn is registered are refused, and a
+  turn that ends without the registration or the rewritten-request quote is
+  blocked once (`SCV_MODEL_PROMPTING`).
+- **Resume recap** — after compaction, `/clear`, or a resume, a session-start
+  hook re-injects the active plans, recent decisions, open items, and the
+  active conversation (`SCV_RESUME_RECAP`); one record expands by name with
+  `core/scripts/record-read.sh --key <name>`. It needs a session-start hook
+  from the host.
+- **Background investigation** — with `SCV_DELEGATE_EFFORT=on` (default off),
+  a deep question goes to a background investigator whose report lands in
+  `scv/raw/`. The session's model and effort are never changed. It needs an
+  agent from the host.
+
+Project settings live in `scv/scv_settings.json` (+ a git-ignored secret file),
+created automatically with every key documented; the project `.env` is not
+read. Every key and its default:
+[`core/template/scv/scv_settings.example.json`](core/template/scv/scv_settings.example.json).
+
+### Plans, evidence, and history
+
+- **Plans as pictures** — every plan carries a pure-function pipeline section,
+  and the deck action renders a plan's picture doc (`FEATURE_ARCHITECTURE.md`)
+  as a numbered screen spec: one big picture with numbered markers, the detail
+  for each number beside it, and a validation table, with `PLAN.md` and
+  `TESTS.md` as source tabs.
+- **SCV's own graph** — docs links, archived plans → files, decision
+  references, and files that change together, rebuilt automatically by
+  promote and work with bash and jq, no install (`SCV_GRAPH`). Graft is
+  optional: when it is installed, plan and work headers also list code
+  candidates and change impact (`SCV_GRAFT`); SCV never installs it.
+- **Past work** — help's recall mode searches plan bodies, tests, the decision
+  log, and conversations, not only titles
+  ([`archive-search`](core/protocols/help/archive-search.md)).
+- **Decisions** — `scv/DECISIONS.md` is append-only and written at plan
+  approval, archive, and obsolete, plus lessons learned along the way.
+- **Process metrics** — `core/scripts/metrics.sh` reads the project's own
+  records (archive index, plans, conversations, decisions) and reports the
+  process as numbers. It writes nothing.
+- **Evidence** — PR attachments follow the recorded test run rather than file
+  names, one PR per branch, and the same evidence can go to the team channel.
+
+### State index and DeckUI cache
 
 The shared state index is always `scv/SCV.md`. During the transition from older
 wrappers, readers may fall back to `CLAUDE.md` or `CODEX.md` only when
@@ -72,16 +131,20 @@ not copied. With no mismatch, migration remains additive; a late collision
 still fails closed. Ephemeral existing-vendor recovery must remain strict
 because that source may be removed after a wrapper swap.
 
+### Guard and merge-time gates
+
 Core also ships the checks that keep this workflow honest. A workspace guard
 runs as a `PreToolUse` hook and refuses two things: creating a plan file, and
 writing outside the workflow directory — unless the host has reported, anywhere
 in this session, that an SCV action is running. That report is the one signal
-the model cannot fabricate, which is why the guard keys on it. It fails open on
-an empty payload and where no JSON reader exists, rather than blocking every
+the model cannot fabricate, which is why the guard keys on it. A third rule
+refuses file writes until the current turn's request is registered against the
+model's checklist (per-model prompting, above). The guard fails open on an
+empty payload and where no JSON reader exists, rather than blocking every
 project; a receipt store it cannot write is the one failure that closes. It
-stays inert where SCV was never adopted. Registering it is the wrapper's job: the wrapper
-passes `SCV_GUARD_MODE` per hook entry, so the script never names a host. The
-rules live in [the guard contract](core/contracts/guard.md).
+stays inert where SCV was never adopted. Registering it is the wrapper's job:
+the wrapper passes `SCV_GUARD_MODE` per hook entry, so the script never names a
+host. The rules live in [the guard contract](core/contracts/guard.md).
 
 Two merge-time gates cover what a hook cannot see.
 `core/scripts/check-provenance.sh` denies a pull request that changes code but
@@ -98,8 +161,10 @@ required; an empty marker is refused. Core's own CI runs the provenance gate;
 the vendor gate ships for the wrappers, which are the repositories that carry a
 vendored Core.
 
-See [Architecture](docs/architecture.md) and
-[Wrapper integration](docs/wrapper-integration.md) for the complete boundary.
+See [Architecture](docs/architecture.md),
+[Wrapper integration](docs/wrapper-integration.md), and the
+[Core and wrapper ownership guide](docs/core-wrapper-ownership.ko.md) (Korean)
+for the complete boundary.
 
 ## Verify and test
 
@@ -108,6 +173,10 @@ bash tests/run.sh
 bash core/tests/run-dry.sh
 for test_file in core/tests/test-*.sh; do bash "$test_file"; done
 ```
+
+`tests/run.sh` also checks this page against the repository with
+`tools/check-readme.sh` — every setting, action, and link it names must exist,
+and the three language editions must match.
 
 DeckUI source-checkout development additionally requires Node.js and pnpm:
 
@@ -155,7 +224,9 @@ notify them is marked failed, though the published assets are unaffected. Both
 wrappers also poll daily, so a failed notification delays propagation rather
 than losing it. Wrapper automation verifies the checksum, regenerates its
 host-specific projection, runs regression tests, and opens a PR to `develop`.
-See [Release and integrity](docs/release.md).
+`gh workflow run promote.yml` walks `develop → stage → main`; with
+`-f release=false` it promotes without tagging, for changes such as
+documentation that need no release. See [Release and integrity](docs/release.md).
 
 ## Contributing
 

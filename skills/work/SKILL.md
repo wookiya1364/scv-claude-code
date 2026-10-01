@@ -686,8 +686,12 @@ options:
       PR page. Manifest updated.
     - Auto-deletion N days after PR merge (self-amortizing — runs on next
       pr-helper invocation).
-    - If the plan has an epic, base branch = epic/<epic-slug> (otherwise main).
+    - If the plan has an epic, base branch = epic/<epic-slug>; otherwise the
+      settings' SCV_PR_BASE, then origin's default branch, then main (v0.63.0+).
       If the epic branch doesn't exist on origin, it's auto-created from origin/main.
+    - Commit the archive folder together with the SCV records (journal,
+      conversations, decisions, index). Uncommitted changes outside them stop
+      the helper before anything moves (v0.63.0+) — commit the code first.
     - Push current feature branch + gh pr create + attachments_upload + gh api
       PATCH to replace the placeholder.
     - Print PR URL.
@@ -725,10 +729,11 @@ everything-in-test-results behaviour. When a notifier is configured
 (`NOTIFIER_PROVIDER`), the same evidence is also posted to the team channel —
 success included (v0.36.0+; `SCV_PR_NOTIFY=off` turns that off).
 
-The helper reads `archive/<slug>/PLAN.md`'s `epic:` / `kind:` to determine the base branch and performs commit + push + gh pr create. The last line of the output should be `PR created: <URL>` — report that URL to the user.
+The helper picks the base branch — `epic/<epic>` when `archive/<slug>/PLAN.md` has `epic:`, else `scv/scv_settings.json` `SCV_PR_BASE` (v0.63.0+; e.g. `develop`), else origin's default branch, else `main` — reads `kind:` for the commit prefix, stages the archive folder with the SCV records, and performs commit + push + gh pr create. The last line of the output should be `PR created: <URL>` — report that URL to the user.
 
 Failure cases:
 - Current branch equals the base branch (e.g., invoked on main) → tell the user to switch to a feature branch. SCV does NOT auto-switch (preserves the user's working context).
+- Uncommitted changes outside the SCV records (implementation code, etc.) → the helper lists them and exits 1 before re-running tests, moving, committing or pushing anything (v0.63.0+). Relay the list; the user commits them (or sets aside what does not belong), then re-invoke. `--dry-run` shows the same list as a warning.
 - gh CLI not authenticated → tell the user to run `gh auth login`.
 - No changes to commit (already committed/pushed) → just runs gh pr create.
 
