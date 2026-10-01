@@ -116,8 +116,13 @@ scv_hstate_protocol_line() {
 # 설정값 → on|off (기본 on; "off" 만 끈다, 대소문자·따옴표 무시).
 scv_hstate_switch() {
   local v="${1:-}"
-  v="${v//\"/}"; v="${v//\'/}"; v="${v//[[:space:]]/}"; v="${v,,}"
-  if [[ "$v" == "off" ]]; then printf 'off'; else printf 'on'; fi
+  v="${v//\"/}"; v="${v//\'/}"; v="${v//[[:space:]]/}"
+  # 대소문자는 case 로 본다(v0.63.0). ${v,,} 는 bash 4 부터라 맥 기본 bash 3.2 로 훅이 돌면 여기서 깨져
+  # 턴 세기 · 진단 줄이기가 통째로 꺼졌다(force-help.sh 와 같은 방식).
+  case "$v" in
+    [Oo][Ff][Ff]) printf 'off' ;;
+    *)            printf 'on'  ;;
+  esac
 }
 
 # ---------------------------------------------------------------- 지문 메아리 · 답 모양 린트 (v0.50.0+)
