@@ -40,7 +40,11 @@ Technical identifiers stay as-is: policy names (`recommended`, `all-opus`, `all-
 
 If `$ARGUMENTS` is exactly one of `recommended`, `all-opus`, `all-sonnet`, `all-haiku`, `session-default`, treat that as the chosen policy and skip to Step 2.
 
-Otherwise, fire **AskUserQuestion** with these 5 options (the first is the shipped default — put it first in the list):
+Otherwise, ask with **AskUserQuestion** in two steps. The question UI takes at most four options, and every one of
+the five policies must stay reachable, so the three single-model policies are grouped behind one option
+(`core/contracts/choices.md`, "More options than one question takes").
+
+First question — three options, the shipped default first:
 
 ```
 Question: "Which model policy do you want for SCV commands?"
@@ -49,13 +53,24 @@ options:
     description: "No model: lines at all. Every SCV command runs on the model your Claude Code session already uses — pick Fable, Opus, or anything else once, and SCV never changes it. This is what a fresh install does."
 [2] "recommended"
     description: "Per-command mapping to save cost: status/report/update/install-deps run on haiku; sync/help/promote/codegen/regression/work run on opus. Note: help runs every turn, so this switches your session to opus on nearly every turn."
-[3] "all-opus"
+[3] "One model for every SCV command"
+    description: "Pick opus, sonnet, or haiku in the next question; every SCV command then uses that one model."
+```
+
+Second question — only when the user picked [3]:
+
+```
+Question: "Which model should every SCV command use?"
+options:
+[1] "all-sonnet (Recommended — balanced)"
+    description: "Every SCV command uses sonnet. A middle ground between quality and cost."
+[2] "all-opus"
     description: "Every SCV command uses opus. Highest quality, significantly higher cost."
-[4] "all-sonnet"
-    description: "Every SCV command uses sonnet. A middle ground if you want one fixed model for SCV."
-[5] "all-haiku"
+[3] "all-haiku"
     description: "Every SCV command uses haiku. Lowest cost; reasoning-heavy commands (work, codegen, promote) may degrade."
 ```
+
+If either question is cancelled or left unanswered, stop and say so in one line — do not apply the recommended policy.
 
 Map the user's selection to the corresponding lowercase identifier: `recommended` / `all-opus` / `all-sonnet` / `all-haiku` / `session-default`. Call this value **`POLICY`** from now on.
 

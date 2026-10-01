@@ -898,20 +898,27 @@ if [[ $c -eq 5 ]]; then ok "OK [T28] 5/5 language sections"; else fail "[T28] $c
 
 echo
 echo "T29. SCV 원칙 — 세 구역 모두 필수 요소를 담는다 (요소 하나를 지운 사본은 붉다)"
-principle_missing() {  # <구역> <언어> → 빠진 요소, 한 줄에 하나
-  local s="$1" m
+principle_missing() {  # <구역> <언어> → 빠진 요소(또는 "있으면 안 되는" 요소), 한 줄에 하나
+  # (v0.64.0+) 문제 표 · '생길 수 있는 문제' 칸 · 위치 표시 문장은 없앴다(사용자 결정 2026-10-01) — 다시 들어오면 붉다.
+  local s="$1" m forbid=""
   case "$2" in
-    korean) set -- "정확한 피드백" "듣기 좋은 말 대신 사실" "작은 단위" "단위 | 해결책 | 추천 | 생길 수 있는 문제" "번호를 붙여 모두" "고른 이유" "다를 수 있다" "문제 번호" \
-              "번호 | 위치 | 조건 | 깨지는 것 | 확인" "파일:줄" "확인:" "추정:" "찾아서 위치" "찾아본 범위와 방법" "없음(확인한 범위" "80칸" "줄글처럼 풀려" "번호 메모" "항목 표 대신" ;;
-    english) set -- "accurate feedback" "facts instead of pleasing words" "small units" "Unit | Solutions | Recommendation | Possible problems" \
-              "every usable solution, numbered" "why it was chosen" "can differ" "problem numbers only" "No. | Location | Condition | What breaks | Check" \
-              "file:line" "Checked:" "Estimate:" "search and name the place" "range and method searched" "None (range checked" "80 columns" \
-              "unfolds into plain prose" "numbered notes" "replaces the help answer's item table" ;;
-    japanese) set -- "正確なフィードバック" "事実を述べよ" "小さな単位" "単位 | 解決策 | 推奨 | 起こりうる問題" "番号を付けてすべて" "選んだ理由" "異なりうる" "問題番号" \
-              "番号 | 場所 | 条件 | 壊れるもの | 確認" "ファイル:行" "確認:" "推定:" "探して場所を示し" "探した範囲と方法" "なし（確認した範囲" "約80桁" "文章のように崩れて" "番号付きメモ" "項目表の代わり" ;;
+    korean) set -- "정확한 피드백" "듣기 좋은 말 대신 사실" "작은 단위" "'단위 | 해결책 | 추천' 세 칸" "번호를 붙여 모두" "문제를 막는 길" "고른 이유" "다를 수 있다" \
+              "따로 나열하지 않는다" "contracts/choices.md" "한 줄로" "80칸" "줄글처럼 풀려" "번호 메모" "항목 표 대신"
+            forbid=$'문제 표\n생길 수 있는 문제 칸\n문제 번호\n파일:줄\n확인:\n추정:\n번호 | 위치' ;;
+    english) set -- "accurate feedback" "facts instead of pleasing words" "small units" "three columns 'Unit | Solutions | Recommendation'" \
+              "every usable solution, numbered" "prevents the problems it would cause" "why it was chosen" "can differ" \
+              "Do not list possible problems separately" "contracts/choices.md" "in one line" "80 columns" \
+              "unfolds into plain prose" "numbered notes" "replaces the help answer's item table"
+            forbid=$'Problem table\nPossible problems\'\nproblem numbers\nfile:line\nChecked:\nEstimate:\nNo. | Location' ;;
+    japanese) set -- "正確なフィードバック" "事実を述べよ" "小さな単位" "'単位 | 解決策 | 推奨' の三列" "番号を付けてすべて" "問題を防ぐ手立て" "選んだ理由" "異なりうる" \
+              "別に並べない" "contracts/choices.md" "一行で" "約80桁" "文章のように崩れて" "番号付きメモ" "項目表の代わり"
+            forbid=$'問題表\n起こりうる問題\' の\n問題番号\nファイル:行\n確認:\n推定:\n番号 | 場所' ;;
     *) set -- "(unknown language)" ;;
   esac
   for m in "$@"; do [[ "$s" == *"$m"* ]] || printf '%s\n' "$m"; done
+  local f
+  while IFS= read -r f; do [[ -n "$f" && "$s" == *"$f"* ]] && printf 'forbidden: %s\n' "$f"; done <<< "$forbid"
+  return 0
 }
 c=0
 for L in korean english japanese; do

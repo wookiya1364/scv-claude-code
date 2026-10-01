@@ -176,7 +176,7 @@ scv_answer_lint() {
     if [[ "$line" =~ ^[[:space:]]*\`\`\` ]]; then infence=$((1 - infence)); continue; fi
     (( infence )) && continue
     if (( ! lead_done )); then
-      if [[ -z "${line//[[:space:]]/}" ]]; then
+      if [[ "$line" != *[![:space:]]* ]]; then
         [[ -n "$lead" ]] && lead_done=1
         continue
       fi
@@ -202,7 +202,7 @@ scv_answer_lint() {
       [[ "$line" =~ ^[[:space:]]*\|[[:space:]]*:?-+ ]] && continue
       row="${line#*|}"; c1="${row%%|*}"; row="${row#*|}"; c2="${row%%|*}"
       if [[ "$row" == *\|* ]]; then row="${row#*|}"; c3="${row%%|*}"; else c3=""; fi
-      [[ -z "${c3//[[:space:]]/}" ]] && printf 'decision-no-reco=%s\n' "${c1//[[:space:]]/}"
+      [[ "$c3" != *[![:space:]]* ]] && printf 'decision-no-reco=%s\n' "${c1//[[:space:]]/}"
     else
       intable=0
     fi
@@ -235,8 +235,8 @@ scv_drift_decide() {
       mismatch) reload=1; warn="[SCV 규약 지문] 직전 턴 기록의 지문이 이 세션의 것과 다르다 — 규약을 이번 턴에 다시 싣는다." ;;
     esac
   fi
-  if [[ "$lsw" == "on" && -n "${viol//[[:space:]]/}" ]]; then
-    while IFS= read -r line; do [[ -n "${line//[[:space:]]/}" ]] && nviol=$((nviol + 1)); done <<<"$viol"
+  if [[ "$lsw" == "on" && "$viol" == *[![:space:]]* ]]; then
+    while IFS= read -r line; do [[ "$line" == *[![:space:]]* ]] && nviol=$((nviol + 1)); done <<<"$viol"
     if (( nviol > 0 )); then
       reload=1; [[ -n "$warn" ]] && warn+=$'\n'
       warn+="[SCV 답 모양] 직전 답이 답 모양 계약을 벗어났다 (${viol//$'\n'/ · }) — 규약을 이번 턴에 다시 싣는다."
@@ -249,7 +249,7 @@ scv_drift_decide() {
 # <시각> <turn> <메아리 판정> <위반 줄들> <reload> → 드리프트 로그 한 줄. 세션 뒤 "흐려진 턴" 을 세는 자료.
 scv_drift_line() {
   local now="${1:-?}" turn="${2:-0}" echo_r="${3:-skip}" viol="${4:-}" reload="${5:-0}" src="${6:-}" nviol=0 line
-  while IFS= read -r line; do [[ -n "${line//[[:space:]]/}" ]] && nviol=$((nviol + 1)); done <<<"$viol"
+  while IFS= read -r line; do [[ "$line" == *[![:space:]]* ]] && nviol=$((nviol + 1)); done <<<"$viol"
   printf '%s turn=%s echo=%s lint=%s reload=%s' "$now" "$turn" "$echo_r" "$nviol" "$reload"
   # v0.51.0+: 린트가 본 본문의 출처. 안 주면 0.50.0 형식 그대로 — 옛 줄과 같은 정규식으로 집계된다.
   [[ -n "$src" ]] && printf ' src=%s' "$src"
@@ -262,13 +262,22 @@ scv_drift_line() {
 # U 가 하나도 없으면 빈값 — 창 안에서 턴 경계를 못 찾았으니 낡은 답을 볼 바에는 검사를 생략한다(안전 쪽).
 # 도구 결과(tool_result)는 사람 프롬프트가 아니므로 효과부의 필터가 U 로 내지 않는다.
 scv_turn_slice() {
-  local stream="${1:-}" line buf="" seen=0 us=$'\x1f' rs=$'\x1e' t
+  local stream="${1:-}" line buf="" seen=0 us=$'\x1f' rs=$'\x1e' t k
+  local -a parts=()
   while IFS= read -r line; do
     case "$line" in
       U) seen=1; buf="" ;;
       A"$us"*)
-        t="${line#A"$us"}"; t="${t//$rs/$'\n'}"
-        [[ -n "${t//[[:space:]]/}" ]] || continue
+        t="${line#A"$us"}"
+        # \x1e → 줄바꿈. 패턴 치환(${t//…/…})을 쓰지 않는다 — 맥 기본 bash 3.2 는 큰 글(한 메시지 10만 바이트)의 치환에
+        # 2분 넘게 걸렸다(2026-10-01 실측). 구분 글자로 나눠 다시 잇는다 — 히어스트링이 끝에 붙이는 줄바꿈 하나만 걷어 내면
+        # 앞 · 뒤 · 연속 구분 글자까지 치환과 바이트로 같다.
+        if [[ "$t" == *"$rs"* ]]; then
+          parts=(); IFS="$rs" read -r -d '' -a parts <<<"$t" || true
+          t=""; for (( k = 0; k < ${#parts[@]}; k++ )); do (( k )) && t+=$'\n'; t+="${parts[k]}"; done
+          t="${t%$'\n'}"
+        fi
+        [[ "$t" == *[![:space:]]* ]] || continue
         [[ -n "$buf" ]] && buf+=$'\n'
         buf+="$t" ;;
     esac
@@ -282,7 +291,7 @@ scv_turn_slice() {
 # 호스트 값이 1순위(공식 문서: 원본은 늦게 적힐 수 있다), 없으면 원본의 이번 턴, 그래도 없으면 none(린트 생략).
 scv_stop_pick_source() {
   local host="${1:-}" turn="${2:-}" us=$'\x1f'
-  if [[ -n "${host//[[:space:]]/}" ]]; then printf 'host%s%s' "$us" "$host"
-  elif [[ -n "${turn//[[:space:]]/}" ]]; then printf 'transcript%s%s' "$us" "$turn"
+  if [[ "$host" == *[![:space:]]* ]]; then printf 'host%s%s' "$us" "$host"
+  elif [[ "$turn" == *[![:space:]]* ]]; then printf 'transcript%s%s' "$us" "$turn"
   else printf 'none%s' "$us"; fi
 }
