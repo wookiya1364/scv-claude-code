@@ -88,7 +88,9 @@ they appear in this order:
 4. **Detail** — a short subsection for each `large` item only.
 5. **Cross-cutting** — one paragraph for what spans the items: speed, cost, operations.
 6. **Decisions** — `# | question | my recommendation`, and ask the user to answer by
-   number. The recommendation column is never omitted.
+   number. The recommendation column is never omitted. When the host names a choice
+   tool, ask each decision through it instead — recommended option first, each option
+   carrying its own fix (`core/contracts/choices.md`).
 
 Which slots a question calls for:
 
@@ -106,7 +108,8 @@ Two rules hold across every slot:
 - **Dependent questions vs independent decisions.** When the next question depends on
   the answer to this one, ask that one question and stop — no Decisions table. When
   several decisions are independent of each other, put them in one Decisions table with
-  a recommendation on every row, so the user can answer them all in one line.
+  a recommendation on every row, so the user can answer them all in one line — with a
+  choice tool, one call of up to four questions.
 - **Speak in the user's words — never coin a label.** The names in this section
   (Lead, Surprises, Item table, slots) are for you, not for the user; they never appear
   in an answer. Call each thing by what it is in plain words — "the conclusion", "the
