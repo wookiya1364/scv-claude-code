@@ -72,6 +72,11 @@ JOURNAL_APPEND="$CORE_HOME/scripts/journal-append.sh"
 # 표준입력은 여기서 한 번만 읽는다. 저널 기록은 아래에서 이 값을 그대로 쓴다.
 INPUT="$(cat 2>/dev/null || true)"
 
+# v0.64.0+ — 고르게 할 때 규칙(contracts/choices.md): 호스트 설정에 선택지 도구가 있으면 매 턴(자동 알림 턴 포함) 한 줄로
+# 알린다 — 사용자에게 고르게 하는 것은 그 도구로 묻는다. 도구가 없으면(기본 · 코덱스) 아무것도 싣지 않는다.
+_scv_cgs="$CORE_HOME/scripts/choice-gate.sh"
+if [[ -f "$_scv_cgs" ]]; then bash "$_scv_cgs" line 2>/dev/null || true; fi
+
 # ---------- preflight (v0.40.0+) --------------------------------------------
 # 이 훅이 하는 일은 강제가 아니라 **준비**다. 이번 턴의 프로젝트 상태를 미리 실어
 # 보내면, 그것을 확인하려고 액션을 한 번 더 부를 이유가 사라진다.

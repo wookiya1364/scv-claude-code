@@ -13,6 +13,8 @@
 #   model-prompting.sh gate                 (v0.62.0+) 가드가 부른다: 이번 턴 등록 전이면 거절 사유를 낸다(아니면 아무것도)
 #   model-prompting.sh kind < 프롬프트        (v0.63.0+) 매 턴 훅이 부른다: auto(호스트가 보낸 입력 — 호스트 프로필 SCV_AUTO_PROMPT_TAGS) | human
 #   model-prompting.sh prompt --auto        (v0.63.0+) 자동 입력 턴: 새 표 없이 "이번 턴은 자동" 표시만 남긴다(출력 없음)
+#   model-prompting.sh principle-gate [--active 0|1] < 끝 메시지  (v0.64.0+) 종료 훅이 부른다: 문제 표 · '생길 수 있는 문제'
+#                                            칸이 있으면 PRINCIPLE_GATE: block(+ PRINCIPLE_REASON), 계속 중이면 warn(다음 턴 경고)
 #   model-prompting.sh stop < 답본문        (v0.60.0+) 종료 훅이 부른다: 이번 턴에 원문을 읽었는지 · 다시 쓴 요청을
 #                                            답에 보였는지 결과로 판정 → 어긋나면 다음 턴 경고(.help-warn 에 덧붙임)
 #
@@ -107,7 +109,7 @@ CFILE="$(scv_mp_safe_name "$CFILE")"
 _cl_file() { local k; k="$(scv_mp_safe_name "checklist-${1:-}.tsv")"; [[ -n "${1:-}" && -n "$k" && -f "$GUIDES_DIR/$k" && ! -L "$GUIDES_DIR/$k" ]] && head -c 16384 "$GUIDES_DIR/$k" 2>/dev/null; }
 _checklist_for() {  # <모델 키 또는 ""> → 병합 목록 (공통 목록이 없으면 빈 값 — 이 호스트에 요구 항목 데이터가 없다)
   local common; common="$(_cl_file "$(scv_mp_common_key "$INDEX")")"
-  [[ -n "${common//[[:space:]]/}" ]] || return 0
+  [[ "$common" == *[![:space:]]* ]] || return 0
   scv_mp_checklist_merge "$common" "$(_cl_file "${1:-}")"
 }
 _token_new() { local n; n="$(head -c 4 /dev/urandom 2>/dev/null | od -An -tx1 2>/dev/null | tr -d ' \n')"; [[ "$n" =~ ^[0-9a-f]{8}$ ]] || n="$(printf '%04x%04x' "$RANDOM" "$RANDOM")"; printf '%s' "$n"; }
@@ -255,6 +257,23 @@ case "$cmd" in
     _lm="$(_last_model)"
     echo "SCV 프롬프트: 이번 턴($_tok)의 요청을 아직 모델 가이드 요구 항목과 비교 · 등록하지 않아 파일 쓰기를 거절한다. 먼저 bash \"$SCRIPT_DIR/model-prompting.sh\" checklist --model \"${_lm:-<지금 모델 id>}\" 로 항목을 받아 비교하고, bash \"$SCRIPT_DIR/model-prompting.sh\" register --model \"${_lm:-<지금 모델 id>}\" 로 등록한 뒤(stdin: id | msg|ctx|asked|na | 값, 끝에 rewrite | - | 다시 쓴 요청) 다시 시도하라."
     ;;
+  principle-gate)
+    # v0.64.0+ — 답의 끝 메시지에 문제 표 · '생길 수 있는 문제' 칸이 있으면 막는다. 원칙이 실리는 곳(요구 항목 데이터가 있고
+    # 원칙 스위치가 켜짐)에서만 판정하고, 아니면 ok — 이 기능 전과 같다. 자동 알림 턴도 본다(턴 종류와 무관).
+    ANSWER="$(head -c 65536 2>/dev/null || true)"
+    _psw="$(scv_mp_switch "$(_setting SCV_REWRITE_PRINCIPLE)")"
+    [[ "$SWITCH" == "on" && -n "$(_checklist_for "")" ]] || _psw="off"
+    _hit=0; [[ "$ANSWER" == *[![:space:]]* ]] && _hit="$(scv_mp_answer_has_problem_table "$ANSWER")"
+    _pg="$(scv_mp_principle_gate "$_hit" "$_psw" "$ACTIVE_ARG")"
+    echo "PRINCIPLE_GATE: $_pg"
+    if [[ "$_pg" != "ok" ]]; then
+      _why="$(scv_mp_principle_reason)"
+      echo "PRINCIPLE_REASON: $_why"
+      if [[ "$_pg" == "warn" ]]; then
+        mkdir -p "$JOURNAL_DIR" 2>/dev/null && [[ ! -L "$JOURNAL_DIR/.help-warn" ]] && printf '%s\n' "[SCV 가이드] 직전 턴: $_why" >> "$JOURNAL_DIR/.help-warn" 2>/dev/null
+      fi
+    fi
+    ;;
   stop)
     ANSWER="$(head -c 65536 2>/dev/null || true)"
     # v0.62.0+ — 매 턴 등록 판정: 이번 턴 표가 있고(매 턴 훅이 씀) 요구 항목 데이터가 있을 때만. ok | block | warn.
@@ -265,11 +284,11 @@ case "$cmd" in
       if [[ -n "$_tok" ]]; then
         _rt="$(_first_line "$REG_FILE")"; _reg=0; [[ "${_rt%%$'\x1f'*}" == "$_tok" ]] && _reg=1
         _rw=""; (( _reg )) && _rw="$(scv_mp_register_rewrite "$(head -c 16384 "$REG_FILE" 2>/dev/null | tail -n +2)")"
-        _shown=""; [[ -n "${ANSWER//[[:space:]]/}" ]] && _shown="$(scv_mp_answer_shows_rewrite "$ANSWER" "$_rw")"
+        _shown=""; [[ "$ANSWER" == *[![:space:]]* ]] && _shown="$(scv_mp_answer_shows_rewrite "$ANSWER" "$_rw")"
         _sg="$(scv_mp_stop_gate "$_reg" "$_shown" "$ACTIVE_ARG")"
         echo "STOP_GATE: $_sg"
         # v0.63.0+ — 막지 않으면 이 턴은 끝난다: 자동 입력 턴 표시의 근거(끝난 턴 표). 자동 태그가 없으면 쓰지 않는다(이전과 같은 파일들).
-        [[ "$_sg" != "block" && -n "${SCV_AUTO_PROMPT_TAGS//[[:space:]]/}" ]] && _put "$DONE_FILE" "$_tok"
+        [[ "$_sg" != "block" && "$SCV_AUTO_PROMPT_TAGS" == *[![:space:]]* ]] && _put "$DONE_FILE" "$_tok"
         _lm="$(_last_model)"
         if [[ "$_sg" != "ok" ]]; then
           if (( _reg )); then
@@ -308,7 +327,7 @@ case "$cmd" in
         RECORDED="$(scv_mp_rewrite_recorded "$_blk")"
       fi
     fi
-    QUOTED=""; [[ -n "${ANSWER//[[:space:]]/}" ]] && QUOTED="$(scv_mp_answer_has_quote "$ANSWER")"
+    QUOTED=""; [[ "$ANSWER" == *[![:space:]]* ]] && QUOTED="$(scv_mp_answer_has_quote "$ANSWER")"
     VERDICT="$(scv_mp_turn_verdict "$TDEC" "$WAS_READ" "$RECORDED" "$QUOTED")"
     _drop "$TURN_FILE"
     if [[ -n "$VERDICT" ]]; then
@@ -322,6 +341,6 @@ case "$cmd" in
       && printf '%s guide=%s decision=%s read=%s recorded=%s quoted=%s verdict=%s\n' "$_now" "${TKEY:-?}" "$TDEC" "$WAS_READ" "$RECORDED" "${QUOTED:-?}" "${_vs:-ok}" >> "$_drift" 2>/dev/null
     echo "GUIDE_VERDICT: ${_vs:-ok}"
     ;;
-  *) echo "usage: model-prompting.sh guide|mark|status|prompt|checklist|register|kind|gate|stop --model <id>" >&2 ;;
+  *) echo "usage: model-prompting.sh guide|mark|status|prompt|checklist|register|kind|gate|principle-gate|stop --model <id>" >&2 ;;
 esac
 exit 0

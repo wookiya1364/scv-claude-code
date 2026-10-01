@@ -29,6 +29,8 @@ SCV_UPDATE_OWNER=""
 SCV_MODEL_POLICY_OWNER=""
 SCV_PROMPTING_GUIDES=""
 SCV_AUTO_PROMPT_TAGS=""
+SCV_CHOICE_TOOL=""
+SCV_CHOICE_OFF_WHEN=""
 line_no=0
 while IFS= read -r line || [[ -n "$line" ]]; do
   line_no=$((line_no + 1))
@@ -47,7 +49,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     SCV_HOST_PROFILE_API|SCV_HOST_ID|SCV_HOST_LABEL|SCV_ACTION_TEMPLATE|\
     SCV_ARGUMENT_STYLE|SCV_STATE_INDEX|SCV_LEGACY_STATE_INDEXES|SCV_ROOT_ENV|\
     SCV_GRAPH_SKILL_PATHS|SCV_UPDATE_OWNER|SCV_MODEL_POLICY_OWNER|\
-    SCV_PROMPTING_GUIDES|SCV_AUTO_PROMPT_TAGS) ;;
+    SCV_PROMPTING_GUIDES|SCV_AUTO_PROMPT_TAGS|SCV_CHOICE_TOOL|SCV_CHOICE_OFF_WHEN) ;;
     *) echo "profile:$line_no: unknown key: $key" >&2; exit 1 ;;
   esac
   case "|$seen_keys|" in
@@ -97,6 +99,19 @@ if [[ -n "$SCV_AUTO_PROMPT_TAGS" ]]; then
   _tags_re='^[a-z][a-z0-9-]*( [a-z][a-z0-9-]*)*$'   # 공백이 든 정규식은 변수로 — bash 3.2 · 5 가 같게 읽는다
   [[ "$SCV_AUTO_PROMPT_TAGS" =~ $_tags_re ]] \
     || { echo "profile: invalid SCV_AUTO_PROMPT_TAGS (tag names separated by single spaces)" >&2; exit 1; }
+fi
+
+# 선택 키 (0.64.0+): 호스트의 선택지 도구 이름 — 글자로 시작하는 이름 하나(글자 · 숫자 · _ · -, 64자까지). 공백 · 셸 문자 없음.
+if [[ -n "$SCV_CHOICE_TOOL" ]]; then
+  [[ "$SCV_CHOICE_TOOL" =~ ^[A-Za-z][A-Za-z0-9_-]{0,63}$ ]] \
+    || { echo "profile: invalid SCV_CHOICE_TOOL (one tool name: a letter, then letters, digits, _ or -)" >&2; exit 1; }
+fi
+
+# 선택 키 (0.64.0+): 선택지 도구가 없는 실행을 알리는 환경 조건 — "환경 변수 이름=값" 하나(이름은 셸 변수 이름, 값은 글자 · 숫자 ·
+# . _ : - 로 64자까지). 그 환경 변수가 그 값인 실행에서는 도구가 없는 것과 같다.
+if [[ -n "$SCV_CHOICE_OFF_WHEN" ]]; then
+  [[ "$SCV_CHOICE_OFF_WHEN" =~ ^[A-Za-z_][A-Za-z0-9_]{0,63}=[A-Za-z0-9_.:-]{1,64}$ ]] \
+    || { echo "profile: invalid SCV_CHOICE_OFF_WHEN (one NAME=VALUE: an environment variable name, then a plain value)" >&2; exit 1; }
 fi
 
 template="$SCV_ACTION_TEMPLATE"
