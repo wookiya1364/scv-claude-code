@@ -35,3 +35,7 @@ scv/.graph/
 # 팀 맥락으로 공유하고 싶으면 이 줄을 지우세요. 그때는 저장소 공개 범위와
 # journal 에 남는 내용을 먼저 확인하세요 — redaction 은 휴리스틱입니다.
 scv/journal/
+
+# v0.63.0+ — 저널을 공유하더라도(위 줄을 지워도) 세션 표식 파일은 올리지 않는다. 세션마다 바뀌는 잡음이라
+# PR 마다 충돌한다(.help-state · .help-turn · .help-rewrite …).
+scv/journal/.help-*
