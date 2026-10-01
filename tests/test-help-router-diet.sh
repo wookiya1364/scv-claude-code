@@ -24,10 +24,12 @@ FIX="$HERE/fixtures"; FORCE_LIB="$CORE/scripts/lib/force-help.sh"
 PROMPT_HOOK="$CORE/template/hooks/on-user-prompt.sh"; HELP_SH="$CORE/scripts/help.sh"
 section() { awk -v S="## $2" 'index($0,S)==1{f=1;print;next} f&&/^## /{exit} f' "$1"; }
 # 사용자 결정(2026-09-16): 고정 절 4,529B + 계약 문구·명령 ≈1,000B 가 바닥 → scv-core 원본은 7,200B.
-# 래퍼가 벤더링하며 호스트 자리표시자를 펼치면 몇백 바이트가 늘 수 있으므로, 사본에서는 budget 검사의 상한(7,500B)을 쓴다.
+# 래퍼가 벤더링하며 호스트 자리표시자를 펼치면 몇백 바이트가 늘 수 있으므로, 사본에서는 budget 검사의 상한을 쓴다.
+# 사용자 결정(2026-10-01): 답 모양 절의 결정 자리에 선택지 규칙을 직접 적는다 — 잠금은 새 문구로 다시 걸고(지문 갱신),
+# 상한은 원본 7,200 → 7,600B, 사본 7,500 → 8,000B(클로드 사본이 펼침으로 약 400B 커진다).
 REPO="$(cd "$CORE/.." && pwd)"
 IS_CORE_REPO=0; [[ -f "$REPO/VERSION" && -f "$REPO/core/TEMPLATE_DIGEST" && -d "$REPO/scv/archive" ]] && IS_CORE_REPO=1
-ROUTER_MAX=7200; (( IS_CORE_REPO )) || ROUTER_MAX=7500
+ROUTER_MAX=7600; (( IS_CORE_REPO )) || ROUTER_MAX=8000
 
 echo "── [T1] 라우터 크기 ──"
 n="$(wc -c < "$ROUTER")"; (( n <= ROUTER_MAX )) && ok "help.md ${n}B ≤ ${ROUTER_MAX}B" || fail "help.md ${n}B > ${ROUTER_MAX}B"
