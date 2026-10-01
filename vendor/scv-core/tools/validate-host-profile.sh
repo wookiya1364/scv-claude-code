@@ -28,6 +28,7 @@ SCV_GRAPH_SKILL_PATHS=""
 SCV_UPDATE_OWNER=""
 SCV_MODEL_POLICY_OWNER=""
 SCV_PROMPTING_GUIDES=""
+SCV_AUTO_PROMPT_TAGS=""
 line_no=0
 while IFS= read -r line || [[ -n "$line" ]]; do
   line_no=$((line_no + 1))
@@ -46,7 +47,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     SCV_HOST_PROFILE_API|SCV_HOST_ID|SCV_HOST_LABEL|SCV_ACTION_TEMPLATE|\
     SCV_ARGUMENT_STYLE|SCV_STATE_INDEX|SCV_LEGACY_STATE_INDEXES|SCV_ROOT_ENV|\
     SCV_GRAPH_SKILL_PATHS|SCV_UPDATE_OWNER|SCV_MODEL_POLICY_OWNER|\
-    SCV_PROMPTING_GUIDES) ;;
+    SCV_PROMPTING_GUIDES|SCV_AUTO_PROMPT_TAGS) ;;
     *) echo "profile:$line_no: unknown key: $key" >&2; exit 1 ;;
   esac
   case "|$seen_keys|" in
@@ -89,6 +90,13 @@ done
 if [[ -n "$SCV_PROMPTING_GUIDES" ]]; then
   [[ "$SCV_PROMPTING_GUIDES" =~ ^[A-Za-z0-9._/-]+$ ]] \
     || { echo "profile: invalid SCV_PROMPTING_GUIDES (path characters only)" >&2; exit 1; }
+fi
+
+# 선택 키 (0.63.0+): 자동 입력 태그 이름들 — 소문자 · 숫자 · 하이픈 이름을 공백으로 나눈 목록. 꺾쇠는 코어가 붙인다.
+if [[ -n "$SCV_AUTO_PROMPT_TAGS" ]]; then
+  _tags_re='^[a-z][a-z0-9-]*( [a-z][a-z0-9-]*)*$'   # 공백이 든 정규식은 변수로 — bash 3.2 · 5 가 같게 읽는다
+  [[ "$SCV_AUTO_PROMPT_TAGS" =~ $_tags_re ]] \
+    || { echo "profile: invalid SCV_AUTO_PROMPT_TAGS (tag names separated by single spaces)" >&2; exit 1; }
 fi
 
 template="$SCV_ACTION_TEMPLATE"
