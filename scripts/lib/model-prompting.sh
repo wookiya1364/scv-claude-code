@@ -548,8 +548,9 @@ scv_mp_answer_shows_rewrite() {
 }
 
 # @pure
-# <등록됨 0|1> <보임 0|1|""(답을 못 얻음)> <이미 계속 중 0|1> → ok | block | warn.
-# 계속 중이면 절대 막지 않는다(같은 턴 한 번) — 다음 턴 경고로 넘긴다. 답을 못 얻었으면 "보임" 은 판정하지 않는다.
+# <등록됨 0|1> <보임 0|1|""(답을 못 얻음)> <이미 전달 0|1> → ok | block | warn.
+# 이미 전달했으면 절대 막지 않는다(같은 턴 한 번) — 다음 턴 경고로 넘긴다. 답을 못 얻었으면 "보임" 은 판정하지 않는다.
+# 세 번째 값은 종료 훅이 검사마다 준다(v0.64.2+, lib/stop-gates.sh) — 그 전에는 호스트의 "이미 계속 중" 값이었다.
 scv_mp_stop_gate() {
   local reg="${1:-0}" shown="${2:-}" active="${3:-0}" bad=0
   [[ "$reg" == "1" ]] || bad=1
@@ -581,7 +582,8 @@ scv_mp_answer_has_problem_table() {
 }
 
 # @pure
-# <문제 표 있음 0|1> <원칙 스위치 on|off> <이미 계속 중 0|1> → ok | block | warn. 같은 턴 한 번 — 계속 중이면 다음 턴 경고.
+# <문제 표 있음 0|1> <원칙 스위치 on|off> <이미 전달 0|1> → ok | block | warn. 같은 턴 한 번 — 이미 전달했으면 다음 턴 경고
+# (세 번째 값은 v0.64.2+ 종료 훅이 검사마다 준다 — lib/stop-gates.sh).
 scv_mp_principle_gate() {
   local hit="${1:-0}" sw="${2:-on}" active="${3:-0}"
   [[ "$sw" == "on" && "$hit" == "1" ]] || { printf 'ok'; return 0; }

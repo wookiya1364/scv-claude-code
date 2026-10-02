@@ -14,7 +14,7 @@
 #   model-prompting.sh kind < 프롬프트        (v0.63.0+) 매 턴 훅이 부른다: auto(호스트가 보낸 입력 — 호스트 프로필 SCV_AUTO_PROMPT_TAGS) | human
 #   model-prompting.sh prompt --auto        (v0.63.0+) 자동 입력 턴: 새 표 없이 "이번 턴은 자동" 표시만 남긴다(출력 없음)
 #   model-prompting.sh principle-gate [--active 0|1] < 끝 메시지  (v0.64.0+) 종료 훅이 부른다: 문제 표 · '생길 수 있는 문제'
-#                                            칸이 있으면 PRINCIPLE_GATE: block(+ PRINCIPLE_REASON), 계속 중이면 warn(다음 턴 경고)
+#                                            칸이 있으면 PRINCIPLE_GATE: block(+ PRINCIPLE_REASON), --active 1(이미 전달)이면 warn(다음 턴 경고)
 #   model-prompting.sh stop < 답본문        (v0.60.0+) 종료 훅이 부른다: 이번 턴에 원문을 읽었는지 · 다시 쓴 요청을
 #                                            답에 보였는지 결과로 판정 → 어긋나면 다음 턴 경고(.help-warn 에 덧붙임)
 #
@@ -301,8 +301,9 @@ case "$cmd" in
             mkdir -p "$JOURNAL_DIR" 2>/dev/null && [[ ! -L "$JOURNAL_DIR/.help-warn" ]] && printf '%s\n' "[SCV 가이드] 직전 턴: $_why" >> "$JOURNAL_DIR/.help-warn" 2>/dev/null
           fi
         fi
-        # 판정은 파일에 남기지 않는다 — 종료 훅이 쓰는 것은 저널과(계속 중일 때만) 다음 턴 경고, 그리고(0.63.0+, 자동 태그가
-        # 있을 때만) 끝난 턴 표뿐이다.
+        # 이 판정(stop)은 판정을 파일에 남기지 않는다 — 여기서 쓰는 것은(계속 중일 때만) 다음 턴 경고, 그리고(0.63.0+, 자동
+        # 태그가 있을 때만) 끝난 턴 표뿐이다. 저널은 종료 훅이 쓰고, 이번 턴 전달 기록(.help-turn-gates, v0.64.2+)도 종료 훅
+        # on-stop.sh 가 막을 때 쓴다.
         # 막을 때의 사유는 호스트가 대화 기록에 남긴다.
       fi
     fi
