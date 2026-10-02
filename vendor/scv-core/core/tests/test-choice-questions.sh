@@ -2,8 +2,9 @@
 # test-choice-questions.sh — "결정은 고르는 선택지로" 검사 (v0.64.0+).
 #
 # 왜 있나: 호스트 설정에 선택지 도구가 있으면 SCV 가 사용자에게 고르게 하는 결정은 그 도구로 묻는다 — 매 턴 안내 한 줄이
-# 실리고, 마지막 답이 글로 묻거나 번호로 고르게 하면서 끝나면 종료 훅이 같은 턴에 한 번 막는다(이미 계속 중이면 다음 턴
-# 경고). 도구가 없으면(기본 · 코덱스) 모든 출력과 판정이 이 기능 전과 같다. 규칙은 contracts/choices.md 한 곳뿐이다.
+# 실리고, 마지막 답이 글로 묻거나 번호로 고르게 하면서 끝나면 종료 훅이 같은 턴에 한 번 막는다(v0.64.2+ 검사마다 한 턴에 한 번 —
+# 이 검사가 이미 이유를 냈으면 다음 턴 경고). 도구가 없으면(기본 · 코덱스) 모든 출력과 판정이 이 기능 전과 같다. 규칙은
+# contracts/choices.md 한 곳뿐이다.
 #
 # Covers TESTS.md T1~T9 · T13~T15 of 20261001-wookiya1364-restore-choice-questions
 #   and T19 · T20 (등록 판정 경로 — 답 모양 검사 경로의 T19 는 test-answer-lint-source [T11]), T23 · T25 · T26,
@@ -59,7 +60,7 @@ stop_p() {  # <저장소> <프로필> <마지막 답> <계속 중 true|false> [�
   local r="$1" core="${5:-$CORE}" tr="$WORK/tr-$RANDOM$RANDOM.jsonl"
   printf '{"type":"user","message":{"content":[{"type":"text","text":"q"}]}}\n' > "$tr"
   jq -cn --arg t "$3" '{type:"assistant",message:{model:"vendor-model-a",content:[{type:"text",text:$t}]}}' >> "$tr"
-  (cd "$r" && jq -cn --arg p "$tr" --arg a "$3" --argjson act "$4" '{transcript_path:$p,last_assistant_message:$a,stop_hook_active:$act}' \
+  (cd "$r" && jq -cn --arg p "$tr" --arg a "$3" --argjson act "$4" '{session_id:"s1",transcript_path:$p,last_assistant_message:$a,stop_hook_active:$act}' \
      | CLAUDE_PLUGIN_ROOT="$core" SCV_HOST_PROFILE="$2" GIT_AUTHOR_NAME="Hook User" bash "$core/template/hooks/on-stop.sh" 2>/dev/null)
 }
 reg_full() { (cd "$1" && printf '%s\n' "$SUB_OK" | SCV_HOST_PROFILE="$WORK/profile-full.env" bash "$MP" register --model vendor-model-a 2>/dev/null); }
@@ -241,8 +242,10 @@ o="$(stop_p "$R" "$WORK/profile-full.env" "$(printf '%s\n\n%s\n\n%s' "결론." "
 grep -q '^\[SCV 가이드\] 직전 턴: \[SCV 선택지\]' "$R/scv/journal/.help-warn" 2>/dev/null \
   && ok "경고는 컨텍스트 초기화(clear · 압축 · 재개) 뒤에도 남는다" || fail "T4 초기화 뒤 경고 사라짐"
 o="$(stop_p "$R" "$WORK/profile-full.env" "$(printf '%s\n\n%s' "결론." "$C_A")" false)"
-grep -q 'SCV 프롬프트' <<<"$o" && ! grep -q 'SCV 선택지' <<<"$o" && ok "등록 · 인용 판정이 먼저 막으면 선택지 판정은 보지 않는다(한 번에 한 이유)" \
-  || fail "T4 한 이유: [$o]"
+# v0.64.2+ (계획 stop-gates-each-once) — 한 멈춤에 걸린 이유는 함께 싣는다: 예전에는 등록 이유 하나만 내고 선택지 판정을 건너뛰었다.
+_r="$(jq -r .reason <<<"$o" 2>/dev/null)"
+[[ "$_r" == *'[SCV 프롬프트]'*'[SCV 선택지]'* ]] && ok "등록 · 인용과 선택지가 함께 걸리면 두 이유를 한 번에(등록 → 선택지 순)" \
+  || fail "T4 함께 싣기: [$o]"
 
 echo "── [T5] 종료 훅 — 자동 알림 턴에도 적용된다 ──"
 R="$(new_repo t5)"; hook_p "$R" "$WORK/profile-full.env" "로그인 고쳐" >/dev/null; reg_full "$R" >/dev/null
@@ -389,7 +392,9 @@ rm -f "$R/scv/journal/.help-warn"
 o="$(stop_p "$R" "$WORK/profile-full.env" "$(printf '%s\n\n%s\n\n%s' "결론." "$QUOTE" "$PTA")" true)"
 [[ -z "$o" ]] && grep -q '^\[SCV 가이드\] 직전 턴: \[SCV 원칙\]' "$R/scv/journal/.help-warn" 2>/dev/null && ok "이미 계속 중: 막지 않고 다음 턴 경고" || fail "T23 계속 중: [$o]"
 o="$(stop_p "$R" "$WORK/profile-full.env" "$(printf '%s\n\n%s\n\n%s\n\n%s' "결론." "$QUOTE" "$PTA" "릴리스할까요?")" false)"
-grep -q 'SCV 원칙' <<<"$o" && ! grep -q 'SCV 선택지' <<<"$o" && ok "문제 표와 글 질문이 함께 있으면 원칙 이유 하나만(한 번에 한 이유)" || fail "T23 한 이유: [$o]"
+# v0.64.2+ (계획 stop-gates-each-once) — 예전에는 원칙 이유 하나만 냈다. 이제 한 멈춤에 걸린 이유를 함께 싣는다.
+_r="$(jq -r .reason <<<"$o" 2>/dev/null)"
+[[ "$_r" == *'[SCV 원칙]'*'[SCV 선택지]'* ]] && ok "문제 표와 글 질문이 함께 있으면 두 이유를 한 번에(원칙 → 선택지 순)" || fail "T23 함께 싣기: [$o]"
 R="$(fresh_turn t23off)"; printf '{\n  "SCV_REWRITE_PRINCIPLE": "off"\n}\n' > "$R/scv/scv_settings.json"
 o="$(stop_p "$R" "$WORK/profile-full.env" "$(printf '%s\n\n%s\n\n%s' "결론." "$QUOTE" "$PTA")" false)"
 [[ -z "$o" ]] && ok "원칙 스위치 off — 판정 없음(이 기능 전과 같다)" || fail "T23 off: [$o]"
@@ -496,6 +501,311 @@ if [[ -x /bin/bash ]]; then
     && ok "매 턴 출력이 시스템 bash $v 와 지금 bash 에서 같다(모델 id 자리 표시에 역슬래시 없음)" || fail "T33 (c): $(diff <(printf '%s\n' "$o1") <(printf '%s\n' "$o2") | head -3)"
 else
   echo "  (시스템 bash 없음 — T33 생략)"
+fi
+
+# ---------------------------------------------------------------- 검사마다 한 턴에 한 번 (v0.64.2+, 계획 stop-gates-each-once)
+# 2026-10-02 설치본 0.64.1 대화형 재현: 등록 없이 결정 표로 끝난 답이 등록 이유로만 막히고, 등록 뒤 같은 결정 표는 계속 중이라
+# 다음 턴 경고로만 남아 화면에 그대로 보였다. 이제 세 검사(등록 · 원칙 · 선택지)가 각자 한 턴에 한 번씩 막고, 한 멈춤에 걸린 이유는
+# 함께 싣는다. 계획 TESTS.md 번호와의 대응: T35.1~T35.9 · T35.11 · T35.12 = T1~T9 · T11 · T12, T35.0 = T14, T35.10 = T15,
+# T35.13~T35.18 = T16~T21 (T10 은 이 파일 · test-model-prompting 전체가 통과하는 것, T13 은 릴리스 뒤 설치본 실측).
+sg_tags() {  # <종료 훅 출력> → "pass" | "block:<꼬리표들>" — 이유 줄 머리의 꼬리표를 나온 순서대로(prompt · principle · choice)
+  local o="$1" r l names=""
+  [[ "$(jq -r .decision <<<"$o" 2>/dev/null)" == block ]] || { printf 'pass'; return 0; }
+  r="$(jq -r .reason <<<"$o" 2>/dev/null)"
+  while IFS= read -r l; do
+    case "$l" in
+      '[SCV 프롬프트]'*) names="$names,prompt" ;;
+      '[SCV 원칙]'*)     names="$names,principle" ;;
+      '[SCV 선택지]'*)   names="$names,choice" ;;
+    esac
+  done <<<"$r"
+  printf 'block:%s' "${names#,}"
+}
+sg_warns() { grep -c '^\[SCV 가이드\] 직전 턴:' "$1/scv/journal/.help-warn" 2>/dev/null || true; }
+SG_DONE="작업을 마쳤습니다."                                                       # 묻지도 표도 없음
+SG_QJ="$(printf '%s\n\n%s\n\n%s' "결론." "$QUOTE" "$C_J")"                         # 인용 + 실측 결정 표로 끝
+SG_QP="$(printf '%s\n\n%s\n\n%s\n\n%s' "결론." "$QUOTE" "$PTA" "끝났습니다.")"       # 인용 + 문제 표
+SG_ALL="$(printf '%s\n\n%s' "$PTA" "$C_J")"                                         # 인용 없음 + 문제 표 + 결정 표로 끝
+
+echo "── [T35.0] 순수부 — 이미 전달 · 기록 · 지우기 · 이유 합치기 ──"
+SGL="$CORE/scripts/lib/stop-gates.sh"
+sgf() { bash -c 'source "$1"; shift; "$@"' _ "$SGL" "$@"; }
+U=$'\x1f'; c=0; n=0
+sgc() { n=$((n + 1)); [[ "$2" == "$3" ]] && c=$((c + 1)) || echo "      ✖ $1: [$(printf '%s' "$2" | tr '\037' '|')] ≠ [$(printf '%s' "$3" | tr '\037' '|')]"; }
+sgc "첫 멈춤은 아무것도 전달 전"        "$(sgf scv_gates_delivered choice 0 S T "S${U}T${U}choice")" 0
+sgc "턴 표 없음 — 이 기능 전과 같다"     "$(sgf scv_gates_delivered choice 1 S "" "")" 1
+sgc "세션 id 없음 — 이 기능 전과 같다"   "$(sgf scv_gates_delivered choice 1 "" T "${U}T${U}prompt")" 1
+sgc "계속 중 · 이번 턴 기록 없음 — 이 기능 전과 같다" "$(sgf scv_gates_delivered choice 1 S T "")" 1
+sgc "기록에 있는 검사"                 "$(sgf scv_gates_delivered choice 1 S T "S${U}T${U}prompt,choice")" 1
+sgc "기록에 없는 검사"                 "$(sgf scv_gates_delivered principle 1 S T "S${U}T${U}prompt,choice")" 0
+sgc "다른 턴 표의 기록 — 이 기능 전과 같다" "$(sgf scv_gates_delivered principle 1 S T "S${U}X${U}choice")" 1
+sgc "다른 세션의 기록 — 이 기능 전과 같다" "$(sgf scv_gates_delivered principle 1 S T "B${U}T${U}choice")" 1
+sgc "깨진 기록(칸 하나)"               "$(sgf scv_gates_delivered choice 1 S T "garbage")" 1
+sgc "깨진 기록(칸 둘)"                 "$(sgf scv_gates_delivered choice 1 S T "S${U}T")" 1
+sgc "깨진 기록(칸 넷)"                 "$(sgf scv_gates_delivered choice 1 S T "S${U}T${U}a${U}b")" 1
+sgc "이름이 겹치는 검사(부분 일치 아님)"  "$(sgf scv_gates_delivered choice 1 S T "S${U}T${U}choices")" 0
+sgc "첫 멈춤 기록은 새로 시작"           "$(sgf scv_gates_record S T "S${U}T${U}choice" 0 principle)" "S${U}T${U}principle"
+sgc "계속 중 기록은 이번 턴 것에 더함"     "$(sgf scv_gates_record S T "S${U}T${U}prompt" 1 choice)" "S${U}T${U}prompt,choice"
+sgc "계속 중 · 다른 세션 기록은 새로"      "$(sgf scv_gates_record S T "B${U}T${U}prompt" 1 choice)" "S${U}T${U}choice"
+sgc "같은 검사는 한 번만 적힌다"          "$(sgf scv_gates_record S T "S${U}T${U}choice" 1 choice,choice)" "S${U}T${U}choice"
+sgc "막은 검사 없음 — 쓰지 않음"          "$(sgf scv_gates_record S T "" 0 "")" ""
+sgc "턴 표 없음 — 쓰지 않음"             "$(sgf scv_gates_record S "" "" 0 choice)" ""
+sgc "첫 멈춤 · 같은 세션 기록 — 지운다"    "$(sgf scv_gates_drop S "S${U}T${U}choice" 0)" 1
+sgc "첫 멈춤 · 다른 세션 기록 — 둔다"      "$(sgf scv_gates_drop S "B${U}T${U}choice" 0)" 0
+sgc "첫 멈춤 · 깨진 기록 — 지운다"         "$(sgf scv_gates_drop S "garbage" 0)" 1
+sgc "계속 중에는 지우지 않는다"           "$(sgf scv_gates_drop S "S${U}T${U}choice" 1)" 0
+sgc "이유 합치기 — 빈 것은 빼고 순서대로"  "$(sgf scv_gates_reason a "" c)" $'a\nc'
+sgc "이유 합치기 — 모두 비면 빈 값"        "$(sgf scv_gates_reason "" "" "")" ""
+[[ $c -eq $n ]] && ok "순수부 $n/$n" || fail "T35.0 순수부 $c/$n"
+
+echo "── [T35.1] 재현 순서 — 첫 멈춤에 등록 · 선택지 두 이유가 함께 ──"
+R="$(new_repo sg1)"; hook_p "$R" "$WORK/profile-full.env" "로그인 고쳐" >/dev/null
+o="$(stop_p "$R" "$WORK/profile-full.env" "$C_J" false)"
+[[ "$(sg_tags "$o")" == "block:prompt,choice" ]] && ok "등록 없이 결정 표로 끝 — 한 번의 막기에 [SCV 프롬프트] → [SCV 선택지]" || fail "T35.1: $(sg_tags "$o") [$o]"
+
+echo "── [T35.2] 이어서 같은 결정 표 — 선택지 이유는 이미 전달됨 ──"
+reg_full "$R" >/dev/null; rm -f "$R/scv/journal/.help-warn"
+o="$(stop_p "$R" "$WORK/profile-full.env" "$SG_QJ" true)"
+[[ "$(sg_tags "$o")" == pass ]] && grep -q '^\[SCV 가이드\] 직전 턴: \[SCV 선택지\]' "$R/scv/journal/.help-warn" 2>/dev/null \
+  && ok "함께 실린 것도 한 번으로 센다 — 막지 않고 다음 턴 경고" || fail "T35.2: $(sg_tags "$o") / $(cat "$R/scv/journal/.help-warn" 2>/dev/null)"
+
+echo "── [T35.3] 등록에만 막힌 뒤 이어 쓴 답이 글로 묻는다 — 같은 턴에 선택지로 막는다 ──"
+R="$(new_repo sg3)"; hook_p "$R" "$WORK/profile-full.env" "로그인 고쳐" >/dev/null
+o1="$(stop_p "$R" "$WORK/profile-full.env" "$SG_DONE" false)"; reg_full "$R" >/dev/null
+o2="$(stop_p "$R" "$WORK/profile-full.env" "$SG_QJ" true)"
+[[ "$(sg_tags "$o1")" == "block:prompt" && "$(sg_tags "$o2")" == "block:choice" ]] \
+  && ok "첫 멈춤은 등록만, 계속 중인 두 번째 멈춤은 선택지로 막음" || fail "T35.3: $(sg_tags "$o1") / $(sg_tags "$o2")"
+
+echo "── [T35.4] 원칙 검사도 같은 규칙 ──"
+R="$(new_repo sg4)"; hook_p "$R" "$WORK/profile-full.env" "로그인 고쳐" >/dev/null
+o1="$(stop_p "$R" "$WORK/profile-full.env" "$SG_DONE" false)"; reg_full "$R" >/dev/null
+o2="$(stop_p "$R" "$WORK/profile-full.env" "$SG_QP" true)"
+[[ "$(sg_tags "$o1")" == "block:prompt" && "$(sg_tags "$o2")" == "block:principle" ]] \
+  && ok "등록에 막힌 뒤 이어 쓴 답의 문제 표 — 같은 턴에 원칙으로 막음" || fail "T35.4: $(sg_tags "$o1") / $(sg_tags "$o2")"
+
+echo "── [T35.5] 상한 — 검사마다 한 번, 끝없는 반복 없음 ──"
+R="$(new_repo sg5)"; hook_p "$R" "$WORK/profile-full.env" "로그인 고쳐" >/dev/null
+s1="$(sg_tags "$(stop_p "$R" "$WORK/profile-full.env" "$SG_DONE" false)")"; reg_full "$R" >/dev/null
+s2="$(sg_tags "$(stop_p "$R" "$WORK/profile-full.env" "$SG_QP" true)")"
+s3="$(sg_tags "$(stop_p "$R" "$WORK/profile-full.env" "$SG_QJ" true)")"
+rm -f "$R/scv/journal/.help-warn"
+s4="$(sg_tags "$(stop_p "$R" "$WORK/profile-full.env" "$SG_ALL" true)")"
+[[ "$s1|$s2|$s3|$s4" == "block:prompt|block:principle|block:choice|pass" && "$(sg_warns "$R")" == 3 ]] \
+  && ok "세 번(등록 → 원칙 → 선택지) 막은 뒤 네 번째는 셋 다 걸려도 통과 · 경고 3줄" || fail "T35.5: $s1|$s2|$s3|$s4 · 경고 $(sg_warns "$R")"
+
+echo "── [T35.6] 새 턴이면 다시 한 번씩 ──"
+R="$WORK/sg1"; hook_p "$R" "$WORK/profile-full.env" "다음 일" >/dev/null   # T35.1 의 저장소 — 지난 턴에 등록 · 선택지를 전달했다
+o1="$(stop_p "$R" "$WORK/profile-full.env" "$SG_DONE" false)"; reg_full "$R" >/dev/null
+o2="$(stop_p "$R" "$WORK/profile-full.env" "$SG_QJ" true)"
+[[ "$(sg_tags "$o1")" == "block:prompt" && "$(sg_tags "$o2")" == "block:choice" ]] \
+  && ok "지난 턴의 전달 기록은 새 턴에 이어지지 않는다" || fail "T35.6: $(sg_tags "$o1") / $(sg_tags "$o2")"
+
+echo "── [T35.7] 사람 없는 실행 · 스위치 off 는 그대로 ──"
+{ cat "$WORK/profile-full.env"; printf 'SCV_CHOICE_OFF_WHEN=SCV_TEST_ATTENDED=0\n'; } > "$WORK/profile-full-off.env"
+R="$(new_repo sg7a)"; SCV_TEST_ATTENDED=0 hook_p "$R" "$WORK/profile-full-off.env" "로그인 고쳐" >/dev/null
+o1="$(SCV_TEST_ATTENDED=0 stop_p "$R" "$WORK/profile-full-off.env" "$SG_DONE" false)"; reg_full "$R" >/dev/null; rm -f "$R/scv/journal/.help-warn"
+o2="$(SCV_TEST_ATTENDED=0 stop_p "$R" "$WORK/profile-full-off.env" "$SG_QJ" true)"
+[[ "$(sg_tags "$o1")" == "block:prompt" && "$(sg_tags "$o2")" == pass ]] && ! grep -q 'SCV 선택지' "$R/scv/journal/.help-warn" 2>/dev/null \
+  && ok "사람 없는 실행 — 이어 쓴 글 질문도 막지 않고 선택지 경고도 없다" || fail "T35.7 (a): $(sg_tags "$o1") / $(sg_tags "$o2")"
+R="$(new_repo sg7b)"; printf '{\n  "SCV_CHOICE_GATE": "off"\n}\n' > "$R/scv/scv_settings.json"; hook_p "$R" "$WORK/profile-full.env" "로그인 고쳐" >/dev/null
+o1="$(stop_p "$R" "$WORK/profile-full.env" "$SG_DONE" false)"; reg_full "$R" >/dev/null; rm -f "$R/scv/journal/.help-warn"
+o2="$(stop_p "$R" "$WORK/profile-full.env" "$SG_QJ" true)"
+[[ "$(sg_tags "$o1")" == "block:prompt" && "$(sg_tags "$o2")" == pass ]] && ! grep -q 'SCV 선택지' "$R/scv/journal/.help-warn" 2>/dev/null \
+  && ok "SCV_CHOICE_GATE=off — 그대로" || fail "T35.7 (b): $(sg_tags "$o1") / $(sg_tags "$o2")"
+R="$(new_repo sg7c)"; printf '{\n  "SCV_REWRITE_PRINCIPLE": "off"\n}\n' > "$R/scv/scv_settings.json"; hook_p "$R" "$WORK/profile-full.env" "로그인 고쳐" >/dev/null
+o1="$(stop_p "$R" "$WORK/profile-full.env" "$SG_DONE" false)"; reg_full "$R" >/dev/null
+o2="$(stop_p "$R" "$WORK/profile-full.env" "$SG_QP" true)"
+[[ "$(sg_tags "$o1")" == "block:prompt" && "$(sg_tags "$o2")" == pass ]] && ok "SCV_REWRITE_PRINCIPLE=off — 그대로" || fail "T35.7 (c): $(sg_tags "$o1") / $(sg_tags "$o2")"
+
+echo "── [T35.8] 턴 표를 못 읽으면 지금 동작 ──"
+R="$(new_repo sg8)"; hook_p "$R" "$WORK/profile-full.env" "로그인 고쳐" >/dev/null
+stop_p "$R" "$WORK/profile-full.env" "$SG_DONE" false >/dev/null; reg_full "$R" >/dev/null
+rm -f "$R/scv/journal/.help-turn" "$R/scv/journal/.help-warn"
+o="$(stop_p "$R" "$WORK/profile-full.env" "$SG_QJ" true)"
+[[ "$(sg_tags "$o")" == pass ]] && grep -q '^\[SCV 가이드\] 직전 턴: \[SCV 선택지\]' "$R/scv/journal/.help-warn" 2>/dev/null \
+  && ok "턴 표 없음 — 계속 중이면 막지 않고 다음 턴 경고(이 기능 전과 같다)" || fail "T35.8 (a): $(sg_tags "$o")"
+R="$(new_repo sg8b)"; hook_p "$R" "$WORK/profile-full.env" "로그인 고쳐" >/dev/null
+stop_p "$R" "$WORK/profile-full.env" "$SG_DONE" false >/dev/null; reg_full "$R" >/dev/null
+printf 'garbage-without-separator\n' > "$R/scv/journal/.help-turn-gates"
+o="$(stop_p "$R" "$WORK/profile-full.env" "$SG_QJ" true)"
+[[ "$(sg_tags "$o")" == pass ]] && ok "전달 기록이 깨짐 — 막는 쪽으로 실패하지 않는다" || fail "T35.8 (b): $(sg_tags "$o")"
+
+echo "── [T35.9] 자동 알림 턴 ──"
+R="$(fresh_turn sg9)"
+stop_p "$R" "$WORK/profile-full.env" "$(printf '%s\n\n%s' "$QUOTE" "끝났습니다.")" false >/dev/null   # 사람 턴이 끝난다
+hook_p "$R" "$WORK/profile-full.env" $'<machine-event>\n<status>completed</status>\n</machine-event>' >/dev/null
+o1="$(stop_p "$R" "$WORK/profile-full.env" "$C_J" false)"
+o2="$(stop_p "$R" "$WORK/profile-full.env" "$C_J" true)"
+[[ "$(sg_tags "$o1")" == "block:choice" && "$(sg_tags "$o2")" == pass ]] \
+  && ok "등록 이유 없이 선택지로 한 번, 두 번째는 경고만" || fail "T35.9: $(sg_tags "$o1") / $(sg_tags "$o2")"
+
+echo "── [T35.10] 턴 표가 그대로인 다음 턴(자동 알림 턴) — 지난 턴 기록을 이번 것으로 읽지 않는다 ──"
+R="$(fresh_turn sg10)"
+stop_p "$R" "$WORK/profile-full.env" "$SG_QJ" false >/dev/null                                            # 사람 턴: 선택지를 전달
+stop_p "$R" "$WORK/profile-full.env" "$(printf '%s\n\n%s' "$QUOTE" "끝났습니다.")" true >/dev/null       # 사람 턴이 끝난다
+hook_p "$R" "$WORK/profile-full.env" $'<machine-event>\n<status>completed</status>\n</machine-event>' >/dev/null
+o1="$(stop_p "$R" "$WORK/profile-full.env" "$(printf '%s\n\n%s' "$PTA" "끝났습니다.")" false)"
+o2="$(stop_p "$R" "$WORK/profile-full.env" "$C_J" true)"
+[[ "$(sg_tags "$o1")" == "block:principle" && "$(sg_tags "$o2")" == "block:choice" ]] \
+  && ok "자동 알림 턴: 원칙으로 막힌 뒤 이어 쓴 글 질문도 같은 턴에 선택지로 막음(지난 턴의 '선택지 전달'을 잇지 않음)" || fail "T35.10 (a): $(sg_tags "$o1") / $(sg_tags "$o2")"
+hook_p "$R" "$WORK/profile-full.env" $'<machine-event>\n<status>completed</status>\n</machine-event>' >/dev/null
+o1="$(stop_p "$R" "$WORK/profile-full.env" "끝났습니다." false)"
+o2="$(stop_p "$R" "$WORK/profile-full.env" "$C_J" true)"   # 다른 훅이 첫 멈춤을 이어 간 꼴 — 이번 턴 우리 기록은 없다
+[[ "$(sg_tags "$o1")" == pass && "$(sg_tags "$o2")" == pass && ! -e "$R/scv/journal/.help-turn-gates" ]] \
+  && ok "다른 훅이 이어 간 턴: 첫 멈춤이 지난 기록을 지우고, 이번 턴 기록이 없으니 이 기능 전과 같다(막지 않음)" || fail "T35.10 (b): $(sg_tags "$o1") / $(sg_tags "$o2")"
+
+echo "── [T35.13] 전달 기록을 쓰지 못하면 — 같은 검사가 끝없이 막지 않는다 ──"
+if [[ "$(id -u)" != 0 ]]; then
+  R="$(new_repo sg13)"; hook_p "$R" "$WORK/profile-full.env" "로그인 고쳐" >/dev/null
+  s1="$(sg_tags "$(stop_p "$R" "$WORK/profile-full.env" "$SG_DONE" false)")"; reg_full "$R" >/dev/null
+  chmod a-w "$R/scv/journal"
+  s2="$(sg_tags "$(stop_p "$R" "$WORK/profile-full.env" "$SG_QJ" true)")"
+  s3="$(sg_tags "$(stop_p "$R" "$WORK/profile-full.env" "$SG_QJ" true)")"
+  s4="$(sg_tags "$(stop_p "$R" "$WORK/profile-full.env" "$SG_QJ" true)")"
+  chmod u+w "$R/scv/journal"
+  [[ "$s1|$s2|$s3|$s4" == "block:prompt|pass|pass|pass" ]] \
+    && ok "읽기 전용 저널 — 첫 멈춤만 막고, 계속 중인 멈춤은 기록을 못 남겨 막지 않음" || fail "T35.13: $s1|$s2|$s3|$s4"
+else
+  echo "  (root 로 도는 중 — 읽기 전용이 효과가 없어 T35.13 생략)"
+fi
+
+echo "── [T35.14] 전달 기록 자리가 심볼릭 링크 — 따라가지 않고, 끝없이 막지 않는다 ──"
+R="$(new_repo sg14)"; hook_p "$R" "$WORK/profile-full.env" "로그인 고쳐" >/dev/null
+s1="$(sg_tags "$(stop_p "$R" "$WORK/profile-full.env" "$SG_DONE" false)")"; reg_full "$R" >/dev/null
+printf 'untouched\n' > "$WORK/sg14-target"; rm -f "$R/scv/journal/.help-turn-gates"; ln -s "$WORK/sg14-target" "$R/scv/journal/.help-turn-gates"
+s2="$(sg_tags "$(stop_p "$R" "$WORK/profile-full.env" "$SG_QJ" true)")"
+s3="$(sg_tags "$(stop_p "$R" "$WORK/profile-full.env" "$SG_QJ" true)")"
+[[ "$s1|$s2|$s3" == "block:prompt|pass|pass" && "$(cat "$WORK/sg14-target")" == untouched ]] \
+  && grep -q '^\[SCV 가이드\] 직전 턴: \[SCV 선택지\]' "$R/scv/journal/.help-warn" 2>/dev/null \
+  && ok "링크 대상은 그대로, 계속 중 멈춤은 막지 않고 다음 턴 경고" || fail "T35.14: $s1|$s2|$s3 / $(cat "$WORK/sg14-target")"
+
+echo "── [T35.15] 한 저장소 · 두 세션 — 다른 세션의 기록으로 한 검사가 두 번 막지 않는다 ──"
+stop_s() {  # <저장소> <세션> <답> <계속 중 true|false> → 종료 훅 stdout (프로필 full, 세션 id 실음)
+  local r="$1" tr="$WORK/tr-s-$RANDOM$RANDOM.jsonl"
+  printf '{"type":"user","message":{"content":[{"type":"text","text":"q"}]}}\n' > "$tr"
+  jq -cn --arg t "$3" '{type:"assistant",message:{model:"vendor-model-a",content:[{type:"text",text:$t}]}}' >> "$tr"
+  (cd "$r" && jq -cn --arg p "$tr" --arg a "$3" --arg s "$2" --argjson act "$4" '{session_id:$s,transcript_path:$p,last_assistant_message:$a,stop_hook_active:$act}' \
+     | CLAUDE_PLUGIN_ROOT="$CORE" SCV_HOST_PROFILE="$WORK/profile-full.env" GIT_AUTHOR_NAME="Hook User" bash "$STOP_HOOK" 2>/dev/null)
+}
+R="$(fresh_turn sg15)"
+a1="$(sg_tags "$(stop_s "$R" sess-a "$SG_QJ" false)")"; b1="$(sg_tags "$(stop_s "$R" sess-b "$SG_QP" false)")"
+a2="$(sg_tags "$(stop_s "$R" sess-a "$SG_QJ" true)")"
+[[ "$a1|$b1|$a2" == "block:choice|block:principle|pass" ]] && ok "A 선택지 → B 원칙 → A 계속 중 같은 질문: 막지 않음(기록이 B 것 — 이 기능 전 동작)" || fail "T35.15 (a): $a1|$b1|$a2"
+R="$(fresh_turn sg15b)"
+a1="$(sg_tags "$(stop_s "$R" sess-a "$SG_QJ" false)")"; b1="$(sg_tags "$(stop_s "$R" sess-b "$(printf '%s\n\n%s' "$QUOTE" "끝났습니다.")" false)")"   # 인용을 갖춰 아무 검사도 걸리지 않는 첫 멈춤
+a2="$(sg_tags "$(stop_s "$R" sess-a "$SG_QJ" true)")"
+[[ "$a1|$b1|$a2" == "block:choice|pass|pass" ]] && ok "B 의 첫 멈춤은 A 의 기록을 지우지 않는다 — A 의 선택지는 이미 전달" || fail "T35.15 (b): $a1|$b1|$a2"
+
+echo "── [T35.16] 코덱스 모양 원본 — 앞선 인용을 못 보니 계속 중 등록 검사는 막지 않는다 ──"
+stop_tra() {  # <저장소> <원본> <마지막 답> <계속 중 true|false> → 종료 훅 stdout (프로필 full)
+  (cd "$1" && jq -cn --arg p "$2" --arg a "$3" --argjson act "$4" '{session_id:"s1",transcript_path:$p,last_assistant_message:$a,stop_hook_active:$act}' \
+     | CLAUDE_PLUGIN_ROOT="$CORE" SCV_HOST_PROFILE="$WORK/profile-full.env" GIT_AUTHOR_NAME="Hook User" bash "$STOP_HOOK" 2>/dev/null)
+}
+R="$(fresh_turn sg16)"; TR="$WORK/sg16.jsonl"; A1="$(printf '%s\n\n%s\n\n%s' "결론." "$QUOTE" "$PTA")"
+{ printf '%s\n' '{"type":"session_meta","payload":{"originator":"fixture"}}'; cx_line user "로그인 고쳐"; cx_line assistant "$A1"; } > "$TR"
+o1="$(stop_tra "$R" "$TR" "$A1" false)"
+A2=$'표를 고쳤습니다.\n\n| 단위 | 해결책 | 추천 |\n|---|---|---|\n| a | ①x | ① 이유 |'
+cx_line assistant "$A2" >> "$TR"
+o2="$(stop_tra "$R" "$TR" "$A2" true)"
+[[ "$(sg_tags "$o1")" == "block:principle" && "$(sg_tags "$o2")" == pass ]] \
+  && ok "원칙에 막힌 뒤 인용 없이 표만 고친 답 — 등록 이유로 새로 막지 않음" || fail "T35.16: $(sg_tags "$o1") / $(sg_tags "$o2") [$o2]"
+
+echo "── [T35.17] 첫 멈춤에서 새 기록 쓰기만 실패 — 지난 기록을 먼저 지워 같은 검사가 한 번 더 막지 않는다 ──"
+# 재검토(2026-10-02)가 재현한 꼴: 자동 알림 턴(턴 표 그대로)의 첫 멈춤이 막으면서 기록을 못 쓰면 지난 턴 기록이 남아, 다음 멈춤이
+# 같은 검사를 또 막았다. 첫 멈춤은 기록을 쓰기 전에 같은 세션의 지난 기록부터 지운다. 쓰기 실패는 가짜 mktemp 로 만든다.
+mkdir -p "$WORK/nomktemp"; printf '#!/bin/sh\nexit 1\n' > "$WORK/nomktemp/mktemp"; chmod +x "$WORK/nomktemp/mktemp"
+R="$(fresh_turn sg17)"
+stop_p "$R" "$WORK/profile-full.env" "$(printf '%s\n\n%s\n\n%s' "결론." "$QUOTE" "$PTA")" false >/dev/null   # 사람 턴: 원칙을 전달
+stop_p "$R" "$WORK/profile-full.env" "$(printf '%s\n\n%s' "$QUOTE" "끝났습니다.")" true >/dev/null       # 사람 턴이 끝난다
+hook_p "$R" "$WORK/profile-full.env" $'<machine-event>\n<status>completed</status>\n</machine-event>' >/dev/null
+TR="$WORK/sg17.jsonl"; { jl_user "q"; jl_asst "$C_J"; } > "$TR"
+o1="$(cd "$R" && jq -cn --arg p "$TR" --arg a "$C_J" '{session_id:"s1",transcript_path:$p,last_assistant_message:$a,stop_hook_active:false}' \
+       | PATH="$WORK/nomktemp:$PATH" CLAUDE_PLUGIN_ROOT="$CORE" SCV_HOST_PROFILE="$WORK/profile-full.env" GIT_AUTHOR_NAME="Hook User" bash "$STOP_HOOK" 2>/dev/null)"
+gone=0; [[ ! -e "$R/scv/journal/.help-turn-gates" ]] && gone=1
+o2="$(stop_p "$R" "$WORK/profile-full.env" "$C_J" true)"
+[[ "$(sg_tags "$o1")" == "block:choice" && "$gone" == 1 && "$(sg_tags "$o2")" == pass ]] \
+  && ok "첫 멈춤: 지난 기록 지우고 막음(새 기록은 못 씀) → 계속 중 같은 질문은 막지 않음" || fail "T35.17: $(sg_tags "$o1") gone=$gone / $(sg_tags "$o2")"
+
+echo "── [T35.18] 세션 id 를 주지 않는 호스트 — 계속 중이면 이 기능 전과 같다 ──"
+# 재검토(2026-10-02): 세션 id 가 없으면 한 저장소의 두 세션을 가를 수 없어, 한 검사가 한 턴에 세 번까지 막혔다.
+stop_ns() {  # <저장소> <답> <계속 중 true|false> → 종료 훅 stdout (프로필 full, 세션 id 없음)
+  local r="$1" tr="$WORK/tr-ns-$RANDOM$RANDOM.jsonl"
+  printf '{"type":"user","message":{"content":[{"type":"text","text":"q"}]}}\n' > "$tr"
+  jq -cn --arg t "$2" '{type:"assistant",message:{model:"vendor-model-a",content:[{type:"text",text:$t}]}}' >> "$tr"
+  (cd "$r" && jq -cn --arg p "$tr" --arg a "$2" --argjson act "$3" '{transcript_path:$p,last_assistant_message:$a,stop_hook_active:$act}' \
+     | CLAUDE_PLUGIN_ROOT="$CORE" SCV_HOST_PROFILE="$WORK/profile-full.env" GIT_AUTHOR_NAME="Hook User" bash "$STOP_HOOK" 2>/dev/null)
+}
+R="$(new_repo sg18)"; hook_p "$R" "$WORK/profile-full.env" "로그인 고쳐" >/dev/null
+o1="$(stop_ns "$R" "$SG_DONE" false)"; reg_full "$R" >/dev/null
+o2="$(stop_ns "$R" "$SG_QJ" true)"
+[[ "$(sg_tags "$o1")" == "block:prompt" && "$(sg_tags "$o2")" == pass ]] \
+  && ok "세션 id 없음 — 첫 멈춤은 막고, 계속 중 글 질문은 막지 않음(이 기능 전과 같다)" || fail "T35.18: $(sg_tags "$o1") / $(sg_tags "$o2")"
+
+echo "── [T35.11] 맥 기본 bash 3.2 와 지금 bash 에서 같은 결과 — 출력 · 전달 기록 · 다음 턴 경고를 바이트로 ──"
+# 계획 TESTS T11: T1~T9 의 흐름을 두 bash 로 돌려, 멈춤마다 훅 출력과 남긴 파일(전달 기록 · 다음 턴 경고)을 바이트로 비교한다.
+# 저장소마다 다른 턴 표(8자리 16진)만 TOK 로 바꾼다 — 그 밖의 바이트는 그대로 같아야 한다(재검토 2026-10-02: 꼬리표 요약만
+# 비교하던 것을 넓힘).
+SG_PROF="$WORK/profile-full.env"
+stop_g() {  # <bash 실행 파일> <저장소> <답> <계속 중 true|false> → 종료 훅 stdout (프로필 SG_PROF, 세션 s1)
+  local b="$1" r="$2" tr="$WORK/tr-g-$RANDOM$RANDOM.jsonl" pth="$PATH"
+  [[ "$b" == /bin/bash ]] && pth="$SYSB:$PATH"
+  printf '{"type":"user","message":{"content":[{"type":"text","text":"q"}]}}\n' > "$tr"
+  jq -cn --arg t "$3" '{type:"assistant",message:{model:"vendor-model-a",content:[{type:"text",text:$t}]}}' >> "$tr"
+  (cd "$r" && jq -cn --arg p "$tr" --arg a "$3" --argjson act "$4" '{session_id:"s1",transcript_path:$p,last_assistant_message:$a,stop_hook_active:$act}' \
+     | PATH="$pth" CLAUDE_PLUGIN_ROOT="$CORE" SCV_HOST_PROFILE="$SG_PROF" GIT_AUTHOR_NAME="Hook User" "$b" "$STOP_HOOK" 2>/dev/null)
+}
+sg_dump() {  # <저장소> <훅 출력> → 정규화한 출력 · 전달 기록 · 다음 턴 경고 (턴 표 → TOK, 칸 구분 → |)
+  { printf 'OUT %s\n' "$2"; printf 'REC %s\n' "$(cat "$1/scv/journal/.help-turn-gates" 2>/dev/null)"
+    printf 'WARN %s\n' "$(cat "$1/scv/journal/.help-warn" 2>/dev/null)"; } \
+    | tr '\037' '|' | sed -E 's/턴\([0-9a-f]{8}\)/턴(TOK)/g; s/^(REC [^|]*)\|[0-9a-f]{8}\|/\1|TOK|/'
+}
+sg_step() {  # <bash> <저장소> <답> <계속 중> — 꼬리표는 SG_T 에, 정규화한 덤프는 SG_D 에 덧붙인다
+  local o; o="$(stop_g "$1" "$2" "$3" "$4")"
+  SG_T="$SG_T|$(sg_tags "$o")"; SG_D="$SG_D$(sg_dump "$2" "$o")"$'\n'
+}
+sg_run() {  # <bash 실행 파일> <이름> → 첫 줄: 꼬리표 요약, 나머지: 정규화한 덤프
+  local b="$1" R; SG_T=""; SG_D=""; SG_PROF="$WORK/profile-full.env"
+  R="$(new_repo "$2-a")"; hook_p "$R" "$SG_PROF" "로그인 고쳐" >/dev/null                       # T1 · T2
+  sg_step "$b" "$R" "$C_J" false; reg_full "$R" >/dev/null; sg_step "$b" "$R" "$SG_QJ" true
+  hook_p "$R" "$SG_PROF" "다음 일" >/dev/null                                                    # T6 — 새 턴
+  sg_step "$b" "$R" "$SG_DONE" false; reg_full "$R" >/dev/null; sg_step "$b" "$R" "$SG_QJ" true
+  R="$(new_repo "$2-b")"; hook_p "$R" "$SG_PROF" "로그인 고쳐" >/dev/null                       # T3 · T4 · T5
+  sg_step "$b" "$R" "$SG_DONE" false; reg_full "$R" >/dev/null
+  sg_step "$b" "$R" "$SG_QP" true; sg_step "$b" "$R" "$SG_QJ" true; sg_step "$b" "$R" "$SG_ALL" true
+  R="$(new_repo "$2-c")"; hook_p "$R" "$SG_PROF" "로그인 고쳐" >/dev/null; reg_full "$R" >/dev/null   # T9 — 자동 알림 턴
+  sg_step "$b" "$R" "$(printf '%s\n\n%s' "$QUOTE" "끝났습니다.")" false
+  hook_p "$R" "$SG_PROF" $'<machine-event>\n<status>completed</status>\n</machine-event>' >/dev/null
+  sg_step "$b" "$R" "$C_J" false; sg_step "$b" "$R" "$C_J" true
+  R="$(new_repo "$2-d")"; hook_p "$R" "$SG_PROF" "로그인 고쳐" >/dev/null                       # T8 — 턴 표 없음
+  sg_step "$b" "$R" "$SG_DONE" false; reg_full "$R" >/dev/null; rm -f "$R/scv/journal/.help-turn"; sg_step "$b" "$R" "$SG_QJ" true
+  SG_PROF="$WORK/profile-full-off.env"; export SCV_TEST_ATTENDED=0                               # T7 — 사람 없는 실행
+  R="$(new_repo "$2-e")"; hook_p "$R" "$SG_PROF" "로그인 고쳐" >/dev/null
+  sg_step "$b" "$R" "$SG_DONE" false; reg_full "$R" >/dev/null; sg_step "$b" "$R" "$SG_QJ" true
+  unset SCV_TEST_ATTENDED; SG_PROF="$WORK/profile-full.env"
+  printf '%s\n%s' "${SG_T#|}" "$SG_D"
+}
+if [[ -x /bin/bash ]]; then
+  SYSB="$WORK/sysbash"; mkdir -p "$SYSB"; ln -sf /bin/bash "$SYSB/bash"; v="$(/bin/bash -c 'echo "$BASH_VERSION"')"
+  g1="$(sg_run bash sgb1)"; g2="$(sg_run /bin/bash sgb2)"
+  want="block:prompt,choice|pass|block:prompt|block:choice|block:prompt|block:principle|block:choice|pass|pass|block:choice|pass|block:prompt|pass|block:prompt|pass"
+  [[ "$g1" == "$g2" && "$(head -1 <<<"$g1")" == "$want" ]] \
+    && ok "시스템 bash $v 와 지금 bash — 멈춤 15번의 출력 · 전달 기록 · 다음 턴 경고가 바이트로 같다" \
+    || fail "T35.11: [$(head -1 <<<"$g1")] vs [$(head -1 <<<"$g2")] / $(diff <(printf '%s\n' "$g1") <(printf '%s\n' "$g2") | head -4)"
+else
+  echo "  (시스템 bash 없음 — T35.11 생략)"
+fi
+
+echo "── [T35.12] 큰 끝 메시지 속도 — 세 검사를 모두 보는 멈춤 ──"
+# 끝 메시지는 앞 64KB 만 본다(0.64.0 부터의 동작) — 질문이 그 안에 들도록 63KB 로 만든다. 맥 실측(2026-10-02, 시스템 bash 3.2):
+# 고치기 전 2.40초(등록 이유 하나) → 고친 뒤 2.69초(두 이유). 상한 10초는 병적인 느려짐(예전 같은 꼴 158초)을 잡는 자리다.
+if [[ -x /bin/bash ]]; then
+  R="$(new_repo sg12)"; hook_p "$R" "$WORK/profile-full.env" "로그인 고쳐" >/dev/null   # 등록 없음 → 등록 검사가 걸린 채로 셋 다 판정
+  BIGA="$( { for i in $(seq 1 1500); do printf '진행 메모 %s — 이번 단계에서 확인한 것을 적는다.\n' "$i"; done; } | head -c 63000; printf '\n\n릴리스할까요?')"
+  t0=$SECONDS; o="$(stop_g /bin/bash "$R" "$BIGA" false)"; t1=$SECONDS
+  [[ "$(sg_tags "$o")" == "block:prompt,choice" ]] && (( t1 - t0 <= 10 )) \
+    && ok "끝 메시지 $(printf '%s' "$BIGA" | wc -c | tr -d ' ')바이트 — 시스템 bash $v 로 $((t1 - t0))s, 두 이유 함께" || fail "T35.12 $((t1 - t0))s: $(sg_tags "$o")"
+else
+  echo "  (시스템 bash 없음 — T35.12 생략)"
 fi
 
 echo; echo "test-choice-questions: pass=$PASS fail=$FAIL"

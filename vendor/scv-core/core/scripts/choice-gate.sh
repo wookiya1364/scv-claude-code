@@ -3,7 +3,8 @@
 #
 #   choice-gate.sh line                         매 턴 훅이 부른다: 호스트 설정에 선택지 도구가 있으면 안내 한 줄(없으면 아무것도)
 #   choice-gate.sh stop [--active 0|1] < 마지막 답  종료 훅이 부른다: 글로 묻거나 번호로 고르게 하면서 끝났으면
-#                                                 CHOICE_GATE: block + CHOICE_REASON: <이유>. 호스트가 이미 계속 중이면
+#                                                 CHOICE_GATE: block + CHOICE_REASON: <이유>. --active 1(v0.64.2+ 종료 훅이
+#                                                 주는 "이 검사가 이번 턴에 이미 이유를 냄", 그 전에는 "이미 계속 중")이면
 #                                                 CHOICE_GATE: warn — 막지 않고 다음 턴 경고(.help-warn)에 덧붙인다. 그 밖에는 ok.
 #
 # 입력: 호스트 프로필 SCV_CHOICE_TOOL (래퍼가 준다), 설정 SCV_CHOICE_GATE(on 기본 | off — 이 프로젝트에서 끄기),
