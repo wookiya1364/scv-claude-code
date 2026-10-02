@@ -158,8 +158,27 @@ fi
 # 답의 인용을 보고, 어긋나면 다음 턴 경고를 덧붙인다. 답 본문은 위 드리프트 검사가 고른 것을 그대로 쓴다(없으면 빈 값 —
 # 그러면 "보였나" 는 판정하지 않는다). 어떤 실패도 막지 않는다.
 # v0.62.0+ — 매 턴 등록 판정도 같은 호출이 한다: 이번 턴 요청을 등록하지 않았거나 다시 쓴 요청을 답에 보이지 않았으면
-# 끝내기를 막고 계속하게 한다(같은 턴 한 번 — 호스트가 이미 계속 중이라고 알리면 막지 않고 다음 턴 경고). 막는 출력은
-# 저널 기록을 마친 뒤, 훅이 끝날 때 한 번 낸다.
+# 끝내기를 막고 계속하게 한다. 막는 출력은 저널 기록을 마친 뒤, 훅이 끝날 때 한 번 낸다.
+# v0.64.2+ — 검사마다 한 턴에 한 번(계획 stop-gates-each-once). 규칙은 contracts/choices.md 7항 한 곳, '이미 전달' 판단은
+# lib/stop-gates.sh(순수 — 그 머리말이 경우를 모두 적는다). 여기는 효과만: 훅 입력 · 턴 표 · 이번 턴 전달 기록(.help-turn-gates)을
+# 읽고, 막을 때만 기록을 쓰고, 첫 멈춤에서 같은 세션의 지난 기록을 지우고, 계속 중인 멈춤은 쓴 기록을 다시 읽어 확인했을 때만
+# 막는다(못 남겼으면 다음 턴 경고). 0.64.1 까지는 막을 기회가 턴 전체에 하나뿐이라, 등록 판정이 먼저 막은 턴에는 선택지 · 원칙
+# 판정이 차례를 받지 못했다(2026-10-02 설치본 대화형 재현).
+_scv_jdir="${SCV_JOURNAL_DIR:-scv/journal}"
+_scv_sgl="${SCV_CORE_ROOT:-$SCRIPT_DIR/../..}/scripts/lib/stop-gates.sh"
+_scv_active=0
+[[ "$(printf '%s' "$INPUT" | jq -r 'try (.stop_hook_active // false)' 2>/dev/null)" == "true" ]] && _scv_active=1
+_scv_sess="$(printf '%s' "$INPUT" | jq -r 'try (.session_id // empty)' 2>/dev/null | head -c 256 | LC_ALL=C tr -d '\n\r\037' 2>/dev/null || true)"
+_scv_line1() { [[ -f "$1" && ! -L "$1" ]] && head -c 4096 "$1" 2>/dev/null | head -1 || printf ''; }
+_scv_tok="$(_scv_line1 "$_scv_jdir/.help-turn")"; _scv_grec="$(_scv_line1 "$_scv_jdir/.help-turn-gates")"
+_scv_d_prompt="$_scv_active"; _scv_d_principle="$_scv_active"; _scv_d_choice="$_scv_active"   # 순수부가 없으면 이 기능 전과 같다
+# shellcheck disable=SC1090
+if [[ -f "$_scv_sgl" ]] && source "$_scv_sgl" 2>/dev/null; then
+  _scv_d_prompt="$(scv_gates_delivered prompt "$_scv_active" "$_scv_sess" "$_scv_tok" "$_scv_grec")"
+  _scv_d_principle="$(scv_gates_delivered principle "$_scv_active" "$_scv_sess" "$_scv_tok" "$_scv_grec")"
+  _scv_d_choice="$(scv_gates_delivered choice "$_scv_active" "$_scv_sess" "$_scv_tok" "$_scv_grec")"
+fi
+_scv_r_prompt=""; _scv_r_principle=""; _scv_r_choice=""
 _scv_mp="${SCV_CORE_ROOT:-$SCRIPT_DIR/../..}/scripts/model-prompting.sh"
 _scv_block_reason=""
 if [[ -f "$_scv_mp" ]]; then
@@ -167,6 +186,7 @@ if [[ -f "$_scv_mp" ]]; then
   [[ "$_scv_ans" == *[![:space:]]* ]] || _scv_ans="$(printf '%s' "$INPUT" | jq -r 'try (.last_assistant_message // empty)' 2>/dev/null | head -c 65536 || true)"
   # 호스트가 준 답은 마지막 메시지뿐이다 — 도구를 부르기 전 첫 메시지에 인용을 보였을 수 있으니, 원본에서 이번 턴의
   # 답 텍스트 전부도 덧붙여 본다(이미 적힌 앞 메시지만 필요하므로 다시 읽기는 하지 않는다).
+  _scv_tstream=""
   if declare -F scv_turn_slice >/dev/null 2>&1; then
     _scv_tstream="$(_scv_turn_stream_wide)"
     if [[ -z "$_scv_tstream" ]]; then   # v0.64.0+ — 40000 줄 안에 사람 프롬프트가 없다: 판정 기록에 한 번 남긴다
@@ -178,41 +198,76 @@ if [[ -f "$_scv_mp" ]]; then
     _scv_all="$(scv_turn_slice "$_scv_tstream" | head -c 65536)"
     [[ "$_scv_all" == *[![:space:]]* ]] && _scv_ans="$(printf '%s\n\n%s' "$_scv_ans" "$_scv_all")"
   fi
-  _scv_active=0
-  [[ "$(printf '%s' "$INPUT" | jq -r 'try (.stop_hook_active // false)' 2>/dev/null)" == "true" ]] && _scv_active=1
-  _scv_gate="$(printf '%s' "$_scv_ans" | bash "$_scv_mp" stop --active "$_scv_active" 2>/dev/null || true)"
+  # v0.64.2+ — 이번 턴의 앞선 글을 못 보는 원본(코덱스 모양 "N" · 경계를 못 찾음 · 자르기 함수 없음)에서는 앞에서 보인 인용을
+  # 확인할 수 없다 — 계속 중일 때 등록 검사는 '이미 전달'로 본다(이 기능 전과 같음). 끝 메시지에 인용을 다시 쓰지 않은 답을 막지
+  # 않는다(독립 검토 2026-10-02: 원칙에 막힌 뒤 표만 고친 코덱스 답이 "인용을 보이지 않았다"로 새로 막혔다).
+  if [[ "$_scv_active" == 1 && ( -z "$_scv_tstream" || "$_scv_tstream" == "N" ) ]]; then _scv_d_prompt=1; fi
+  _scv_gate="$(printf '%s' "$_scv_ans" | bash "$_scv_mp" stop --active "$_scv_d_prompt" 2>/dev/null || true)"
   if grep -qx 'STOP_GATE: block' <<<"$_scv_gate"; then
-    _scv_block_reason="$(grep -m1 '^STOP_REASON: ' <<<"$_scv_gate" | sed 's/^STOP_REASON: //')"
-    [[ -n "$_scv_block_reason" ]] || _scv_block_reason="[SCV 프롬프트] 이번 턴 요청을 비교 · 등록하고 다시 쓴 요청을 보여라."
+    _scv_r_prompt="$(grep -m1 '^STOP_REASON: ' <<<"$_scv_gate" | sed 's/^STOP_REASON: //')"
+    [[ -n "$_scv_r_prompt" ]] || _scv_r_prompt="[SCV 프롬프트] 이번 턴 요청을 비교 · 등록하고 다시 쓴 요청을 보여라."
   fi
 fi
 # v0.64.0+ — 답의 끝 메시지 판정 둘: (1) SCV 원칙 — 문제 표 · '생길 수 있는 문제' 칸(model-prompting.sh principle-gate,
 # 원칙이 실리는 곳에서만), (2) 고르게 할 때 규칙(contracts/choices.md) — 호스트 설정에 선택지 도구가 있을 때, 글로 묻거나 번호로
-# 고르게 하면서 끝남(choice-gate.sh). 등록 판정이 이미 막았으면 보지 않고, 한 번에 한 이유만 낸다. 둘 다 같은 턴 한 번 —
-# 호스트가 이미 계속 중이면 막지 않고 다음 턴 경고. 자동 알림 턴에도 적용된다. 마지막 메시지만 본다 — 앞에서 선택지로
-# 물었어도 끝을 글 질문으로 맺으면 막는다. 판정할 것이 없으면(원칙이 안 실림 · 도구 없음 · 끝 메시지를 못 받음) 이 기능 전과 같다.
+# 고르게 하면서 끝남(choice-gate.sh). 자동 알림 턴에도 적용된다. 마지막 메시지만 본다 — 앞에서 선택지로 물었어도 끝을 글
+# 질문으로 맺으면 막는다. 판정할 것이 없으면(원칙이 안 실림 · 도구 없음 · 끝 메시지를 못 받음) 이 기능 전과 같다.
+# v0.64.2+ — 등록 판정이 막았어도 끝 메시지를 읽고 둘 다 판정한다(검사마다 한 턴에 한 번 — 위 설명).
 _scv_cg="${SCV_CORE_ROOT:-$SCRIPT_DIR/../..}/scripts/choice-gate.sh"
 # 끝 메시지는 호스트가 준 것만 본다 — 원본에서 고르면 아직 안 적힌 끝 메시지 대신 도구 호출 전의 글을 볼 수 있다(그때는 판정하지
 # 않는다 — 막지 않는 쪽).
-_scv_lastmsg=""; _scv_tail_active=0
-if [[ -z "$_scv_block_reason" ]] && [[ -f "$_scv_mp" || -f "$_scv_cg" ]]; then
+_scv_lastmsg=""
+if [[ -f "$_scv_mp" || -f "$_scv_cg" ]]; then
   _scv_lastmsg="$(printf '%s' "$INPUT" | jq -r 'try (.last_assistant_message // empty)' 2>/dev/null | head -c 65536 || true)"
-  [[ "$(printf '%s' "$INPUT" | jq -r 'try (.stop_hook_active // false)' 2>/dev/null)" == "true" ]] && _scv_tail_active=1
 fi
 [[ "$_scv_lastmsg" == *[![:space:]]* ]] || _scv_lastmsg=""
-if [[ -z "$_scv_block_reason" && -n "$_scv_lastmsg" && -f "$_scv_mp" ]]; then
-  _scv_pgo="$(printf '%s' "$_scv_lastmsg" | bash "$_scv_mp" principle-gate --active "$_scv_tail_active" 2>/dev/null || true)"
+if [[ -n "$_scv_lastmsg" && -f "$_scv_mp" ]]; then
+  _scv_pgo="$(printf '%s' "$_scv_lastmsg" | bash "$_scv_mp" principle-gate --active "$_scv_d_principle" 2>/dev/null || true)"
   if grep -qx 'PRINCIPLE_GATE: block' <<<"$_scv_pgo"; then
-    _scv_block_reason="$(grep -m1 '^PRINCIPLE_REASON: ' <<<"$_scv_pgo" | sed 's/^PRINCIPLE_REASON: //')"
-    [[ -n "$_scv_block_reason" ]] || _scv_block_reason="[SCV 원칙] 문제 표 · 문제 칸 없이, 해결책 안에서 막아 다시 써라."
+    _scv_r_principle="$(grep -m1 '^PRINCIPLE_REASON: ' <<<"$_scv_pgo" | sed 's/^PRINCIPLE_REASON: //')"
+    [[ -n "$_scv_r_principle" ]] || _scv_r_principle="[SCV 원칙] 문제 표 · 문제 칸 없이, 해결책 안에서 막아 다시 써라."
   fi
 fi
-if [[ -z "$_scv_block_reason" && -n "$_scv_lastmsg" && -f "$_scv_cg" ]]; then
-  _scv_cgo="$(printf '%s' "$_scv_lastmsg" | bash "$_scv_cg" stop --active "$_scv_tail_active" 2>/dev/null || true)"
+if [[ -n "$_scv_lastmsg" && -f "$_scv_cg" ]]; then
+  _scv_cgo="$(printf '%s' "$_scv_lastmsg" | bash "$_scv_cg" stop --active "$_scv_d_choice" 2>/dev/null || true)"
   if grep -qx 'CHOICE_GATE: block' <<<"$_scv_cgo"; then
-    _scv_block_reason="$(grep -m1 '^CHOICE_REASON: ' <<<"$_scv_cgo" | sed 's/^CHOICE_REASON: //')"
-    [[ -n "$_scv_block_reason" ]] || _scv_block_reason="[SCV 선택지] 고를 것은 선택지 도구로 다시 물어라(contracts/choices.md)."
+    _scv_r_choice="$(grep -m1 '^CHOICE_REASON: ' <<<"$_scv_cgo" | sed 's/^CHOICE_REASON: //')"
+    [[ -n "$_scv_r_choice" ]] || _scv_r_choice="[SCV 선택지] 고를 것은 선택지 도구로 다시 물어라(contracts/choices.md)."
   fi
+fi
+# 막은 검사들 → 막는 이유 하나 · 이번 턴 전달 기록(막을 때만 쓴다, 첫 멈춤에서는 같은 세션의 지난 기록을 지운다).
+# 순수부가 없으면 이 기능 전처럼 첫 이유 하나만.
+_scv_blocked=""
+[[ -n "$_scv_r_prompt" ]] && _scv_blocked="${_scv_blocked:+$_scv_blocked,}prompt"
+[[ -n "$_scv_r_principle" ]] && _scv_blocked="${_scv_blocked:+$_scv_blocked,}principle"
+[[ -n "$_scv_r_choice" ]] && _scv_blocked="${_scv_blocked:+$_scv_blocked,}choice"
+if declare -F scv_gates_reason >/dev/null 2>&1 && declare -F scv_gates_record >/dev/null 2>&1 && declare -F scv_gates_drop >/dev/null 2>&1; then
+  _scv_block_reason="$(scv_gates_reason "$_scv_r_prompt" "$_scv_r_principle" "$_scv_r_choice")"
+  _scv_gfile="$_scv_jdir/.help-turn-gates"
+  _scv_newrec="$(scv_gates_record "$_scv_sess" "$_scv_tok" "$_scv_grec" "$_scv_active" "$_scv_blocked")"
+  # 첫 멈춤은 같은 세션의 지난 기록을 먼저 지운다 — 막으면서 새 기록 쓰기에 실패해도 지난 턴 기록이 이번 것으로 남지 않게
+  # (재검토 2026-10-02). 지우지도 쓰지도 못한 첫 멈춤 뒤에는 같은 검사가 한 번 더 막을 수 있다 — 상한 2, 끝없는 반복은 없다.
+  if [[ "$(scv_gates_drop "$_scv_sess" "$_scv_grec" "$_scv_active")" == 1 && -f "$_scv_gfile" && ! -L "$_scv_gfile" ]]; then
+    rm -f "$_scv_gfile" 2>/dev/null
+  fi
+  if [[ -n "$_scv_newrec" ]]; then
+    if mkdir -p "$_scv_jdir" 2>/dev/null && [[ ! -L "$_scv_gfile" ]]; then
+      _scv_tmp="$(mktemp "$_scv_gfile.XXXXXX" 2>/dev/null)" \
+        && { printf '%s\n' "$_scv_newrec" > "$_scv_tmp" 2>/dev/null && mv -f "$_scv_tmp" "$_scv_gfile" 2>/dev/null \
+             || rm -f "$_scv_tmp" 2>/dev/null; }
+    fi
+    if [[ "$_scv_active" == 1 && "$(_scv_line1 "$_scv_gfile")" != "$_scv_newrec" ]]; then
+      # 기록을 남기지 못했다 — 막으면 다음 멈춤이 같은 검사를 또 막는다. 막지 않고 다음 턴 경고로 돌린다.
+      if [[ ! -L "$_scv_jdir/.help-warn" ]]; then
+        while IFS= read -r _scv_l; do
+          [[ -n "$_scv_l" ]] && printf '%s\n' "[SCV 가이드] 직전 턴: $_scv_l" >> "$_scv_jdir/.help-warn" 2>/dev/null
+        done <<< "$_scv_block_reason"
+      fi
+      _scv_block_reason=""
+    fi
+  fi
+else
+  _scv_block_reason="${_scv_r_prompt:-${_scv_r_principle:-$_scv_r_choice}}"
 fi
 _scv_emit_block() {
   [[ -n "${_scv_block_reason:-}" ]] || return 0
