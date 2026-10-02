@@ -4,7 +4,7 @@
 #   scv_choice_line <도구 이름>                → 매 턴 안내 한 줄 | 빈 값(도구가 없으면)
 #   scv_answer_body <답>                       → 코드 블록과 인용 줄(다시 쓴 요청 등)을 뺀 본문
 #   scv_asks_in_text <본문>                    → 1(글로 묻거나 번호로 고르게 하면서 끝남) | 0
-#   scv_choice_gate <묻나> <도구 이름> <계속 중> → ok | block | warn
+#   scv_choice_gate <묻나> <도구 이름> <이미 전달> → ok | block | warn
 #   scv_choice_reason <도구 이름>              → 막는 이유 한 줄
 #   scv_choice_off_when <조건 이름=값> <지금 값> → 1(이 실행에는 선택지 도구가 없다) | 0
 #
@@ -163,8 +163,9 @@ scv_asks_in_text() {
 }
 
 # @pure
-# <묻나 0|1> <도구 이름> <이미 계속 중 0|1> → ok | block | warn. 도구가 없으면 늘 ok(이 기능 전과 같다).
-# 이미 계속 중이면 막지 않는다 — 같은 턴 한 번, 다음 턴 경고로 넘긴다.
+# <묻나 0|1> <도구 이름> <이미 전달 0|1> → ok | block | warn. 도구가 없으면 늘 ok(이 기능 전과 같다).
+# 이미 전달했으면 막지 않는다 — 같은 턴 한 번, 다음 턴 경고로 넘긴다. 세 번째 값은 종료 훅이 검사마다 준다(v0.64.2+, 이 검사가
+# 이번 턴에 이유를 이미 냈나 — lib/stop-gates.sh). 그 전에는 호스트의 "이미 계속 중" 값 하나를 세 검사가 함께 썼다.
 scv_choice_gate() {
   local asks="${1:-0}" tool="${2:-}" active="${3:-0}"
   [[ -n "$tool" && "$asks" == "1" ]] || { printf 'ok'; return 0; }
