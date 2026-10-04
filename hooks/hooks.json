@@ -1,5 +1,5 @@
 {
-  "description": "SCV hooks. Two kinds, and the distinction is the contract: the journal capture on UserPromptSubmit/Stop and the resume recap on SessionStart are non-blocking by design (the templates exit 0 on every failure and write nothing outside scv/journal/ — the SessionStart template writes nothing at all — with redaction running before anything hits disk or stdout; SessionStart is registered for compact|clear|resume only, never startup, because the first prompt's preflight already carries the project state there, Core 0.47.0+), while the PreToolUse guard is deliberately blocking — it denies writes no SCV action accounts for. The guard fails open on internal error and is inert in projects that have not adopted SCV. See vendor/scv-core/core/contracts/guard.md.",
+  "description": "SCV hooks. Two kinds, and the distinction is the contract: the journal capture on UserPromptSubmit/Stop and the resume recap on SessionStart are non-blocking by design (the templates exit 0 on every failure and write nothing outside scv/journal/ — the SessionStart template writes nothing at all — with redaction running before anything hits disk or stdout; SessionStart is registered for compact|clear|resume only, never startup, because the first prompt's preflight already carries the project state there, Core 0.47.0+), while the PreToolUse guard is deliberately blocking — it denies writes no SCV action accounts for. The guard fails open on internal error and is inert in projects that have not adopted SCV. See vendor/scv-core/core/contracts/guard.md. The PostToolUse entry (Core 0.65.0+) is non-blocking too: after the user answers the choice tool, it records that the turn's registration predates the answer, so the guard asks for a fresh registration before the next write.",
   "hooks": {
     "UserPromptSubmit": [
       {
@@ -63,6 +63,18 @@
             "type": "command",
             "command": "SCV_GUARD_MODE=gate-write SCV_GUARD_SCRIPTS=\"${CLAUDE_PLUGIN_ROOT}/vendor/scv-core/core/scripts\" SCV_GUARD_EXEMPT=\".claude/settings.json:.claude/settings.local.json\" bash \"${CLAUDE_PLUGIN_ROOT}/vendor/scv-core/core/template/hooks/guard.sh\"",
             "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "SCV_CORE_ROOT=\"${CLAUDE_PLUGIN_ROOT}/vendor/scv-core/core\" bash \"${CLAUDE_PLUGIN_ROOT}/vendor/scv-core/core/template/hooks/on-choice-answer.sh\"",
+            "timeout": 10
           }
         ]
       }

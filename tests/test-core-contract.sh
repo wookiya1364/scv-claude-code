@@ -36,6 +36,23 @@ grep -qx 'SCV_LEGACY_STATE_INDEXES=CLAUDE.md|CODEX.md' adapter/claude-code.env |
   fail "cross-host legacy state fallback is missing"
 grep -qx 'SCV_ROOT_ENV=CLAUDE_PLUGIN_ROOT' adapter/claude-code.env ||
   fail "Claude plugin root contract is missing"
+# Core 0.65.0+: the session id the model's shell commands carry, peer messages as automatic input, and the
+# choice-answer signal (PostToolUse on the choice tool runs the core template on-choice-answer.sh).
+grep -qx 'SCV_SESSION_ENV=CLAUDE_CODE_SESSION_ID' adapter/claude-code.env ||
+  fail "Claude session id variable (SCV_SESSION_ENV) is missing"
+grep -qx 'SCV_AUTO_PROMPT_TAGS=task-notification teammate-message' adapter/claude-code.env ||
+  fail "automatic input tags must include teammate-message"
+grep -qx 'SCV_AUTO_PROMPT_PREFIX=Another Claude session sent a message:' adapter/claude-code.env ||
+  fail "peer message prefix (SCV_AUTO_PROMPT_PREFIX) is missing"
+grep -qx 'SCV_AUTO_PROMPT_SUFFIX=This came from another Claude session' adapter/claude-code.env ||
+  fail "peer message note start (SCV_AUTO_PROMPT_SUFFIX) is missing"
+python3 - <<'PY' || fail "hooks.json: PostToolUse on the choice tool must run on-choice-answer.sh"
+import json
+h = json.load(open("hooks/hooks.json"))["hooks"]
+tool = next(l.split("=", 1)[1].strip() for l in open("adapter/claude-code.env") if l.startswith("SCV_CHOICE_TOOL="))
+cmds = [x.get("command", "") for e in h.get("PostToolUse", []) if e.get("matcher") == tool for x in e.get("hooks", [])]
+assert any("on-choice-answer.sh" in c and "SCV_CORE_ROOT=" in c and "CLAUDE_PLUGIN_ROOT" in c for c in cmds), cmds
+PY
 wrapper_version=$(tr -d '[:space:]' < VERSION)
 [[ "$(python3 -c 'import json; print(json.load(open(".claude-plugin/plugin.json"))["version"])')" == "$wrapper_version" ]] ||
   fail "Claude plugin manifest version does not match wrapper VERSION"
