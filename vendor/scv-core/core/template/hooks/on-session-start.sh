@@ -10,7 +10,8 @@
 # Contract (see docs/wrapper-integration.md §6 "Hook seam" in scv-core):
 #   - The host's session-start event pipes ONE JSON object to stdin. When it
 #     carries a `source` string (what reset the context), the header quotes it;
-#     otherwise the header is generic. Nothing else is read from stdin.
+#     otherwise the header is generic. Since v0.65.0 `session_id` is read too —
+#     the per-turn state the reset clears lives per session. Nothing else is read.
 #   - Registration is WRAPPER-OWNED. The wrapper decides WHICH session starts
 #     invoke this template — the plan registers it for clear / compact / resume
 #     and NOT for a fresh session start, because the first prompt's preflight
@@ -47,8 +48,20 @@ _scv_read() {  # <KEY> — 라이브러리가 없으면 빈값(=기본값).
 # 순수부 — 없으면 아무 것도 하지 않는다. 문자열부 없이 블록을 손으로 찍지 않는다.
 # v0.49.0+ — 컨텍스트가 비워졌다(압축·지우기·재개): 다음 help 호출이 규약 전체를 다시 읽도록
 # 표식을 되돌린다. 되찾기(recap) 스위치와 무관하게, 어떤 실패도 exit 0 로.
+# 표준입력은 여기서 한 번만 읽는다 — 무엇이 컨텍스트를 비웠는지(source)와, v0.65.0+ 이 세션(session_id)을 본다.
+INPUT="$(cat 2>/dev/null || true)"
+# v0.65.0+ — 이번 턴 상태(경고 · 이번 턴 가이드 기록)는 세션마다 따로 있다: 이 세션의 자리에서 초기화한다.
+_scv_rtd=()
+_scv_mp="$CORE_HOME/scripts/model-prompting.sh"
+if [[ -n "$INPUT" && -f "$_scv_mp" ]] && command -v jq >/dev/null 2>&1; then
+  _scv_ssid="$(printf '%s' "$INPUT" | jq -r 'try (.session_id // empty)' 2>/dev/null || true)"
+  if [[ -n "$_scv_ssid" ]]; then
+    _scv_std="$(bash "$_scv_mp" session --session "$_scv_ssid" 2>/dev/null | sed -n 's/^TURN_DIR: //p' | head -n 1)"
+    [[ -n "$_scv_std" ]] && _scv_rtd=(--turn-dir "$_scv_std")
+  fi
+fi
 if [[ -f "$CORE_HOME/scripts/help-state.sh" ]]; then
-  bash "$CORE_HOME/scripts/help-state.sh" reset >/dev/null 2>&1 || true
+  bash "$CORE_HOME/scripts/help-state.sh" reset ${_scv_rtd[@]+"${_scv_rtd[@]}"} >/dev/null 2>&1 || true
 fi
 _scv_resume_lib="$CORE_HOME/scripts/lib/resume-recap.sh"
 [[ -f "$_scv_resume_lib" ]] || exit 0
@@ -59,8 +72,6 @@ declare -F scv_resume_switch >/dev/null 2>&1 || exit 0
 # 스위치 — off 면 여기서 끝. 바이트 하나도 내지 않는다.
 [[ "$(scv_resume_switch "$(_scv_read SCV_RESUME_RECAP)")" == "on" ]] || exit 0
 
-# 표준입력은 여기서 한 번만 읽는다. 무엇이 컨텍스트를 비웠는지(source)만 본다.
-INPUT="$(cat 2>/dev/null || true)"
 SOURCE=""
 if [[ -n "$INPUT" ]]; then
   if command -v jq >/dev/null 2>&1; then

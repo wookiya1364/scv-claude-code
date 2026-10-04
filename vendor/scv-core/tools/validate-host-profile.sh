@@ -31,6 +31,9 @@ SCV_PROMPTING_GUIDES=""
 SCV_AUTO_PROMPT_TAGS=""
 SCV_CHOICE_TOOL=""
 SCV_CHOICE_OFF_WHEN=""
+SCV_SESSION_ENV=""
+SCV_AUTO_PROMPT_PREFIX=""
+SCV_AUTO_PROMPT_SUFFIX=""
 line_no=0
 while IFS= read -r line || [[ -n "$line" ]]; do
   line_no=$((line_no + 1))
@@ -49,7 +52,8 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     SCV_HOST_PROFILE_API|SCV_HOST_ID|SCV_HOST_LABEL|SCV_ACTION_TEMPLATE|\
     SCV_ARGUMENT_STYLE|SCV_STATE_INDEX|SCV_LEGACY_STATE_INDEXES|SCV_ROOT_ENV|\
     SCV_GRAPH_SKILL_PATHS|SCV_UPDATE_OWNER|SCV_MODEL_POLICY_OWNER|\
-    SCV_PROMPTING_GUIDES|SCV_AUTO_PROMPT_TAGS|SCV_CHOICE_TOOL|SCV_CHOICE_OFF_WHEN) ;;
+    SCV_PROMPTING_GUIDES|SCV_AUTO_PROMPT_TAGS|SCV_CHOICE_TOOL|SCV_CHOICE_OFF_WHEN|\
+    SCV_SESSION_ENV|SCV_AUTO_PROMPT_PREFIX|SCV_AUTO_PROMPT_SUFFIX) ;;
     *) echo "profile:$line_no: unknown key: $key" >&2; exit 1 ;;
   esac
   case "|$seen_keys|" in
@@ -113,6 +117,26 @@ if [[ -n "$SCV_CHOICE_OFF_WHEN" ]]; then
   [[ "$SCV_CHOICE_OFF_WHEN" =~ ^[A-Za-z_][A-Za-z0-9_]{0,63}=[A-Za-z0-9_.:-]{1,64}$ ]] \
     || { echo "profile: invalid SCV_CHOICE_OFF_WHEN (one NAME=VALUE: an environment variable name, then a plain value)" >&2; exit 1; }
 fi
+
+# 선택 키 (0.65.0+): 모델이 실행하는 셸 명령에 세션 id 를 담아 주는 환경 변수 이름 하나.
+if [[ -n "$SCV_SESSION_ENV" ]]; then
+  [[ "$SCV_SESSION_ENV" =~ ^[A-Za-z_][A-Za-z0-9_]{0,63}$ ]] \
+    || { echo "profile: invalid SCV_SESSION_ENV (one environment variable name)" >&2; exit 1; }
+fi
+
+# 선택 키 (0.65.0+): 호스트가 자동 입력의 태그 블록 앞 · 뒤에 붙이는 글의 시작 — 한 줄의 평문(제어 문자 · 꺾쇠 없음, 200자까지),
+# 앞뒤 공백 없음. 셸 코드가 아니라 글자 그대로 비교한다.
+for key in SCV_AUTO_PROMPT_PREFIX SCV_AUTO_PROMPT_SUFFIX; do
+  case "$key" in
+    SCV_AUTO_PROMPT_PREFIX) val="$SCV_AUTO_PROMPT_PREFIX" ;;
+    SCV_AUTO_PROMPT_SUFFIX) val="$SCV_AUTO_PROMPT_SUFFIX" ;;
+  esac
+  [[ -n "$val" ]] || continue
+  if [[ ${#val} -gt 200 || "$val" == *[[:cntrl:]]* || "$val" == *'<'* || "$val" == *'>'* \
+        || "$val" == [[:space:]]* || "$val" == *[[:space:]] ]]; then
+    echo "profile: invalid $key (one line of plain text without angle brackets, at most 200 characters)" >&2; exit 1
+  fi
+done
 
 template="$SCV_ACTION_TEMPLATE"
 without_one="${template/\{action\}/}"
