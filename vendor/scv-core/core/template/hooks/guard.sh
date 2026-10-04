@@ -257,11 +257,26 @@ fi
 # guide requirement list and registered before any editor-style write. The
 # decision lives in model-prompting.sh gate (it prints a reason, or nothing);
 # no requirement data, no turn token, switch off, or any failure → no opinion.
+# v0.65.0+: the decision also sees whose write this is and what it touches — the
+# session id (each session judges by its own registration), the subagent id (a
+# subagent received no person's message: no opinion), and whether any target is a
+# project file outside the SCV tree (a registration whose scope forbids changes
+# refuses those; SCV's own records stay writable).
 if [[ "$MODE" == "gate-write" && "${SCV_GUARD_RULE_P:-on}" != "off" ]]; then
   _scv_mp_dir="${SCV_GUARD_SCRIPTS:-}"; _scv_mp_dir="${_scv_mp_dir%%:*}"
   [[ -n "$_scv_mp_dir" ]] || _scv_mp_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../scripts" 2>/dev/null && pwd)"
   if [[ -f "$_scv_mp_dir/model-prompting.sh" && -d "$PROJECT_ROOT" ]]; then
-    _scv_mp_why="$(cd "$PROJECT_ROOT" && bash "$_scv_mp_dir/model-prompting.sh" gate 2>/dev/null | head -c 2048 || true)"
+    _scv_mp_args=(gate --agent "$(field '.agent_id')")
+    _scv_mp_sid="$(field '.session_id')"
+    [[ -n "$_scv_mp_sid" ]] && _scv_mp_args+=(--session "$_scv_mp_sid")
+    _scv_mp_code=0
+    while IFS= read -r raw; do
+      [[ -n "$raw" ]] || continue
+      abs="$(abspath "$raw")"
+      [[ "$abs" == "$PROJECT_ROOT"/* && "$abs" != "$SCV_ROOT"/* ]] && { _scv_mp_code=1; break; }
+    done < <(targets)
+    _scv_mp_args+=(--code "$_scv_mp_code")
+    _scv_mp_why="$(cd "$PROJECT_ROOT" && bash "$_scv_mp_dir/model-prompting.sh" "${_scv_mp_args[@]}" 2>/dev/null | head -c 2048 || true)"
     [[ -n "${_scv_mp_why//[[:space:]]/}" ]] && deny "$_scv_mp_why"
   fi
 fi

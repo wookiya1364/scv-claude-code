@@ -2,7 +2,7 @@
 # choice-gate.sh — 고르게 할 때 규칙(contracts/choices.md)의 효과부. 읽기 · 쓰기는 여기서만, 판단은 lib/choices.sh.
 #
 #   choice-gate.sh line                         매 턴 훅이 부른다: 호스트 설정에 선택지 도구가 있으면 안내 한 줄(없으면 아무것도)
-#   choice-gate.sh stop [--active 0|1] < 마지막 답  종료 훅이 부른다: 글로 묻거나 번호로 고르게 하면서 끝났으면
+#   choice-gate.sh stop [--active 0|1] [--turn-dir <폴더>] < 마지막 답  종료 훅이 부른다: 글로 묻거나 번호로 고르게 하면서 끝났으면
 #                                                 CHOICE_GATE: block + CHOICE_REASON: <이유>. --active 1(v0.64.2+ 종료 훅이
 #                                                 주는 "이 검사가 이번 턴에 이미 이유를 냄", 그 전에는 "이미 계속 중")이면
 #                                                 CHOICE_GATE: warn — 막지 않고 다음 턴 경고(.help-warn)에 덧붙인다. 그 밖에는 ok.
@@ -11,6 +11,8 @@
 # 호스트 프로필 SCV_CHOICE_OFF_WHEN("이름=값" — 그 환경 변수가 그 값인 실행에는 도구가 없다. 예: 헤드리스 실행).
 # 도구가 없거나 스위치가 off 면 두 하위 명령 모두 이 기능 전과 같다(아무것도 내지 않음 · ok).
 # 다음 턴 경고는 "[SCV 가이드] 직전 턴: …" 머리말로 남긴다 — 컨텍스트 초기화(clear · 압축 · 재개)에도 살아남는 경고와 같은 꼴.
+# (v0.65.0+) 답은 끝 64KB 를 본다(질문은 답의 끝에 있다). 다음 턴 경고는 --turn-dir(이 세션의 턴 상태 자리 — 종료 훅이 정한다)에
+# 남긴다. 없거나 모양이 다르면 저널 폴더(이 기능 전과 같다).
 # 어떤 실패도 exit 0 — 판정을 못 하면 막지 않는다.
 set -u
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" 2>/dev/null && pwd )" || exit 0
@@ -37,15 +39,21 @@ case "${1:-}" in
     ;;
   stop)
     shift
-    ACTIVE=0
+    ACTIVE=0; TDIR_ARG=""
     while [[ $# -gt 0 ]]; do
       case "$1" in
         --active) ACTIVE="${2:-0}"; shift 2 2>/dev/null || shift ;;
+        --turn-dir) TDIR_ARG="${2:-}"; shift 2 2>/dev/null || shift ;;
         *) shift ;;
       esac
     done
     [[ "$ACTIVE" == "1" ]] || ACTIVE=0
-    ANSWER="$(head -c 65536 2>/dev/null || true)"
+    WDIR="$JOURNAL_DIR"
+    if [[ -n "$TDIR_ARG" && -f "$SCRIPT_DIR/lib/model-prompting.sh" ]] && source "$SCRIPT_DIR/lib/model-prompting.sh" 2>/dev/null; then
+      WDIR="$(scv_mp_turn_dir_ok "$JOURNAL_DIR" "$TDIR_ARG")"
+      [[ "$WDIR" != "$JOURNAL_DIR" && ( -L "$JOURNAL_DIR/.help-turns" || -L "$WDIR" ) ]] && WDIR="$JOURNAL_DIR"
+    fi
+    ANSWER="$(tail -c 65536 2>/dev/null || true)"
     _asks=0
     [[ "$ANSWER" == *[![:space:]]* ]] && _asks="$(scv_asks_in_text "$(scv_answer_body "$ANSWER")")"
     _gate="$(scv_choice_gate "$_asks" "$TOOL" "$ACTIVE")"
@@ -54,11 +62,11 @@ case "${1:-}" in
       _why="$(scv_choice_reason "$TOOL")"
       echo "CHOICE_REASON: $_why"
       if [[ "$_gate" == "warn" ]]; then
-        mkdir -p "$JOURNAL_DIR" 2>/dev/null && [[ ! -L "$JOURNAL_DIR/.help-warn" ]] \
-          && printf '%s\n' "[SCV 가이드] 직전 턴: $_why" >> "$JOURNAL_DIR/.help-warn" 2>/dev/null
+        mkdir -p "$WDIR" 2>/dev/null && [[ ! -L "$WDIR/.help-warn" ]] \
+          && printf '%s\n' "[SCV 가이드] 직전 턴: $_why" >> "$WDIR/.help-warn" 2>/dev/null
       fi
     fi
     ;;
-  *) echo "usage: choice-gate.sh line | stop [--active 0|1]" >&2 ;;
+  *) echo "usage: choice-gate.sh line | stop [--active 0|1] [--turn-dir <dir>]" >&2 ;;
 esac
 exit 0

@@ -9,6 +9,8 @@
 #   help-state.sh stop [--echo on|off] [--lint on|off] [--cap N] [--now ISO] < 답본문   (v0.50.0+)
 #                                            종료 훅: 이번 턴 기록의 지문 검사 + 답 모양 린트 → 흐려짐이면 protocol=0
 #                                            + .help-warn(다음 턴 경고) 저장, .help-drift 에 한 줄. "echo=<r> lint=<n> reload=<0|1>" 출력.
+#   (v0.65.0+) stop · reset 은 --turn-dir <폴더> 를 받는다 — 이번 턴 상태(.help-warn · .help-guide-turn)를 두는 이 세션의 자리
+#   (종료 · 시작 훅이 model-prompting.sh session 으로 정한다). 없거나 모양이 다르면 저널 폴더(이 기능 전과 같다).
 #
 # 파일: ${SCV_JOURNAL_DIR:-scv/journal}/.help-state — 훅이 쓰는 자리(scv/journal/, ignore 대상). 같은 폴더의
 #   .help-nonce(지문 한 줄 — 규약을 읽은 턴에 모델이 읽는다) · .help-warn(다음 턴 훅이 싣고 지운다) · .help-drift(관찰 로그).
@@ -31,8 +33,14 @@ _write() {  # <json> — 임시 파일 뒤 mv. journal 디렉터리가 없으면
   return 0
 }
 _put() {  # <파일> <본문> — 같은 폴더의 부속 파일 한 개를 통째로 쓴다(임시 파일 뒤 mv). 심볼릭 링크면 안 쓴다.
-  local file="$1" body="$2" tmp
+  # (v0.65.0+) 세션 자리(.help-turns/<세션>)에 쓸 때는 그 폴더와 .help-turns 가 링크가 아니어야 한다. 저널 폴더 자신은 예전처럼
+  # 링크여도 쓴다 — 작업 트리끼리 저널을 링크로 나눠 쓰는 경우가 있다(독립 검토).
+  local file="$1" body="$2" tmp dir="${1%/*}"
   mkdir -p "$JOURNAL_DIR" 2>/dev/null || return 0
+  if [[ "$dir" != "$JOURNAL_DIR" ]]; then
+    [[ -L "$JOURNAL_DIR/.help-turns" || -L "$dir" ]] && return 0
+    mkdir -p "$dir" 2>/dev/null || return 0
+  fi
   [[ -L "$file" ]] && return 0
   tmp="$(mktemp "$file.XXXXXX" 2>/dev/null)" || return 0
   printf '%s\n' "$body" > "$tmp" 2>/dev/null && mv -f "$tmp" "$file" 2>/dev/null || rm -f "$tmp" 2>/dev/null
@@ -64,6 +72,25 @@ _turn_record() {
 }
 
 cmd="${1:-read}"; shift || true
+# v0.65.0+ — 이 세션의 턴 상태 자리(--turn-dir). 다른 인자는 각 명령이 읽는다.
+_args=(); _tdir=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --turn-dir) _tdir="${2:-}"; shift 2 2>/dev/null || shift ;;
+    *) _args+=("$1"); shift ;;
+  esac
+done
+set -- ${_args[@]+"${_args[@]}"}
+TURN_DIR="$JOURNAL_DIR"
+if [[ -n "$_tdir" ]]; then
+  _mplib0="$SCRIPT_DIR/lib/model-prompting.sh"
+  if [[ -f "$_mplib0" ]] && { declare -F scv_mp_turn_dir_ok >/dev/null 2>&1 || source "$_mplib0" 2>/dev/null; }; then
+    TURN_DIR="$(scv_mp_turn_dir_ok "$JOURNAL_DIR" "$_tdir")"
+  fi
+  # 세션 자리나 그 위 폴더가 심볼릭 링크면 쓰지 않는다 — 저널 폴더로 간다.
+  [[ "$TURN_DIR" != "$JOURNAL_DIR" && ( -L "$JOURNAL_DIR/.help-turns" || -L "$TURN_DIR" ) ]] && TURN_DIR="$JOURNAL_DIR"
+fi
+WARN_FILE="$TURN_DIR/.help-warn"
 st="$(scv_hstate_parse "$(_read)")"
 case "$cmd" in
   read)   _read; echo ;;
@@ -71,7 +98,7 @@ case "$cmd" in
   reset)  st="$(scv_hstate_reload "$st" "" reset 0)"; json="$(scv_hstate_render "$st")"; _write "$json"
           # 지문은 컨텍스트에 묶인 값 — 컨텍스트가 비워졌으니 파일도 비운다. 예약된 경고도 의미를 잃는다.
           # v0.59.0+: 모델별 가이드 읽음 기록도 컨텍스트에 묶인 값 — 비워서 다음 help 가 원문을 다시 읽게 한다.
-          for _f in "$NONCE_FILE" "$JOURNAL_DIR/.help-guide" "$JOURNAL_DIR/.help-guide-turn"; do [[ -f "$_f" && ! -L "$_f" ]] && rm -f "$_f" 2>/dev/null; done
+          for _f in "$NONCE_FILE" "$JOURNAL_DIR/.help-guide" "$TURN_DIR/.help-guide-turn"; do [[ -f "$_f" && ! -L "$_f" ]] && rm -f "$_f" 2>/dev/null; done
           # v0.60.1+: 경고는 가이드 경고 블록만 남긴다 — 원문을 건너뛴 사실은 초기화로 사라지지 않는다(재개마다 지워져
           # 다음 턴 모델에게 닿지 않던 0.60.0 실측). 남길 것이 없거나 라이브러리가 없으면 이전처럼 지운다.
           if [[ -f "$WARN_FILE" && ! -L "$WARN_FILE" ]]; then
@@ -92,7 +119,7 @@ case "$cmd" in
             [[ -n "$_nl" ]] && _put "$_gf" "$_nl"
           fi
           # v0.60.0+: 이번 턴 기록(종료 훅의 판정 근거)도 새 지문으로 옮긴다 — 안 옮기면 판정이 옛 지문을 본다.
-          _gt="$JOURNAL_DIR/.help-guide-turn"
+          _gt="$TURN_DIR/.help-guide-turn"
           if [[ -f "$_gt" && ! -L "$_gt" && -f "$_mplib" ]] && { declare -F scv_mp_turn_restamp >/dev/null 2>&1 || source "$_mplib" 2>/dev/null; }; then
             _tl="$(head -c 4096 "$_gt" 2>/dev/null | head -1)"; _tnl="$(scv_mp_turn_restamp "$_tl" "$_old" "$_n")"
             # v0.60.2: 첫 줄(지문)만 바꾸고 둘째 줄부터(원문 경로 · 표시 명령)는 그대로 둔다 — 0.60.1 은 첫 줄만 다시 써서
