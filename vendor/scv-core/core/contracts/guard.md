@@ -208,3 +208,14 @@ nothing. It has no opinion — and the guard falls through to Rules A and B — 
 checklist, when no turn token exists (the prompt hook did not run), when `SCV_MODEL_PROMPTING=off`,
 or on any failure. `SCV_GUARD_RULE_P=off` disables this rule alone. Shell commands are not gated by
 Rule P; the Stop hook's once-per-turn block is the net for a turn that never registered.
+
+Since v0.65.0 the guard passes three facts from the payload: the session id (each session is judged by
+its own turn and registration — another session's registration neither unlocks nor blocks it), the
+subagent id (a write from inside a subagent is never refused for a missing registration — that agent received
+no person's message), and whether any target is a project file outside the workflow tree. With them the script
+also refuses the first write after a choice-tool answer that came after the turn's last registration (register
+again; `register --keep` when the scope is unchanged), and a project-file write while the last
+registration's `scope` cell opens with a whole-turn no-change phrase (`변경 없음 — …` and the listed
+equivalents; a cell naming an exception is never refused). A subagent's write follows these two checks of the
+session that delegated it, with a reason that hands the edit back to the lead. Writes inside the workflow tree
+(the records) are never refused for the scope.
