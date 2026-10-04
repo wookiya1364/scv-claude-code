@@ -110,6 +110,17 @@ _scv_emit_delegate() {
 }
 # ---------- /delegate --------------------------------------------------------
 
+# ---------- session (v0.65.0+) -----------------------------------------------
+# 세션 id · 대화 기록 경로(호스트가 주면). 이번 턴 상태(표 · 등록 · 경고 …)는 세션마다 따로 둔다 — 자리는 모델별 프롬프팅
+# 명령이 정하고 알려 준다(아래 사람 입력 처리). 그 전까지 · 그 명령이 없으면 예전 자리(저널 폴더).
+_scv_sid0=""; _scv_tr0=""
+if [[ -n "$INPUT" ]] && command -v jq >/dev/null 2>&1; then
+  _scv_sid0="$(printf '%s' "$INPUT" | jq -r 'try (.session_id // empty)' 2>/dev/null || true)"
+  _scv_tr0="$(printf '%s' "$INPUT" | jq -r 'try (.transcript_path // empty)' 2>/dev/null || true)"
+fi
+_scv_tdir="${SCV_JOURNAL_DIR:-scv/journal}"
+# ---------- /session ---------------------------------------------------------
+
 # ---------- auto turns (v0.63.0+) --------------------------------------------
 # 호스트가 스스로 보낸 입력(배경 작업 완료 알림 등 — 래퍼 호스트 프로필 SCV_AUTO_PROMPT_TAGS)은 사람 턴이 아니다.
 # 새 턴 표를 쓰지 않고(직전 사람 턴의 등록이 그대로 유효) "이번 턴은 자동" 표시만 남긴 뒤, 지시 · 진단 · 가이드
@@ -123,12 +134,19 @@ if [[ -f "$_scv_mp_sh" && -n "$INPUT" ]] && command -v jq >/dev/null 2>&1; then
   [[ "$_scv_kind" == "auto" ]] || _scv_kind="human"
 fi
 # 사람 입력이면 지난 자동 표시를 지운다 — 표를 새로 쓰지 않는 입력(빈 프롬프트 등)에서도 이 턴의 검사가 꺼지지 않게.
+# v0.65.0+ — 지우기와 "이 세션이 사람 메시지를 받았다" 표시는 모델별 프롬프팅 명령이 한다(세션 자리를 아는 곳). 그 명령이 없으면 예전처럼.
 if [[ "$_scv_kind" != "auto" ]]; then
-  _scv_af="${SCV_JOURNAL_DIR:-scv/journal}/.help-turn-auto"
-  if [[ -f "$_scv_af" && ! -L "$_scv_af" ]]; then rm -f "$_scv_af" 2>/dev/null || true; fi
+  if [[ -f "$_scv_mp_sh" ]]; then
+    _scv_ho="$(bash "$_scv_mp_sh" human --session "$_scv_sid0" --transcript "$_scv_tr0" 2>/dev/null || true)"
+    _scv_hd="$(printf '%s\n' "$_scv_ho" | sed -n 's/^TURN_DIR: //p' | head -n 1)"
+    [[ -n "$_scv_hd" ]] && _scv_tdir="$_scv_hd"
+  else
+    _scv_af="${SCV_JOURNAL_DIR:-scv/journal}/.help-turn-auto"
+    if [[ -f "$_scv_af" && ! -L "$_scv_af" ]]; then rm -f "$_scv_af" 2>/dev/null || true; fi
+  fi
 fi
 if [[ "$_scv_kind" == "auto" ]]; then
-  if [[ "${_scv_always:-on}" != "off" ]]; then bash "$_scv_mp_sh" prompt --auto >/dev/null 2>&1 || true; fi
+  if [[ "${_scv_always:-on}" != "off" ]]; then bash "$_scv_mp_sh" prompt --auto --session "$_scv_sid0" >/dev/null 2>&1 || true; fi
 # ---------- /auto turns ------------------------------------------------------
 # 전체 스위치가 꺼져 있으면 여기서 끝난다 — 지시도 진단도 없다. 대체된 계획의
 # 검사에 있던 성질이고, 새 검사가 이어받는다. (위임 블록만은 자기 스위치로 따로 실린다.)
@@ -140,7 +158,7 @@ elif [[ "${_scv_always:-on}" != "off" ]] && declare -F scv_force_routing >/dev/n
   printf '\n'
   # v0.50.0+ — 종료 훅이 예약한 경고(규약 지문 없음 · 답 모양 위반)를 지시 바로 뒤에 한 번 싣고 지운다.
   # 표식은 이미 protocol=0 이라 이번 help 호출이 규약 전체를 다시 읽는다 — 이 줄은 그 이유를 말할 뿐이다.
-  _scv_warn="${SCV_JOURNAL_DIR:-scv/journal}/.help-warn"
+  _scv_warn="$_scv_tdir/.help-warn"   # v0.65.0+ — 이 세션의 경고(다른 세션의 경고를 싣지 않는다)
   # v0.61.0+ — 이 컨텍스트에서 아직 가이드 원문을 안 읽었으면, help 가 마지막으로 본 모델의 원문 경로 · 표시 명령을 싣는다.
   # 경고 파일을 지우기 전에 판단한다(가이드 경고가 이미 있으면 같은 내용이라 싣지 않는다). 어떤 실패도 아무것도 안 싣는다.
   _scv_guide_first=""
@@ -148,12 +166,21 @@ elif [[ "${_scv_always:-on}" != "off" ]] && declare -F scv_force_routing >/dev/n
   if [[ -f "$CORE_HOME/scripts/model-prompting.sh" && -n "$INPUT" ]] && command -v jq >/dev/null 2>&1 \
      && [[ "$(printf '%s' "$INPUT" | jq -r 'try (.prompt | type == "string" and length > 0) catch false' 2>/dev/null)" == "true" ]]; then
     _scv_psid="$(printf '%s' "$INPUT" | jq -r 'try (.session_id // empty)' 2>/dev/null || true)"
-    _scv_guide_first="$(bash "$CORE_HOME/scripts/model-prompting.sh" prompt --session "$_scv_psid" 2>/dev/null | head -c 2048 || true)"
+    # 상한 4KB(v0.65.0+, 이전 2KB): 요구 항목이 많은 래퍼의 등록 블록(약 1.6KB) 뒤에 첫 턴 가이드 안내(경로 · 명령)가 잘리지 않게.
+    _scv_guide_first="$(bash "$CORE_HOME/scripts/model-prompting.sh" prompt --session "$_scv_psid" --transcript "$_scv_tr0" 2>/dev/null | head -c 4096 || true)"
   fi
-  if [[ -f "$_scv_warn" && ! -L "$_scv_warn" ]]; then
-    head -c 2048 "$_scv_warn" 2>/dev/null; printf '\n'
-    rm -f "$_scv_warn" 2>/dev/null || true
-  fi
+  # v0.65.0+ — 세션 자리를 쓰는 턴이면 공용 자리에 남은 경고(세션 id 를 모르던 종료가 남긴 것 · 업그레이드 전의 것)도 함께 싣는다 —
+  # 주인이 없는 경고라 이 기능 전처럼 다음 사람 턴이 받는다.
+  _scv_jd0="${SCV_JOURNAL_DIR:-scv/journal}"
+  for _scv_wf in "$_scv_warn" "$_scv_jd0/.help-warn"; do
+    [[ "$_scv_wf" == "$_scv_warn" || "$_scv_tdir" != "$_scv_jd0" ]] || continue
+    # 세션 자리의 경고는 그 폴더와 .help-turns 가 링크가 아닐 때만 읽고 지운다.
+    [[ "$_scv_wf" == "$_scv_jd0/.help-warn" ]] || { [[ ! -L "$_scv_jd0/.help-turns" && ! -L "$_scv_tdir" ]] || continue; }
+    if [[ -f "$_scv_wf" && ! -L "$_scv_wf" ]]; then
+      head -c 2048 "$_scv_wf" 2>/dev/null; printf '\n'
+      rm -f "$_scv_wf" 2>/dev/null || true
+    fi
+  done
   [[ -n "${_scv_guide_first//[[:space:]]/}" ]] && printf '%s\n\n' "$_scv_guide_first"
   _scv_emit_delegate
   if [[ "$_scv_pre" == "on" ]]; then

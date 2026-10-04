@@ -27,6 +27,13 @@ SCV_CHOICE_TOOL=""
 # 0.64.0+ 선택 키: 선택지 도구가 없는 실행(사람이 답할 수 없는 헤드리스 등)을 알리는 환경 조건 "이름=값". 그 환경 변수가
 # 그 값이면 이 실행에서는 도구가 없는 것과 같다(choice-gate.sh). 비면 조건 없음.
 SCV_CHOICE_OFF_WHEN=""
+# 0.65.0+ 선택 키: 모델이 실행하는 셸 명령에 이 세션 id 를 담아 주는 환경 변수 이름(훅 입력의 session_id 와 같은 값). 모델이 직접
+# 부르는 명령(등록 · help)이 --session 없이도 자기 세션 자리를 찾는다. 비면 가장 최근 사람 턴의 세션으로 간다.
+SCV_SESSION_ENV=""
+# 0.65.0+ 선택 키: 호스트가 자동 입력의 태그 블록 앞 · 뒤에 붙이는 글 — 머리(맨 앞 한 줄의 시작)와 끝 안내문(마지막 닫는 태그 뒤의
+# 시작). 예: 다른 세션이 보낸 메시지. 그 둘을 걷어 낸 나머지가 SCV_AUTO_PROMPT_TAGS 블록뿐이면 자동 입력이다. 비면 걷어 내지 않는다.
+SCV_AUTO_PROMPT_PREFIX=""
+SCV_AUTO_PROMPT_SUFFIX=""
 
 _scv_profile_assign() {
   local key="$1" value="$2"
@@ -46,6 +53,9 @@ _scv_profile_assign() {
     SCV_AUTO_PROMPT_TAGS) SCV_AUTO_PROMPT_TAGS="$value" ;;
     SCV_CHOICE_TOOL) SCV_CHOICE_TOOL="$value" ;;
     SCV_CHOICE_OFF_WHEN) SCV_CHOICE_OFF_WHEN="$value" ;;
+    SCV_SESSION_ENV) SCV_SESSION_ENV="$value" ;;
+    SCV_AUTO_PROMPT_PREFIX) SCV_AUTO_PROMPT_PREFIX="$value" ;;
+    SCV_AUTO_PROMPT_SUFFIX) SCV_AUTO_PROMPT_SUFFIX="$value" ;;
   esac
 }
 

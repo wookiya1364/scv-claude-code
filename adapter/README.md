@@ -30,7 +30,12 @@ Adapter-owned behavior:
   registrations are a separate seam and are deliberately blocking: they
   point at `template/hooks/guard.sh`, which denies writes no SCV action
   accounts for. Non-blocking is a property of the journal templates, not of
-  hooks as a category — see `vendor/scv-core/core/contracts/guard.md`
+  hooks as a category — see `vendor/scv-core/core/contracts/guard.md`. The `PostToolUse` registration (Core 0.65.0+, matcher = the
+  profile's `SCV_CHOICE_TOOL`, `AskUserQuestion`) binds
+  `vendor/scv-core/core/template/hooks/on-choice-answer.sh`: after the user
+  answers, it records that the turn's registration predates the answer so the
+  guard asks for a fresh registration (or `register --keep`) before the next
+  editor write. It prints nothing and never blocks
 
 Core-owned behavior:
 
