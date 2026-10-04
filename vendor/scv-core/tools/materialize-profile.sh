@@ -151,10 +151,12 @@ fi
     SCV_ARGUMENT_STYLE \
     SCV_STATE_INDEX SCV_LEGACY_STATE_INDEXES SCV_ROOT_ENV \
     SCV_GRAPH_SKILL_PATHS SCV_UPDATE_OWNER SCV_MODEL_POLICY_OWNER \
-    SCV_PROMPTING_GUIDES SCV_AUTO_PROMPT_TAGS SCV_CHOICE_TOOL SCV_CHOICE_OFF_WHEN; do
+    SCV_PROMPTING_GUIDES SCV_AUTO_PROMPT_TAGS SCV_CHOICE_TOOL SCV_CHOICE_OFF_WHEN \
+    SCV_SESSION_ENV SCV_AUTO_PROMPT_PREFIX SCV_AUTO_PROMPT_SUFFIX; do
     value="$(profile_get "$key")"
     # 선택 키는 프로필에 없으면 쓰지 않는다 — 없는 키를 빈 값으로 만들어 넣지 않는다.
-    if [[ ( "$key" == "SCV_LEGACY_STATE_INDEXES" || "$key" == "SCV_PROMPTING_GUIDES" || "$key" == "SCV_AUTO_PROMPT_TAGS" || "$key" == "SCV_CHOICE_TOOL" || "$key" == "SCV_CHOICE_OFF_WHEN" ) && -z "$value" ]] \
+    if [[ ( "$key" == "SCV_LEGACY_STATE_INDEXES" || "$key" == "SCV_PROMPTING_GUIDES" || "$key" == "SCV_AUTO_PROMPT_TAGS" || "$key" == "SCV_CHOICE_TOOL" || "$key" == "SCV_CHOICE_OFF_WHEN" \
+          || "$key" == "SCV_SESSION_ENV" || "$key" == "SCV_AUTO_PROMPT_PREFIX" || "$key" == "SCV_AUTO_PROMPT_SUFFIX" ) && -z "$value" ]] \
       && ! grep -q "^$key=" "$PROFILE"; then
       continue
     fi
