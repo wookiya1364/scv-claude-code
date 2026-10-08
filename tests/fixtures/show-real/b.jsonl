@@ -1,0 +1,13 @@
+{"type": "user", "message": {"role": "user", "content": "README 정리해 줘"}, "timestamp": "2026-10-03T05:00:00Z"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "t", "name": "Patcher", "input": {"file_path": "README.md", "old_string": "a", "new_string": "b"}}]}, "timestamp": "2026-10-03T05:00:10Z"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "t", "name": "Runner", "input": {"command": "head -3 README.md"}}]}, "timestamp": "2026-10-03T05:00:20Z"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "정리했습니다:\n```\n# 제목\n```\n이대로 계속할까요, 고칠 점이 있나요?"}]}, "timestamp": "2026-10-03T05:00:30Z"}
+{"type": "user", "message": {"role": "user", "content": "응 근데 제목은 바꿔"}, "timestamp": "2026-10-03T05:10:00Z"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "t", "name": "Patcher", "input": {"file_path": "README.md", "old_string": "b", "new_string": "c"}}]}, "timestamp": "2026-10-03T05:10:10Z"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "바꿨습니다."}]}, "timestamp": "2026-10-03T05:10:20Z"}
+{"type": "user", "message": {"role": "user", "content": "<cmd-echo>/plugin</cmd-echo>"}, "timestamp": "2026-10-03T05:20:00Z"}
+{"type": "user", "message": {"role": "user", "content": "이게 아니잖아, 원래대로 되돌려"}, "timestamp": "2026-10-03T05:21:00Z"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "t", "name": "Patcher", "input": {"file_path": "README.md", "old_string": "c", "new_string": "a"}}]}, "timestamp": "2026-10-03T05:21:10Z"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "t", "name": "PickTool", "input": {"questions": [{"question": "어느 판으로 되돌릴까요?", "options": [{"label": "처음 판", "description": "계속 쓰던 판으로 고쳐 둡니다"}, {"label": "어제 판"}]}]}}]}, "timestamp": "2026-10-03T05:21:20Z"}
+{"type": "user", "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t", "content": "ok"}]}, "timestamp": "2026-10-03T05:21:30Z"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "되돌렸습니다."}]}, "timestamp": "2026-10-03T05:21:40Z"}

@@ -1,0 +1,7 @@
+{"type": "user", "message": {"role": "user", "content": "표 만들어 줘"}, "timestamp": "2026-10-10T01:00:00Z"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "t", "name": "Writer", "input": {"file_path": "t.md", "content": "|a|"}}]}, "timestamp": "2026-10-10T01:00:10Z"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "만들었습니다."}]}, "timestamp": "2026-10-10T01:00:20Z"}
+{"type": "user", "message": {"role": "user", "content": "<cmd-echo>Error: build failed</cmd-echo>"}, "timestamp": "2026-10-10T01:05:00Z"}
+{"type": "user", "message": {"role": "user", "content": "머리글 고쳐 줘"}, "timestamp": "2026-10-10T01:06:00Z"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "t", "name": "Patcher", "input": {"file_path": "t.md", "old_string": "|a|", "new_string": "|b|"}}]}, "timestamp": "2026-10-10T01:06:10Z"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "고쳤습니다."}]}, "timestamp": "2026-10-10T01:06:20Z"}
