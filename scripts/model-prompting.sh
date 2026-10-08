@@ -10,6 +10,8 @@
 #   model-prompting.sh register --model <id> < 제출  (v0.62.0+) 이번 턴 비교 결과를 등록 — 항목이 모두 채워졌을 때만.
 #                                            (v0.63.0+) 출력의 REWRITE 끝에 SCV 원칙 표식, 그 아래 PRINCIPLE: 전문 —
 #                                            contracts/rewrite-principle.md 의 SCV_LANG 구역, 설정 SCV_REWRITE_PRINCIPLE(on|off)
+#                                            (2026-10-08+) 전문 아래 해로운 변경 줄 하나 — 이번 실행의 확인 통로(choice-gate.sh
+#                                            tool · unattended → scv_show_real_channel)에 맞는 harm-choice | harm-text | harm-none
 #   model-prompting.sh gate                 (v0.62.0+) 가드가 부른다: 이번 턴 등록 전이면 거절 사유를 낸다(아니면 아무것도)
 #   model-prompting.sh kind < 프롬프트        (v0.63.0+) 매 턴 훅이 부른다: auto(호스트가 보낸 입력 — 호스트 프로필 SCV_AUTO_PROMPT_TAGS) | human
 #   model-prompting.sh prompt --auto        (v0.63.0+) 자동 입력 턴: 새 표 없이 "이번 턴은 자동" 표시만 남긴다(출력 없음)
@@ -43,6 +45,8 @@ source "$SCRIPT_DIR/lib/help-state.sh" 2>/dev/null || { echo "GUIDE: none"; exit
 source "$SCRIPT_DIR/lib/host-profile.sh" 2>/dev/null || true
 # shellcheck source=lib/settings.sh
 source "$SCRIPT_DIR/lib/settings.sh" 2>/dev/null || true
+# shellcheck source=lib/show-real.sh
+source "$SCRIPT_DIR/lib/show-real.sh" 2>/dev/null || true   # (2026-10-08+) 확인 통로 판단 scv_show_real_channel 을 함께 쓴다
 
 JOURNAL_DIR="${SCV_JOURNAL_DIR:-scv/journal}"
 READ_FILE="$JOURNAL_DIR/.help-guide"
@@ -390,7 +394,20 @@ case "$cmd" in
       if [[ -n "$psec" ]]; then
         echo "PRINCIPLE:"
         printf '%s\n' "$(scv_mp_principle_text "$psec")"
+        # (2026-10-08+) 해로운 변경 줄 — 이번 실행의 확인 통로에 맞는 한 줄. 통로 판단은 실체 보여 주기와 같다(입구: choice-gate.sh).
+        local hl
+        hl="$(scv_mp_harm_line "$psec" "$(_harm_channel)")"
+        [[ -n "$hl" ]] && printf '%s\n' "$hl"
       fi
+      return 0
+    }
+    _harm_channel() {  # → choice | text | none. 읽기(호스트 프로필 · 환경)는 choice-gate.sh 가, 판단은 순수 함수가 한다.
+      local t="" u=0
+      if [[ -f "$SCRIPT_DIR/choice-gate.sh" ]]; then
+        t="$(bash "$SCRIPT_DIR/choice-gate.sh" tool 2>/dev/null || true)"
+        u="$(bash "$SCRIPT_DIR/choice-gate.sh" unattended 2>/dev/null || true)"
+      fi
+      if declare -F scv_show_real_channel >/dev/null 2>&1; then scv_show_real_channel "$t" "$u" human; else printf 'text'; fi
     }
     if (( KEEP_ARG )); then
       # v0.65.0+ — 선택 창 답 뒤 범위가 그대로일 때의 한 줄 등록: 이번 턴 등록이 있고 그 뒤에 답이 왔을 때만. 제출(범위 칸 포함)은
