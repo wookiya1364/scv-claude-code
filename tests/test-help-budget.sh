@@ -231,8 +231,14 @@ if [[ -f "$PROMPT_HOOK" ]]; then
     echo "  · with a choice tool: hook=${CHOICE_BYTES}B (+$((CHOICE_BYTES - HOOK_BYTES))B) → turn=${TURN_C}B"
     v="$(scv_help_budget "$TURN_C" "$TURN_MAX" turn-with-choice)"
     [[ -z "$v" ]] && ok "선택지 도구가 있어도 매 턴 스택 ${TURN_C}B ≤ ${TURN_MAX}B" || fail "$v"
-    (( CHOICE_BYTES - HOOK_BYTES <= 400 )) && ok "선택지 안내 줄 $((CHOICE_BYTES - HOOK_BYTES))B ≤ 400B (래퍼의 요구 항목 블록 1.5KB 와 함께 상한 안)" \
-      || fail "선택지 안내 줄이 $((CHOICE_BYTES - HOOK_BYTES))B — 400B 를 넘으면 래퍼에서 매 턴 상한을 넘을 수 있다"
+    # (v0.66.0+) 실체 보여 주기 안내도 선택 창 유무로 문구가 달라진다(contracts/show-real.md) — 선택지 줄 크기만 재려고 그 안내를
+    # 끈 두 실행으로 견준다. 그 안내를 켠 채 잰 매 턴 합(위 두 검사)은 그대로 상한 안이어야 한다.
+    _hb0=$(cd "$WORK/p" && printf '{"prompt":"안녕","session_id":"t"}' \
+      | SCV_SHOW_REAL=off CLAUDE_PLUGIN_ROOT="$CORE" SCV_GUARD_STATE="$WORK/state" bash "$PROMPT_HOOK" 2>/dev/null | wc -c | tr -d '[:space:]')
+    _hb1=$(cd "$WORK/p" && printf '{"prompt":"안녕","session_id":"t"}' \
+      | SCV_SHOW_REAL=off CLAUDE_PLUGIN_ROOT="$CORE" SCV_HOST_PROFILE="$_bp" SCV_GUARD_STATE="$WORK/state" bash "$PROMPT_HOOK" 2>/dev/null | wc -c | tr -d '[:space:]')
+    (( _hb1 - _hb0 <= 400 )) && ok "선택지 안내 줄 $((_hb1 - _hb0))B ≤ 400B (래퍼의 요구 항목 블록 1.5KB 와 함께 상한 안)" \
+      || fail "선택지 안내 줄이 $((_hb1 - _hb0))B — 400B 를 넘으면 래퍼에서 매 턴 상한을 넘을 수 있다"
   fi
 else
   skip "프롬프트 훅 없음 — 매 턴 합 생략"
