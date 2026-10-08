@@ -2,6 +2,8 @@
 # choice-gate.sh — 고르게 할 때 규칙(contracts/choices.md)의 효과부. 읽기 · 쓰기는 여기서만, 판단은 lib/choices.sh.
 #
 #   choice-gate.sh line                         매 턴 훅이 부른다: 호스트 설정에 선택지 도구가 있으면 안내 한 줄(없으면 아무것도)
+#   choice-gate.sh tool                         (v0.66.0+) 실체 보여 주기가 부른다: 이번 실행에 쓸 선택지 도구 이름(없으면 아무것도)
+#   choice-gate.sh unattended                   (v0.66.0+) 실체 보여 주기가 부른다: 사람 없는 실행 조건(SCV_CHOICE_OFF_WHEN)이 맞으면 1, 아니면 0
 #   choice-gate.sh stop [--active 0|1] [--turn-dir <폴더>] < 마지막 답  종료 훅이 부른다: 글로 묻거나 번호로 고르게 하면서 끝났으면
 #                                                 CHOICE_GATE: block + CHOICE_REASON: <이유>. --active 1(v0.64.2+ 종료 훅이
 #                                                 주는 "이 검사가 이번 턴에 이미 이유를 냄", 그 전에는 "이미 계속 중")이면
@@ -27,15 +29,26 @@ _sw=""; declare -F settings_get >/dev/null 2>&1 && _sw="$(settings_get SCV_CHOIC
 _sw="$(printf '%s' "$_sw" | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]')"
 [[ "$_sw" == "off" ]] && TOOL=""   # 스위치 off — 도구가 없는 것과 같다
 _off="${SCV_CHOICE_OFF_WHEN:-}"; _offname="${_off%%=*}"
-if [[ -n "$TOOL" && "$_off" == *=* && "$_offname" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
-  # 호스트가 이 실행에서 도구를 빼는 조건(사람이 답할 수 없는 헤드리스 등) — 도구가 없는 것과 같다: 안내도 막기도 없다
-  [[ "$(scv_choice_off_when "$_off" "${!_offname:-}")" == "1" ]] && TOOL=""
+# 호스트가 이 실행에서 도구를 빼는 조건(사람이 답할 수 없는 헤드리스 등) — 도구가 없는 것과 같다: 안내도 막기도 없다.
+# (v0.66.0+) 조건은 도구 · 스위치와 따로 판단해 둔다 — 실체 보여 주기가 이 실행에 사람이 있는지를 묻는다(unattended).
+OFFRUN=0
+if [[ "$_off" == *=* && "$_offname" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+  [[ "$(scv_choice_off_when "$_off" "${!_offname:-}")" == "1" ]] && OFFRUN=1
 fi
+[[ "$OFFRUN" == "1" ]] && TOOL=""
 JOURNAL_DIR="${SCV_JOURNAL_DIR:-scv/journal}"
 
 case "${1:-}" in
   line)
     scv_choice_line "$TOOL"
+    ;;
+  tool)
+    # (v0.66.0+) 이번 실행에 쓸 선택지 도구 이름 — 위에서 스위치와 사람 없는 실행 조건을 반영한 값(없으면 아무것도 내지 않는다).
+    # 실체 보여 주기(contracts/show-real.md)가 확인을 묻는 통로를 이 판단으로 고른다.
+    [[ -n "$TOOL" ]] && printf '%s\n' "$TOOL"
+    ;;
+  unattended)
+    printf '%s\n' "$OFFRUN"
     ;;
   stop)
     shift
@@ -67,6 +80,6 @@ case "${1:-}" in
       fi
     fi
     ;;
-  *) echo "usage: choice-gate.sh line | stop [--active 0|1] [--turn-dir <dir>]" >&2 ;;
+  *) echo "usage: choice-gate.sh line | tool | unattended | stop [--active 0|1] [--turn-dir <dir>]" >&2 ;;
 esac
 exit 0
