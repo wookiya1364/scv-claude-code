@@ -1,0 +1,11 @@
+{"type": "user", "message": {"role": "user", "content": "구조 정리해 줘"}, "timestamp": "2026-10-12T01:00:00Z"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "t", "name": "Patcher", "input": {"file_path": "a.py", "old_string": "x", "new_string": "y"}}]}, "timestamp": "2026-10-12T01:00:10Z"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "t", "name": "Patcher", "input": {"file_path": "b.py", "old_string": "x", "new_string": "y"}}]}, "timestamp": "2026-10-12T01:00:20Z"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "t", "name": "Runner", "input": {"command": "pytest"}}]}, "timestamp": "2026-10-12T01:00:30Z"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "정리했습니다. 결과물 변화 없음."}]}, "timestamp": "2026-10-12T01:00:40Z"}
+{"type": "user", "message": {"role": "user", "content": "다음 파일도 봐 줘"}, "timestamp": "2026-10-12T01:10:00Z"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "t", "name": "Viewer", "input": {"file_path": "c.py"}}]}, "timestamp": "2026-10-12T01:10:05Z"}
+{"type": "user", "message": {"role": "user", "content": [{"type": "text", "text": "[중단됨]"}]}, "timestamp": "2026-10-12T01:10:06Z"}
+{"type": "user", "message": {"role": "user", "content": "아니 그게 아니라 설정 파일"}, "timestamp": "2026-10-12T01:11:00Z"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "t", "name": "Patcher", "input": {"file_path": "c.json", "old_string": "1", "new_string": "2"}}]}, "timestamp": "2026-10-12T01:11:10Z"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "바꿨습니다."}]}, "timestamp": "2026-10-12T01:11:20Z"}

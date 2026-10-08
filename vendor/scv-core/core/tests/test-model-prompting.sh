@@ -663,6 +663,7 @@ PRIN="$CORE/contracts/rewrite-principle.md"
 psec()  { bash -c 'source "$1"; scv_mp_principle_section "$(cat "$2")" "$3"' _ "$LIB" "$PRIN" "$1"; }
 ptag()  { bash -c 'source "$1"; scv_mp_principle_tag "$2"' _ "$LIB" "$1"; }
 ptext() { bash -c 'source "$1"; scv_mp_principle_text "$2"' _ "$LIB" "$1"; }
+pharm() { bash -c 'source "$1"; scv_mp_harm_line "$2" "$3"' _ "$LIB" "$1" "$2"; }   # (2026-10-08+) 통로별 해로운 변경 줄
 
 echo
 echo "T20. 매 턴 비교 · 등록 — 순수부"
@@ -857,7 +858,9 @@ out="$(reg_cl "$R")"
 SK="$(psec korean)"; TK="$(ptag "$SK")"; XK="$(ptext "$SK")"
 [[ -n "$TK" ]] && grep -qxF "REWRITE: Fix the login bug until the login test passes $TK" <<<"$out" && c=$((c + 1)) || echo "      (1) tag: $out"
 got="$(printf '%s\n' "$out" | sed -n '/^PRINCIPLE:$/,$p' | sed '1d')"
-[[ -n "$XK" && "$got" == "$XK" ]] && c=$((c + 1)) || echo "      (2) principle text differs from the korean section"
+# (2026-10-08+) 전문 아래 해로운 변경 줄 하나 — 이 픽스처 호스트는 선택 창 이름이 없어 text 통로.
+XH="$(pharm "$SK" text)"
+[[ -n "$XK" && -n "$XH" && "$got" == "$XK"$'\n'"$XH" ]] && c=$((c + 1)) || echo "      (2) principle text + text-channel harm line differ from the korean section"
 ! grep -qF "$TK" "$(tf "$R" .help-rewrite)" && ! grep -qF "$(printf '%s\n' "$XK" | head -1)" "$(tf "$R" .help-rewrite)" && c=$((c + 1)) || echo "      (3) saved submission must not carry the principle"
 [[ "$(printf '%s\n' "$out" | head -1)" == "REGISTERED: turn $tok · model vendor-model-a · 3 item(s)" ]] && c=$((c + 1)) || echo "      (4) first line: $(printf '%s\n' "$out" | head -1)"
 if [[ $c -eq 4 ]]; then ok "OK [T25] 4/4 principle attached to the register output"; else fail "[T25] $c/4"; fi
@@ -906,15 +909,24 @@ principle_missing() {  # <구역> <언어> → 빠진 요소(또는 "있으면 �
   local s="$1" m forbid=""
   case "$2" in
     korean) set -- "정확한 피드백" "듣기 좋은 말 대신 사실" "작은 단위" "'단위 | 해결책 | 추천' 세 칸" "번호를 붙여 모두" "문제를 막는 길" "고른 이유" "다를 수 있다" \
-              "따로 나열하지 않는다" "contracts/choices.md" "한 줄로" "80칸" "줄글처럼 풀려" "번호 메모" "항목 표 대신"
+              "따로 나열하지 않는다" "contracts/choices.md" "한 줄로" "80칸" "줄글처럼 풀려" "번호 메모" "항목 표 대신" \
+              "듣기 좋은 행동도 하지 않는다" "2배 이상" "결과를 틀리게" "오류를 숨기" "추정뿐이면" "효과 없음을 전후 측정" \
+              "그래도 요청대로" "느려진 함수 이름" "harm-choice: " "harm-text: " "harm-none: " "실제 원인" \
+              "묻지 말고 바로 적용해" "묻거나 보고하기 전에 되돌린다" "밀어붙이지 않았으면" "그 바로 다음 단락"
             forbid=$'문제 표\n생길 수 있는 문제 칸\n문제 번호\n파일:줄\n확인:\n추정:\n번호 | 위치' ;;
     english) set -- "accurate feedback" "facts instead of pleasing words" "small units" "three columns 'Unit | Solutions | Recommendation'" \
               "every usable solution, numbered" "prevents the problems it would cause" "why it was chosen" "can differ" \
               "Do not list possible problems separately" "contracts/choices.md" "in one line" "80 columns" \
-              "unfolds into plain prose" "numbered notes" "replaces the help answer's item table"
+              "unfolds into plain prose" "numbered notes" "replaces the help answer's item table" \
+              "No pleasing actions either" "at least 2x slower" "make results wrong" "hide an error" "only an estimate" \
+              "lack of effect" "as requested anyway" "name the function that slowed" "harm-choice: " "harm-text: " "harm-none: " "real cause" \
+              "don't ask, apply it now" "revert it before you ask or report" "when the user did not push" "paragraph right after the top line"
             forbid=$'Problem table\nPossible problems\'\nproblem numbers\nfile:line\nChecked:\nEstimate:\nNo. | Location' ;;
     japanese) set -- "正確なフィードバック" "事実を述べよ" "小さな単位" "'単位 | 解決策 | 推奨' の三列" "番号を付けてすべて" "問題を防ぐ手立て" "選んだ理由" "異なりうる" \
-              "別に並べない" "contracts/choices.md" "一行で" "約80桁" "文章のように崩れて" "番号付きメモ" "項目表の代わり"
+              "別に並べない" "contracts/choices.md" "一行で" "約80桁" "文章のように崩れて" "番号付きメモ" "項目表の代わり" \
+              "耳触りのよい行動もしない" "2倍以上" "結果を誤らせる" "エラーを隠す" "推測にすぎなければ" "効果がないこと" \
+              "それでも要求どおり" "遅くなった関数名" "harm-choice: " "harm-text: " "harm-none: " "本当の原因" \
+              "聞かずにすぐ適用して" "元に戻す" "押されていなければ" "すぐ次の段落"
             forbid=$'問題表\n起こりうる問題\' の\n問題番号\nファイル:行\n確認:\n推定:\n番号 | 場所' ;;
     *) set -- "(unknown language)" ;;
   esac
@@ -1188,6 +1200,39 @@ if command -v jq >/dev/null 2>&1; then
 else
   echo "  · (jq 없음 — T34~T42 생략)"
 fi
+
+echo
+echo "T43. 해로운 변경 줄 — 통로마다 한 줄 (계획 harmful-change-ask-first T1 · T2 · T3)"
+c=0
+# (a) 순수부: 통로별 줄 고르기 · 원칙 전문에서 빼기
+B="$(printf 'tag: [K]\nK1\nK2\nharm-choice: C\nharm-text: T\nharm-none: N')"
+[[ "$(pharm "$B" choice)" == "C" && "$(pharm "$B" text)" == "T" && "$(pharm "$B" none)" == "N" && "$(pharm "$B" bogus)" == "T" ]] \
+  && c=$((c + 1)) || echo "      (a1) channel pick"
+[[ "$(ptext "$B")" == "$(printf 'K1\nK2')" && -z "$(pharm "$(printf 'tag: [K]\nK1')" choice)" && -z "$(pharm "$(printf 'harm-choice: ')" choice)" ]] \
+  && c=$((c + 1)) || echo "      (a2) principle text keeps the harm lines out; no line → empty"
+# (b) 등록 출력: 선택 창 있음 → choice, 없음 → text, 사람 없는 실행 → none. 그 줄 하나만.
+{ cat "$WORK/profile-cl.env"; printf 'SCV_CHOICE_TOOL=PickTool\n'; } > "$WORK/profile-ch.env"
+{ cat "$WORK/profile-ch.env"; printf 'SCV_CHOICE_OFF_WHEN=SCV_TEST_ATTENDED=0\n'; } > "$WORK/profile-un.env"
+SK="$(psec korean)"
+for row in "ch:choice" "cl:text" "un:none"; do
+  pf="${row%%:*}"; ch="${row#*:}"
+  R="$(new_repo "t43-$pf")"; printf '{\n  "SCV_LANG": "korean"\n}\n' > "$R/scv/scv_settings.json"
+  (cd "$R" && printf '{"prompt":"x","session_id":"s1"}' | SCV_TEST_ATTENDED=0 CLAUDE_PLUGIN_ROOT="$CORE" SCV_HOST_PROFILE="$WORK/profile-$pf.env" bash "$CORE/template/hooks/on-user-prompt.sh" >/dev/null 2>&1)
+  o="$(cd "$R" && printf '%s\n' "$SUB_OK" | SCV_TEST_ATTENDED=0 SCV_HOST_PROFILE="$WORK/profile-$pf.env" bash "$MP" register --model vendor-model-a 2>/dev/null)"
+  want="$(pharm "$SK" "$ch")"; n=0
+  for other in choice text none; do [[ "$other" != "$ch" ]] && grep -qF -- "$(pharm "$SK" "$other")" <<<"$o" && n=$((n + 1)); done
+  [[ -n "$want" && "$(printf '%s\n' "$o" | tail -1)" == "$want" && $n -eq 0 ]] && c=$((c + 1)) || echo "      (b:$pf) expected the $ch line only: $(printf '%s\n' "$o" | tail -1)"
+done
+# (c) 규칙 본문은 원칙 파일 한 곳에만(코어 어디에도 같은 줄이 없다)
+for L in korean english japanese; do
+  S="$(psec "$L")"
+  for line in "$(ptext "$S" | tail -1)" "$(pharm "$S" none)"; do
+    hits="$(grep -rlF -- "$line" "$CORE" 2>/dev/null | grep -vxF "$PRIN" || true)"
+    [[ -n "$line" && -z "$hits" ]] || { echo "      (c:$L) also found in: $hits"; continue 2; }
+  done
+  c=$((c + 1))
+done
+if [[ $c -eq 8 ]]; then ok "OK [T43] 8/8 harm line per channel, one place"; else fail "[T43] $c/8"; fi
 
 echo
 echo "T7. 순수성 계약"

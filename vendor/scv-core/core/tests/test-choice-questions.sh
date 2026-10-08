@@ -269,6 +269,9 @@ done
 echo "── [T7] 도구가 없으면 지금과 같다 (코덱스 · 기본) ──"
 # 같은 훅을 도구 없음 · 도구 있음으로 돌린다 — 차이는 안내 한 줄뿐이어야 한다(도구가 없으면 그 줄도 없다).
 R1="$(new_repo t7a)"; R2="$(new_repo t7b)"
+# (v0.66.0+) 실체 보여 주기 안내도 같은 도구 유무로 확인 통로(선택 창 · 글 질문)를 고른다(contracts/show-real.md) — 이 검사는
+# 선택지 줄만 보므로 두 저장소 모두 그 안내를 끈다. 그 안내의 통로 차이는 test-show-real 의 T1 · T3 이 본다.
+printf '{"SCV_SHOW_REAL": "off"}\n' > "$R1/scv/scv_settings.json"; cp "$R1/scv/scv_settings.json" "$R2/scv/scv_settings.json"
 # 진단 줄의 저장소 경로는 폴더 이름만 다르다(임시 경로의 // 는 출력에서 / 로 접힌다) — 이름만 맞춘다.
 o1="$(hook_p "$R1" "$WORK/profile-none.env" "안녕" | sed -E 's#/t7[ab]\)#/REPO)#g')"
 o2="$(hook_p "$R2" "$WORK/profile-pick.env" "안녕" | sed -E 's#/t7[ab]\)#/REPO)#g' | grep -v '^\[SCV choices\] ')"
