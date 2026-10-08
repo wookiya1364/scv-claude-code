@@ -526,14 +526,31 @@ scv_mp_principle_tag() {
 }
 
 # @pure
-# <구역> → 원칙 전문(표식 줄을 뺀 나머지). 표식 줄이 없으면 구역 전체.
+# <구역> → 원칙 전문(표식 줄과 통로별 해로운 변경 줄 "harm-choice: " · "harm-text: " · "harm-none: " 을 뺀 나머지).
+# 표식 줄이 없으면 구역 전체에서 통로별 줄만 뺀다. 통로별 줄이 없는 구역은 이 기능 전과 같은 값이다.
 scv_mp_principle_text() {
-  local sec="${1:-}" first
+  local sec="${1:-}" first body line out=""
   first="${sec%%$'\n'*}"
   case "$first" in
-    "tag: "*) [[ "$sec" == *$'\n'* ]] && printf '%s' "${sec#*$'\n'}" ;;
-    *) printf '%s' "$sec" ;;
+    "tag: "*) [[ "$sec" == *$'\n'* ]] || return 0; body="${sec#*$'\n'}" ;;
+    *) body="$sec" ;;
   esac
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    case "$line" in "harm-choice: "*|"harm-text: "*|"harm-none: "*) continue ;; esac
+    out="$out$line"$'\n'
+  done <<< "$body"
+  printf '%s' "${out%$'\n'}"
+}
+
+# @pure
+# <구역> <choice|text|none> → 그 통로의 해로운 변경 줄("harm-<통로>: " 뒤). 모르는 통로는 text, 줄이 없으면 빈 값.
+# 통로는 실체 보여 주기와 같은 판단(scv_show_real_channel — choice-gate.sh tool · unattended)으로 고른다(2026-10-08).
+scv_mp_harm_line() {
+  local sec="${1:-}" ch="${2:-text}" line
+  case "$ch" in choice|text|none) ;; *) ch="text" ;; esac
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    case "$line" in "harm-$ch: "?*) printf '%s' "${line#"harm-$ch: "}"; return 0 ;; esac
+  done <<< "$sec"
   return 0
 }
 

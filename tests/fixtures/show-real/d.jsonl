@@ -1,0 +1,3 @@
+{"type": "user", "message": {"role": "user", "content": [{"type": "text", "text": "작은 수정"}]}, "timestamp": "2026-10-07T23:30:00Z"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "t", "name": "Patcher", "input": {"file_path": "a.txt", "old_string": "1", "new_string": "2"}}]}, "timestamp": "2026-10-07T23:30:10Z"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "고쳤습니다. 다른 것도 볼까요?"}]}, "timestamp": "2026-10-07T23:30:20Z"}
