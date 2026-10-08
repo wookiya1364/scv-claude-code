@@ -203,8 +203,9 @@ write_settings "$PL" '{"SCV_PLAIN_LANGUAGE": "OFF"}'
 _no_plain "$PL" && ok "OFF (any case): plain block silent" || fail "OFF: still printed"
 write_settings "$PL" '{"SCV_PLAIN_LANGUAGE": "off"}'
 _no_plain "$PL" && ok "quoted off: plain block silent" || fail "quoted off: still printed"
-write_settings "$PL" '{"SCV_PLAIN_LANGUAGE": "off", "SCV_ALWAYS_ON": "off"}'
-[[ -z "$(run_pl "$PL")" ]] && ok "both switches off: fully silent" || fail "both off: still printed"
+# (v0.66.0+) every block has its own switch — the show-real guidance (SCV_SHOW_REAL) must be off too for full silence.
+write_settings "$PL" '{"SCV_PLAIN_LANGUAGE": "off", "SCV_ALWAYS_ON": "off", "SCV_SHOW_REAL": "off"}'
+[[ -z "$(run_pl "$PL")" ]] && ok "every block switch off: fully silent" || fail "every block switch off: still printed"
 write_settings "$PL" '{"SCV_PLAIN_LANGUAGE": "maybe"}'
 grep -qF "1–2 sentences" <<<"$(run_pl "$PL")" && ok "unknown value = on" || fail "unknown value silenced the reminder"
 write_settings "$PL" '{"OTHER": "1", "SCV_PLAIN_LANGUAGE": "off"}'

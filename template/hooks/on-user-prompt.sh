@@ -77,6 +77,14 @@ INPUT="$(cat 2>/dev/null || true)"
 _scv_cgs="$CORE_HOME/scripts/choice-gate.sh"
 if [[ -f "$_scv_cgs" ]]; then bash "$_scv_cgs" line 2>/dev/null || true; fi
 
+# ---------- show-real (v0.66.0+) ---------------------------------------------
+# 실체 보여 주기 안내 세 줄 — 규칙 본문은 contracts/show-real.md 한 곳. 매 턴, 고르게 할 때 줄 바로 뒤에 싣는다(확인을 묻는
+# 통로가 그 규칙의 판단과 같다). 자동 알림 턴 · 사람 없는 실행에는 묻지 않는 문구다 — 판별에 이 훅의 입력을 넘긴다. 막는 검사는 없다.
+# 설정 SCV_SHOW_REAL=off 면 아무것도 싣지 않는다 — 이 구간을 지운 훅과 바이트 단위로 같다(test-show-real 이 견준다).
+_scv_srs="$CORE_HOME/scripts/show-real.sh"
+if [[ -f "$_scv_srs" ]]; then { printf '%s' "$INPUT" | bash "$_scv_srs" line; } 2>/dev/null || true; fi
+# ---------- /show-real -------------------------------------------------------
+
 # ---------- preflight (v0.40.0+) --------------------------------------------
 # 이 훅이 하는 일은 강제가 아니라 **준비**다. 이번 턴의 프로젝트 상태를 미리 실어
 # 보내면, 그것을 확인하려고 액션을 한 번 더 부를 이유가 사라진다.

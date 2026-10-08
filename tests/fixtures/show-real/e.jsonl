@@ -1,0 +1,3 @@
+{"type": "user", "message": {"role": "user", "content": "옛 일"}, "timestamp": "2026-09-20T01:00:00Z"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "t", "name": "Writer", "input": {"file_path": "old.txt", "content": "o"}}]}, "timestamp": "2026-09-20T01:00:10Z"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "끝."}]}, "timestamp": "2026-09-20T01:00:20Z"}
