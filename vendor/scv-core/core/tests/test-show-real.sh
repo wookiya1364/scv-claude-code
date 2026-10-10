@@ -57,7 +57,12 @@ grep -qF 'contracts/show-real.md' <<<"$B1" && ok "본문 계약 경로를 가리
 _lc="$(printf '%s\n' "$O1" | grep -n '^\[SCV choices\]' | head -1 | cut -d: -f1)"; _ls="$(printf '%s\n' "$O1" | grep -n '^\[SCV 실체 보여 주기\]' | head -1 | cut -d: -f1)"
 [[ -n "$_lc" && -n "$_ls" && "$_ls" == "$((_lc + 1))" ]] && ok "고르게 할 때 줄 바로 뒤에 실린다" || fail "T1 자리: choices=$_lc show-real=$_ls"
 _bc="$(printf '%s' "$B1" | wc -c | tr -d ' ')"
-(( _bc <= 640 )) && ok "안내 ${_bc}B ≤ 640B (매 턴 스택 상한 — test-help-budget T12 와 함께)" || fail "T1 크기 ${_bc}B"
+# 상한 640 → 760B: 검토 시점 문구(계획 20261009-wookiya1364-show-real-at-checkpoint)를 더해 선택 창 블록이 742B — 매 턴 전체 상한
+# (12,000B, test-help-budget)은 그대로 지킨다.
+(( _bc <= 760 )) && ok "안내 ${_bc}B ≤ 760B (매 턴 스택 상한 — test-help-budget T12 와 함께)" || fail "T1 크기 ${_bc}B"
+# 검토 시점 문구 — 사용자가 정한 검토 시점은 앞당기지 않고, 그때 요약 대신 실제 실행 결과를 보이며 묻는다(묻는 통로에만).
+grep -qF '검토 시점을 정해 두었으면' <<<"$B1" && grep -qF '앞당기지 말고' <<<"$B1" && grep -qF '요약 대신 실제로 돌린 결과' <<<"$B1" \
+  && ok "검토 시점 문구가 실린다(앞당기지 않음 · 요약 대신 실제 실행 결과)" || fail "T1 검토 시점 문구: [$B1]"
 
 echo "── [T2] 끔 — 설정 off 면 이 기능이 없는 훅과 바이트 단위로 같다 ──"
 # 기능 전 훅을 이 파일에서 만든다: 표식 사이(show-real 구간)를 지운다. 새 코드끼리만 견주면 끈 출력이 바뀌어도 못 잡는다.
@@ -90,11 +95,12 @@ done
 echo "── [T3] 선택 창이 없는 호스트 — 글 질문 한 번 · 사람이 없으면 묻지 않음 ──"
 R="$(new_repo t3)"; B3="$(hook_with "$PROMPT_HOOK" "$R" "$WORK/none.env" "로그인 버튼 만들어 줘" | sr_block)"
 grep -qF '글 질문 한 번으로' <<<"$B3" && ! grep -qF '선택 창' <<<"$B3" && ok "선택 창 문구 없음 · 글 질문 문구 있음" || fail "T3: [$B3]"
+grep -qF '검토 시점을 정해 두었으면' <<<"$B3" && ok "글 질문 통로에도 검토 시점 문구" || fail "T3 검토 시점(글): [$B3]"
 R="$(new_repo t3c)"; printf '{"SCV_CHOICE_GATE": "off"}\n' > "$R/scv/scv_settings.json"
 B3c="$(hook_with "$PROMPT_HOOK" "$R" "$WORK/pick.env" "x" | sr_block)"
 grep -qF '글 질문 한 번으로' <<<"$B3c" && ok "고르게 할 때 규칙을 끈 프로젝트도 글 질문" || fail "T3 규칙 off: [$B3c]"
 # 계약의 예외 — 사람 없는 실행 · 자동 알림 턴에는 묻지 않는 문구(묻게 하면 무인 실행이 첫 결과에서 멈춘다 — 독립 검토 2026-10-07).
-no_ask() { grep -qF '묻지 않는다' <<<"$1" && ! grep -qF '이대로 계속할까요' <<<"$1" && ! grep -qF '선택 창으로' <<<"$1" && ! grep -qF '글 질문' <<<"$1"; }
+no_ask() { grep -qF '묻지 않는다' <<<"$1" && ! grep -qF '이대로 계속할까요' <<<"$1" && ! grep -qF '선택 창으로' <<<"$1" && ! grep -qF '글 질문' <<<"$1" && ! grep -qF '검토 시점' <<<"$1"; }
 R="$(new_repo t3b)"; B3b="$(cd "$R" && jq -cn '{prompt:"x",session_id:"s1"}' | SCV_TEST_ATTENDED=0 CLAUDE_PLUGIN_ROOT="$CORE" SCV_HOST_PROFILE="$WORK/offwhen.env" bash "$PROMPT_HOOK" 2>/dev/null | sr_block)"
 no_ask "$B3b" && [[ "$(printf '%s\n' "$B3b" | grep -c .)" == 3 ]] && ok "사람 없는 실행 조건이면 묻지 않는 문구(세 줄)" || fail "T3 사람 없는 실행: [$B3b]"
 R="$(new_repo t3d)"; B3d="$(cd "$R" && jq -cn '{prompt:"x",session_id:"s1"}' | SCV_TEST_ATTENDED=1 CLAUDE_PLUGIN_ROOT="$CORE" SCV_HOST_PROFILE="$WORK/offwhen.env" bash "$PROMPT_HOOK" 2>/dev/null | sr_block)"
