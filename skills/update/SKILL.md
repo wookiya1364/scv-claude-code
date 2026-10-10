@@ -49,6 +49,8 @@ Branch by `UP_TO_DATE` value:
 | **`no`** | Report: "Installed `<INSTALLED_VERSION>` → latest `<LATEST_VERSION>`." Then proceed to Step 3 (guide commands). |
 | **`unknown`** | Report the unavailability reason (from `LATEST_VERSION:` line). Then ask via `AskUserQuestion` whether to proceed with manual update commands anyway (Step 3) or stop. |
 
+These reports name versions on purpose (the user acts on them); where that differs from the always-on plain-language text, the resolution order in `scv/SCV.md` Top-level rules applies.
+
 ### Step 3 — Guide the two built-in commands
 
 Print to the user, in the resolved language:
