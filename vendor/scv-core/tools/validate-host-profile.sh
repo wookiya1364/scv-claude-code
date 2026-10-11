@@ -34,6 +34,8 @@ SCV_CHOICE_OFF_WHEN=""
 SCV_SESSION_ENV=""
 SCV_AUTO_PROMPT_PREFIX=""
 SCV_AUTO_PROMPT_SUFFIX=""
+SCV_JUDGE_COMMAND=""
+SCV_CHOICE_REJECTED_PREFIX=""
 line_no=0
 while IFS= read -r line || [[ -n "$line" ]]; do
   line_no=$((line_no + 1))
@@ -53,7 +55,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     SCV_ARGUMENT_STYLE|SCV_STATE_INDEX|SCV_LEGACY_STATE_INDEXES|SCV_ROOT_ENV|\
     SCV_GRAPH_SKILL_PATHS|SCV_UPDATE_OWNER|SCV_MODEL_POLICY_OWNER|\
     SCV_PROMPTING_GUIDES|SCV_AUTO_PROMPT_TAGS|SCV_CHOICE_TOOL|SCV_CHOICE_OFF_WHEN|\
-    SCV_SESSION_ENV|SCV_AUTO_PROMPT_PREFIX|SCV_AUTO_PROMPT_SUFFIX) ;;
+    SCV_SESSION_ENV|SCV_AUTO_PROMPT_PREFIX|SCV_AUTO_PROMPT_SUFFIX|SCV_JUDGE_COMMAND|SCV_CHOICE_REJECTED_PREFIX) ;;
     *) echo "profile:$line_no: unknown key: $key" >&2; exit 1 ;;
   esac
   case "|$seen_keys|" in
@@ -137,6 +139,23 @@ for key in SCV_AUTO_PROMPT_PREFIX SCV_AUTO_PROMPT_SUFFIX; do
     echo "profile: invalid $key (one line of plain text without angle brackets, at most 200 characters)" >&2; exit 1
   fi
 done
+
+# 선택 키 (0.68.0+): 실사용 보고의 판정자 명령 — 코어 루트 기준 상대 경로 또는 절대 경로 하나(글자 · 숫자 · . _ - 와 / 로 나눈
+# 이름들, 256자까지, '..' 조각 없음). 셸 코드가 아니라 경로다 — 보고가 bash 로 그 파일을 돌린다.
+if [[ -n "$SCV_JUDGE_COMMAND" ]]; then
+  [[ ${#SCV_JUDGE_COMMAND} -le 256 && "$SCV_JUDGE_COMMAND" =~ ^/?[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$ \
+     && "/$SCV_JUDGE_COMMAND/" != *"/../"* ]] \
+    || { echo "profile: invalid SCV_JUDGE_COMMAND (one script path: names of letters, digits, . _ - joined by /, no ..)" >&2; exit 1; }
+fi
+
+# 선택 키 (0.68.0+): 호스트가 선택지 도구 호출을 사람에게 보이기 전에 거절했을 때 결과 글의 시작 — 한 줄의 평문(제어 문자 없음,
+# 100자까지), 앞뒤 공백 없음. 꺾쇠는 된다(예: 호스트의 오류 태그). 글자 그대로 비교한다.
+if [[ -n "$SCV_CHOICE_REJECTED_PREFIX" ]]; then
+  if [[ ${#SCV_CHOICE_REJECTED_PREFIX} -gt 100 || "$SCV_CHOICE_REJECTED_PREFIX" == *[[:cntrl:]]* \
+        || "$SCV_CHOICE_REJECTED_PREFIX" == [[:space:]]* || "$SCV_CHOICE_REJECTED_PREFIX" == *[[:space:]] ]]; then
+    echo "profile: invalid SCV_CHOICE_REJECTED_PREFIX (one line of plain text, at most 100 characters)" >&2; exit 1
+  fi
+fi
 
 template="$SCV_ACTION_TEMPLATE"
 without_one="${template/\{action\}/}"

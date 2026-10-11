@@ -190,6 +190,7 @@ apply-model-policy.sh
 hydrate.sh
 project-core.sh
 set-wrapper-version.sh
+show-real-judge.sh
 sync-core-paths.py
 sync-core.sh
 sync.sh
@@ -203,6 +204,7 @@ update
 ADAPTER_TESTS='
 test-apply-model-policy.sh
 test-core-contract.sh
+test-show-real-judge.sh
 test-sync-core-atomicity.sh
 test-state-adapter.sh
 '
