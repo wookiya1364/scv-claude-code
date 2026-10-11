@@ -14,6 +14,14 @@ Adapter-owned behavior:
 - `scripts/apply-model-policy.sh`, `scripts/update.sh`, and the thin
   `scripts/hydrate.sh`/`scripts/sync.sh` state adapters
 - the `adapter/scripts/state-index.sh` delegation shim
+- `scripts/show-real-judge.sh` — the real-use report's judge command (Core
+  0.68.0+, profile key `SCV_JUDGE_COMMAND`): it reads the question on stdin,
+  asks Sonnet once (`claude -p`, no tools, no MCP servers, this plugin
+  disabled, none of the calling session's Claude Code environment, at most
+  `SCV_JUDGE_TIMEOUT` seconds, default 300) and prints only the answer text;
+  any failure exits non-zero with no output, and the report counts that batch
+  as undecided. The profile's `SCV_CHOICE_REJECTED_PREFIX=<tool_use_error>`
+  marks a choice-tool call Claude Code rejected before the user saw it
 - `hooks/hooks.json` — journal-capture hook registration (Core 0.22.0 hook
   seam, `docs/wrapper-integration.md` §6 in scv-core): binds Claude Code's
   `UserPromptSubmit`/`Stop` events to the vendored templates

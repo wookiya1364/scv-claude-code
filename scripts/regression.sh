@@ -16,7 +16,7 @@ fi
 #   regression.sh [<slug-prefix>]
 #                 [--tag <x>] [--include-promote] [--include-obsolete]
 #                 [--only <slug>] [--skip <slug>] [--ci] [--quiet]
-                [--dry] [--changed <a,b,…>]     # v0.51.0: 계획·영향만 보기 / 영향 조회 대상 지정
+#                 [--dry] [--changed <a,b,…>]     # v0.51.0: 계획·영향만 보기 / 영향 조회 대상 지정
 #                 [--json <path>] [--timeout <sec>] [--no-memo]
 #
 # Exit codes:
