@@ -4,7 +4,8 @@
 {"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "t", "name": "Writer", "input": {"file_path": "src/btn.js", "content": "x"}}]}, "timestamp": "2026-10-02T01:00:10Z"}
 {"type": "user", "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t", "content": "ok"}]}, "timestamp": "2026-10-02T01:00:11Z"}
 {"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "t", "name": "Runner", "input": {"command": "node src/btn.js"}}]}, "timestamp": "2026-10-02T01:00:20Z"}
-{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "실행 결과:\n```\nok\n```"}]}, "timestamp": "2026-10-02T01:00:30Z"}
+{"type": "user", "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t", "content": "3 passed in 0.12s"}]}, "timestamp": "2026-10-02T01:00:25Z"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "실행 결과:\n```\n3 passed in 0.12s\n```"}]}, "timestamp": "2026-10-02T01:00:30Z"}
 {"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "t", "name": "PickTool", "input": {"questions": [{"question": "이대로 계속할까요, 고칠 점이 있나요?", "header": "확인", "options": [{"label": "계속", "description": "그대로 이어 갑니다"}, {"label": "고칠 점", "description": "고칠 점을 적습니다"}]}]}}]}, "timestamp": "2026-10-02T01:00:40Z"}
 {"type": "user", "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t", "content": "ok"}]}, "timestamp": "2026-10-02T01:01:00Z"}
 {"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "t", "name": "Patcher", "input": {"file_path": "src/btn.js", "old_string": "x", "new_string": "y"}}]}, "timestamp": "2026-10-02T01:01:10Z"}
