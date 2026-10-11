@@ -10,6 +10,12 @@
 # 못 만들면 모두 읽는다). 날짜는 이 기계의 지역 오프셋(date +%z)으로 옮긴다.
 # 호스트 설정 파일(SCV_HOST_PROFILE — 래퍼 설치본에는 있다)에서 선택 창 이름 · 자동 입력 모양을 읽는다. 그 파일이 없으면 확인 창과
 # 자동 알림을 가를 수 없어 숫자가 틀리므로 멈춘다.
+# 판정자 단계(0.68.0+, 늘 켜짐): 규칙만으로 못 가린 턴(결과를 보인 뒤 물음표 없이 끝남)만 호스트 설정의 판정자 명령
+# (SCV_JUDGE_COMMAND)에 20턴씩 묻는다 — 보내는 것은 턴마다 보인 출력 줄 하나와 끝 글의 마지막 1,500자뿐이다. 답은 사용자 캐시
+# (${XDG_CACHE_HOME:-~/.cache}/scv/show-real-judge.v1.tsv — 발췌의 해시와 답만)에 두어 같은 턴은 다시 묻지 않는다. 판정자 명령이
+# 없거나 · 실패하거나 · 답이 깨지면 그 턴은 '판정 못 한 턴'으로 세고(보여 주지 않음) 보고는 멈추지 않는다.
+# 판정자 명령은 스스로 시간 제한을 둔다(래퍼 몫 — 보고는 그 명령이 끝나기를 기다린다). 판정자는 캐시 폴더에서 부른다.
+# 거절된 확인 창(사람에게 보이지 않음)은 호스트 설정의 거절 표시(SCV_CHOICE_REJECTED_PREFIX)로 가른다 — 비면 가르지 않는다.
 # 출력은 숫자 · 날짜뿐 — 대화 내용 · 경로 · 세션 이름 · 메일 주소는 내지 않는다(공개 저장소에 붙여도 되게). 오류 메시지도 경로를
 # 담지 않는다.
 # 종료 코드: 0 보고함 · 1 jq · 호스트 설정 · 기록 폴더가 없음 · 2 사용법 오류.
@@ -85,22 +91,61 @@ if [[ -n "$REF" ]] && ! touch -t "${_start}0000" "$REF" 2>/dev/null; then rm -f 
 OFF="$(scv_show_real_offset "$(date +%z 2>/dev/null)")"
 
 TOOL="${SCV_CHOICE_TOOL:-}"; TAGS="${SCV_AUTO_PROMPT_TAGS:-}"; PFX="${SCV_AUTO_PROMPT_PREFIX:-}"; SFX="${SCV_AUTO_PROMPT_SUFFIX:-}"
-ROWS=""; NF=0; NU=0; _i=0
+REJ="${SCV_CHOICE_REJECTED_PREFIX:-}"
+ROWS=""; PICK=""; NF=0; NU=0; _i=0
 for _d in "${DIRS[@]}"; do
   _i=$((_i + 1))
   for _f in "$_d"/*.jsonl; do
     [[ -f "$_f" && ! -L "$_f" ]] || continue
     [[ -z "$REF" || "$_f" -nt "$REF" ]] || continue
     [[ -r "$_f" ]] || { NU=$((NU + 1)); continue; }
-    _e="$(scv_show_real_entries "$TOOL" < "$_f" 2>/dev/null)"
+    _e="$(scv_show_real_entries "$TOOL" "$REJ" < "$_f" 2>/dev/null)"
     if [[ -z "$_e" ]]; then [[ -s "$_f" ]] && NU=$((NU + 1)); continue; fi
     _s="${_f##*/}"; _s="$_i/${_s%.jsonl}"   # 폴더마다 따로 — 같은 이름 파일이 한 세션으로 섞이지 않게(출력에는 나오지 않는다)
-    ROWS+="$(scv_show_real_classify "$(scv_show_real_split "$_s" "$_e" "$TAGS" "$PFX" "$SFX")")"$'\n'
+    _t="$(scv_show_real_split "$_s" "$_e" "$TAGS" "$PFX" "$SFX")"
+    ROWS+="$(scv_show_real_classify "$_t")"$'\n'
+    PICK+="$(scv_show_real_pick "$_t" "$OFF" "$BR" "$AR")"$'\n'
     NF=$((NF + 1))
   done
 done
 
+# ---------------------------------------------------------------- 판정자 단계: 저장된 답 먼저, 남은 턴만 20턴씩
+JUDGE=""
+case "${SCV_JUDGE_COMMAND:-}" in
+  "") ;;
+  /*) JUDGE="$SCV_JUDGE_COMMAND" ;;
+  *)  JUDGE="$SCRIPT_DIR/../$SCV_JUDGE_COMMAND" ;;
+esac
+[[ -n "$JUDGE" && -f "$JUDGE" ]] || JUDGE=""
+CACHE="${XDG_CACHE_HOME:-${HOME:-}/.cache}/scv/show-real-judge.v1.tsv"
+_cached=""; [[ -f "$CACHE" && -r "$CACHE" ]] && _cached="$(tr -d '\000' 2>/dev/null < "$CACHE")"
+# 판정자는 캐시 폴더에서 부른다 — 판정자가 자기 기록을 작업 폴더 기준으로 남기는 호스트라면, 보고가 읽는 세션 기록에 섞이지 않게.
+_jdir="${CACHE%/*}"; mkdir -p "$_jdir" 2>/dev/null || true; [[ -d "$_jdir" ]] || _jdir="${TMPDIR:-/tmp}"
+LOOK="$(scv_show_real_lookup "$(scv_show_real_keys "$(scv_show_real_excerpts "$PICK")")" "$_cached")"
+ANSWERS=""; _batch=""; _bn=0
+_ask() {  # 효과 — 모은 턴을 판정자에게 한 번 묻고, 받은 답을 저장 파일에 더한다
+  local out="" ans z p
+  (( _bn )) || return 0
+  p="$(scv_show_real_judge_prompt "$_batch")"
+  [[ -n "$JUDGE" && -n "$p" ]] && { out="$(cd "$_jdir" 2>/dev/null && printf '%s\n' "$p" | bash "$JUDGE" 2>/dev/null | tr -d '\000')" || out=""; }
+  ans="$(scv_show_real_judge_parse "$out" "$_bn")"
+  z="$(scv_show_real_zip "$_batch" "$ans")"
+  ANSWERS+="$z"$'\n'
+  if [[ -n "$ans" ]]; then   # 캐시를 못 써도(읽기 전용 등) 경로가 담긴 오류를 내지 않는다 — 다음 보고가 다시 물을 뿐이다
+    { printf '%s\n' "$z" | awk -F '\t' '$6 == "yes" || $6 == "no" { print $2 "\t" $6 }' >> "$CACHE"; } 2>/dev/null || true
+  fi
+  _batch=""; _bn=0
+}
+while IFS= read -r _l || [[ -n "$_l" ]]; do
+  case "$_l" in
+    A$'\t'*) ANSWERS+="$_l"$'\n' ;;
+    Q$'\t'*) _batch+="$_l"$'\n'; _bn=$((_bn + 1)); [[ $_bn -lt 20 ]] || _ask ;;
+  esac
+done <<< "$LOOK"
+_ask
+
 # ---------------------------------------------------------------- 출구: 표
 _lang=""; declare -F settings_get >/dev/null 2>&1 && _lang="$(settings_get SCV_LANG 2>/dev/null || true)"
-scv_show_real_render "$(scv_show_real_count "$ROWS" "$OFF" "$BR" "$AR")" "$_lang" "$BEFORE" "$AFTER" "$NF" "$NU"
+scv_show_real_render "$(scv_show_real_count "$(scv_show_real_merge "$ROWS" "$ANSWERS")" "$OFF" "$BR" "$AR")" "$_lang" "$BEFORE" "$AFTER" \
+  "$NF" "$NU" "$(scv_show_real_judge_count "$ANSWERS")"
 exit 0
