@@ -3,7 +3,8 @@
 {"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "t", "name": "Runner", "input": {"command": "ls"}}]}, "timestamp": "2026-10-09T01:00:05Z"}
 {"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "t", "name": "Writer", "input": {"file_path": "x.py", "content": "print(1)"}}]}, "timestamp": "2026-10-09T01:00:10Z"}
 {"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "t", "name": "Runner", "input": {"command": "python3 x.py"}}]}, "timestamp": "2026-10-09T01:00:20Z"}
-{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "t", "name": "PickTool", "input": {"questions": [{"question": "Continue as is, or anything to fix?", "options": [{"label": "Continue"}, {"label": "Fix"}]}]}}]}, "timestamp": "2026-10-09T01:00:30Z"}
+{"type": "user", "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t", "content": "2 checks passed"}]}, "timestamp": "2026-10-09T01:00:25Z"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "t", "name": "PickTool", "input": {"questions": [{"question": "2 checks passed. Continue as is, or anything to fix?", "options": [{"label": "Continue"}, {"label": "Fix"}]}]}}]}, "timestamp": "2026-10-09T01:00:30Z"}
 {"type": "user", "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t", "content": "ok"}]}, "timestamp": "2026-10-09T01:00:40Z"}
 {"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "t", "name": "PickTool", "input": {"questions": [{"question": "Which name should the module use?", "options": [{"label": "x"}, {"label": "y"}]}]}}]}, "timestamp": "2026-10-09T01:00:50Z"}
 {"type": "user", "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t", "content": "ok"}]}, "timestamp": "2026-10-09T01:01:00Z"}
