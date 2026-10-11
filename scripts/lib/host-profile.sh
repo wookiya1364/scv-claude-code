@@ -34,6 +34,14 @@ SCV_SESSION_ENV=""
 # 시작). 예: 다른 세션이 보낸 메시지. 그 둘을 걷어 낸 나머지가 SCV_AUTO_PROMPT_TAGS 블록뿐이면 자동 입력이다. 비면 걷어 내지 않는다.
 SCV_AUTO_PROMPT_PREFIX=""
 SCV_AUTO_PROMPT_SUFFIX=""
+# 0.68.0+ 선택 키: 실사용 보고(show-real-report.sh)의 판정자 명령 — 코어 루트 기준 상대 경로 또는 절대 경로의 bash 스크립트. 표준입력으로
+# 질문 글을 받아 모델의 답 글을 표준출력에 내고, 못 하면 0 이 아닌 종료 코드. 어떤 모델을 도구 없이 · SCV 를 끈 채 부를지는 래퍼 몫이다.
+# 비면 판정자가 없어, 규칙만으로 못 가린 턴은 보고에 '판정 못 한 턴'으로 센다.
+SCV_JUDGE_COMMAND=""
+# 0.68.0+ 선택 키: 선택지 도구 호출을 호스트가 사람에게 보이기 전에 거절했을 때 그 결과 글의 시작(예: 보기 수가 모자란 호출). 실사용
+# 보고는 결과가 오류이고 이 글로 시작하는 확인 창을 묻기로 세지 않는다 — 사람이 보고 닫은 창(거절 표시 없음)은 물은 것으로 센다.
+# 비면 가르지 않는다(모든 확인 창을 물은 것으로 센다).
+SCV_CHOICE_REJECTED_PREFIX=""
 
 _scv_profile_assign() {
   local key="$1" value="$2"
@@ -56,6 +64,8 @@ _scv_profile_assign() {
     SCV_SESSION_ENV) SCV_SESSION_ENV="$value" ;;
     SCV_AUTO_PROMPT_PREFIX) SCV_AUTO_PROMPT_PREFIX="$value" ;;
     SCV_AUTO_PROMPT_SUFFIX) SCV_AUTO_PROMPT_SUFFIX="$value" ;;
+    SCV_JUDGE_COMMAND) SCV_JUDGE_COMMAND="$value" ;;
+    SCV_CHOICE_REJECTED_PREFIX) SCV_CHOICE_REJECTED_PREFIX="$value" ;;
   esac
 }
 
