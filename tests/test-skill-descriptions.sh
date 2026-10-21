@@ -155,9 +155,10 @@ if [[ -n "$SKILLS" && -d "$SKILLS" ]]; then
   if [[ "$summary" == *"BAD=0" ]]; then ok "스킬 ${cnt}개 전부 통과 ($summary, 개별 ≤${DESC_MAX} · 합계 ≤${TOTAL_MAX})"
   else fail "위반 있음 — $summary"; printf '%s\n' "$out" | grep -v '^TOTAL='; fi
   [[ ! -e "$SKILLS/../commands" ]] && ok "예전 commands/ 폴더 없음" || fail "commands/ 가 아직 있다"
-  expected="codegen deck handoff help install-deps promote regression report routine set-models status sync update work workspace"
+  # 기대 집합은 코어 명령 목록(actions.json)에서 읽는다 — 명령이 늘 때 이 줄을 고치지 않아도 된다.
+  expected="$(sed -n 's/.*"id": *"\([^"]*\)".*/\1/p' "$CORE/actions.json" | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')"
   actual="$(ls "$SKILLS" | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')"
-  [[ "$actual" == "$expected" ]] && ok "호출 이름 열다섯 개가 그대로다" || fail "스킬 집합이 다르다: $actual"
+  [[ -n "$expected" && "$actual" == "$expected" ]] && ok "호출 이름이 코어 명령 목록과 같다 ($(printf '%s\n' $expected | wc -l | tr -d ' ')개)" || fail "스킬 집합이 다르다: $actual (기대: $expected)"
 else
   skip "래퍼 skills/ 디렉터리 없음 (옆 체크아웃 없거나 SCV_SKILLS_DIR 미지정)"
 fi

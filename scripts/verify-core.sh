@@ -265,7 +265,7 @@ else:
     raise SystemExit("ERROR: core/actions.json has no actions catalog")
 
 expected = {
-    "codegen", "deck", "handoff", "help", "install-deps", "promote",
+    "codegen", "deck", "dreams", "handoff", "help", "install-deps", "promote",
     "regression", "report", "routine", "set-models", "status", "sync",
     "update", "work", "workspace",
 }

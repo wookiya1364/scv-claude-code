@@ -16,7 +16,7 @@ scv_choice_line() {
   local tool="${1:-}"
   [[ -n "$tool" ]] || return 0
   # 매 턴 실리는 줄 — 래퍼(요구 항목 블록 약 1.5KB)와 함께 매 턴 스택 상한(test-help-budget T12, 12,000B) 안. 요지만, 전문은 규칙 문서.
-  printf '%s\n' "[SCV choices] Ask the user's decisions with $tool, never in text: recommended option first; each option says how it avoids its own problems; over 4 questions, consecutive calls; over 4 options, two steps; names, suggested values; cancelled, stop. A turn that ends asking in text is blocked (contracts/choices.md)."
+  printf '%s\n' "[SCV choices] Ask the user's decisions with $tool, never in text: recommended option first; each option says how it avoids its own problems; over 4 questions, consecutive calls; over 4 options, two steps; names, suggested values; cancelled, stop. Next step is no decision: unblocked, go on; work done, state it unasked. A turn that ends asking in text is blocked (contracts/choices.md)."
 }
 
 # @pure
