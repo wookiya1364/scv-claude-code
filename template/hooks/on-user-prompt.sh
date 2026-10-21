@@ -153,6 +153,32 @@ if [[ "$_scv_kind" != "auto" ]]; then
     if [[ -f "$_scv_af" && ! -L "$_scv_af" ]]; then rm -f "$_scv_af" 2>/dev/null || true; fi
   fi
 fi
+# ---------- dreams (v0.69.0+) ------------------------------------------------
+# 드림(규칙 전문 protocols/dreams.md) — 사람 턴에서만: (1) 아직 안 알린 보고서가 있으면 요약 한 줄을 싣고 알린 것으로 표시한다,
+# (2) 지난 드림 날짜가 오늘이 아니면 드림을 배경으로 띄우고 바로 돌아온다. 설정 SCV_DREAMS=off 면 아무것도 하지 않는다 — 이 구간을
+# 지운 훅과 바이트 단위로 같다(test-dreams 가 견준다).
+_scv_dr_lib="$CORE_HOME/scripts/lib/dreams.sh"; _scv_dr_sh="$CORE_HOME/scripts/dreams.sh"
+if [[ "$_scv_kind" != "auto" && -f "$_scv_dr_lib" && -f "$_scv_dr_sh" ]] && command -v jq >/dev/null 2>&1 \
+   && source "$_scv_dr_lib" 2>/dev/null && [[ "$(scv_dreams_switch "$(_scv_read SCV_DREAMS)")" == "on" ]]; then
+  _scv_dl="scv/dreams/latest.json"
+  if [[ -f "$_scv_dl" && ! -L "$_scv_dl" && ! -L scv/dreams ]]; then
+    _scv_ds="$(jq -r 'try (if .announced == false and (.summary | type) == "string" then .summary else empty end) catch empty' "$_scv_dl" 2>/dev/null | head -n 1 | head -c 600)"
+    if [[ -n "$_scv_ds" ]]; then
+      printf '%s (답 맨 위에 이 한 줄을 사용자에게 그대로 알려라)\n' "$_scv_ds"
+      { jq -c '.announced = true' "$_scv_dl" > "$_scv_dl.tmp" && mv -f "$_scv_dl.tmp" "$_scv_dl"; } 2>/dev/null || rm -f "$_scv_dl.tmp" 2>/dev/null
+    fi
+  fi
+  _scv_dlast=""; [[ -f scv/dreams/.last && ! -L scv/dreams/.last ]] && _scv_dlast="$(head -c 16 scv/dreams/.last 2>/dev/null)"
+  _scv_dtoday="$(date +%Y%m%d 2>/dev/null)"
+  if [[ "$(scv_dreams_day_trigger "$_scv_dlast" "$_scv_dtoday")" == "1" ]] && mkdir -p scv/dreams 2>/dev/null \
+     && [[ ! -L scv/dreams && ! -L scv/dreams/.last ]]; then
+    # 날짜를 먼저 적는다 — 같은 날 다음 턴이 다시 띄우지 않게(드림이 실패해도 하루 한 번). 무시 목록은 dreams.sh 와 같다.
+    [[ -f scv/dreams/.gitignore ]] || printf '.lock\n.last\n*.tmp\n' > scv/dreams/.gitignore 2>/dev/null || true
+    printf '%s\n' "$_scv_dtoday" > scv/dreams/.last 2>/dev/null || true
+    ( bash "$_scv_dr_sh" --auto </dev/null >/dev/null 2>&1 & ) >/dev/null 2>&1 || true
+  fi
+fi
+# ---------- /dreams ----------------------------------------------------------
 if [[ "$_scv_kind" == "auto" ]]; then
   if [[ "${_scv_always:-on}" != "off" ]]; then bash "$_scv_mp_sh" prompt --auto --session "$_scv_sid0" >/dev/null 2>&1 || true; fi
 # ---------- /auto turns ------------------------------------------------------

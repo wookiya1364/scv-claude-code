@@ -224,6 +224,7 @@ Skills
   /scv:workspace  Multi-repo setup: join an umbrella / create a root / detach (interactive, no flags)
   /scv:handoff    Multi-repo: declare another repo needs corresponding dev (→ root scv repo)
   action:routine    Run a named maintenance routine from scv/routines/ (--list to enumerate)
+  action:dreams     Look back over past sessions — requests per archived plan + prompt tips (HTML report)
   /scv:update     Claude Code marketplace update guide
   /scv:set-models Explain Claude Code session-level model selection compatibility
 
