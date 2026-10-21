@@ -1,0 +1,7 @@
+{"type": "user", "message": {"role": "user", "content": "내 경로 /Users/alice/secret-proj 메일 alice@example.com token: abcSECRET123 세션 3f2a1b4c-1111-2222-3333-444455556666 확인해 줘"}, "timestamp": "2026-09-05T01:00:00Z"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "r1", "name": "Runner", "input": {"command": "bash \"/opt/core/scripts/model-prompting.sh\" register --model \"m\" --session \"x\" <<'EOF'\ngoal\tmsg\t확인\ndepth\tmsg\t전부\nfinish\tna\t확인만\nrewrite\t-\t확인한다\nEOF"}}, {"type": "text", "text": "확인했습니다."}]}, "timestamp": "2026-09-05T01:00:10Z"}
+{"type": "user", "isSidechain": true, "message": {"role": "user", "content": "하위 에이전트 메시지"}, "timestamp": "2026-09-05T01:30:00Z"}
+{"type": "assistant", "isSidechain": true, "message": {"role": "assistant", "content": [{"type": "text", "text": "하위 답"}]}, "timestamp": "2026-09-05T01:30:05Z"}
+{"type": "user", "message": {"role": "user", "content": "좋아 계속 진행"}, "timestamp": "2026-09-05T02:00:00Z"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "r9", "name": "Runner", "input": {"command": "bash /opt/core/scripts/model-prompting.sh register --keep"}}, {"type": "text", "text": "진행합니다."}]}, "timestamp": "2026-09-05T02:00:10Z"}
+{"type": "user", "isMeta": true, "message": {"role": "user", "content": "메타 줄"}, "timestamp": "2026-09-05T02:10:00Z"}
