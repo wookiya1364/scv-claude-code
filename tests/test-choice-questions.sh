@@ -821,5 +821,17 @@ else
   echo "  (시스템 bash 없음 — T35.12 생략)"
 fi
 
+echo "── [NI.T1 · NI.T2] 다음 할 일은 결정이 아니다 — 규약 규칙 8 + 매 턴 줄 (20261021-wookiya1364-no-idle-next-question) ──"
+# 실사용(2026-10-21): 긴 세션 하나의 창 225개 중 115개가 배경 작업 끝 알림 바로 뒤의 '다음으로 무엇을?' 창이었다.
+r8="$(awk '/^8\. What to do next is not/{p=1} p&&/^Information is not a decision/{exit} p' "$RULE")"
+[[ -n "$r8" ]] && grep -q "take that step without asking" <<<"$r8" && grep -q "automatic-notification turns alike" <<<"$r8" \
+  && grep -q "without a question" <<<"$r8" && grep -q "hard to reverse or reaches outside" <<<"$r8" \
+  && grep -q "taste or scope" <<<"$r8" && grep -q "cannot" <<<"$r8" \
+  && ok "규약 규칙 8 — 막힌 것 없으면 계속 · 끝났으면 서술 · 진짜 결정 세 종류 · 자동 알림 턴 포함" || fail "NI.T1: [$r8]"
+l="$(bash -c 'source "$1"; scv_choice_line PickTool' _ "$LIB")"
+grep -q "Next step is no decision: unblocked, go on; work done, state it unasked." <<<"$l" \
+  && [[ -z "$(bash -c 'source "$1"; scv_choice_line ""' _ "$LIB")" ]] \
+  && ok "매 턴 줄에 '다음 할 일은 결정 아님' 구절, 도구 없으면 줄 없음" || fail "NI.T2: [$l]"
+
 echo; echo "test-choice-questions: pass=$PASS fail=$FAIL"
 (( FAIL == 0 ))

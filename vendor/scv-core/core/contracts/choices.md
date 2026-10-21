@@ -33,6 +33,14 @@ turns included:
    Rare limit: when the turn's first stop can neither clear nor write that record, the rule may block
    once more in the turn — never more than twice. A project can turn the rule off with the setting
    `SCV_CHOICE_GATE=off`.
+8. What to do next is not, by itself, a decision. While the work the user asked for has a clear next
+   step and nothing blocks it, take that step without asking — after a step finishes, after a
+   background job reports back, in automatic-notification turns alike. When the asked work is done,
+   state the recommended next step in one line, without a question, and end the turn. Ask only a real
+   decision: a step that is hard to reverse or reaches outside (deleting, pushing, publishing,
+   sending), a choice of taste or scope that only the user can make, or a point where the work cannot
+   go on without the user's input. (2026-10-21: in real use, one week-long session raised 225
+   windows, 115 of them right after a background job reported back, mostly "what next?".)
 
 Information is not a decision. Tables that report — the unit table of the rewrite principle, result
 tables, the help item table — stay as text.
