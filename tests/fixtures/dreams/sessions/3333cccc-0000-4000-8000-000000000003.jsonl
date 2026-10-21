@@ -1,0 +1,8 @@
+{"type": "user", "message": {"role": "user", "content": "대시보드 차트 추가"}, "timestamp": "2026-09-12T01:00:00Z"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "r1", "name": "Runner", "input": {"command": "bash \"/opt/core/scripts/model-prompting.sh\" register --model \"m\" <<'EOF'\ngoal | msg | 차트\nfinish | asked | 무엇이 되면 끝? (추천: 화면에 보임)\nrewrite | - | 차트를 더한다\nEOF"}}]}, "timestamp": "2026-09-12T01:00:10Z"}
+{"type": "user", "message": {"role": "user", "content": "버그 있어 고쳐"}, "timestamp": "2026-09-25T01:00:00Z"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "고쳤습니다."}]}, "timestamp": "2026-09-25T01:00:10Z"}
+{"type": "user", "message": {"role": "user", "content": "다음 기능 시작하자"}, "timestamp": "2026-10-02T01:00:00Z"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "시작합니다."}]}, "timestamp": "2026-10-02T01:00:10Z"}
+{"type": "attachment", "attachment": {"type": "queued_command", "prompt": "작업 중 추가 요청"}, "timestamp": "2026-10-03T01:00:00Z"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "반영합니다."}]}, "timestamp": "2026-10-03T01:00:10Z"}

@@ -103,6 +103,8 @@ jobs:
           bash .github/scripts/test-prompting-guides.sh
           bash tests/test-apply-model-policy.sh
           bash tests/test-show-real-judge.sh
+          SCV_SKILLS_DIR="$PWD/skills" bash tests/test-skill-descriptions.sh
+          bash tests/test-dreams.sh
           bash tests/test-help-workspace.sh
           bash tests/test-workspace.sh
           bash tests/test-guard.sh
