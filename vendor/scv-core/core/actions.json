@@ -113,6 +113,27 @@
       "execution_class": "economy",
       "protocol": "protocols/dreams.md",
       "entrypoint": "scripts/dreams.sh"
+    },
+    {
+      "id": "mods",
+      "owner": "adapter",
+      "execution_class": "economy",
+      "protocol": "protocols/mods.md",
+      "entrypoint": null
+    },
+    {
+      "id": "mods-install",
+      "owner": "adapter",
+      "execution_class": "economy",
+      "protocol": "protocols/mods-install.md",
+      "entrypoint": null
+    },
+    {
+      "id": "mods-remove",
+      "owner": "adapter",
+      "execution_class": "economy",
+      "protocol": "protocols/mods-remove.md",
+      "entrypoint": null
     }
   ]
 }
