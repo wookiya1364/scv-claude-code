@@ -52,6 +52,9 @@ Six months later, a test nobody remembers still catches the break.
 `/scv:update` tells you whether you are behind. After an update, each project
 refreshes its SCV files on the first action — and says so.
 
+SCV mods (e.g. `scv-hello`, the SCV pane in the desktop app): `/scv:mods` updates them and lists them,
+`/scv:mods-install` and `/scv:mods-remove` let you pick one. No arguments.
+
 ## How you use it
 
 **Just talk.** No command to memorize — SCV joins the conversation by itself:
@@ -162,6 +165,7 @@ You never need this table — conversation routes for you. For explicit control:
 | `/scv:dreams` | Look back at past sessions · coach better prompts |
 | `/scv:workspace` · `/scv:handoff` | Multi-repo: umbrella setup · cross-repo work declaration |
 | `/scv:update` · `/scv:set-models` · `/scv:install-deps` | Plugin update guide · model policy · CLI deps |
+| `/scv:mods` · `/scv:mods-install` · `/scv:mods-remove` | Update + list SCV mods · install one · remove one |
 
 ## Guardrails
 

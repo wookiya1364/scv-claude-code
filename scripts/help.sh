@@ -226,6 +226,7 @@ Skills
   action:routine    Run a named maintenance routine from scv/routines/ (--list to enumerate)
   action:dreams     Look back over past sessions — requests per archived plan + prompt tips (HTML report)
   /scv:update     Claude Code marketplace update guide
+  action:mods       Update the installed SCV mods and list them (mods-install / mods-remove pick one)
   /scv:set-models Explain Claude Code session-level model selection compatibility
 
 EOF
