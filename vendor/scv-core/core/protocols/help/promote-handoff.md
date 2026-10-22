@@ -63,7 +63,7 @@ Continue the loop. Don't immediately re-ask "enough yet?" — wait for natural p
 #### Step B6 — On choice [4] — free-form
 
 Parse the user's intent:
-- "pause for now" → leave the file as `status: active`. Tell the user: "Saved. Run `/scv:help "..."` later to resume."
+- "pause for now" → leave the file as `status: active`. Tell the user: "Saved. To resume later, just say so in plain words (or run `/scv:help \"...\"`)."
 - "discard" → ask once more for confirmation, then delete the file.
 - "change slug" → rename the file accordingly.
 - Other → engage in natural conversation.

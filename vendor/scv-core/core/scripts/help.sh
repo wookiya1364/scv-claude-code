@@ -309,6 +309,11 @@ fi
 # 설정 확인. 값은 settings_get 으로만 읽는다 — 직접 파일을 뒤지지 않는다.
 SETTINGS_FILE="${SCV_SETTINGS_FILE:-scv/scv_settings.json}"
 SECRET_FILE="${SCV_SETTINGS_SECRET_FILE:-scv/scv_settings.secret.json}"
+# Free-form messages reach help through the per-turn hook unless SCV_ALWAYS_ON=off
+# (same reading as the hook: absent or anything but off = on). Decides whether the
+# next-action text says "just say it" or names the help command.
+ALWAYS_ON="$(settings_get SCV_ALWAYS_ON 2>/dev/null | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]' || true)"
+[[ "$ALWAYS_ON" == "off" ]] || ALWAYS_ON="on"
 
 if [[ -f "$SETTINGS_FILE" || -f "$SECRET_FILE" ]]; then
   prov="$(settings_get NOTIFIER_PROVIDER 2>/dev/null)"
@@ -328,7 +333,7 @@ if [[ -f "$SETTINGS_FILE" || -f "$SECRET_FILE" ]]; then
       echo "  [△] settings present but token unset (NOTIFIER_PROVIDER=$prov) — put it in $SECRET_FILE"
     fi
   else
-    echo "  [△] settings present but NOTIFIER_PROVIDER missing in $SETTINGS_FILE"
+    echo "  [i] settings present — notifications not set (optional, /scv:report only)"
   fi
 else
   # 0.34.0: 액션 시작 때 자동으로 생기므로 여기 오면 hydrate 가 안 됐거나 쓰기가 막힌 것이다.
@@ -475,17 +480,6 @@ elif [[ $HYDRATED -eq 0 ]]; then
 
   Run /scv:help again afterwards to see the next step.
 EOF
-elif [[ $ENV_SET -eq 0 ]]; then
-  cat <<'EOF'
-  Configure settings. Copy `scv/scv_settings.example.json` and fill it in.
-
-  1. cp scv/scv_settings.example.json scv/scv_settings.json
-     Tokens and channel IDs go in scv/scv_settings.secret.json (git-ignored).
-     Coming from .env? run: bash <core>/scripts/settings-migrate.sh
-  2. Set NOTIFIER_PROVIDER (slack or discord)
-  3. Fill in the matching Bot token and SLACK_CHANNEL_ID_* (or DISCORD_*)
-  4. Run /scv:help again
-EOF
 elif [[ "$RAW_CHANGES_TOTAL" -gt 0 ]]; then
   cat <<EOF
   Detected changes in scv/raw/ ($RAW_CHANGES_TOTAL item(s) total).
@@ -525,10 +519,43 @@ else
 
   Start a new loop with one of:
 
+EOF
+  if [[ "$ALWAYS_ON" == "off" ]]; then
+    cat <<'EOF'
+  - Talk through an idea     : /scv:help "<what you want to build>"
   - Drop new material        : add files to scv/raw/, then /scv:help
+EOF
+  else
+    cat <<'EOF'
+  - Just say what you want   : describe it in plain words in this chat — every
+                               message reaches SCV on its own (no command needed)
+  - Drop new material        : add files to scv/raw/, then say so
+EOF
+  fi
+  cat <<'EOF'
   - Ralph Loop autoloop      : external integration using loop-runner.md
   - Manual phase report      : /scv:report "Phase 1 — ..." passed --summary "..."
 EOF
+fi
+
+# Notifications are optional — only /scv:report and PR notices use them, so a
+# missing notifier never takes the recommended-next-action slot (0.69.1). An
+# existing settings file is never overwritten by a suggested command.
+if [[ $HYDRATED -eq 1 && $ENV_SET -eq 0 && $STATE_CONFLICT -eq 0 && $STATE_POINTER_BROKEN -eq 0 ]]; then
+  echo ""
+  if [[ -f "$SETTINGS_FILE" ]]; then
+    cat <<EOF
+  (Optional) Team notifications for /scv:report: set NOTIFIER_PROVIDER
+  (slack or discord) in $SETTINGS_FILE — keep your other settings — and put the
+  bot token in $SECRET_FILE (git-ignored).
+EOF
+  else
+    cat <<EOF
+  (Optional) Team notifications for /scv:report: copy
+  scv/scv_settings.example.json to $SETTINGS_FILE (none exists yet), set
+  NOTIFIER_PROVIDER, and put the bot token in $SECRET_FILE (git-ignored).
+EOF
+  fi
 fi
 
 # Additive workspace recommendation — surfaces incoming cross-repo work regardless
