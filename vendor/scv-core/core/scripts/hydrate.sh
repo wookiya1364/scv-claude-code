@@ -175,9 +175,12 @@ cat <<EOF
 ✅ SCV template hydrated into: $TARGET
    SCV version: $VERSION (synced $TODAY)
 
-▶ Next: in your Claude Code session, run this one line:
+▶ Next: in your agent session, just say what you want to build, in plain words.
+  Every message reaches SCV on its own — no command needed. To see the current
+  state and the recommended next step, run:
 
     /scv:help
 
-/scv:help diagnoses the current state and recommends the next step.
+  (With SCV_ALWAYS_ON=off in scv/scv_settings.json, start ideas with
+   /scv:help "<what you want to build>" instead.)
 EOF
