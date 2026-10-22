@@ -31,21 +31,25 @@ Drop into scv/raw/ → action:promote (refines via dialogue)
 
 ---
 
-## 1.4. Idea-first entry — `action:help "..."` (v0.9.0+, no raw needed)
+## 1.4. Idea-first entry — just say it (v0.9.0+, no raw needed)
 
-**You don't need files in `scv/raw/` to start.** If you have an idea but no concrete materials yet:
+**You don't need files in `scv/raw/` to start.** If you have an idea but no concrete materials yet,
+just describe it in plain words in your agent session — a per-turn hook routes every message to
+`action:help` (`SCV_ALWAYS_ON`, default on), so no command is needed:
 
 ```
-action:help "I want to add a refund button to checkout"
+I want to add a refund button to checkout
 ```
+
+The explicit form `action:help "..."` does the same, and is the way in when `SCV_ALWAYS_ON=off`.
 
 This enters **conversation mode** — SCV refines your idea with you (asking goal / scope / acceptance questions), persists every turn to `scv/conversations/<timestamp>-<slug>.md` (committed, redaction-filtered — v0.22.0+), and offers to draft `PLAN.md + TESTS.md` when there's enough information. You can:
 
-- **Quit anytime** — the conversation file is saved turn-by-turn. Run `action:help "<continue idea>"` later to resume.
+- **Quit anytime** — the conversation file is saved turn-by-turn. Just say you want to continue later (or run `action:help "<continue idea>"`) to resume.
 - **Promote without `scv/raw/`** — choice [1] in the conversation's "ready?" prompt creates the plan directly. Conversation stays in `scv/conversations/` (committed).
 - **Promote with team traceability** — choice [2] also copies the conversation to `scv/raw/<YYYYMMDD>-<author>-<slug>.md` (committable). Pick this when teammates value the raw-thinking history.
 
-If you already have files in `scv/raw/`, the classic flow (§1.5 below) still works — `action:help "..."` is the *additional* entry, not a replacement.
+If you already have files in `scv/raw/`, the classic flow (§1.5 below) still works — talking it through is the *additional* entry, not a replacement.
 
 ---
 
