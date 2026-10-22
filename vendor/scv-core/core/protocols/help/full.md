@@ -16,9 +16,10 @@ protocol says, then continue with the current turn.
 
 ## Mode B — Conversation (future-leaning argument, v0.9.0+)
 
-`/scv:help "I want to add a refund button"` (any *forward-looking* idea): refine it into
-a plan, persist the dialog turn by turn, hand off to `/scv:promote` once goal / scope /
-acceptance are clear.
+`/scv:help "I want to add a refund button"` (any *forward-looking* idea; users usually just say
+it in chat — the per-turn hook routes it here, `SCV_ALWAYS_ON` default on): refine it into a plan,
+persist the dialog turn by turn, hand off to `/scv:promote` once goal / scope / acceptance
+are clear.
 
 ## Mode B' — Archive Search (retrospective argument, v0.10.0+)
 
