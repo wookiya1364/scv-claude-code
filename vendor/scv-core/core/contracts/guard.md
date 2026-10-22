@@ -81,9 +81,12 @@ handoff
 set-models
 routine
 dreams
+mods
+mods-install
+mods-remove
 ```
 
-Two of these (`update`, `set-models`) have `entrypoint: null` in
+Five of these (`update`, `set-models`, `mods`, `mods-install`, `mods-remove`) have `entrypoint: null` in
 `core/actions.json` — Core ships no executable for them. On a host that mints from
 a script invocation, they mint from the wrapper adapter's own scripts instead, so
 an adapter script directory must be part of the mint allowlist.
@@ -139,6 +142,9 @@ write, or the guard blocks the action it exists to protect. Verified by hand on
 | sync | 40 | no |
 | work | 32 | no |
 | workspace | 36 | no |
+| mods | — | adapter-owned; Core ships no write |
+| mods-install | — | adapter-owned; Core ships no write |
+| mods-remove | — | adapter-owned; Core ships no write |
 | set-models | — | adapter-owned; Core ships no write |
 | update | — | adapter-owned; Core ships no write |
 
