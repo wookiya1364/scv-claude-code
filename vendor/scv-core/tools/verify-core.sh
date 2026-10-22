@@ -74,8 +74,8 @@ fi
 
 action_count="$(grep -c '"id":' "$ROOT/core/actions.json")"
 protocol_count="$(find "$ROOT/core/protocols" -maxdepth 1 -type f -name '*.md' | wc -l | tr -d '[:space:]')"
-[[ "$action_count" -eq 16 ]] || { echo "expected 16 actions, got $action_count" >&2; exit 1; }
-[[ "$protocol_count" -eq 16 ]] || { echo "expected 16 protocols, got $protocol_count" >&2; exit 1; }
+[[ "$action_count" -eq 19 ]] || { echo "expected 19 actions, got $action_count" >&2; exit 1; }
+[[ "$protocol_count" -eq 19 ]] || { echo "expected 19 protocols, got $protocol_count" >&2; exit 1; }
 grep -A4 '"id": "update"' "$ROOT/core/actions.json" | grep -q '"owner": "adapter"'
 grep -A4 '"id": "set-models"' "$ROOT/core/actions.json" | grep -q '"owner": "adapter"'
 [[ ! -e "$ROOT/core/scripts/update.sh" && ! -e "$ROOT/core/scripts/apply-model-policy.sh" ]] \
@@ -91,4 +91,4 @@ if [[ -f "$ROOT/core.lock.json" ]]; then
     || { echo "invalid artifact_sha256 in core.lock.json" >&2; exit 1; }
 fi
 
-echo "SCV Core verified: v$VERSION (API $CORE_API, 16 actions)"
+echo "SCV Core verified: v$VERSION (API $CORE_API, 19 actions)"
