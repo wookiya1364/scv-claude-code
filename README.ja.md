@@ -52,6 +52,9 @@
 `/scv:update` が最新かどうかを知らせます。更新後、各プロジェクトは最初の
 アクションで SCV のファイルを自ら更新し、更新したことを伝えます。
 
+SCV モッド(例: デスクトップアプリの SCV ペイン `scv-hello`): `/scv:mods` が更新して一覧を表示し、
+`/scv:mods-install`・`/scv:mods-remove` で一つを選んでインストール・削除します。引数はありません。
+
 ## 使い方
 
 **普通に話しかけるだけ。** 覚えるコマンドはありません — SCV が会話に自ら加わります:
@@ -159,6 +162,7 @@ bash "$CORE/scripts/metrics.sh"                                 # プロセス�
 | `/scv:dreams` | 過去のセッションを振り返り、より良いプロンプトを助言 |
 | `/scv:workspace` · `/scv:handoff` | マルチレポ: アンブレラ構成 · 他リポジトリ作業の宣言 |
 | `/scv:update` · `/scv:set-models` · `/scv:install-deps` | プラグイン更新案内 · モデルポリシー · CLI 依存 |
+| `/scv:mods` · `/scv:mods-install` · `/scv:mods-remove` | SCV モッド更新 + 一覧 · 一つインストール · 一つ削除 |
 
 ## ガードレール
 
