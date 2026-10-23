@@ -54,8 +54,8 @@
 
 SCV モッド(例: デスクトップアプリの SCV ペイン `scv-dashboard`): `/scv:mods` が更新して一覧を表示し、
 `/scv:mods-install`・`/scv:mods-remove` で一つを選んでインストール・削除します。引数はありません。
-`scv-hello` は `scv-dashboard` に名前が変わりました: `/scv:mods-remove` で `scv-hello` を削除し、
-`/scv:mods-install` で `scv-dashboard` をインストールします。
+`scv-hello` は `scv-dashboard` に名前が変わりました: `/scv:mods-install` で `scv-dashboard` をインストールし、
+一覧に `scv-hello` が残っていれば `/scv:mods-remove` で削除します。
 
 ## 使い方
 

@@ -54,8 +54,8 @@ SCV 파일을 스스로 갱신하고, 갱신했다고 말해 줍니다.
 
 SCV 모드(예: 데스크톱 앱의 SCV 칸 `scv-dashboard`): `/scv:mods` 가 업데이트하고 목록을 보여 주고,
 `/scv:mods-install` · `/scv:mods-remove` 는 하나를 골라 설치 · 삭제합니다. 인자는 없습니다.
-`scv-hello` 는 `scv-dashboard` 로 이름이 바뀌었습니다: `/scv:mods-remove` 로 `scv-hello` 를 지우고
-`/scv:mods-install` 로 `scv-dashboard` 를 설치합니다.
+`scv-hello` 는 `scv-dashboard` 로 이름이 바뀌었습니다: `/scv:mods-install` 로 `scv-dashboard` 를 설치하고,
+목록에 `scv-hello` 가 남아 있으면 `/scv:mods-remove` 로 지웁니다.
 
 ## 쓰는 법
 

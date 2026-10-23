@@ -54,8 +54,8 @@ refreshes its SCV files on the first action — and says so.
 
 SCV mods (e.g. `scv-dashboard`, the SCV pane in the desktop app): `/scv:mods` updates them and lists them,
 `/scv:mods-install` and `/scv:mods-remove` let you pick one. No arguments.
-`scv-hello` was renamed `scv-dashboard`: remove `scv-hello` with `/scv:mods-remove`, then install
-`scv-dashboard` with `/scv:mods-install`.
+`scv-hello` was renamed `scv-dashboard`: install `scv-dashboard` with `/scv:mods-install`; if `scv-hello`
+is still listed, remove it with `/scv:mods-remove`.
 
 ## How you use it
 
