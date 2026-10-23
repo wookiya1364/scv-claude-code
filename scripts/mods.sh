@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # mods.sh — /scv:mods · /scv:mods-install · /scv:mods-remove 의 엔진: SCV 모드 업데이트 · 목록 · 설치 · 삭제.
 #
-# 모드(예: scv-dashboard — 데스크톱 앱의 SCV 칸)는 별도 마켓(기본 wookiya1364/scv-mods, 비공개)에서 오는 Claude Code
+# 모드(예: scv-dashboard — 데스크톱 앱의 SCV 칸)는 별도 마켓(기본 wookiya1364/scv-mods, 공개 — 로그인 없이 설치)에서 오는 Claude Code
 # 플러그인이다. 사람이 기억해야 했던 일 — 마켓 추가 · 설치 · 마켓 갱신 + 업데이트 두 줄 · 인증 · 다시 불러오기 — 을
 # 한 명령으로 묶는다. 바꾸는 일은 모두 Claude Code CLI(`claude plugin …`)로만 하고 ~/.claude/plugins 를 직접 고치지
 # 않는다. 프로젝트 파일은 건드리지 않는다.
@@ -86,7 +86,7 @@ mods_summary() {
         && printf '%s' "$ftext" | grep -qiE 'not found'; then
       echo "NEXT: ${failed#* } 은(는) 모드 마켓에 없다 — 이름이 바뀌었거나 빠졌다: /scv:mods-install 로 새 모드를 설치하고, 목록에 옛 모드가 남아 있으면 /scv:mods-remove 로 지운다"
     elif printf '%s' "$ftext" | grep -qiE "$auth|not found|404|repository"; then
-      echo "NEXT: 모드 마켓($MKT_SOURCE)은 비공개 저장소다 — 이 컴퓨터에 github 읽기 권한을 준다: gh auth login 다음 gh auth setup-git (또는 SSH 키), 그 뒤 다시 실행"
+      echo "NEXT: 모드 마켓($MKT_SOURCE)을 읽지 못했다 — 비공개 마켓이면 이 컴퓨터에 github 읽기 권한을 준다: gh auth login 다음 gh auth setup-git (또는 SSH 키), 그 뒤 다시 실행"
     fi
     return 0
   fi

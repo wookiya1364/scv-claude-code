@@ -113,7 +113,7 @@ O="$(run remove scv-dashboard)"
 grep -q '^RESULT: scv-dashboard removed$' <<<"$O" && ok "삭제됨" || fail "결과: $O"
 grep -q '/reload-plugins' <<<"$O" && ok "다시 불러오기 안내" || fail "안내 없음"
 
-echo "── [T7] 비공개 저장소 인증 실패 ──"
+echo "── [T7] 마켓 저장소 인증 실패(비공개 마켓) ──"
 case_dir; echo "marketplace add" > "$W/fc/failon"
 O="$(run install scv-dashboard)"; rc=$?
 [[ $rc -ne 0 ]] && ok "종료 코드 $rc" || fail "실패인데 0"

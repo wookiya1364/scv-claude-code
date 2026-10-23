@@ -7,7 +7,7 @@ allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/mods.sh:*)"]
 
 # /scv:mods
 
-SCV mods are Claude Code plugins from a separate marketplace (default `wookiya1364/scv-mods`, private;
+SCV mods are Claude Code plugins from a separate marketplace (default `wookiya1364/scv-mods`, public;
 `SCV_MODS_MARKETPLACE` overrides it). This command takes no argument and runs without asking — an
 update only moves installed mods forward, and the list changes nothing:
 
