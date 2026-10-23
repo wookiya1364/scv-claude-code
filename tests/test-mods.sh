@@ -16,12 +16,14 @@ W="$(mktemp -d "${TMPDIR:-/tmp}/scv-mods-test.XXXXXX")"; trap 'rm -rf "$W"' EXIT
 mkdir -p "$W/bin"
 
 # 가짜 claude — $FC_DIR/mkt (있으면 마켓 있음), $FC_DIR/inst ("모드 버전" 줄), $FC_DIR/avail ("모드" 줄),
-# $FC_DIR/next (업데이트 뒤 버전), $FC_DIR/failon (이 단어로 시작하는 명령은 인증 오류로 실패).
+# $FC_DIR/next (업데이트 뒤 버전), $FC_DIR/failon (이 단어로 시작하는 명령은 인증 오류로 실패 — $FC_DIR/failmsg 가
+# 있으면 그 문구로).
 cat > "$W/bin/claude" <<'FC'
 #!/usr/bin/env bash
 [[ "$1" == plugin ]] || exit 9; shift
 echo "$*" >> "$FC_DIR/calls"
 if [[ -f "$FC_DIR/failon" ]] && [[ "$*" == "$(cat "$FC_DIR/failon")"* ]]; then
+  if [[ -f "$FC_DIR/failmsg" ]]; then cat "$FC_DIR/failmsg" >&2; exit 1; fi
   echo "Error: Failed to clone marketplace repository: fatal: could not read Username for 'https://github.com': terminal prompts disabled" >&2; exit 1
 fi
 inst() { [[ -f "$FC_DIR/inst" ]] && cat "$FC_DIR/inst"; }
@@ -118,6 +120,17 @@ O="$(run install scv-dashboard)"; rc=$?
 grep -q 'installed' <<<"$O" && fail "설치됐다고 함: $O" || ok "설치됐다고 하지 않음"
 grep -q 'gh auth login' <<<"$O" && grep -q 'gh auth setup-git' <<<"$O" && ok "인증 할 일 안내" || fail "안내 없음: $O"
 calls | grep -q '^install ' && fail "실패 뒤에도 설치를 부름" || ok "실패 뒤 설치 안 부름"
+
+echo "── [T7b] 이름이 바뀐 모드 — 모드 단계의 not found 는 인증 안내가 아니다 ──"
+case_dir; touch "$W/fc/mkt"; echo "scv-hello 0.1.0" > "$W/fc/inst"; echo "update scv-hello" > "$W/fc/failon"
+echo "Plugin \"scv-hello\" not found in marketplace \"scv-mods\"" > "$W/fc/failmsg"
+O="$(run)"; rc=$?
+[[ $rc -ne 0 ]] && ok "종료 코드 $rc" || fail "실패인데 0"
+grep -q 'gh auth' <<<"$O" && fail "인증 안내가 나옴: $O" || ok "인증 안내 없음"
+grep -q 'mods-install' <<<"$O" && grep -q 'mods-remove' <<<"$O" && ok "새 모드 설치 · 옛 모드 삭제 안내" || fail "안내 없음: $O"
+case_dir; echo "marketplace add" > "$W/fc/failon"; echo "Error: repository not found" > "$W/fc/failmsg"
+O="$(run install scv-dashboard)"
+grep -q 'gh auth login' <<<"$O" && ok "마켓 단계의 not found 는 그대로 인증 안내" || fail "안내 없음: $O"
 
 echo "── [T8] 스킬 — 인자 없음, 설치 · 삭제는 선택 창에서 고름 ──"
 for a in mods mods-install mods-remove; do

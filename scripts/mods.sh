@@ -79,7 +79,13 @@ mods_summary() {
   local targets m old new
   if [[ -n "$failed" ]]; then
     echo "RESULT: ${mod:-all} failed $failed"
-    if printf '%s' "$ftext" | grep -qiE 'auth|permission denied|could not read|not found|403|404|terminal prompts disabled|repository'; then
+    # 마켓 단계는 저장소를 받는다 — 'not found' 도 권한 없음일 수 있다. 모드 단계의 'not found' 는 마켓에 그
+    # 이름이 없다는 뜻(이름이 바뀌었거나 빠짐)이라 인증 안내가 원인과 맞지 않는다.
+    local auth='auth|permission denied|could not read|403|terminal prompts disabled'
+    if [[ "$failed" != marketplace* ]] && ! printf '%s' "$ftext" | grep -qiE "$auth" \
+        && printf '%s' "$ftext" | grep -qiE 'not found'; then
+      echo "NEXT: ${failed#* } 은(는) 모드 마켓에 없다 — 이름이 바뀌었거나 빠졌다: /scv:mods-install 로 새 모드를 설치하고, 목록에 옛 모드가 남아 있으면 /scv:mods-remove 로 지운다"
+    elif printf '%s' "$ftext" | grep -qiE "$auth|not found|404|repository"; then
       echo "NEXT: 모드 마켓($MKT_SOURCE)은 비공개 저장소다 — 이 컴퓨터에 github 읽기 권한을 준다: gh auth login 다음 gh auth setup-git (또는 SSH 키), 그 뒤 다시 실행"
     fi
     return 0
