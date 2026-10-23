@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # mods.sh — /scv:mods · /scv:mods-install · /scv:mods-remove 의 엔진: SCV 모드 업데이트 · 목록 · 설치 · 삭제.
 #
-# 모드(예: scv-hello — 데스크톱 앱의 SCV 칸)는 별도 마켓(기본 wookiya1364/scv-mods, 비공개)에서 오는 Claude Code
+# 모드(예: scv-dashboard — 데스크톱 앱의 SCV 칸)는 별도 마켓(기본 wookiya1364/scv-mods, 비공개)에서 오는 Claude Code
 # 플러그인이다. 사람이 기억해야 했던 일 — 마켓 추가 · 설치 · 마켓 갱신 + 업데이트 두 줄 · 인증 · 다시 불러오기 — 을
 # 한 명령으로 묶는다. 바꾸는 일은 모두 Claude Code CLI(`claude plugin …`)로만 하고 ~/.claude/plugins 를 직접 고치지
 # 않는다. 프로젝트 파일은 건드리지 않는다.

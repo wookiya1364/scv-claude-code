@@ -52,8 +52,10 @@
 `/scv:update` が最新かどうかを知らせます。更新後、各プロジェクトは最初の
 アクションで SCV のファイルを自ら更新し、更新したことを伝えます。
 
-SCV モッド(例: デスクトップアプリの SCV ペイン `scv-hello`): `/scv:mods` が更新して一覧を表示し、
+SCV モッド(例: デスクトップアプリの SCV ペイン `scv-dashboard`): `/scv:mods` が更新して一覧を表示し、
 `/scv:mods-install`・`/scv:mods-remove` で一つを選んでインストール・削除します。引数はありません。
+`scv-hello` は `scv-dashboard` に名前が変わりました: `/scv:mods-remove` で `scv-hello` を削除し、
+`/scv:mods-install` で `scv-dashboard` をインストールします。
 
 ## 使い方
 
