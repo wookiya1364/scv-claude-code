@@ -1,6 +1,6 @@
 ---
 name: mods-install
-description: "Install one SCV mod (e.g. scv-hello, the SCV pane in the desktop app) — pick it from the mods marketplace; adds the marketplace first when it is missing. No arguments. Use whenever the user wants to install or add an SCV mod — not only when they type /scv:mods-install."
+description: "Install one SCV mod (e.g. scv-dashboard, the SCV pane in the desktop app) — pick it from the mods marketplace; adds the marketplace first when it is missing. No arguments. Use whenever the user wants to install or add an SCV mod — not only when they type /scv:mods-install."
 argument-hint: ""
 allowed-tools:
   - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/mods.sh:*)"
@@ -29,6 +29,6 @@ Then install the picked mod:
 "${CLAUDE_PLUGIN_ROOT}/scripts/mods.sh" install "<picked mod>"
 ```
 
-Report `RESULT:` in plain words ("scv-hello installed, 745b604") and every `NEXT:` line as it is —
+Report `RESULT:` in plain words ("scv-dashboard installed, 0.1.0") and every `NEXT:` line as it is —
 the user runs `/reload-plugins` (or opens a new session) to start the mod. Never report a failed step
 as installed. Never edit `~/.claude/plugins` by hand or touch project files.
