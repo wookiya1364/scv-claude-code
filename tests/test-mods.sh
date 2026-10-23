@@ -17,7 +17,8 @@ mkdir -p "$W/bin"
 
 # 가짜 claude — $FC_DIR/mkt (있으면 마켓 있음), $FC_DIR/inst ("모드 버전" 줄), $FC_DIR/avail ("모드" 줄),
 # $FC_DIR/next (업데이트 뒤 버전), $FC_DIR/failon (이 단어로 시작하는 명령은 인증 오류로 실패 — $FC_DIR/failmsg 가
-# 있으면 그 문구로).
+# 있으면 그 문구로), $FC_DIR/mloc/.claude-plugin/marketplace.json (받아 둔 마켓 목록 — 없으면 못 읽음),
+# $FC_DIR/catalog.next · avail.next (marketplace update 가 새로 받아 오는 마켓 목록 · 설치 가능 목록).
 cat > "$W/bin/claude" <<'FC'
 #!/usr/bin/env bash
 [[ "$1" == plugin ]] || exit 9; shift
@@ -29,14 +30,17 @@ fi
 inst() { [[ -f "$FC_DIR/inst" ]] && cat "$FC_DIR/inst"; }
 case "$*" in
   "marketplace list --json")
-    if [[ -f "$FC_DIR/mkt" ]]; then echo '[{"name":"scv-mods","source":"github","repo":"wookiya1364/scv-mods"},{"name":"other","source":"github"}]'; else echo '[{"name":"other","source":"github"}]'; fi ;;
+    if [[ -f "$FC_DIR/mkt" ]]; then echo '[{"name":"scv-mods","source":"github","repo":"wookiya1364/scv-mods","installLocation":"'"$FC_DIR/mloc"'"},{"name":"other","source":"github"}]'; else echo '[{"name":"other","source":"github"}]'; fi ;;
   "list --json")
     { inst | awk 'NF { printf "{\"id\":\"%s@scv-mods\",\"version\":\"%s\"}\n", $1, $2 }'; echo '{"id":"x@other","version":"1"}'; } | jq -cs . ;;
   "list --json --available")
     { [[ -f "$FC_DIR/avail" ]] && awk 'NF { printf "{\"name\":\"%s\",\"marketplaceName\":\"scv-mods\"}\n", $1 }' "$FC_DIR/avail"; echo '{"name":"y","marketplaceName":"other"}'; } \
       | jq -cs --argjson i "$(inst | awk 'NF { printf "{\"id\":\"%s@scv-mods\",\"version\":\"%s\"}\n", $1, $2 }' | jq -cs .)" '{installed: $i, available: .}' ;;
   "marketplace add "*) touch "$FC_DIR/mkt" ;;
-  "marketplace update "*) : ;;
+  "marketplace update "*)
+    [[ -f "$FC_DIR/catalog.next" ]] && { mkdir -p "$FC_DIR/mloc/.claude-plugin"; mv "$FC_DIR/catalog.next" "$FC_DIR/mloc/.claude-plugin/marketplace.json"; }
+    [[ -f "$FC_DIR/avail.next" ]] && mv "$FC_DIR/avail.next" "$FC_DIR/avail"
+    : ;;
   "install "*) m="${2%@*}"; echo "$m 1111111" >> "$FC_DIR/inst" ;;
   "update "*) m="${2%@*}"; v="$(cat "$FC_DIR/next" 2>/dev/null)"; [[ -n "$v" ]] && { inst | awk -v m="$m" -v v="$v" '$1 == m { $2 = v } { print }' > "$FC_DIR/inst.n"; mv "$FC_DIR/inst.n" "$FC_DIR/inst"; } ;;
   "uninstall "*) m="${2%@*}"; inst | awk -v m="$m" '$1 != m' > "$FC_DIR/inst.n"; mv "$FC_DIR/inst.n" "$FC_DIR/inst" ;;
@@ -131,6 +135,30 @@ grep -q 'mods-install' <<<"$O" && grep -q 'mods-remove' <<<"$O" && ok "새 모�
 case_dir; echo "marketplace add" > "$W/fc/failon"; echo "Error: repository not found" > "$W/fc/failmsg"
 O="$(run install scv-dashboard)"
 grep -q 'gh auth login' <<<"$O" && ok "마켓 단계의 not found 는 그대로 인증 안내" || fail "안내 없음: $O"
+
+echo "── [T11] 이름이 바뀐 직후, 옛 마켓 사본 — 새로 받고, 없는 모드는 업데이트하지 않는다 ──"
+renamed_case() {
+  case_dir; touch "$W/fc/mkt"; mkdir -p "$W/fc/mloc/.claude-plugin"
+  echo '{"plugins":[{"name":"scv-hello"}]}' > "$W/fc/mloc/.claude-plugin/marketplace.json"
+  echo '{"plugins":[{"name":"scv-dashboard"}],"renames":{"scv-hello":"scv-dashboard"}}' > "$W/fc/catalog.next"
+  echo "scv-hello 0.1.0" > "$W/fc/inst"; echo "scv-dashboard" > "$W/fc/avail.next"
+  echo "update scv-hello" > "$W/fc/failon"; echo 'Plugin "scv-hello" not found in marketplace "scv-mods"' > "$W/fc/failmsg"
+}
+renamed_case
+O="$(run candidates)"
+calls | grep -q '^marketplace update scv-mods$' && ok "설치 보기 전에 마켓을 새로 받음" || fail "호출: $(calls | tr '\n' '|')"
+grep -q '^MOD: scv-dashboard available$' <<<"$O" && ok "새 이름이 설치 보기에 나옴" || fail "보기: $O"
+renamed_case
+O="$(run)"; rc=$?
+[[ $rc -eq 0 ]] && ok "새로고침이 끝까지 감(종료 0)" || fail "종료 코드 $rc: $O"
+calls | grep -q '^update scv-hello' && fail "마켓에 없는 모드를 업데이트함" || ok "없는 모드는 업데이트 안 함"
+grep -q '^RESULT: scv-hello renamed scv-dashboard$' <<<"$O" && ok "이름 바뀜 결과" || fail "결과: $O"
+grep -q 'mods-install' <<<"$O" && ok "새 이름 설치 안내" || fail "안내 없음: $O"
+grep -q 'gh auth' <<<"$O" && fail "인증 안내가 나옴" || ok "인증 안내 없음"
+grep -q '^MOD: scv-dashboard available$' <<<"$O" && ok "이어서 목록" || fail "목록: $O"
+renamed_case; echo '{"plugins":[{"name":"scv-dashboard"}]}' > "$W/fc/catalog.next"
+O="$(run)"
+grep -q '^RESULT: scv-hello gone$' <<<"$O" && ok "이름 바뀜 표가 없으면 빠짐으로" || fail "결과: $O"
 
 echo "── [T8] 스킬 — 인자 없음, 설치 · 삭제는 선택 창에서 고름 ──"
 for a in mods mods-install mods-remove; do

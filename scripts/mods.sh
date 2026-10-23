@@ -26,6 +26,7 @@
 #   MOD: <name> installed <version>|available
 #   STEP: <claude plugin 인자들> ok|fail
 #   RESULT: <name> installed <ver> | updated <old> -> <new> | up-to-date <ver> | removed | failed <reason>
+#           | renamed <new> | gone          (새로고침 때 새로 받은 마켓에 없는 모드 — 업데이트하지 않는다)
 #   NEXT: <할 일 한 줄>                    (인증 · 다시 불러오기)
 #
 # Exit: 0 성공, 1 실패(단계 실패 · 상태를 못 읽음), 2 사용법 오류.
@@ -69,6 +70,43 @@ mods_plan() {
       [[ $has_mod -eq 1 ]] && echo "uninstall $mod@$name" ;;
   esac
   return 0
+}
+
+# mods_split <installed_lines> <catalog_lines>
+#   catalog_lines: "plugin <name>" · "rename <old> <new>" 줄들 (받아 둔 마켓 목록). 비어 있으면(못 읽음) 전부 keep.
+#   → stdout: "keep <mod> <version>" · "renamed <mod> <new>" · "gone <mod>" 줄들
+mods_split() {
+  local installed=$1 catalog=$2
+  if [[ -z "$catalog" ]]; then printf '%s\n' "$installed" | awk 'NF { print "keep " $0 }'; return 0; fi
+  # 여러 줄 값은 -v 대신 환경으로 넘긴다 — BSD awk 는 -v 값의 줄바꿈을 거부한다.
+  printf '%s\n' "$installed" | MODS_CAT="$catalog" awk '
+    BEGIN { n = split(ENVIRON["MODS_CAT"], L, "\n"); for (i = 1; i <= n; i++) { split(L[i], f, " ")
+              if (f[1] == "plugin") p[f[2]] = 1; else if (f[1] == "rename") r[f[2]] = f[3] } }
+    NF { if ($1 in p) print "keep " $0; else if ($1 in r) print "renamed " $1 " " r[$1]; else print "gone " $1 }'
+}
+
+# mods_moved <split_lines> <installed_after_lines> → 마켓에서 빠진 모드의 RESULT: / NEXT: 줄들
+mods_moved() {
+  local split=$1 after=$2 line kind m new need=0
+  while IFS= read -r line; do
+    read -r kind m new <<<"$line"
+    case "$kind" in
+      renamed) echo "RESULT: $m renamed $new"
+               printf '%s\n' "$after" | awk -v n="$new" '$1 == n { f = 1 } END { exit !f }' || need=1 ;;
+      gone)    echo "RESULT: $m gone"; need=1 ;;
+    esac
+  done <<<"$split"
+  if [[ $need -eq 1 ]]; then
+    echo "NEXT: 마켓에서 이름이 바뀌었거나 빠진 모드다 — /scv:mods-install 로 새 모드를 설치하고, 목록에 옛 모드가 남아 있으면 /scv:mods-remove 로 지운다"
+  fi
+  return 0
+}
+
+# mods_drop_moved <installed_lines> <split_lines> → 옮겨진(renamed · gone) 모드를 뺀 설치 줄들
+mods_drop_moved() {
+  printf '%s\n' "$1" | MODS_SPLIT="$2" awk '
+    BEGIN { n = split(ENVIRON["MODS_SPLIT"], L, "\n"); for (i = 1; i <= n; i++) { split(L[i], f, " "); if (f[1] == "renamed" || f[1] == "gone") d[f[2]] = 1 } }
+    NF && !($1 in d)'
 }
 
 # mods_summary <op> <mod> <before_lines> <after_lines> <failed_step> <fail_text>
@@ -130,6 +168,16 @@ read_state() {
     | "\(.id | sub("@.*$"; "")) \(.version // "unknown")"' 2>/dev/null
 }
 
+# read_catalog → 받아 둔 마켓 목록의 "plugin <name>" · "rename <old> <new>" 줄들 (읽기만 — 못 읽으면 빈 출력)
+read_catalog() {
+  local loc
+  loc="$("$CLAUDE_BIN" plugin marketplace list --json 2>/dev/null \
+    | jq -r --arg n "$MKT_NAME" '.[] | select(.name == $n) | .installLocation // empty' 2>/dev/null)"
+  [[ -n "$loc" && -f "$loc/.claude-plugin/marketplace.json" ]] || return 0
+  jq -r '((.plugins // [])[] | "plugin \(.name)"), ((.renames // {}) | to_entries[] | "rename \(.key) \(.value)")' \
+    "$loc/.claude-plugin/marketplace.json" 2>/dev/null
+}
+
 # read_available → "<mod>" 줄들 (이 마켓에서 설치 가능한, 아직 안 깐 모드)
 read_available() {
   "$CLAUDE_BIN" plugin list --json --available 2>/dev/null \
@@ -167,18 +215,31 @@ main() {
     return 0
   fi
   if [[ "$op" == candidates ]]; then
-    if [[ $present -eq 0 ]]; then
-      if out="$("$CLAUDE_BIN" plugin marketplace add "$MKT_SOURCE" 2>&1)"; then echo "STEP: marketplace add $MKT_SOURCE ok"
-      else echo "STEP: marketplace add $MKT_SOURCE fail"; mods_summary install "" "" "" "marketplace add $MKT_SOURCE" "$out"; return 1; fi
-    fi
+    # 마켓이 있어도 새로 받는다 — 받아 둔 옛 목록에서 고르면 새 모드 · 바뀐 이름이 보이지 않는다.
+    local first="marketplace update $MKT_NAME"
+    [[ $present -eq 1 ]] || first="marketplace add $MKT_SOURCE"
+    # shellcheck disable=SC2086 # 단계는 공백으로 나뉜 인자다(값에 공백 없음).
+    if out="$("$CLAUDE_BIN" plugin $first 2>&1)"; then echo "STEP: $first ok"
+    else echo "STEP: $first fail"; mods_summary install "" "" "" "$first" "$out"; return 1; fi
     read_available | awk 'NF { print "MOD: " $1 " available" }'
     return 0
   fi
   local relist=""
   if [[ "$op" == refresh ]]; then op=update; relist=1; fi
 
-  local steps step out failed="" ftext=""
+  local steps step out failed="" ftext="" split="" kept="$before"
   steps="$(mods_plan "$op" "$mod" "$MKT_NAME" "$MKT_SOURCE" "$present" "$before")"
+  if [[ "$op" == update && $present -eq 1 ]]; then
+    # 마켓을 먼저 새로 받고, 새 목록에 없는 모드(이름이 바뀌었거나 빠짐)는 업데이트하지 않는다.
+    if out="$("$CLAUDE_BIN" plugin marketplace update "$MKT_NAME" 2>&1)"; then echo "STEP: marketplace update $MKT_NAME ok"
+    else echo "STEP: marketplace update $MKT_NAME fail"; mods_summary "$op" "$mod" "$before" "" "marketplace update $MKT_NAME" "$out"; return 1; fi
+    split="$(mods_split "$before" "$(read_catalog)")"
+    kept="$(printf '%s\n' "$split" | awk '$1 == "keep" { print $2 " " $3 }')"
+    if [[ -n "$mod" ]] && ! printf '%s\n' "$kept" | awk -v m="$mod" '$1 == m { f = 1 } END { exit !f }'; then
+      split="$(printf '%s\n' "$split" | awk -v m="$mod" '$2 == m')"
+    fi
+    steps="$(mods_plan "$op" "$mod" "$MKT_NAME" "$MKT_SOURCE" "$present" "$kept" | grep -v '^marketplace ')"
+  fi
   while IFS= read -r step; do
     [[ -n "$step" ]] || continue
     # shellcheck disable=SC2086 # 단계는 공백으로 나뉜 인자다(값에 공백 없음).
@@ -190,7 +251,13 @@ main() {
   if [[ -z "$failed" ]]; then
     after="$(read_state | sed -n '2,$p')"
   fi
-  mods_summary "$op" "$mod" "$before" "$after" "$failed" "$ftext"
+  local moved=""
+  [[ -n "$split" && -z "$failed" ]] && moved="$(mods_moved "$split" "$after")"
+  # 옮겨진 모드만 있었으면 "설치된 모드 없음" 대신 그 결과만 낸다.
+  if [[ -n "$failed" || -n "$kept" || -z "$moved" ]]; then
+    mods_summary "$op" "$mod" "$kept" "$(mods_drop_moved "$after" "$split")" "$failed" "$ftext"
+  fi
+  [[ -n "$moved" ]] && printf '%s\n' "$moved"
   [[ -z "$failed" ]] || return 1
   if [[ -n "$relist" ]]; then print_list "$present" "$after"; fi
   return 0
