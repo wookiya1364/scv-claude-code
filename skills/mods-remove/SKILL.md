@@ -26,6 +26,6 @@ Then remove the picked mod:
 "${CLAUDE_PLUGIN_ROOT}/scripts/mods.sh" remove "<picked mod>"
 ```
 
-Report `RESULT:` in plain words ("scv-hello removed") and every `NEXT:` line as it is — the user runs
+Report `RESULT:` in plain words ("scv-dashboard removed") and every `NEXT:` line as it is — the user runs
 `/reload-plugins` (or opens a new session). A `failed` result is reported as failed, never as removed.
 Never edit `~/.claude/plugins` by hand or touch project files.
