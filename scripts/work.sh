@@ -310,6 +310,39 @@ else
   echo "TESTS_FILE: (MISSING — $TESTS not found)"
 fi
 
+# Each Suggested path line says what it does (0.70.4): " — `단계`" names pipeline-table rows, a
+# plain " — <한 줄>" says it in words. A line with neither, or a name the table lacks, shows
+# nothing under 하는 일 in a step view — warn per line; never block.
+if [[ -f "$PLAN" ]]; then
+  awk '
+    function trim(s) { gsub(/^[ \t`]+|[ \t`]+$/, "", s); return s }
+    /^## / {
+      h = tolower($0)
+      sec = (h ~ /순수함수|파이프라인|pure function|pipeline/) ? "pipe" : (h ~ /^## (suggested path|steps)[ \t]*$/) ? "path" : ""
+      col = 0; next
+    }
+    sec == "pipe" && /^[ \t]*\|/ {
+      n = split($0, c, "|")
+      if (!col) { for (i = 2; i < n; i++) if (trim(c[i]) == "단계" || tolower(trim(c[i])) == "step") col = i; next }
+      if (trim(c[2]) ~ /^[0-9]+$/ && col) names[trim(c[col])] = 1
+      next
+    }
+    sec == "path" && /^[ \t]*[0-9]+\.[ \t]/ {
+      line = $0; sub(/^[ \t]*/, "", line); num = line; sub(/\..*/, "", num)
+      sub(/^[0-9]+\.[ \t]+/, "", line); sub(/^(\[[ x~!]\]|✅|🔄|⛔)[ \t]*/, "", line)
+      p = index(line, " — ")
+      if (!p) { out[++k] = "PLAN_LINK: step " num " has no \" — `단계`\" or \" — <하는 일 한 줄>\" tail"; next }
+      tail = substr(line, p + length(" — ")); sub(/^[ \t]+/, "", tail)
+      if (substr(tail, 1, 1) != "`") next
+      while (match(tail, /`[^`]+`/)) { refs[++r] = num SUBSEP substr(tail, RSTART + 1, RLENGTH - 2); tail = substr(tail, RSTART + RLENGTH) }
+    }
+    END {
+      for (i = 1; i <= k; i++) print out[i]
+      for (i = 1; i <= r; i++) { split(refs[i], x, SUBSEP); if (!(x[2] in names)) print "PLAN_LINK: step " x[1] " names `" x[2] "`, which is not in the pipeline table 단계 column" }
+    }
+  ' "$PLAN"
+fi
+
 # Related Documents
 echo ""
 echo "=== related documents (from PLAN.md) ==="
