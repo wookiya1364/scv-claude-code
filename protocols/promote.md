@@ -429,10 +429,12 @@ flow(
      End each line with the pipeline steps it builds: " — `단계`, `단계`", each
      name copied exactly from the 단계 column above — that link is how a reader
      (and a dashboard) shows what each line does. A line that builds no step
-     (e.g. a recording) carries no tail. -->
+     (a scenario, a test run, a recording) ends instead with " — " and its
+     하는 일 in one plain line, no backticks — so every line says what it does. -->
 
 1. <TODO> — `<단계>`
 2. <TODO> — `<단계>`, `<단계>`
+3. <TODO> — <TODO: 하는 일 한 줄, 쉬운 말>
 
 ## Related Documents
 
@@ -784,7 +786,9 @@ what makes a feature cheap to A/B test (swap one step, keep the rest).
 each step's 하는 일 (one plain line) and input → output, and marks which ends hold the
 side effects. Each `## Suggested path` line ends with ` — ` and the backticked 단계
 names it builds (`` — `a`, `b` ``), copied exactly from the table, so every path line
-is linked to the rows that say what it does. In the numbered
+is linked to the rows that say what it does. A line that builds no pipeline step (a
+scenario, a test run, a recording) ends with ` — ` and its 하는 일 in one plain line
+instead, without backticks. In the numbered
 spec below, each pipeline step is a natural marker: a number on the picture, its
 input/output and role in the detail beside it.
 
