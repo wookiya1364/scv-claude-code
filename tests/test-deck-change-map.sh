@@ -176,6 +176,25 @@ J=$(probe steps "$P/PLAN.md")
 want "T2 단계 개수" "$(echo "$J" | jq -r 'length')" "2"
 want "T2 상태는 모두 미지정" "$(echo "$J" | jq -r '[.[].status]|unique|join(",")')" "unspecified"
 
+# T2b. 계획서 양식의 '하는 일' 칸이 있어도 단계 · 입출력 · 순수여부를 제 칸에서 읽는다
+cat > "$WORK/role-col.md" <<'EOF'
+## 순수함수 · 파이프라인 (Pure functions & pipeline)
+
+| # | 단계 | 하는 일 | 받는 값 → 돌려주는 값 | 순수/부수효과 |
+|---|---|---|---|---|
+| 1 | `alpha` | 글을 목록으로 나눈다 | 글 → 목록 | 순수 |
+| 2 | `beta` | 목록을 저장한다 | 목록 → 없음 | 부수효과 (출구) |
+EOF
+J=$(probe steps "$WORK/role-col.md")
+want "T2b 단계 개수" "$(echo "$J" | jq -r 'length')" "2"
+want "T2b 단계 이름" "$(echo "$J" | jq -r '.[0].name')" "alpha"
+want "T2b 입출력" "$(echo "$J" | jq -r '.[0].io')" "글 → 목록"
+want "T2b 순수여부" "$(echo "$J" | jq -r '.[1].purity')" "부수효과 (출구)"
+# 계획서 양식이 그 모양을 그대로 내놓는다 — 대시보드(scv-dashboard)가 '하는 일' 칸과
+# 단계 줄 끝 " — `단계`" 연결로 단계 흐름의 '하는 일'을 보여 준다.
+has "$ROOT/protocols/promote.md" "| # | 단계 | 하는 일 | 받는 값 → 돌려주는 값 | 순수/부수효과 |" "T2b 양식 표 머리"
+has "$ROOT/protocols/promote.md" '1. <TODO> — `<단계>`' "T2b 양식 단계 줄 연결"
+
 # T9. 삭제가 적혀 있지 않으면 삭제 행을 만들지 않는다
 P=$(mkproj t9 0)
 J=$(probe rows "$P/PLAN.md")
