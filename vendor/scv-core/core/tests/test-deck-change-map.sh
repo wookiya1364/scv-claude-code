@@ -194,6 +194,7 @@ want "T2b 순수여부" "$(echo "$J" | jq -r '.[1].purity')" "부수효과 (출�
 # 단계 줄 끝 " — `단계`" 연결로 단계 흐름의 '하는 일'을 보여 준다.
 has "$ROOT/protocols/promote.md" "| # | 단계 | 하는 일 | 받는 값 → 돌려주는 값 | 순수/부수효과 |" "T2b 양식 표 머리"
 has "$ROOT/protocols/promote.md" '1. <TODO> — `<단계>`' "T2b 양식 단계 줄 연결"
+has "$ROOT/protocols/promote.md" '3. <TODO> — <TODO: 하는 일 한 줄, 쉬운 말>' "T2b 양식 함수 없는 단계 줄의 하는 일"
 
 # T9. 삭제가 적혀 있지 않으면 삭제 행을 만들지 않는다
 P=$(mkproj t9 0)
