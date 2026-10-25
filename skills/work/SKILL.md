@@ -137,6 +137,11 @@ graft library, and this protocol does not restate or extend it.
 
 `Read` the `PLAN_FILE` path emitted by the helper. Summarize `Summary`, `Goals / Non-Goals`, `Guardrails` + `Exit criteria` (when present), and `Suggested path` (legacy PLANs: `Steps`) to the user in 3–5 bullets so they can confirm scope. Both PLAN forms are valid — a legacy PLAN with only `## Steps` and no Guardrails / Exit criteria is processed exactly as before.
 
+**Step links (0.70.4)** — each `PLAN_LINK:` line in the header names a Suggested path line the
+step view cannot explain: no `` — `단계` `` link to the pipeline table and no ` — <하는 일 한 줄>`, or a
+backticked name the table lacks. Relay each line in one sentence and add the missing tail to that
+PLAN.md line before implementing — a warning, never a block.
+
 Also surface any **external refs** from the helper's `=== external refs ===` block (grouped by `type`, e.g. `[jira] 2`, `[pr] 1`). One line per type is enough — the user can follow links without Claude Code reading them.
 
 **Document split judgment** (applied from now on, through implementation):
