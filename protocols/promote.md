@@ -397,10 +397,10 @@ flow(
 )
 ```
 
-| # | 단계 | 받는 값 → 돌려주는 값 | 순수/부수효과 |
-|---|---|---|---|
-| 1 | <TODO> | <TODO> → <TODO> | 순수 |
-| 2 | <TODO> | <TODO> → <TODO> | 부수효과 (입구/출구) |
+| # | 단계 | 하는 일 | 받는 값 → 돌려주는 값 | 순수/부수효과 |
+|---|---|---|---|---|
+| 1 | <TODO> | <TODO — 한 줄, 쉬운 말> | <TODO> → <TODO> | 순수 |
+| 2 | <TODO> | <TODO — 한 줄, 쉬운 말> | <TODO> → <TODO> | 부수효과 (입구/출구) |
 
 - 부수효과 위치: <TODO — 어떤 단계가 DB·네트워크·시각·난수를 만지는가>
 - 재사용: <TODO — 이미 있는 단계 중 무엇을 그대로 쓰는가>
@@ -425,10 +425,14 @@ flow(
 
 <!-- The path is a suggestion — Guardrails and Exit criteria are the contract
      (경로는 제안, Guardrails/Exit criteria 가 계약). The implementing model may
-     follow a better path when it finds one. -->
+     follow a better path when it finds one.
+     End each line with the pipeline steps it builds: " — `단계`, `단계`", each
+     name copied exactly from the 단계 column above — that link is how a reader
+     (and a dashboard) shows what each line does. A line that builds no step
+     (e.g. a recording) carries no tail. -->
 
-1. <TODO>
-2. <TODO>
+1. <TODO> — `<단계>`
+2. <TODO> — `<단계>`, `<단계>`
 
 ## Related Documents
 
@@ -777,7 +781,10 @@ what makes a feature cheap to A/B test (swap one step, keep the rest).
 
 **Write this into the plan.** Every PLAN.md carries a `## 순수함수 · 파이프라인
 (Pure functions & pipeline)` section that names the pipeline's steps in order, states
-each step's input → output, and marks which ends hold the side effects. In the numbered
+each step's 하는 일 (one plain line) and input → output, and marks which ends hold the
+side effects. Each `## Suggested path` line ends with ` — ` and the backticked 단계
+names it builds (`` — `a`, `b` ``), copied exactly from the table, so every path line
+is linked to the rows that say what it does. In the numbered
 spec below, each pipeline step is a natural marker: a number on the picture, its
 input/output and role in the detail beside it.
 
