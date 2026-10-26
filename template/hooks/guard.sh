@@ -145,7 +145,7 @@ store_deny_reason() {
   printf 'SCV guard: the receipt store at %s cannot be written, so no action can record itself and every guarded write is refused. This is a machine problem, not a workflow one — fix the directory permissions or point SCV_GUARD_STATE at a writable path.' "$STATE_DIR"
 }
 
-ACTIONS_RE="${SCV_GUARD_ACTIONS:-help|status|promote|work|codegen|deck|update|regression|report|sync|install-deps|workspace|handoff|set-models|routine|dreams|mods-install|mods-remove|mods}"
+ACTIONS_RE="${SCV_GUARD_ACTIONS:-help|status|promote|work|codegen|deck|update|regression|report|sync|install-deps|workspace|handoff|set-models|routine|dreams|mods-install|mods-remove|mods|channel}"
 
 # ---------- mint mode: an action is starting --------------------------------
 if [[ "$MODE" == "mint" ]]; then

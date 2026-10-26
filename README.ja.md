@@ -165,6 +165,7 @@ bash "$CORE/scripts/metrics.sh"                                 # プロセス�
 | `/scv:workspace` · `/scv:handoff` | マルチレポ: アンブレラ構成 · 他リポジトリ作業の宣言 |
 | `/scv:update` · `/scv:set-models` · `/scv:install-deps` | プラグイン更新案内 · モデルポリシー · CLI 依存 |
 | `/scv:mods` · `/scv:mods-install` · `/scv:mods-remove` | SCV モッド更新 + 一覧 · 一つインストール · 一つ削除 |
+| `/scv:channel` | SCV を開発 · ステージング · 本番チャネルに切り替え — リリース前に新しい作業を確認 |
 
 ## ガードレール
 
