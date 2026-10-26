@@ -1,0 +1,106 @@
+name: Channel sync
+
+# 채널(0.71.0+): channel/dev = 이 래퍼의 develop + Core develop, channel/stage = 이 래퍼의 stage + Core stage.
+# /scv:channel 이 이 브랜치에서 받는다(Core protocols/channel.md). 이 워크플로가 만드는 브랜치는 channel/* 뿐이다 —
+# develop · stage · main 과 릴리스 체인(core-sync.yml 의 scv-core-released)은 건드리지 않는다.
+# channel/* 는 이 워크플로만 쓰는 브랜치라 매번 원천에서 새로 만들어 강제로 밀어 넣는다(사람이 그 위에서 일하지 않는다).
+on:
+  repository_dispatch:
+    types: [scv-core-channel]
+  push:
+    branches: [develop, stage]
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: 'dev or stage'
+        required: true
+        type: choice
+        options: [dev, stage]
+
+concurrency:
+  group: channel-sync-${{ github.event.client_payload.channel || inputs.channel || (github.ref_name == 'stage' && 'stage' || 'dev') }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      GH_TOKEN: ${{ secrets.SCV_CORE_SYNC_TOKEN || github.token }}
+    steps:
+      - name: Resolve channel
+        id: ch
+        env:
+          PAYLOAD_CHANNEL: ${{ github.event.client_payload.channel }}
+          INPUT_CHANNEL: ${{ inputs.channel }}
+        run: |
+          channel="${PAYLOAD_CHANNEL:-$INPUT_CHANNEL}"
+          if [[ -z "$channel" ]]; then
+            case "$GITHUB_REF_NAME" in develop) channel=dev ;; stage) channel=stage ;; esac
+          fi
+          case "$channel" in
+            dev) base=develop ;;
+            stage) base=stage ;;
+            *) echo "::error::unknown channel: '$channel'"; exit 1 ;;
+          esac
+          echo "channel=$channel" >> "$GITHUB_OUTPUT"
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+          echo "branch=channel/$channel" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ steps.ch.outputs.base }}
+          fetch-depth: 0
+          token: ${{ secrets.SCV_CORE_SYNC_TOKEN || github.token }}
+
+      # Core 는 그 채널 브랜치의 끝(알림이 커밋을 실어 오면 그 커밋)을 받는다.
+      - uses: actions/checkout@v5
+        with:
+          repository: wookiya1364/scv-core
+          ref: ${{ github.event.client_payload.sha || steps.ch.outputs.base }}
+          path: .channel-core
+
+      - name: Vendor Core and set the channel version
+        id: build
+        env:
+          CHANNEL: ${{ steps.ch.outputs.channel }}
+        run: |
+          set -euo pipefail
+          sha=$(git -C .channel-core rev-parse HEAD)
+          core_version=$(tr -d '[:space:]' < .channel-core/VERSION)
+          ./scripts/sync-core.sh --source "$PWD/.channel-core"
+          rm -rf .channel-core
+          # lib/channel.sh 는 방금 들어온 Core 에서 온다 — 채널 버전 규칙이 한 곳에만 있게.
+          # shellcheck source=/dev/null
+          source scripts/lib/channel.sh
+          version=$(scv_channel_version "$core_version" "$CHANNEL" "$sha")
+          ./scripts/set-wrapper-version.sh "$version"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Validate
+        run: |
+          bash tests/test-core-contract.sh
+          bash tests/test-channel.sh
+          bash tests/test-channel-engine.sh
+          bash tests/test-guard.sh
+          find scripts tests adapter -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
+
+      - name: Push channel branch
+        env:
+          BRANCH: ${{ steps.ch.outputs.branch }}
+          BASE: ${{ steps.ch.outputs.base }}
+          SHA: ${{ steps.build.outputs.sha }}
+          VERSION: ${{ steps.build.outputs.version }}
+        run: |
+          set -euo pipefail
+          git config user.name "scv-core-sync[bot]"
+          git config user.email "scv-core-sync[bot]@users.noreply.github.com"
+          git switch -C "$BRANCH"
+          git add -A
+          git commit -q -m "chore(channel): $BRANCH = $BASE + scv-core ${SHA:0:7} ($VERSION)" || echo "no change against $BASE"
+          git push --force origin "HEAD:refs/heads/$BRANCH"
+          echo "### $BRANCH → $VERSION" >> "$GITHUB_STEP_SUMMARY"

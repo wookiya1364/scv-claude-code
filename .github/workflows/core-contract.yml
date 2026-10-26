@@ -104,6 +104,7 @@ jobs:
           bash tests/test-apply-model-policy.sh
           bash tests/test-show-real-judge.sh
           bash tests/test-mods.sh
+          bash tests/test-channel-engine.sh
           SCV_SKILLS_DIR="$PWD/skills" bash tests/test-skill-descriptions.sh
           bash tests/test-dreams.sh
           bash tests/test-help-workspace.sh

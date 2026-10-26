@@ -165,6 +165,7 @@ bash "$CORE/scripts/metrics.sh"                                 # 과정 숫자
 | `/scv:workspace` · `/scv:handoff` | 멀티레포: 우산 구성 · 타 저장소 작업 선언 |
 | `/scv:update` · `/scv:set-models` · `/scv:install-deps` | 플러그인 업데이트 안내 · 모델 정책 · CLI 의존성 |
 | `/scv:mods` · `/scv:mods-install` · `/scv:mods-remove` | SCV 모드 업데이트 + 목록 · 하나 설치 · 하나 삭제 |
+| `/scv:channel` | SCV 를 개발 · 스테이징 · 운영 채널로 바꿔 끼우기 — 릴리스 전에 새 작업 확인 |
 
 ## 가드레일
 

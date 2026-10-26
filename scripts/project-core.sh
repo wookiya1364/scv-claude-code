@@ -195,10 +195,12 @@ sync-core-paths.py
 sync-core.sh
 sync.sh
 mods.sh
+channel.sh
 update.sh
 verify-core.sh
 '
 ADAPTER_ACTIONS='
+channel
 mods
 mods-install
 mods-remove
@@ -212,6 +214,7 @@ test-show-real-judge.sh
 test-sync-core-atomicity.sh
 test-state-adapter.sh
 test-mods.sh
+test-channel-engine.sh
 '
 FAILURES=0
 

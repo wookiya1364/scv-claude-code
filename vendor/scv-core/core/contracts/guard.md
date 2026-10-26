@@ -84,9 +84,10 @@ dreams
 mods
 mods-install
 mods-remove
+channel
 ```
 
-Five of these (`update`, `set-models`, `mods`, `mods-install`, `mods-remove`) have `entrypoint: null` in
+Six of these (`update`, `set-models`, `mods`, `mods-install`, `mods-remove`, `channel`) have `entrypoint: null` in
 `core/actions.json` — Core ships no executable for them. On a host that mints from
 a script invocation, they mint from the wrapper adapter's own scripts instead, so
 an adapter script directory must be part of the mint allowlist.

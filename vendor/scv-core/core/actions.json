@@ -134,6 +134,13 @@
       "execution_class": "economy",
       "protocol": "protocols/mods-remove.md",
       "entrypoint": null
+    },
+    {
+      "id": "channel",
+      "owner": "adapter",
+      "execution_class": "economy",
+      "protocol": "protocols/channel.md",
+      "entrypoint": null
     }
   ]
 }
