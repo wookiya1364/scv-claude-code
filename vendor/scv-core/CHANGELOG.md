@@ -2,6 +2,14 @@
 
 All notable changes to SCV Core are documented here.
 
+## [0.71.0] - 2026-10-26
+
+### 채널 — 개발 · 스테이징 · 운영을 바꿔 끼워 받기
+
+- `channel` 액션(어댑터 몫, 명령 20개째). 규약 `protocols/channel.md`, 순수부 `lib/channel.sh`(채널 ↔ 브랜치, 바꿔 끼우기 단계, 채널 버전 `-dev/-stage.<커밋7>`).
+- Core develop · stage push 마다 두 래퍼에 `scv-core-channel` 알림(`channel-dispatch.yml`) — 래퍼가 `channel/*` 브랜치를 그 Core 로 다시 만든다. 래퍼 develop · stage · main 과 릴리스 체인은 그대로.
+- 시험 `test-channel.sh`.
+
 ## [0.70.4] - 2026-10-25
 
 ### 작업 시작 때 단계 줄 연결 경고
