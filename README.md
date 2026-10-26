@@ -168,6 +168,7 @@ You never need this table — conversation routes for you. For explicit control:
 | `/scv:workspace` · `/scv:handoff` | Multi-repo: umbrella setup · cross-repo work declaration |
 | `/scv:update` · `/scv:set-models` · `/scv:install-deps` | Plugin update guide · model policy · CLI deps |
 | `/scv:mods` · `/scv:mods-install` · `/scv:mods-remove` | Update + list SCV mods · install one · remove one |
+| `/scv:channel` | Switch SCV between dev · stage · prod — try new work before a release |
 
 ## Guardrails
 
