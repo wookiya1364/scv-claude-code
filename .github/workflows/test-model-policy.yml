@@ -53,19 +53,19 @@ jobs:
         run: |
           ./scripts/apply-model-policy.sh --policy all-opus > /dev/null
           n=0; for f in skills/*/SKILL.md; do if grep -q '^model: opus' "$f"; then n=$((n+1)); fi; done
-          [ "$n" = "19" ] || { echo "expected 19 opus, got $n"; exit 1; }
+          [ "$n" = "20" ] || { echo "expected 20 opus, got $n"; exit 1; }
 
       - name: Policy — all-haiku (19 files → haiku)
         run: |
           ./scripts/apply-model-policy.sh --policy all-haiku > /dev/null
           n=0; for f in skills/*/SKILL.md; do if grep -q '^model: haiku' "$f"; then n=$((n+1)); fi; done
-          [ "$n" = "19" ] || { echo "expected 19 haiku, got $n"; exit 1; }
+          [ "$n" = "20" ] || { echo "expected 20 haiku, got $n"; exit 1; }
 
       - name: Policy — all-sonnet (19 files → sonnet)
         run: |
           ./scripts/apply-model-policy.sh --policy all-sonnet > /dev/null
           n=0; for f in skills/*/SKILL.md; do if grep -q '^model: sonnet' "$f"; then n=$((n+1)); fi; done
-          [ "$n" = "19" ] || { echo "expected 19 sonnet, got $n"; exit 1; }
+          [ "$n" = "20" ] || { echo "expected 20 sonnet, got $n"; exit 1; }
 
       - name: Policy — session-default (0 files with model:)
         run: |
@@ -107,7 +107,7 @@ jobs:
           echo "SCV_MODEL_POLICY=all-haiku" > "$TMP/.env"
           SCV_PROJECT_DIR="$TMP" ./scripts/apply-model-policy.sh --from-env > /dev/null
           n=0; for f in skills/*/SKILL.md; do if grep -q '^model: haiku' "$f"; then n=$((n+1)); fi; done
-          [ "$n" = "19" ] || { echo "from-env: expected 19 haiku, got $n"; exit 1; }
+          [ "$n" = "20" ] || { echo "from-env: expected 20 haiku, got $n"; exit 1; }
           ./scripts/apply-model-policy.sh --policy recommended > /dev/null
 
       - name: --from-env with missing .env (silent skip)
