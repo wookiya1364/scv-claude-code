@@ -2,11 +2,11 @@ import { AbsoluteFill, interpolate, useCurrentFrame } from "remotion";
 import { COLORS, FONTS, SIZES } from "./design";
 
 export const ARCH_FPS = 30;
-export const ARCH_DURATION_SECONDS = 12;
+export const ARCH_DURATION_SECONDS = 14;
 export const ARCH_WIDTH = 1600;
-export const ARCH_HEIGHT = 600;
+export const ARCH_HEIGHT = 720;
 
-// Static layout — matches the README Mermaid screenshot. No camera, no zoom.
+// Static layout — today's structure. No camera, no zoom.
 const NODE_W = 180;
 const NODE_H = 80;
 
@@ -19,32 +19,52 @@ type NodeDef = {
   isKey?: boolean;
   shape?: NodeKind;
   fill?: string;
-  // Optional explicit width override (e.g., for long titles like FEATURE_ARCHITECTURE.md).
+  // Optional explicit size overrides.
   w?: number;
+  h?: number;
+  // Invisible anchor: an arrow target on a container's border, not a box.
+  hidden?: boolean;
 };
 
 const NODES: Record<string, NodeDef> = {
-  // SCV row
-  PLAN:    { cx: 300,  cy: 240, title: "PLAN.md",                  subtitle: "(plan + refs)",            isKey: true },
-  Archive: { cx: 1080, cy: 100, title: "scv/archive/",             subtitle: "(accumulated regression)", isKey: true },
-  TESTS:   { cx: 1080, cy: 240, title: "TESTS.md",                 subtitle: "(executable gate)" },
-  FA:      { cx: 1380, cy: 240, title: "FEATURE_ARCHITECTURE.md",  subtitle: "(2 Mermaid diagrams)",     w: 240 },
-  // External (cylinders)
-  Jira:       { cx: 130,  cy: 500, title: "Jira",                shape: "cylinder", fill: COLORS.bgPanelLight },
-  Linear:     { cx: 290,  cy: 500, title: "Linear",              shape: "cylinder", fill: COLORS.bgPanelLight },
-  Confluence: { cx: 470,  cy: 500, title: "Confluence",          shape: "cylinder", fill: COLORS.bgPanelLight },
-  Doc:        { cx: 670,  cy: 500, title: "Google Doc / Notion", shape: "cylinder", fill: COLORS.bgPanelLight },
-  // Output
-  GH:      { cx: 890,  cy: 500, title: "GitHub PR", fill: COLORS.bgPanelLight },
-  GL:      { cx: 1080, cy: 500, title: "GitLab MR", fill: COLORS.bgPanelLight },
-  Slack:   { cx: 1260, cy: 500, title: "Slack",     fill: COLORS.bgPanelLight },
-  Discord: { cx: 1450, cy: 500, title: "Discord",   fill: COLORS.bgPanelLight },
+  // Core
+  Core:   { cx: 390,  cy: 150, title: "SCV Core", subtitle: "protocols · scripts · hooks · actions list", isKey: true, w: 420, h: 96 },
+  // Release channels
+  Dev:    { cx: 920,  cy: 120, title: "dev",   subtitle: "channel/dev branch",   w: 200, h: 64 },
+  Stage:  { cx: 1150, cy: 120, title: "stage", subtitle: "channel/stage branch", w: 200, h: 64 },
+  Prod:   { cx: 1380, cy: 120, title: "prod",  subtitle: "latest release",       w: 200, h: 64 },
+  Swap:   { cx: 1150, cy: 222, title: "/scv:channel", subtitle: "swaps the installed copy", w: 260, h: 52, fill: COLORS.bgPanelLight },
+  // Wrappers ("Wrappers" anchor = the top edge of the wrappers container)
+  Wrappers: { cx: 690, cy: 310, title: "", w: 0, h: 0, hidden: true },
+  Codex:  { cx: 220,  cy: 400, title: "Codex plugin",       subtitle: "scv-codex",       w: 240 },
+  Claude: { cx: 560,  cy: 400, title: "Claude Code plugin", subtitle: "scv-claude-code", w: 240 },
+  // Mods
+  Dash:   { cx: 990,  cy: 400, title: "scv-dashboard", subtitle: "an SCV pane in the desktop app", w: 260, isKey: true },
+  Mods:   { cx: 1410, cy: 400, title: "scv-mods", subtitle: "mods marketplace", shape: "cylinder", fill: COLORS.bgPanelLight, w: 180 },
+  // Outputs
+  PR:     { cx: 390,  cy: 598, title: "PR with evidence", subtitle: "/scv:work",   w: 240, fill: COLORS.bgPanelLight },
+  Notify: { cx: 900,  cy: 598, title: "Slack / Discord",  subtitle: "/scv:report", w: 240, fill: COLORS.bgPanelLight },
 };
 
-const SUBGRAPHS = [
-  { id: "scv",      label: "SCV (in your repo)",         x:  60, y:  40, w: 1500, h: 320, fill: COLORS.scvFill,      stroke: "#4a8fbf" },
-  { id: "external", label: "External (linked via refs:)", x:  60, y: 410, w:  720, h: 170, fill: COLORS.externalFill, stroke: "#5fa85f" },
-  { id: "output",   label: "Output channels",            x: 820, y: 410, w:  740, h: 170, fill: COLORS.outputFill,   stroke: "#a85faa" },
+type SubgraphDef = {
+  id: string;
+  label: string;
+  // Optional label center (relative to the container) when the top-left corner is crossed by an arrow.
+  labelCenterX?: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  fill: string;
+  stroke: string;
+};
+
+const SUBGRAPHS: SubgraphDef[] = [
+  { id: "core",     label: "SCV Core — the shared engine",                  x:  60, y:  40, w:  680, h: 230, fill: COLORS.scvFill,      stroke: "#4a8fbf" },
+  { id: "channels", label: "Release channels",                              x: 780, y:  40, w:  760, h: 230, fill: COLORS.externalFill, stroke: "#5fa85f" },
+  { id: "wrappers", label: "Wrappers", labelCenterX: 325,                   x:  60, y: 310, w:  680, h: 170, fill: COLORS.scvFill,      stroke: "#4a8fbf" },
+  { id: "mods",     label: "Mods — a separate marketplace (Claude Code)",   x: 780, y: 310, w:  760, h: 170, fill: COLORS.externalFill, stroke: "#5fa85f" },
+  { id: "output",   label: "Outputs",                                       x:  60, y: 515, w: 1480, h: 150, fill: COLORS.outputFill,   stroke: "#a85faa" },
 ];
 
 type EdgeDef = {
@@ -56,24 +76,25 @@ type EdgeDef = {
   color?: string;
   // Where on the path the label sits (0 = start, 1 = end). Default 0.5.
   labelT?: number;
-  // Phase label that lights up while this edge is active.
-  phase?: string;
 };
 
 const EDGES: EdgeDef[] = [
-  // refs (dashed, green) — Phase 1: PLAN → External
-  { from: "PLAN", to: "Jira",       startFrame: 30,  label: "refs:", dashed: true, color: COLORS.green, phase: "refs" },
-  { from: "PLAN", to: "Linear",     startFrame: 40,  label: "refs:", dashed: true, color: COLORS.green, phase: "refs" },
-  { from: "PLAN", to: "Confluence", startFrame: 50,  label: "refs:", dashed: true, color: COLORS.green, phase: "refs" },
-  { from: "PLAN", to: "Doc",        startFrame: 60,  label: "refs:", dashed: true, color: COLORS.green, phase: "refs" },
-  // work (solid, accent) — Phase 2: PLAN → Output
-  { from: "PLAN", to: "GH", startFrame: 130, label: "/scv:work Step 9d\n(.webm + .gif inline)", color: COLORS.accent, labelT: 0.35, phase: "work" },
-  { from: "PLAN", to: "GL", startFrame: 145, label: "/scv:work Step 9d", color: COLORS.accent, labelT: 0.55, phase: "work" },
-  // regression (solid, accent) — Phase 3: Archive → TESTS
-  { from: "Archive", to: "TESTS", startFrame: 200, label: "/scv:regression\n(auto-runs every TESTS)", color: COLORS.accent, phase: "regression" },
-  // report (solid, blue) — Phase 4: TESTS → Slack/Discord
-  { from: "TESTS", to: "Slack",   startFrame: 270, label: "/scv:report", color: COLORS.blue, phase: "report" },
-  { from: "TESTS", to: "Discord", startFrame: 285, label: "/scv:report", color: COLORS.blue, phase: "report" },
+  // Phase 1: Core vendored into both wrappers
+  { from: "Core", to: "Codex",  startFrame: 30, label: "vendored", color: COLORS.accent },
+  { from: "Core", to: "Claude", startFrame: 40, label: "vendored", color: COLORS.accent },
+  // Phase 2: channels → /scv:channel → installed copy
+  { from: "Dev",   to: "Swap", startFrame: 110, dashed: true, color: COLORS.green },
+  { from: "Stage", to: "Swap", startFrame: 118, dashed: true, color: COLORS.green },
+  { from: "Prod",  to: "Swap", startFrame: 126, dashed: true, color: COLORS.green },
+  { from: "Swap", to: "Wrappers", startFrame: 140, color: COLORS.green, label: "installed copy" },
+  // Phase 3: mods marketplace → scv-dashboard → Claude Code desktop app
+  { from: "Mods", to: "Dash",   startFrame: 200, label: "/scv:mods-install", color: COLORS.blue },
+  { from: "Dash", to: "Claude", startFrame: 215, label: "pane", color: COLORS.blue },
+  // Phase 4: outputs
+  { from: "Codex",  to: "PR",     startFrame: 280, color: COLORS.accent },
+  { from: "Claude", to: "PR",     startFrame: 288, color: COLORS.accent },
+  { from: "Codex",  to: "Notify", startFrame: 296, color: COLORS.blue },
+  { from: "Claude", to: "Notify", startFrame: 304, color: COLORS.blue },
 ];
 
 // All nodes/subgraphs appear together at the start.
@@ -89,7 +110,7 @@ const exitPoint = (cx: number, cy: number, ux: number, uy: number, halfW: number
   return { x: cx + ux * t, y: cy + uy * t };
 };
 
-const Subgraph: React.FC<{ cfg: typeof SUBGRAPHS[number]; frame: number }> = ({ cfg, frame }) => {
+const Subgraph: React.FC<{ cfg: SubgraphDef; frame: number }> = ({ cfg, frame }) => {
   const opacity = interpolate(frame, [0, NODES_FADEIN_END], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
@@ -111,7 +132,8 @@ const Subgraph: React.FC<{ cfg: typeof SUBGRAPHS[number]; frame: number }> = ({ 
       <div
         style={{
           position: "absolute",
-          left: 18,
+          left: cfg.labelCenterX ?? 18,
+          transform: cfg.labelCenterX ? "translateX(-50%)" : undefined,
           top: 10,
           fontFamily: FONTS.sans,
           fontSize: 16,
@@ -128,11 +150,13 @@ const Subgraph: React.FC<{ cfg: typeof SUBGRAPHS[number]; frame: number }> = ({ 
 
 const Node: React.FC<{ id: keyof typeof NODES; frame: number }> = ({ id, frame }) => {
   const node = NODES[id];
+  if (node.hidden) return null;
   const opacity = interpolate(frame, [0, NODES_FADEIN_END], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
   const w = node.w ?? NODE_W;
+  const h = node.h ?? NODE_H;
   const fill = node.isKey ? COLORS.accent : node.fill || COLORS.bgPanel;
   const stroke = node.isKey ? COLORS.orange : COLORS.border;
   const textColor = node.isKey ? COLORS.accentText : COLORS.text;
@@ -143,21 +167,28 @@ const Node: React.FC<{ id: keyof typeof NODES; frame: number }> = ({ id, frame }
         style={{
           position: "absolute",
           left: node.cx - w / 2,
-          top: node.cy - NODE_H / 2,
+          top: node.cy - h / 2,
           width: w,
-          height: NODE_H,
+          height: h,
           opacity,
           backgroundColor: fill,
           border: `2px solid ${stroke}`,
           borderRadius: "50% / 22%",
           display: "flex",
-          alignItems: "center",
+            alignItems: "center",
           justifyContent: "center",
           boxShadow: "0 4px 14px rgba(0,0,0,0.4)",
         }}
       >
-        <div style={{ fontFamily: FONTS.mono, fontSize: 16, fontWeight: 700, color: textColor }}>
-          {node.title}
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontFamily: FONTS.mono, fontSize: 16, fontWeight: 700, color: textColor }}>
+            {node.title}
+          </div>
+          {node.subtitle && (
+            <div style={{ fontFamily: FONTS.sans, fontSize: 12, color: textColor, opacity: 0.85, marginTop: 4 }}>
+              {node.subtitle}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -168,9 +199,9 @@ const Node: React.FC<{ id: keyof typeof NODES; frame: number }> = ({ id, frame }
       style={{
         position: "absolute",
         left: node.cx - w / 2,
-        top: node.cy - NODE_H / 2,
+        top: node.cy - h / 2,
         width: w,
-        height: NODE_H,
+        height: h,
         opacity,
         backgroundColor: fill,
         border: `2px solid ${stroke}`,
@@ -186,7 +217,7 @@ const Node: React.FC<{ id: keyof typeof NODES; frame: number }> = ({ id, frame }
       <div
         style={{
           fontFamily: FONTS.mono,
-          fontSize: node.title.length > 18 ? 13 : 16,
+          fontSize: node.isKey && (node.h ?? NODE_H) > NODE_H ? 26 : node.title.length > 18 ? 13 : 16,
           fontWeight: 700,
           color: textColor,
           textAlign: "center",
@@ -199,7 +230,7 @@ const Node: React.FC<{ id: keyof typeof NODES; frame: number }> = ({ id, frame }
         <div
           style={{
             fontFamily: FONTS.sans,
-            fontSize: 12,
+            fontSize: (node.h ?? NODE_H) > NODE_H ? 16 : 12,
             color: textColor,
             opacity: 0.85,
             marginTop: 4,
@@ -225,9 +256,9 @@ const Edge: React.FC<{ edge: EdgeDef; frame: number }> = ({ edge, frame }) => {
   const uy = dy / len;
 
   const fromHalfW = (fromN.w ?? NODE_W) / 2;
-  const fromHalfH = NODE_H / 2;
+  const fromHalfH = (fromN.h ?? NODE_H) / 2;
   const toHalfW = (toN.w ?? NODE_W) / 2;
-  const toHalfH = NODE_H / 2;
+  const toHalfH = (toN.h ?? NODE_H) / 2;
 
   const start = exitPoint(fromN.cx, fromN.cy, ux, uy, fromHalfW, fromHalfH);
   const end = exitPoint(toN.cx, toN.cy, -ux, -uy, toHalfW, toHalfH);
@@ -366,10 +397,10 @@ const Edge: React.FC<{ edge: EdgeDef; frame: number }> = ({ edge, frame }) => {
 const PhaseLabel: React.FC<{ frame: number }> = ({ frame }) => {
   // Show what's flowing right now.
   const phases: Array<{ from: number; to: number; text: string }> = [
-    { from: 30, to: 130, text: "1.  PLAN.md  →  External  (linked via refs:)" },
-    { from: 130, to: 200, text: "2.  PLAN.md  →  Output  (/scv:work Step 9d)" },
-    { from: 200, to: 270, text: "3.  Archive  →  TESTS  (/scv:regression — auto-runs every TESTS)" },
-    { from: 270, to: 360, text: "4.  TESTS  →  Slack / Discord  (/scv:report)" },
+    { from: 30, to: 110, text: "1.  SCV Core  →  vendored into the two wrappers you install" },
+    { from: 110, to: 200, text: "2.  /scv:channel  —  dev · stage · prod swap the installed copy" },
+    { from: 200, to: 280, text: "3.  scv-dashboard  —  a mod from a separate marketplace" },
+    { from: 280, to: 420, text: "4.  Outputs  —  a PR with evidence · Slack / Discord" },
   ];
   const active = phases.find((p) => frame >= p.from && frame < p.to);
   if (!active) return null;
@@ -386,7 +417,7 @@ const PhaseLabel: React.FC<{ frame: number }> = ({ frame }) => {
         position: "absolute",
         left: 0,
         right: 0,
-        bottom: 22,
+        bottom: 6,
         textAlign: "center",
         opacity,
         pointerEvents: "none",

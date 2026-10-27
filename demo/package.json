@@ -6,7 +6,10 @@
   "scripts": {
     "preview": "remotion preview src/index.ts",
     "render": "remotion render src/index.ts ScvDemo out/scv-demo.mp4 --codec=h264",
-    "render-gif": "remotion render src/index.ts ScvDemo out/scv-demo.gif --image-format=jpeg --every-nth-frame=2"
+    "render-gif": "remotion render src/index.ts ScvDemo out/scv-demo.gif --image-format=jpeg --every-nth-frame=2",
+    "render-loop-gif": "remotion render src/index.ts TheLoop out/the-loop.gif --image-format=jpeg --every-nth-frame=3 --scale=0.65",
+    "render-architecture-gif": "remotion render src/index.ts Architecture out/architecture.gif --image-format=jpeg --every-nth-frame=3 --scale=0.8",
+    "render-mirror-gif": "remotion render src/index.ts Mirror out/mirror.gif --image-format=jpeg --every-nth-frame=3 --scale=0.75"
   },
   "dependencies": {
     "@remotion/cli": "^4.0.300",

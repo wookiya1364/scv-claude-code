@@ -82,12 +82,16 @@ SCV は毎ターン、次のことも行います:
   書き直した依頼を結論のすぐ後に引用します。そのターンが登録されるまで
   ファイルは書きません (`SCV_MODEL_PROMPTING`);
 - **中断したところから続けます** — `/clear`、圧縮、再開のあとに、進行中の計画、
-  最近の決定、未決事項、進行中の会話を載せ直します (`SCV_RESUME_RECAP`)。
+  最近の決定、未決事項、進行中の会話を載せ直します (`SCV_RESUME_RECAP`);
+- **実物を動かして見せます** — 成果物が変わるターンでは、最初に動く瞬間に最小の
+  ものを実際に実行し、その結果 (コマンド出力 · 画面 · 関数の結果) をそのまま見せ、
+  続けるか直すかを選択ウィンドウで聞きます。何も変わらなければ「成果物の変化なし」と
+  書き、何も聞きません (`SCV_SHOW_REAL`)。
 
 会話の裏では、ひとつのループがすべてを回しています:
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#1e1e1e','primaryTextColor':'#fff','primaryBorderColor':'#888','lineColor':'#fff','secondaryColor':'#2d2d2d','tertiaryColor':'#1e1e1e','background':'#0d1117','edgeLabelBackground':'#1e1e1e'}}}%%
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#1e1e1e','primaryTextColor':'#fff','primaryBorderColor':'#9096a8','lineColor':'#e7e9f0','secondaryColor':'#2d2d2d','tertiaryColor':'#1e1e1e','background':'#171922','edgeLabelBackground':'#171922'}}}%%
 flowchart LR
   Raw["scv/raw/<br>資料"]
   Promote["計画 + テスト<br>(scv/promote/)"]
@@ -104,6 +108,8 @@ flowchart LR
   classDef key fill:#FFE082,stroke:#F57C00,stroke-width:2px,color:#000
   class Promote,Regression key
 ```
+
+<img src="assets/the-loop.gif" width="720" alt="SCV ループのアニメーション" />
 
 ## 得られるもの
 
@@ -130,6 +136,7 @@ flowchart LR
 | `SCV_PLAIN_LANGUAGE` | `on` | やさしい言葉優先の答えの形 (+毎ターンのリマインド); `off` で停止 |
 | `SCV_MODEL_PROMPTING` | `on` | モデル別プロンプティング: モデルのガイドを読み、毎回の依頼を照合 · 登録 |
 | `SCV_RESUME_RECAP` | `on` | `/clear` · 圧縮 · 再開のあとに進捗を載せ直す |
+| `SCV_SHOW_REAL` | `on` | 成果物が変わると最小のものを実際に動かして結果を見せる; `off` で止める |
 | `SCV_DELEGATE_EFFORT` | `off` | 深い質問をバックグラウンドの調査担当へ渡す; 報告は `scv/raw/` に |
 | `SCV_LANG` | 自動 | 出力言語: `english` · `korean` · `japanese` |
 | `NOTIFIER_PROVIDER` | オフ | チームレポート先: `slack` か `discord` |
@@ -233,6 +240,33 @@ UX、バックグラウンド調査エージェント、そして `prompting/` �
 診断、プロンプティングブロック、やさしい言葉のリマインドを届け、セッション開始
 フックが再開サマリーを載せ直し、終了フックが答えの形とそのターンの登録を検査し、
 ジャーナルフックは書き込み前のリダクションを経て会話を記録します。
+
+部品のつながり — Core はホストごとのプラグインにベンダリングされ、チャンネルが
+インストールするビルドを選び、モッドは別のマーケットプレイスから来ます:
+
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#1e1e1e','primaryTextColor':'#fff','primaryBorderColor':'#9096a8','lineColor':'#e7e9f0','secondaryColor':'#2d2d2d','tertiaryColor':'#1e1e1e','background':'#171922','edgeLabelBackground':'#171922'}}}%%
+flowchart TB
+  Core["SCV Core<br>(scv-core)"]
+  Claude["Claude Code プラグイン<br>(scv-claude-code)"]
+  Codex["Codex プラグイン<br>(scv-codex)"]
+  Core -->|"ベンダリング、バージョン固定"| Claude
+  Core -->|"ベンダリング、バージョン固定"| Codex
+  subgraph Channels["リリースチャンネル — /scv:channel で差し替え"]
+    Dev["dev<br>ブランチ channel/dev<br>ラッパー develop + Core develop"]
+    Stage["stage<br>ブランチ channel/stage<br>ラッパー stage + Core stage"]
+    Prod["prod<br>最新リリース (既定)"]
+  end
+  Claude --> Channels
+  Channels -->|"一度にインストールするチャンネルは一つ"| You["自分の Claude Code"]
+  Mods["SCV モッドマーケットプレイス (scv-mods)<br>例: scv-dashboard — SCV ペイン"]
+  Mods -->|"/scv:mods-install"| You
+
+  classDef key fill:#FFE082,stroke:#F57C00,stroke-width:2px,color:#000
+  class Core,Claude key
+```
+
+<img src="assets/architecture.gif" width="720" alt="SCV 構造のアニメーション" />
 
 ## コントリビューション
 
