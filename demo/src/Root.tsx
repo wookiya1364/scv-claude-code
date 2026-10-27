@@ -8,6 +8,7 @@ import {
   ARCH_WIDTH,
   ARCH_HEIGHT,
 } from "./Architecture";
+import { Mirror, MIRROR_FPS, MIRROR_DURATION_SECONDS } from "./Mirror";
 
 export const Root = () => {
   return (
@@ -35,6 +36,14 @@ export const Root = () => {
         fps={ARCH_FPS}
         width={ARCH_WIDTH}
         height={ARCH_HEIGHT}
+      />
+      <Composition
+        id="Mirror"
+        component={Mirror}
+        durationInFrames={MIRROR_FPS * MIRROR_DURATION_SECONDS}
+        fps={MIRROR_FPS}
+        width={1280}
+        height={720}
       />
     </>
   );
