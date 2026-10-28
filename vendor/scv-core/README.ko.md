@@ -25,21 +25,84 @@ Core 릴리스를 고정하고, 검증된 호스트 프로필을 반영한 뒤 �
 
 ## 구조
 
-```text
-scv-core 릴리스(변경 불가능한 tarball + SHA-256)
-                  │
-                  ├── scv-claude-code가 버전 고정 및 구체화
-                  └── scv-codex가 버전 고정 및 구체화
-                                      │
-                                      └── 런타임 네트워크 요청 없이 로컬 실행
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#1e1e1e','primaryTextColor':'#fff','primaryBorderColor':'#9096a8','lineColor':'#e7e9f0','secondaryColor':'#2d2d2d','tertiaryColor':'#1e1e1e','background':'#171922','edgeLabelBackground':'#171922'}}}%%
+flowchart LR
+  Core["SCV Core<br>규약 · 스크립트 · 훅 · 템플릿"]
+  CC["Claude Code 래퍼<br>(/scv:…)"]
+  CX["Codex 래퍼<br>($scv:…)"]
+  Dev["channel/dev<br>래퍼 develop + Core develop"]
+  Stage["channel/stage<br>래퍼 stage + Core stage"]
+  Prod["prod<br>최신 릴리스"]
+  Mods["SCV 모드 마켓<br>scv-dashboard 칸"]
+  Proj["내 프로젝트<br>scv/ 계획 · 테스트 · 기록"]
+  Core -->|"릴리스 tarball<br>+ SHA-256"| CC
+  Core -->|"릴리스 tarball<br>+ SHA-256"| CX
+  CC -->|"action:mods"| Mods
+  Dev -.->|"action:channel 이 설치본을 바꿔 끼움"| CC
+  Stage -.->|"action:channel 이 설치본을 바꿔 끼움"| CC
+  Prod -.->|"action:channel 이 설치본을 바꿔 끼움"| CC
+  CC -->|"로컬 실행, 런타임 네트워크 요청 없음"| Proj
+  CX -->|"로컬 실행, 런타임 네트워크 요청 없음"| Proj
+  classDef key fill:#FFE082,stroke:#F57C00,stroke-width:2px,color:#000
+  class Core key
 ```
 
-15개 SCV 액션 중 13개는 Core가 소유합니다. 설치 방식과 모델 선택은 호스트에
-종속되므로 `update`, `set-models`는 어댑터가 소유합니다. 정규 프로토콜은
+20개 SCV 액션 중 14개는 Core가 소유합니다. 설치 방식, 모델 선택, 플러그인
+바꿔 끼우기는 호스트에 종속되므로 `update`, `set-models`, `mods`,
+`mods-install`, `mods-remove`, `channel`은 어댑터가 소유합니다. 정규 프로토콜은
 `action:<name>`과 `{{SCV_ARGS}}`를 사용하며, 실제 명령 문법과 인자 전달
 방식은 검증된 호스트 프로필로만 주입됩니다. `scv/SCV.md`는 최상위 규칙과,
 규칙끼리 부딪힐 때 무엇이 이기는지의 순서로 시작하며 모든 프로토콜이 이를
 따릅니다.
+
+
+### 액션 한눈에
+
+| 액션 | 하는 일 | 소유 |
+|---|---|---|
+| `action:help` | 프로젝트 진단 · 아이디어 다듬기 · 지난 작업 찾기 | Core |
+| `action:status` | 진행 중인 것: raw 변경, 계획, 에픽, 핸드오프 | Core |
+| `action:promote` | 자료 → 계획 폴더(`PLAN.md` + `TESTS.md` + 그림) | Core |
+| `action:work` | 구현 · 테스트 실행 · 보관 · 증적 붙은 PR | Core |
+| `action:codegen` | 테스트가 먼저인 변형: Red → Green | Core |
+| `action:deck` | 계획 → 번호식 화면설계서(또는 아무 마크다운 → 문서 / 슬라이드) | Core |
+| `action:update` | 플러그인 업데이트 안내 | 래퍼 |
+| `action:regression` | 보관된 모든 계획의 테스트를 한 묶음으로 실행 | Core |
+| `action:report` | 단계 결과를 산출물과 함께 Slack/Discord 로 | Core |
+| `action:sync` | SCV 템플릿 갱신 + 코드↔계획 어긋남 찾기 | Core |
+| `action:install-deps` | SCV 가 쓰는 CLI 의 OS별 설치 명령 | Core |
+| `action:workspace` | 여러 저장소 상위 폴더 설정 | Core |
+| `action:handoff` | 다른 저장소가 해야 할 일 선언 | Core |
+| `action:set-models` | 액션별 모델 정책 고르기 | 래퍼 |
+| `action:routine` | 파일 하나짜리 정비 루틴 실행 | Core |
+| `action:dreams` | 지난 세션 돌아보기 · 더 나은 요청 코칭 | Core |
+| `action:mods` | 설치된 SCV 모드 업데이트 + 목록 | 래퍼 |
+| `action:mods-install` | SCV 모드 하나 설치 | 래퍼 |
+| `action:mods-remove` | SCV 모드 하나 삭제 | 래퍼 |
+| `action:channel` | 개발 · 스테이징 · 운영 채널 바꿔 끼우기 — 릴리스 전에 새 작업 확인 | 래퍼 |
+
+### 루프
+
+대화 뒤에서는 루프 하나가 모든 것을 돌립니다. 계획을 보관하면 그 테스트가 회귀
+묶음에 들어가, 이후의 모든 변경이 지금까지의 테스트 전부로 확인됩니다.
+
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#1e1e1e','primaryTextColor':'#fff','primaryBorderColor':'#9096a8','lineColor':'#e7e9f0','secondaryColor':'#2d2d2d','tertiaryColor':'#1e1e1e','background':'#171922','edgeLabelBackground':'#171922'}}}%%
+flowchart LR
+  Talk["대화<br>(그냥 말하기 — 매 턴 help 로)"]
+  Promote["계획 + 테스트<br>action:promote"]
+  Work["구현 + 테스트 실행<br>action:work"]
+  Archive["scv/archive/"]
+  Regression["회귀<br>보관된 테스트 전부"]
+  Talk -->|"계획 준비됨"| Promote
+  Promote --> Work
+  Work -->|"테스트 통과 + 승인"| Archive
+  Archive --> Regression
+  Regression -.->|"다음 변경의 안전망"| Promote
+  classDef key fill:#FFE082,stroke:#F57C00,stroke-width:2px,color:#000
+  class Promote,Regression key
+```
 
 ### 매 턴
 
@@ -64,6 +127,11 @@ scv-core 릴리스(변경 불가능한 tarball + SHA-256)
   최근 결정, 미결 항목, 진행 중인 대화를 다시 실어 줍니다(`SCV_RESUME_RECAP`).
   기록 하나는 이름으로 펼칩니다: `core/scripts/record-read.sh --key <name>`.
   호스트의 세션 시작 훅이 필요합니다.
+- **실체 보여 주기** — 결과물이 바뀌는 턴이면, 처음 돌아가는 순간 가장 작은
+  것을 실제로 실행해 그 출력(명령 출력 · 화면 · 함수 호출 결과)을 그대로 보이고,
+  호스트의 선택 창으로 계속할지 · 고칠 점이 있는지 묻습니다. 바뀌는 것이 없는
+  턴은 그렇다고 적고 묻지 않습니다(`SCV_SHOW_REAL`,
+  [규약](core/contracts/show-real.md)).
 - **배경 조사** — `SCV_DELEGATE_EFFORT=on`(기본 끔)이면 깊은 질문을 배경
   조사 담당에게 넘기고, 보고서는 `scv/raw/`에 남습니다. 세션의 모델과 사고량은
   바꾸지 않습니다. 호스트의 에이전트가 필요합니다.

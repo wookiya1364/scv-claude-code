@@ -165,11 +165,10 @@ OUT="$(bash "$CORE/scripts/check-purity.sh" "$FORCE_LIB" 2>&1)"
 grep -q '^OK  purity' <<<"$OUT" && ok "순수성 계약 통과" || fail "순수성 위반: $OUT"
 
 echo "── [T15] 저널 기록이 그대로다 ──"
-if bash "$CORE/tests/test-journal.sh" >/dev/null 2>&1; then
-  ok "기존 저널 검사 초록"
-else
-  fail "저널 검사가 깨졌다 — bash core/tests/test-journal.sh 로 확인"
-fi
+# 저널 검사(test-journal.sh)는 집중 시험 묶음에서 따로 돈다 — 여기서 통째로 다시 돌리던 것은
+# 같은 검사를 두 번 하는 것이라 뺐다(2026-10-28, CI 단축). 그 파일이 있는지만 본다.
+[[ -f "$CORE/tests/test-journal.sh" ]] && ok "저널 검사는 묶음에서 따로 돈다 (core/tests/test-journal.sh)" \
+  || fail "저널 검사 파일이 없다 — core/tests/test-journal.sh"
 
 echo "── [T16] 두 스위치가 모두 등록부와 예시 파일에 있다 (이어받음) ──"
 # 옛 라우팅 검사가 SCV_ALWAYS_ON 의 등록을 지켰다. 그 계획을 대체하므로 여기서

@@ -25,21 +25,84 @@ DeckUI、アセット、共通回帰テストをこのリポジトリで管理�
 
 ## 構造
 
-```text
-scv-core リリース（変更不能な tarball + SHA-256）
-                  │
-                  ├── scv-claude-code が固定・具体化
-                  └── scv-codex が固定・具体化
-                                      │
-                                      └── 実行時の取得なしでローカル実行
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#1e1e1e','primaryTextColor':'#fff','primaryBorderColor':'#9096a8','lineColor':'#e7e9f0','secondaryColor':'#2d2d2d','tertiaryColor':'#1e1e1e','background':'#171922','edgeLabelBackground':'#171922'}}}%%
+flowchart LR
+  Core["SCV Core<br>プロトコル · スクリプト · フック · テンプレート"]
+  CC["Claude Code ラッパー<br>(/scv:…)"]
+  CX["Codex ラッパー<br>($scv:…)"]
+  Dev["channel/dev<br>ラッパー develop + Core develop"]
+  Stage["channel/stage<br>ラッパー stage + Core stage"]
+  Prod["prod<br>最新リリース"]
+  Mods["SCV mods マーケット<br>scv-dashboard ペイン"]
+  Proj["あなたのプロジェクト<br>scv/ 計画 · テスト · 記録"]
+  Core -->|"リリース tarball<br>+ SHA-256"| CC
+  Core -->|"リリース tarball<br>+ SHA-256"| CX
+  CC -->|"action:mods"| Mods
+  Dev -.->|"action:channel がインストール版を入れ替える"| CC
+  Stage -.->|"action:channel がインストール版を入れ替える"| CC
+  Prod -.->|"action:channel がインストール版を入れ替える"| CC
+  CC -->|"ローカル実行、実行時の取得なし"| Proj
+  CX -->|"ローカル実行、実行時の取得なし"| Proj
+  classDef key fill:#FFE082,stroke:#F57C00,stroke-width:2px,color:#000
+  class Core key
 ```
 
-15 個の SCV アクションのうち 13 個を Core が所有します。インストール方法と
-モデル選択はホスト依存のため、`update` と `set-models` はアダプター所有です。
+20 個の SCV アクションのうち 14 個を Core が所有します。インストール方法、
+モデル選択、プラグインの入れ替えはホスト依存のため、`update`、`set-models`、
+`mods`、`mods-install`、`mods-remove`、`channel` はアダプター所有です。
 正規プロトコルは `action:<name>` と `{{SCV_ARGS}}` を使い、実際のコマンド構文
 と引数形式は検証済みホストプロファイルからのみ注入されます。`scv/SCV.md` は
 最上位の規則と、規則どうしが衝突したときの優先順位から始まり、すべての
 プロトコルがそれに従います。
+
+
+### アクション一覧
+
+| アクション | すること | 所有 |
+|---|---|---|
+| `action:help` | プロジェクト診断 · アイデアを練る · 過去の作業を探す | Core |
+| `action:status` | 進行中のもの: raw の変更、計画、エピック、ハンドオフ | Core |
+| `action:promote` | 資料 → 計画フォルダ(`PLAN.md` + `TESTS.md` + 図) | Core |
+| `action:work` | 実装 · テスト実行 · アーカイブ · 証跡付き PR | Core |
+| `action:codegen` | テスト先行の変種: Red → Green | Core |
+| `action:deck` | 計画 → 番号付き画面設計書(または任意の Markdown → 文書 / スライド) | Core |
+| `action:update` | プラグイン更新の案内 | ラッパー |
+| `action:regression` | アーカイブ済み全計画のテストを一つのスイートで実行 | Core |
+| `action:report` | フェーズの結果を成果物付きで Slack/Discord へ | Core |
+| `action:sync` | SCV テンプレート更新 + コード↔計画のずれ検出 | Core |
+| `action:install-deps` | SCV が使う CLI の OS 別インストールコマンド | Core |
+| `action:workspace` | 複数リポジトリの上位フォルダ設定 | Core |
+| `action:handoff` | 別リポジトリがすべき作業を宣言 | Core |
+| `action:set-models` | アクションごとのモデル方針を選ぶ | ラッパー |
+| `action:routine` | ファイル一つの保守ルーチンを実行 | Core |
+| `action:dreams` | 過去のセッションを振り返る · よりよい依頼をコーチ | Core |
+| `action:mods` | インストール済み SCV mod の更新 + 一覧 | ラッパー |
+| `action:mods-install` | SCV mod を一つインストール | ラッパー |
+| `action:mods-remove` | SCV mod を一つ削除 | ラッパー |
+| `action:channel` | 開発 · ステージング · 本番チャンネルの入れ替え — リリース前に新しい作業を確認 | ラッパー |
+
+### ループ
+
+会話の裏では一つのループがすべてを回します。計画をアーカイブするとそのテストが
+回帰スイートに入り、以後のすべての変更がこれまでのテスト全部で確かめられます。
+
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#1e1e1e','primaryTextColor':'#fff','primaryBorderColor':'#9096a8','lineColor':'#e7e9f0','secondaryColor':'#2d2d2d','tertiaryColor':'#1e1e1e','background':'#171922','edgeLabelBackground':'#171922'}}}%%
+flowchart LR
+  Talk["会話<br>(話すだけ — 毎ターン help へ)"]
+  Promote["計画 + テスト<br>action:promote"]
+  Work["実装 + テスト実行<br>action:work"]
+  Archive["scv/archive/"]
+  Regression["回帰<br>アーカイブ済みテストすべて"]
+  Talk -->|"計画できた"| Promote
+  Promote --> Work
+  Work -->|"テスト合格 + 承認"| Archive
+  Archive --> Regression
+  Regression -.->|"次の変更の安全網"| Promote
+  classDef key fill:#FFE082,stroke:#F57C00,stroke-width:2px,color:#000
+  class Promote,Regression key
+```
 
 ### 毎ターン
 
@@ -64,6 +127,10 @@ scv-core リリース（変更不能な tarball + SHA-256）
   計画、最近の決定、未決事項、進行中の会話を載せ直します（`SCV_RESUME_RECAP`）。
   記録一つは名前で展開します: `core/scripts/record-read.sh --key <name>`。
   ホストのセッション開始フックが必要です。
+- **実物を見せる** — 成果物が変わるターンでは、最初に動く時点で最小のものを実際に
+  実行し、その出力(コマンド出力 · 画面 · 関数の結果)をそのまま見せて、ホストの
+  選択ツールで続けるか直すかを尋ねます。何も変わらないターンはそう書いて何も
+  尋ねません(`SCV_SHOW_REAL`、[規約](core/contracts/show-real.md))。
 - **バックグラウンド調査** — `SCV_DELEGATE_EFFORT=on`（既定はオフ）のとき、深い
   質問はバックグラウンドの調査担当へ渡り、報告は `scv/raw/` に残ります。セッション
   のモデルと思考量は変えません。ホストのエージェントが必要です。

@@ -405,7 +405,9 @@ fi
 # Raw changes since last index (reuses readpath.sh earlier banner logic)
 RAW_CHANGES_TOTAL=0
 if [[ -x "$READPATH_SH" && -d "scv/raw" ]]; then
-  COUNTS2=$(bash "$READPATH_SH" status-counts 2>/dev/null || true)
+  # 위 배너가 이미 센 값을 다시 쓴다 — 같은 status-counts 를 두 번 부르던 자리(매 턴 훅 진단).
+  COUNTS2="${COUNTS-}"
+  [[ -n "$COUNTS2" ]] || COUNTS2=$(bash "$READPATH_SH" status-counts 2>/dev/null || true)
   RAW_CHANGES_TOTAL=$(printf '%s' "$COUNTS2" | sed -n 's/.*total=\([0-9]*\).*/\1/p')
   RAW_CHANGES_TOTAL=${RAW_CHANGES_TOTAL:-0}
 fi
