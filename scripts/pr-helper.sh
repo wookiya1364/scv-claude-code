@@ -583,7 +583,11 @@ git add "$TARGET_DIR" 2>/dev/null || true
 # 프로젝트(무시 목록에서 scv/journal/ 을 지운 곳)에서도 올리지 않는다 — 세션마다 바뀌는 잡음이라 PR 마다 충돌한다.
 # 비밀 설정 파일도 무시 목록과 상관없이 올리지 않는다(손으로 만들었거나 무시 줄을 지운 경우의 마지막 방어선).
 # 무시된 경로가 섞이면 git 은 나머지를 다 올리고도 1 로 끝난다 — 그래서 || true 를 지운다면 안 된다.
-git add -- "$SCV_DIR" ":(exclude)${SCV_DIR%/}/journal/.help-*" ":(exclude)${SCV_DIR%/}/scv_settings.secret.json" 2>/dev/null || true
+# 기록 폴더가 다른 저장소로 연결(심볼릭 링크)되어 무시되는 프로젝트도 있다 — 링크 안을 가리키는 제외 패턴은 git 이
+# 통째로 거절하므로(전부 안 담김), journal 이 진짜 폴더일 때만 그 제외를 붙인다.
+scv_add_excludes=(":(exclude)${SCV_DIR%/}/scv_settings.secret.json")
+[[ -d "${SCV_DIR%/}/journal" && ! -L "${SCV_DIR%/}/journal" ]] && scv_add_excludes+=(":(exclude)${SCV_DIR%/}/journal/.help-*")
+git add -- "$SCV_DIR" "${scv_add_excludes[@]}" 2>/dev/null || true
 [[ -d "$DEST_ARTIFACTS_DIR" ]] && git add "$DEST_ARTIFACTS_DIR" 2>/dev/null
 if git diff --cached --quiet; then
   echo "(no staged changes — assuming already committed)"

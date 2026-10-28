@@ -25,21 +25,85 @@ The installable plugins live in:
 
 ## Design
 
-```text
-scv-core release (immutable tarball + SHA-256)
-                 │
-                 ├── pinned and materialized by scv-claude-code
-                 └── pinned and materialized by scv-codex
-                                      │
-                                      └── runs locally; no runtime fetch
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#1e1e1e','primaryTextColor':'#fff','primaryBorderColor':'#9096a8','lineColor':'#e7e9f0','secondaryColor':'#2d2d2d','tertiaryColor':'#1e1e1e','background':'#171922','edgeLabelBackground':'#171922'}}}%%
+flowchart LR
+  Core["SCV Core<br>protocols · scripts · hooks · template"]
+  CC["Claude Code wrapper<br>(/scv:…)"]
+  CX["Codex wrapper<br>($scv:…)"]
+  Dev["channel/dev<br>wrapper develop + Core develop"]
+  Stage["channel/stage<br>wrapper stage + Core stage"]
+  Prod["prod<br>latest release"]
+  Mods["SCV mods marketplace<br>scv-dashboard pane"]
+  Proj["Your project<br>scv/ plans · tests · records"]
+  Core -->|"release tarball<br>+ SHA-256"| CC
+  Core -->|"release tarball<br>+ SHA-256"| CX
+  CC -->|"action:mods"| Mods
+  Dev -.->|"action:channel swaps the installed copy"| CC
+  Stage -.->|"action:channel swaps the installed copy"| CC
+  Prod -.->|"action:channel swaps the installed copy"| CC
+  CC -->|"runs locally, no runtime fetch"| Proj
+  CX -->|"runs locally, no runtime fetch"| Proj
+  classDef key fill:#FFE082,stroke:#F57C00,stroke-width:2px,color:#000
+  class Core key
 ```
 
-Core owns 13 of the 15 SCV actions. `update` and `set-models` are deliberately
-adapter-owned because installation and model selection depend on the host.
+Core owns 14 of the 20 SCV actions. `update`, `set-models`, `mods`,
+`mods-install`, `mods-remove`, and `channel` are deliberately adapter-owned
+because installation, model selection, and plugin swaps depend on the host.
 Canonical protocols use `action:<name>` and `{{SCV_ARGS}}`; wrapper syntax and
 argument transport are supplied only through a validated host profile.
 `scv/SCV.md` opens with the top-level rules and the order in which conflicting
 rules are resolved; every protocol defers to it.
+
+
+### Actions at a glance
+
+| Action | What it does | Owner |
+|---|---|---|
+| `action:help` | Diagnose the project · refine an idea · search past work | Core |
+| `action:status` | What's in flight: raw changes, active plans, epics, handoffs | Core |
+| `action:promote` | Materials → plan folder (`PLAN.md` + `TESTS.md` + diagrams) | Core |
+| `action:work` | Implement · run tests · archive · PR with evidence | Core |
+| `action:codegen` | TDD-first variant: tests drive the code, Red → Green | Core |
+| `action:deck` | Plan → numbered screen spec (or any markdown → document / slides) | Core |
+| `action:update` | Plugin update guide | wrapper |
+| `action:regression` | Run every archived plan's tests as one suite | Core |
+| `action:report` | Post a phase result to Slack/Discord with artifacts | Core |
+| `action:sync` | Refresh SCV templates + detect code↔plan drift | Core |
+| `action:install-deps` | OS-specific install commands for the CLIs SCV uses | Core |
+| `action:workspace` | Multi-repo umbrella setup | Core |
+| `action:handoff` | Declare work another repo must do | Core |
+| `action:set-models` | Pick the model policy per action | wrapper |
+| `action:routine` | Run a one-file maintenance routine | Core |
+| `action:dreams` | Look back at past sessions · coach better prompts | Core |
+| `action:mods` | Update installed SCV mods + list them | wrapper |
+| `action:mods-install` | Install one SCV mod | wrapper |
+| `action:mods-remove` | Remove one SCV mod | wrapper |
+| `action:channel` | Swap SCV between dev · stage · prod — try new work before a release | wrapper |
+
+### The loop
+
+Behind the conversation, one loop runs everything. Each plan's tests join the
+regression suite when it is archived, so every later change is checked against
+all of them.
+
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#1e1e1e','primaryTextColor':'#fff','primaryBorderColor':'#9096a8','lineColor':'#e7e9f0','secondaryColor':'#2d2d2d','tertiaryColor':'#1e1e1e','background':'#171922','edgeLabelBackground':'#171922'}}}%%
+flowchart LR
+  Talk["Conversation<br>(just talk — every turn goes to help)"]
+  Promote["Plan + tests<br>action:promote"]
+  Work["Implement + run tests<br>action:work"]
+  Archive["scv/archive/"]
+  Regression["Regression<br>every archived test"]
+  Talk -->|"plan ready"| Promote
+  Promote --> Work
+  Work -->|"tests pass + approval"| Archive
+  Archive --> Regression
+  Regression -.->|"safety net for the next change"| Promote
+  classDef key fill:#FFE082,stroke:#F57C00,stroke-width:2px,color:#000
+  class Promote,Regression key
+```
 
 ### Every turn
 
@@ -68,6 +132,11 @@ an answer breaks the answer shape (`SCV_HELP_LOAD_ONCE`,
   active conversation (`SCV_RESUME_RECAP`); one record expands by name with
   `core/scripts/record-read.sh --key <name>`. It needs a session-start hook
   from the host.
+- **Show the real thing** — when a turn changes the deliverable, the first
+  time it runs the model runs the smallest real thing and shows its actual
+  output (command output, screen, function result), then asks continue or fix
+  with the host's choice tool; a turn that changes nothing says so and asks
+  nothing (`SCV_SHOW_REAL`, [contract](core/contracts/show-real.md)).
 - **Background investigation** — with `SCV_DELEGATE_EFFORT=on` (default off),
   a deep question goes to a background investigator whose report lands in
   `scv/raw/`. The session's model and effort are never changed. It needs an
