@@ -39,3 +39,9 @@ jobs:
           PR_TITLE: ${{ github.event.pull_request.title }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: bash vendor/scv-core/core/scripts/check-vendor-provenance.sh
+      - name: Privacy gate
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          SCV_PRIVACY_TERMS: ${{ secrets.SCV_PRIVACY_TERMS }}
+        run: bash vendor/scv-core/core/scripts/check-privacy.sh
