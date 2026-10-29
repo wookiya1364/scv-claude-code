@@ -10,7 +10,9 @@ set -uo pipefail
 
 HERE="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 ROOT="$HERE/.."
-DECKDOC="$ROOT/DeckUI/scripts/deckdoc"
+DECKUI_DIR="$(bash "$ROOT/scripts/deck-runtime.sh" ensure)" || { echo "FAIL test-deck-change-map: deck runtime unavailable"; exit 1; }   # 실제 deck 과 같은 길: 엔진 자리(SCV_DECKUI_DIR) → 런타임 캐시
+DECKDOC="$DECKUI_DIR/scripts/deckdoc"
+export SCV_DECK_CORE_ROOT="$(cd "$ROOT" && pwd)"   # deck.sh 와 같이 — 런타임 캐시의 생성기가 코어의 Graft 어댑터를 찾게
 
 pass=0; fail=0
 ok()   { pass=$((pass+1)); }

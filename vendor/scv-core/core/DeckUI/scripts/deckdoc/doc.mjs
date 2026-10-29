@@ -40,7 +40,8 @@ import { fileURLToPath } from "node:url";
 
 // core/ 의 뿌리. 이 파일은 core/DeckUI/scripts/deckdoc/ 안에 있고, Graft 어댑터는
 // core/scripts/graft.sh 에 있다. 래퍼에 벤더링돼도 둘의 상대 위치는 같다.
-const CORE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
+// 실제 deck 은 엔진을 런타임 캐시로 복사해 돌려 이 상대 위치가 깨진다 — deck.sh 가 코어 자리를 SCV_DECK_CORE_ROOT 로 넘긴다.
+const CORE_ROOT = process.env.SCV_DECK_CORE_ROOT || resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
 const normalizeSlug = (s) =>
   s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "deck";

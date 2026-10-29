@@ -2,7 +2,7 @@
 # Materialize the pinned core payload at the legacy Claude plugin paths.
 #
 # Existing Claude commands and downstream tests rely on root-level scripts/,
-# template/, DeckUI/, and assets/.  The canonical copies live under
+# template/, and assets/ (DeckUI is read from the vendored core).  The canonical copies live under
 # vendor/scv-core/core; this script makes those paths deterministic generated
 # projections while preserving the adapter-owned command frontmatter and
 # scripts.
@@ -356,86 +356,24 @@ compare_or_replace_tree() {
   safe_copy_tree "$source" "$target"
 }
 
-compare_or_replace_deckui() {
-  local source=$1 target=$2 inventory git_root
-  if [[ "$MODE" == check ]]; then
-    inventory=$(mktemp)
-    git_root=$(git -C "$DESTINATION" rev-parse --show-toplevel 2>/dev/null || true)
-    if [[ "$git_root" == "$DESTINATION" ]]; then
-      {
-        git -C "$DESTINATION" ls-files \
-          --others --ignored --exclude-standard --directory -z -- DeckUI
-        git -C "$DESTINATION" ls-files \
-          --others --exclude-standard --directory -z -- DeckUI
-      } > "$inventory"
-    fi
-    if [[ ! -d "$target" ]] || ! python3 - "$source" "$target" "$inventory" <<'PY'
-import os
-import stat
-import sys
-from pathlib import Path
-
-source = Path(sys.argv[1])
-target = Path(sys.argv[2])
-raw = Path(sys.argv[3]).read_bytes().split(b"\0")
-candidate_exclusions = set()
-for value in raw:
-    if not value:
-        continue
-    relative = os.fsdecode(value).rstrip("/")
-    if relative.startswith("DeckUI/"):
-        deck_relative = relative.removeprefix("DeckUI/")
-        source_path = source / deck_relative
-        # A path supplied by Core remains part of the projection contract even
-        # when Git considers the directory untracked (Git cannot own an empty
-        # directory). Core ownership wins over the runtime exclusion.
-        if source_path.exists() or source_path.is_symlink():
-            continue
-        candidate_exclusions.add(deck_relative)
-
-excluded = set()
-for relative in sorted(
-    candidate_exclusions, key=lambda item: (item.count("/"), item)
-):
-    parts = relative.split("/")
-    if any("/".join(parts[:index]) in excluded for index in range(1, len(parts))):
-        continue
-    excluded.add(relative)
-
-def entries(root: Path, apply_exclusions: bool):
-    result = {}
-    stack = [(root, "")]
-    while stack:
-        directory, prefix = stack.pop()
-        with os.scandir(directory) as handle:
-            children = sorted(handle, key=lambda entry: entry.name, reverse=True)
-        for child in children:
-            relative = f"{prefix}/{child.name}".lstrip("/")
-            if apply_exclusions and relative in excluded:
-                continue
-            mode = child.stat(follow_symlinks=False).st_mode
-            item = Path(child.path)
-            if stat.S_ISDIR(mode):
-                result[relative] = ("directory",)
-                stack.append((item, relative))
-            elif stat.S_ISLNK(mode):
-                result[relative] = ("symlink", os.readlink(item))
-            elif stat.S_ISREG(mode):
-                result[relative] = ("file", item.read_bytes())
-            else:
-                result[relative] = ("special",)
-    return result
-
-raise SystemExit(0 if entries(source, False) == entries(target, True) else 1)
-PY
-    then
-      echo "PROJECTION_MISMATCH: DeckUI"
-      FAILURES=$((FAILURES + 1))
-    fi
-    rm -f "$inventory"
-    return
+# The deck engine is not projected (core 0.72.2+): the deck runtime reads the
+# vendored copy through the host profile's SCV_DECKUI_DIR. A tracked top-level
+# DeckUI/ is a stale projection; untracked runtime leftovers in an old
+# maintainer checkout are outside every projected path and are left alone.
+check_no_root_deckui() {
+  local tracked= git_root
+  [[ -e "$DESTINATION/DeckUI" || -L "$DESTINATION/DeckUI" ]] || return 0
+  git_root=$(git -C "$DESTINATION" rev-parse --show-toplevel 2>/dev/null || true)
+  if [[ -n "$git_root" && "$git_root" == "$DESTINATION" ]]; then
+    tracked=$(git -C "$DESTINATION" ls-files -- DeckUI | head -n 1)
+    [[ -n "$tracked" ]] || return 0
   fi
-  compare_or_replace_tree "$source" "$target" DeckUI
+  if [[ "$MODE" == check ]]; then
+    echo "PROJECTION_EXTRA: DeckUI"
+    FAILURES=$((FAILURES + 1))
+  else
+    safe_remove_destination "$DESTINATION/DeckUI"
+  fi
 }
 
 # Core shell entrypoints retain their long-standing root paths. Adapter scripts
@@ -469,7 +407,7 @@ done < <(find "$DESTINATION/scripts" -type f -print0)
 # Compatibility pointers are created only when an existing legacy file is
 # explicitly migrated, never as part of the template.
 compare_or_replace_tree "$CORE_ROOT/template" "$DESTINATION/template" template
-compare_or_replace_deckui "$CORE_ROOT/DeckUI" "$DESTINATION/DeckUI"
+check_no_root_deckui
 compare_or_replace_tree "$CORE_ROOT/assets" "$DESTINATION/assets" assets
 compare_or_replace_tree "$CORE_ROOT/protocols" "$DESTINATION/protocols" protocols
 
