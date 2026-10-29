@@ -84,12 +84,17 @@ Every turn, SCV also:
   (`SCV_MODEL_PROMPTING`);
 - **picks up where you left off** — after `/clear`, compaction, or a resume,
   it re-injects active plans, recent decisions, open items, and the active
-  conversation (`SCV_RESUME_RECAP`).
+  conversation (`SCV_RESUME_RECAP`);
+- **shows the real thing** — when a turn changes the deliverable, at the first
+  moment it runs SCV runs the smallest real thing, shows its actual output
+  (command output, screen, function result), and asks continue / fix with the
+  choice tool; when nothing changes it writes "no change to the deliverable" and
+  asks nothing (`SCV_SHOW_REAL`).
 
 Behind the conversation, one loop runs everything:
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#1e1e1e','primaryTextColor':'#fff','primaryBorderColor':'#888','lineColor':'#fff','secondaryColor':'#2d2d2d','tertiaryColor':'#1e1e1e','background':'#0d1117','edgeLabelBackground':'#1e1e1e'}}}%%
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#1e1e1e','primaryTextColor':'#fff','primaryBorderColor':'#9096a8','lineColor':'#e7e9f0','secondaryColor':'#2d2d2d','tertiaryColor':'#1e1e1e','background':'#171922','edgeLabelBackground':'#171922'}}}%%
 flowchart LR
   Raw["scv/raw/<br>materials"]
   Promote["plan + tests<br>(scv/promote/)"]
@@ -106,6 +111,8 @@ flowchart LR
   classDef key fill:#FFE082,stroke:#F57C00,stroke-width:2px,color:#000
   class Promote,Regression key
 ```
+
+<img src="assets/the-loop.gif" width="720" alt="The SCV loop, animated" />
 
 ## What you get
 
@@ -133,6 +140,7 @@ is never read or written.
 | `SCV_PLAIN_LANGUAGE` | `on` | plain-first answer shape (+ per-turn reminder); `off` silences |
 | `SCV_MODEL_PROMPTING` | `on` | per-model prompting: read the model's guide, compare and register every request |
 | `SCV_RESUME_RECAP` | `on` | re-inject progress after `/clear`, compaction, or resume |
+| `SCV_SHOW_REAL` | `on` | run the smallest real thing and show its output when the deliverable changes; `off` silences |
 | `SCV_DELEGATE_EFFORT` | `off` | deep questions go to a background investigator; its report lands in `scv/raw/` |
 | `SCV_LANG` | auto | output language: `english` · `korean` · `japanese` |
 | `NOTIFIER_PROVIDER` | off | `slack` or `discord` for team reports |
@@ -238,6 +246,33 @@ per-turn routing, the project diagnosis, the prompting block, and the
 plain-language reminder; the session-start hook re-injects the recap; the stop
 hook checks the answer's shape and the turn's registration; the journal hooks
 capture conversation with redaction before anything hits disk.
+
+How the pieces fit — Core is vendored into each host's plugin, the channel
+picks which build you install, and mods come from their own marketplace:
+
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#1e1e1e','primaryTextColor':'#fff','primaryBorderColor':'#9096a8','lineColor':'#e7e9f0','secondaryColor':'#2d2d2d','tertiaryColor':'#1e1e1e','background':'#171922','edgeLabelBackground':'#171922'}}}%%
+flowchart TB
+  Core["SCV Core<br>(scv-core)"]
+  Claude["Claude Code plugin<br>(scv-claude-code)"]
+  Codex["Codex plugin<br>(scv-codex)"]
+  Core -->|"vendored, version-pinned"| Claude
+  Core -->|"vendored, version-pinned"| Codex
+  subgraph Channels["release channels — /scv:channel swaps them"]
+    Dev["dev<br>branch channel/dev<br>wrapper develop + Core develop"]
+    Stage["stage<br>branch channel/stage<br>wrapper stage + Core stage"]
+    Prod["prod<br>latest release (default)"]
+  end
+  Claude --> Channels
+  Channels -->|"one channel installed at a time"| You["your Claude Code"]
+  Mods["SCV mods marketplace (scv-mods)<br>e.g. scv-dashboard — the SCV pane"]
+  Mods -->|"/scv:mods-install"| You
+
+  classDef key fill:#FFE082,stroke:#F57C00,stroke-width:2px,color:#000
+  class Core,Claude key
+```
+
+<img src="assets/architecture.gif" width="720" alt="SCV structure, animated" />
 
 ## Contributing
 

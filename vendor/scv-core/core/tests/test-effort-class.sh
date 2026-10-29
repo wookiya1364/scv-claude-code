@@ -112,7 +112,18 @@ if [[ -d "$ARCH/20260818-wookiya1364-sync-autopilot" ]]; then
   done
   [[ $miss -eq 0 ]] && pass "T4 all 14 backtest archives reproduce their recorded band"
   # 백테스트의 유일한 과소 미스가 이 힌트의 존재 이유다 — 반드시 armed 여야 한다.
-  [[ "$(esc "$ARCH/20260818-wookiya1364-sync-autopilot")" == "armed" ]] \
+  # 그 계획의 자료(raw_sources)는 2026-10 부터 비공개 기록 저장소에 있다 — 이 트리에 없으면 같은 크기의 빈 자리 파일로
+  # 같은 조건(자료 9,000바이트 이상)을 만들어 판정한다. 판정이 보는 것은 크기뿐이라 내용은 필요 없다.
+  sa="$ARCH/20260818-wookiya1364-sync-autopilot"
+  sa_root="$(cd "$ARCH/../.." && pwd)"
+  sa_raw="$(sed -n 's/^[[:space:]]*-[[:space:]]*\(scv\/raw\/[^[:space:]]*\)$/\1/p' "$sa/PLAN.md" | head -1)"
+  if [[ -n "$sa_raw" && ! -f "$sa_root/$sa_raw" ]]; then
+    bt="$WORK/backtest-root"; mkdir -p "$bt/scv/archive" "$bt/$(dirname "$sa_raw")"
+    cp -R "$sa" "$bt/scv/archive/"
+    head -c 9500 /dev/zero | tr '\0' 'x' > "$bt/$sa_raw"
+    sa="$bt/scv/archive/$(basename "$sa")"
+  fi
+  [[ "$(esc "$sa")" == "armed" ]] \
     && pass "T4 the one under-provisioned backtest case is pre-armed" \
     || fail "T4 sync-autopilot is not armed — the hint fails its founding case"
 else

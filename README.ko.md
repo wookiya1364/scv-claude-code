@@ -82,12 +82,16 @@ SCV는 매 턴 이런 일도 합니다:
   요청을 결론 바로 뒤에 인용합니다. 이번 턴이 등록되기 전에는 파일을 쓰지
   않습니다 (`SCV_MODEL_PROMPTING`);
 - **하던 곳에서 이어 갑니다** — `/clear`, 압축, 재개 뒤에 진행 중인 계획, 최근
-  결정, 미결 항목, 진행 중인 대화를 다시 실어 줍니다 (`SCV_RESUME_RECAP`).
+  결정, 미결 항목, 진행 중인 대화를 다시 실어 줍니다 (`SCV_RESUME_RECAP`);
+- **실제로 돌려 보여 줍니다** — 결과물이 바뀌는 턴이면 처음 돌아가는 순간 가장
+  작은 것을 실제로 실행해 그 결과(명령 출력 · 화면 · 함수 결과)를 그대로 보이고,
+  계속할지 고칠지를 선택 창으로 묻습니다. 바뀌는 것이 없으면 "결과물 변화 없음"이라고
+  적고 묻지 않습니다 (`SCV_SHOW_REAL`).
 
 대화 뒤에서는 루프 하나가 모든 것을 돌립니다:
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#1e1e1e','primaryTextColor':'#fff','primaryBorderColor':'#888','lineColor':'#fff','secondaryColor':'#2d2d2d','tertiaryColor':'#1e1e1e','background':'#0d1117','edgeLabelBackground':'#1e1e1e'}}}%%
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#1e1e1e','primaryTextColor':'#fff','primaryBorderColor':'#9096a8','lineColor':'#e7e9f0','secondaryColor':'#2d2d2d','tertiaryColor':'#1e1e1e','background':'#171922','edgeLabelBackground':'#171922'}}}%%
 flowchart LR
   Raw["scv/raw/<br>자료"]
   Promote["계획 + 테스트<br>(scv/promote/)"]
@@ -104,6 +108,8 @@ flowchart LR
   classDef key fill:#FFE082,stroke:#F57C00,stroke-width:2px,color:#000
   class Promote,Regression key
 ```
+
+<img src="assets/the-loop.gif" width="720" alt="SCV 루프 애니메이션" />
 
 ## 얻는 것
 
@@ -130,6 +136,7 @@ ID)은 git 무시되는 별도 파일로 갑니다. `.env`는 읽지도 쓰지�
 | `SCV_PLAIN_LANGUAGE` | `on` | 쉬운말 우선 답 모양(+매 턴 알림); `off`로 끔 |
 | `SCV_MODEL_PROMPTING` | `on` | 모델별 프롬프팅: 모델의 가이드를 읽고 매 요청을 비교 · 등록 |
 | `SCV_RESUME_RECAP` | `on` | `/clear` · 압축 · 재개 뒤 진행 상황을 다시 실음 |
+| `SCV_SHOW_REAL` | `on` | 결과물이 바뀌면 가장 작은 것을 실제로 돌려 결과를 보임; `off`면 끔 |
 | `SCV_DELEGATE_EFFORT` | `off` | 깊은 질문을 배경 조사 담당에게 넘김; 보고서는 `scv/raw/`에 |
 | `SCV_LANG` | 자동 | 출력 언어: `english` · `korean` · `japanese` |
 | `NOTIFIER_PROVIDER` | 꺼짐 | 팀 보고 채널: `slack` 또는 `discord` |
@@ -232,6 +239,33 @@ Claude Code 어댑터입니다: 슬래시 명령, 훅 등록, 설치/업데이�
 매 턴 라우팅, 프로젝트 진단, 프롬프팅 블록, 쉬운말 알림을 전달하고, 세션 시작
 훅이 재개 요약을 다시 싣고, 종료 훅이 답 모양과 이번 턴의 등록을 검사하며, 저널
 훅은 기록 전에 레댁션을 거쳐 대화를 남깁니다.
+
+조각들이 맞물리는 모양 — Core는 호스트마다의 플러그인에 벤더링되고, 채널이 설치할
+빌드를 고르며, 모드는 별도 마켓플레이스에서 옵니다:
+
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#1e1e1e','primaryTextColor':'#fff','primaryBorderColor':'#9096a8','lineColor':'#e7e9f0','secondaryColor':'#2d2d2d','tertiaryColor':'#1e1e1e','background':'#171922','edgeLabelBackground':'#171922'}}}%%
+flowchart TB
+  Core["SCV Core<br>(scv-core)"]
+  Claude["Claude Code 플러그인<br>(scv-claude-code)"]
+  Codex["Codex 플러그인<br>(scv-codex)"]
+  Core -->|"벤더링, 버전 고정"| Claude
+  Core -->|"벤더링, 버전 고정"| Codex
+  subgraph Channels["릴리스 채널 — /scv:channel 로 바꿔 끼움"]
+    Dev["dev<br>브랜치 channel/dev<br>래퍼 develop + Core develop"]
+    Stage["stage<br>브랜치 channel/stage<br>래퍼 stage + Core stage"]
+    Prod["prod<br>최신 릴리스 (기본)"]
+  end
+  Claude --> Channels
+  Channels -->|"한 번에 채널 하나만 설치"| You["내 Claude Code"]
+  Mods["SCV 모드 마켓플레이스 (scv-mods)<br>예: scv-dashboard — SCV 패널"]
+  Mods -->|"/scv:mods-install"| You
+
+  classDef key fill:#FFE082,stroke:#F57C00,stroke-width:2px,color:#000
+  class Core,Claude key
+```
+
+<img src="assets/architecture.gif" width="720" alt="SCV 구조 애니메이션" />
 
 ## 기여
 

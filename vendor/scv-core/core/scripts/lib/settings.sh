@@ -281,6 +281,41 @@ settings_get() {
   settings_resolve "$from_env" "$from_secret" "$from_plain" "$default"
 }
 
+# settings_lookup_many_json <json> <키들(공백으로)>
+#
+# settings_lookup_json 을 키마다 부르면 jq 를 키 수만큼 띄운다(47개 — 맥에서 한 번에 약 2초,
+# 매 턴 훅이 여러 번 부른다). 한 번의 jq 로 '<키><TAB><값>' 줄을 낸다. 값 규칙은
+# settings_lookup_json 과 같다(없음 · null · false 는 줄 없음, 문자열은 그대로, 나머지는 tostring).
+# 값에 탭 · 줄바꿈이 있으면 값 대신 \001 한 글자를 내어 부른 쪽이 settings_lookup_json 으로 다시 읽게 한다.
+# 디스크를 만지지 않는다 — 인자로 받은 텍스트만 본다.
+# @deterministic
+settings_lookup_many_json() {
+  local json="${1:-}" keys="${2:-}"
+  [[ -n "$json" && -n "$keys" ]] || return 0
+  command -v jq >/dev/null 2>&1 || return 0
+  printf '%s' "$json" | jq -r --arg ks "$keys" '
+    if type == "object" then
+      . as $o | ([$ks | splits("\\s+")] | map(select(. != "")))[] as $k
+      | ($o[$k] // empty) | (if type == "string" then . else tostring end)
+      | if test("[\t\n\r]") then "\($k)\t\u0001" else "\($k)\t\(.)" end
+    else empty end' 2>/dev/null || true
+}
+
+# _settings_map_get <map> <키> <json> — settings_lookup_many_json 이 낸 줄에서 값 하나를
+# 변수 _SCV_MAP_VALUE 에 넣는다(없으면 빈 문자열). 프로세스를 띄우지 않는다 — 키마다
+# $(...) 로 부르면 그것만으로 수십 번 fork 한다. 표시(\001)를 만나면 그 키만
+# settings_lookup_json 으로 다시 읽는다.
+_settings_map_get() {
+  local map=$'\n'"${1:-}"$'\n' key="${2:-}" json="${3:-}" rest
+  _SCV_MAP_VALUE=""
+  [[ -n "$key" ]] || return 0
+  rest="${map#*$'\n'"$key"$'\t'}"
+  [[ "$rest" != "$map" ]] || return 0
+  _SCV_MAP_VALUE="${rest%%$'\n'*}"
+  if [[ "$_SCV_MAP_VALUE" == $'\001' ]]; then _SCV_MAP_VALUE="$(settings_lookup_json "$json" "$key")"; fi
+  return 0
+}
+
 # settings_has <key>
 #
 # 값이 있으면 0, 없으면 1. 진단 화면처럼 "설정됐는지" 만 궁금한 자리에 쓴다.

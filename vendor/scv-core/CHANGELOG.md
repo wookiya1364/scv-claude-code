@@ -2,6 +2,34 @@
 
 All notable changes to SCV Core are documented here.
 
+## [0.72.0] - 2026-10-28
+
+### 개인정보 검사 — 병합 전에 막는다
+
+- `core/scripts/check-privacy.sh`(순수부 `lib/privacy.sh`): PR 의 커밋 메시지와 더해진 줄에서 로컬 경로 · 세션 id · 세션 링크 줄 · 비밀 목록 낱말(`SCV_PRIVACY_TERMS`, 값은 저장소에 두지 않음)을 찾으면 막는다. 작성자 이름 · 메일 검사는 `SCV_PRIVACY_EMAILS=on` 일 때만.
+- `branch-flow.yml` 에 Privacy gate 단계. 저장소 전체 훑기 `tools/privacy-audit.sh`.
+- SCV 기록(journal · conversations · dreams · raw)은 공개 저장소에서 빠지고 비공개 저장소로 — `.gitignore` 가 연결(심볼릭 링크)도 잡고, `pr-helper` 는 기록 폴더가 연결이어도 결정 기록을 담는다.
+- 과거 기록을 다시 썼다: 옛 → 새 코어 커밋 대응표 `docs/history-rewrite-2026-10.tsv`.
+- 시험 `test-check-privacy.sh`.
+
+### 문서 최신화
+
+- README 3개 언어: 구조 · 루프 머메이드 그림, 액션 20개 한눈 표. `docs/architecture.md`: 매 턴 훅 순서도, 릴리스 채널, 모드. 루프 · 구조 GIF 다시 뽑음.
+- `tools/check-readme.sh` 가 명령 목록 · 그림 수까지 언어판끼리 맞춰 본다.
+
+### CI 단축 — 시험을 여러 러너로 나눠 돌린다
+
+- 새 실행 도구 `core/tests/run-focused.sh`: 시험을 시간 기록(`core/tests/timings.tsv` · 맥 `timings-macos.tsv`)으로 고르게 나눠 `--shard I/N` 조각만 돈다. 실패한 시험은 로그 전문을 찍는다. `# scv-test: serial` 표시가 붙은 시험은 끝에 혼자.
+- Contracts 가 우분투 6 · 맥 5 조각으로 — 우분투 약 13분 → 2분 남짓, 맥 15~16분 → 5분 남짓. 필수 검사 이름(`Contracts (ubuntu-latest)` · `Contracts (macos-latest)`)은 그대로.
+- `tools/ci-plan.sh`: 문서 · 버전만 바뀐 PR 은 무거운 시험을 건너뛰고, `.md` · 버전만 바뀐 PR 은 맥 조각을 건너뛴다.
+- 중복으로 다른 시험을 다시 돌리던 곳 2곳을 정리, 다시 쓴 요청 다음 턴 속도 상한 0.5 → 1.0초(맥 러너 실측).
+- 워크플로 Node 22 → 26.
+
+### 훅 속도
+
+- 설정 불러오기(`env_load`)가 키마다 jq 를 띄우던 것을 jq 한 번으로(`settings_lookup_many_json`) — 빈 저장소 매 턴 훅 7.3 → 1.8초, 진단 5.7 → 0.5초. 옛 길과 값이 바이트까지 같은지 보는 시험 `test-env-load.sh`.
+- 도움말 진단이 상태 수를 두 번 세지 않게, `check-readme.sh` 가 같은 이름을 다시 찾지 않게.
+
 ## [0.71.0] - 2026-10-26
 
 ### 채널 — 개발 · 스테이징 · 운영을 바꿔 끼워 받기
