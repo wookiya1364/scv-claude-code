@@ -39,13 +39,6 @@ else
   fail "linked fixture starts dirty"
 fi
 
-mkdir -p \
-  "$FIXTURE/DeckUI/node_modules" \
-  "$FIXTURE/DeckUI/dist-deck"
-printf 'runtime dependency sentinel\n' \
-  >"$FIXTURE/DeckUI/node_modules/.scv-ci-smoke"
-printf 'runtime build sentinel\n' \
-  >"$FIXTURE/DeckUI/dist-deck/.scv-ci-smoke"
 printf 'wrapper vendor sibling sentinel\n' \
   >"$FIXTURE/vendor/wrapper-ci-smoke.txt"
 git -C "$FIXTURE" add vendor/wrapper-ci-smoke.txt
@@ -58,10 +51,9 @@ before_status="$(git -C "$FIXTURE" status --porcelain=v1 --untracked-files=all)"
 
 dry_run_output="$WORK/dry-run.out"
 set +e
-SCV_DECK_CACHE_DIR="$WORK/deck-cache" \
-  bash "$FIXTURE/scripts/sync-core.sh" \
-    --source "$SOURCE_CORE" \
-    --dry-run >"$dry_run_output" 2>&1
+bash "$FIXTURE/scripts/sync-core.sh" \
+  --source "$SOURCE_CORE" \
+  --dry-run >"$dry_run_output" 2>&1
 dry_run_rc=$?
 set -e
 
@@ -82,7 +74,6 @@ fi
 
 rollback_output="$WORK/rollback.out"
 set +e
-SCV_DECK_CACHE_DIR="$WORK/deck-cache" \
 SCV_CORE_SYNC_FAILPOINT="after-swap:scripts" \
   bash "$FIXTURE/scripts/sync-core.sh" \
     --source "$SOURCE_CORE" >"$rollback_output" 2>&1
@@ -122,9 +113,8 @@ fi
 
 success_output="$WORK/success.out"
 set +e
-SCV_DECK_CACHE_DIR="$WORK/deck-cache" \
-  bash "$FIXTURE/scripts/sync-core.sh" \
-    --source "$SOURCE_CORE" >"$success_output" 2>&1
+bash "$FIXTURE/scripts/sync-core.sh" \
+  --source "$SOURCE_CORE" >"$success_output" 2>&1
 success_rc=$?
 set -e
 if [[ "$success_rc" -eq 0 ]] &&
@@ -151,12 +141,10 @@ else
   fail "successful sync changed wrapper-owned tracked files"
 fi
 
-if [[ -f "$FIXTURE/DeckUI/node_modules/.scv-ci-smoke" &&
-      -f "$FIXTURE/DeckUI/dist-deck/.scv-ci-smoke" &&
-      -f "$FIXTURE/vendor/wrapper-ci-smoke.txt" ]]; then
-  ok "successful sync preserves wrapper-owned and runtime data"
+if [[ -f "$FIXTURE/vendor/wrapper-ci-smoke.txt" ]]; then
+  ok "successful sync preserves wrapper-owned data"
 else
-  fail "successful sync lost wrapper-owned or runtime data"
+  fail "successful sync lost wrapper-owned data"
 fi
 
 transaction_debris=

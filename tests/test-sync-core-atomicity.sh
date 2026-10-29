@@ -115,7 +115,6 @@ PY
 WORK="$(mktemp -d)"
 WORK="$(cd "$WORK" && pwd -P)"
 trap 'rm -rf "$WORK"' EXIT
-export SCV_DECK_CACHE_DIR="$WORK/deck-cache"
 SOURCE_CORE="$WORK/source-core"
 cp -R -p "$SOURCE_VENDOR" "$SOURCE_CORE"
 
@@ -127,27 +126,6 @@ copy_fixture() {
     .claude-plugin adapter scripts skills tests template protocols assets vendor; do
     cp -R -p "$REPO_ROOT/$directory" "$destination/$directory"
   done
-  mkdir -p "$destination/DeckUI"
-  python3 - "$REPO_ROOT/DeckUI" "$destination/DeckUI" <<'PY'
-import shutil
-import sys
-from pathlib import Path
-
-source = Path(sys.argv[1])
-destination = Path(sys.argv[2])
-
-def ignore_runtime(_directory, names):
-    return {name for name in names if name in {"node_modules", "dist-deck"}}
-
-shutil.copytree(
-    source,
-    destination,
-    dirs_exist_ok=True,
-    symlinks=True,
-    copy_function=shutil.copy2,
-    ignore=ignore_runtime,
-)
-PY
   for file in VERSION TEMPLATE_VERSION core.lock host-profile.env ralph-template-scv.md; do
     cp -p "$REPO_ROOT/$file" "$destination/$file"
   done
@@ -158,72 +136,6 @@ PY
   git -C "$destination" config user.email "scv-sync-test@example.invalid"
   git -C "$destination" add -A
   git -C "$destination" commit -qm "fixture baseline"
-  mkdir -p \
-    "$destination/DeckUI/node_modules" \
-    "$destination/DeckUI/dist-deck" \
-    "$destination/DeckUI/scripts/deckdoc/node_modules" \
-    "$destination/DeckUI/src/deck/decks/atomic-runtime"
-  printf 'runtime dependency sentinel\n' \
-    > "$destination/DeckUI/node_modules/.scv-atomicity-sentinel"
-  printf 'runtime build sentinel\n' \
-    > "$destination/DeckUI/dist-deck/.scv-atomicity-sentinel"
-  printf 'nested runtime dependency sentinel\n' \
-    > "$destination/DeckUI/scripts/deckdoc/node_modules/.scv-atomicity-sentinel"
-  printf '{"runtime":"generated deck sentinel"}\n' \
-    > "$destination/DeckUI/src/deck/decks/atomic-runtime/deck.json"
-  printf 'untracked local DeckUI sentinel\n' \
-    > "$destination/DeckUI/.scv-untracked-local"
-}
-
-runtime_paths_preserved() {
-  local fixture=$1
-  [[ -f "$fixture/DeckUI/node_modules/.scv-atomicity-sentinel" &&
-     -f "$fixture/DeckUI/dist-deck/.scv-atomicity-sentinel" &&
-     -f "$fixture/DeckUI/scripts/deckdoc/node_modules/.scv-atomicity-sentinel" &&
-     -f "$fixture/DeckUI/src/deck/decks/atomic-runtime/deck.json" &&
-     -f "$fixture/DeckUI/.scv-untracked-local" ]]
-}
-
-deck_runtime_snapshot() {
-  local root=$1 relative path
-  {
-    for relative in \
-      node_modules \
-      scripts/deckdoc/node_modules \
-      dist-deck \
-      src/deck/decks/atomic-runtime \
-      .scv-untracked-local; do
-      path="$root/$relative"
-      printf '%s\0' "$relative"
-      if [[ -L "$path" ]]; then
-        printf 'L\0%s\0' "$(readlink "$path")"
-      elif [[ -d "$path" ]]; then
-        python3 - "$path" <<'PY'
-import os
-import stat
-import sys
-
-entry = os.lstat(sys.argv[1])
-print(f"D:{stat.S_IMODE(entry.st_mode)}")
-PY
-        tree_snapshot "$path"
-      elif [[ -f "$path" ]]; then
-        python3 - "$path" <<'PY'
-import os
-import stat
-import sys
-
-entry = os.lstat(sys.argv[1])
-print(f"F:{stat.S_IMODE(entry.st_mode)}")
-PY
-        portable_sha256 "$path"
-      elif [[ ! -e "$path" ]]; then
-        printf 'absent\0'
-      else
-        printf 'other\0'
-      fi
-    done
-  } | portable_stream_sha256
 }
 
 transaction_debris() {
@@ -314,10 +226,10 @@ run_failure_case \
   "before-final-verify"
 run_failure_case \
   "TERM midway through projection" \
-  "signal-term:after-swap:DeckUI"
+  "signal-term:after-swap:template"
 run_failure_case \
-  "TERM ignored while rollback restores DeckUI runtime paths" \
-  "after-swap:DeckUI" \
+  "TERM ignored while rollback restores projected paths" \
+  "after-swap:template" \
   "" \
   "TERM"
 
@@ -418,29 +330,12 @@ else
   fail "post-backup live recreation was overwritten or lost its backup"
 fi
 
-fixture="$WORK/deck-backup-reappearance"
-output="$WORK/deck-backup-reappearance.out"
-copy_fixture "$fixture"
-SCV_CORE_SYNC_TEST_BEFORE_COMMIT=recreate-deck-runtime \
-  bash "$fixture/scripts/sync-core.sh" --source "$SOURCE_CORE" \
-  >"$output" 2>&1
-rc=$?
-recovery_path=$(transaction_debris "$fixture")
-if [[ "$rc" -ne 0 &&
-      -f "$fixture/DeckUI/node_modules/.scv-atomicity-sentinel" &&
-      -f "$recovery_path/backup/DeckUI/node_modules/.scv-late-backup-runtime" &&
-      "$(cat "$output")" == *"preserves live and backup DeckUI"* ]]; then
-  ok "DeckUI runtime restore collision retains live and backup trees"
-else
-  fail "DeckUI runtime restore collision deleted live or backup data"
-fi
-
 echo
 echo "── projection snapshot drift guards ──"
-fixture="$WORK/late-non-deck"
-output="$WORK/late-non-deck.out"
+fixture="$WORK/late-local-helper"
+output="$WORK/late-local-helper.out"
 copy_fixture "$fixture"
-SCV_CORE_SYNC_TEST_DRIFT=non-deck \
+SCV_CORE_SYNC_TEST_DRIFT=local-helper \
   bash "$fixture/scripts/sync-core.sh" --source "$SOURCE_CORE" \
   >"$output" 2>&1
 rc=$?
@@ -448,9 +343,9 @@ if [[ "$rc" -ne 0 &&
       -f "$fixture/scripts/late-local-helper.sh" &&
       "$(cat "$output")" == *"Core sync would overwrite local-only path"* &&
       -z "$(transaction_debris "$fixture")" ]]; then
-  ok "late non-Deck local file is rejected and preserved"
+  ok "late local-only file is rejected and preserved"
 else
-  fail "late non-Deck local file was lost or accepted"
+  fail "late local-only file was lost or accepted"
 fi
 
 fixture="$WORK/late-adapter"
@@ -467,22 +362,6 @@ if [[ "$rc" -ne 0 &&
   ok "late adapter-owned edit is rejected and preserved"
 else
   fail "late adapter-owned edit was lost or accepted"
-fi
-
-fixture="$WORK/late-deck-runtime"
-output="$WORK/late-deck-runtime.out"
-copy_fixture "$fixture"
-SCV_CORE_SYNC_TEST_DRIFT=deck \
-  bash "$fixture/scripts/sync-core.sh" --source "$SOURCE_CORE" \
-  >"$output" 2>&1
-rc=$?
-if [[ "$rc" -ne 0 &&
-      -f "$fixture/DeckUI/.scv-late-runtime" &&
-      "$(cat "$output")" == *"DeckUI runtime inventory changed"* &&
-      -z "$(transaction_debris "$fixture")" ]]; then
-  ok "late DeckUI runtime path is rejected and preserved"
-else
-  fail "late DeckUI runtime path was lost or accepted"
 fi
 
 fixture="$WORK/late-vendor-symlink"
@@ -675,73 +554,8 @@ else
   fail "vendor rename race reached external data or was accepted"
 fi
 
-fixture="$WORK/deck-ancestor-race"
-output="$WORK/deck-ancestor-race.out"
-copy_fixture "$fixture"
-deck_ancestor_ready="$WORK/deck-ancestor-race.ready"
-deck_ancestor_continue="$WORK/deck-ancestor-race.continue"
-deck_ancestor_saved="$WORK/deck-ancestor-race.saved"
-deck_ancestor_external="$WORK/deck-ancestor-race.external"
-mkdir "$deck_ancestor_external"
-printf 'external DeckUI sentinel\n' > "$deck_ancestor_external/sentinel"
-deck_ancestor_external_before=$(tree_snapshot "$deck_ancestor_external")
-SCV_CORE_SYNC_TEST_PAUSE_AT=\
-"before-rename:preserve:DeckUI/src/deck/decks/atomic-runtime" \
-SCV_CORE_SYNC_TEST_READY_FILE="$deck_ancestor_ready" \
-SCV_CORE_SYNC_TEST_CONTINUE_FILE="$deck_ancestor_continue" \
-  bash "$fixture/scripts/sync-core.sh" --source "$SOURCE_CORE" \
-    >"$output" 2>&1 &
-deck_ancestor_pid=$!
-if wait_for_test_file "$deck_ancestor_ready"; then
-  mv "$fixture/DeckUI/src" "$deck_ancestor_saved"
-  ln -s "$deck_ancestor_external" "$fixture/DeckUI/src"
-  touch "$deck_ancestor_continue"
-  wait "$deck_ancestor_pid"
-  deck_ancestor_rc=$?
-else
-  kill -TERM "$deck_ancestor_pid" 2>/dev/null || true
-  wait "$deck_ancestor_pid" 2>/dev/null || true
-  deck_ancestor_rc=0
-fi
-deck_ancestor_external_after=$(tree_snapshot "$deck_ancestor_external")
-if [[ "$deck_ancestor_rc" -ne 0 &&
-      "$deck_ancestor_external_before" == "$deck_ancestor_external_after" &&
-      "$(cat "$output")" == *"directory ancestor changed before atomic rename: src"* ]]; then
-  ok "DeckUI ancestor replacement cannot redirect runtime preservation"
-else
-  fail "DeckUI ancestor race reached external data or was accepted"
-fi
-
 echo
 echo "── live worktree collision guards ──"
-fixture="$WORK/deck-conflict"
-output="$WORK/deck-conflict.out"
-copy_fixture "$fixture"
-collision_core="$WORK/collision-core"
-cp -R -p "$SOURCE_CORE" "$collision_core"
-printf 'local/runtime collision\n' \
-  > "$fixture/DeckUI/local-runtime-collision.txt"
-printf 'Core/source collision\n' \
-  > "$collision_core/core/DeckUI/local-runtime-collision.txt"
-bash "$collision_core/tools/generate-manifest.sh" \
-  --root "$collision_core" >/dev/null
-before=$(tree_snapshot "$fixture")
-bash "$fixture/scripts/sync-core.sh" --source "$collision_core" \
-  >"$output" 2>&1
-rc=$?
-after=$(tree_snapshot "$fixture")
-if [[ "$rc" -ne 0 &&
-      "$(cat "$output")" == *"staged Core conflicts with local runtime path"* ]]; then
-  ok "DeckUI runtime path colliding with staged Core fails closed"
-else
-  fail "DeckUI runtime/Core collision was accepted or misdiagnosed"
-fi
-if [[ "$before" == "$after" && -z "$(transaction_debris "$fixture")" ]]; then
-  ok "DeckUI collision rejection makes no live mutation"
-else
-  fail "DeckUI collision rejection changed the wrapper"
-fi
-
 run_protected_path_case() {
   local label=$1 relative=$2 mode=$3 fixture output before after rc
   CASE_NUMBER=$((CASE_NUMBER + 1))
@@ -1326,38 +1140,6 @@ else
 fi
 
 echo
-echo "── Deck runtime cache boundary ──"
-fixture="$WORK/cache-overlap-repository"
-output="$WORK/cache-overlap-repository.out"
-copy_fixture "$fixture"
-before=$(tree_snapshot "$fixture")
-if SCV_DECK_CACHE_DIR="$fixture/scripts" \
-    bash "$fixture/scripts/sync-core.sh" --source "$SOURCE_CORE" \
-      >"$output" 2>&1; then
-  fail "Deck cache inside the wrapper repository was accepted"
-elif [[ "$before" == "$(tree_snapshot "$fixture")" &&
-        "$(cat "$output")" == *"cache base overlaps updater-protected path"* ]]; then
-  ok "Deck cache inside the wrapper fails closed without live mutation"
-else
-  fail "Deck cache repository-overlap rejection was unsafe or unclear"
-fi
-
-fixture="$WORK/cache-overlap-legacy"
-output="$WORK/cache-overlap-legacy.out"
-copy_fixture "$fixture"
-before=$(tree_snapshot "$fixture")
-if SCV_DECK_CACHE_DIR="$fixture/DeckUI/node_modules" \
-    bash "$fixture/scripts/sync-core.sh" --source "$SOURCE_CORE" \
-      >"$output" 2>&1; then
-  fail "Deck cache nested in the legacy migration source was accepted"
-elif [[ "$before" == "$(tree_snapshot "$fixture")" &&
-        "$(cat "$output")" == *"cache base overlaps updater-protected path"* ]]; then
-  ok "Deck cache nested in legacy DeckUI fails without recursive migration"
-else
-  fail "Deck cache legacy-overlap rejection was unsafe or unclear"
-fi
-
-echo
 echo "── project-core write boundary ──"
 fixture="$WORK/project-core-direct"
 output="$WORK/project-core-direct.out"
@@ -1549,43 +1331,6 @@ if [[ "$command_mode_before" == "$command_mode_after" ]]; then
 else
   fail "command body rewrite changed adapter-owned file mode"
 fi
-mkdir -p "$project_destination/DeckUI/node_modules"
-printf 'non-git runtime\n' \
-  > "$project_destination/DeckUI/node_modules/.scv-non-git-runtime"
-if bash "$REPO_ROOT/scripts/project-core.sh" \
-    --vendor "$SOURCE_CORE" \
-    --destination "$project_destination" --check >/dev/null 2>&1; then
-  fail "non-Git projection check silently excluded runtime paths"
-else
-  ok "non-Git projection check treats every DeckUI path as contract-owned"
-fi
-
-empty_vendor="$WORK/core-owned-empty-vendor"
-cp -R -p "$SOURCE_CORE" "$empty_vendor"
-mkdir -p \
-  "$empty_vendor/core/DeckUI/src/deck/decks/core-owned-empty"
-if SCV_PROJECT_CORE_STAGE_ROOT="$project_stage" \
-    SCV_PROJECT_CORE_WRITE_TOKEN="$token" \
-    bash "$REPO_ROOT/scripts/project-core.sh" \
-      --vendor "$empty_vendor" \
-      --destination "$project_destination" >/dev/null 2>&1; then
-  git -C "$project_destination" init -q
-  git -C "$project_destination" config user.name "SCV Projection Test"
-  git -C "$project_destination" config user.email "projection@example.invalid"
-  git -C "$project_destination" add -A
-  git -C "$project_destination" commit -qm "projected baseline"
-  if [[ -d "$project_destination/DeckUI/src/deck/decks/core-owned-empty" ]] &&
-     bash "$REPO_ROOT/scripts/project-core.sh" \
-       --vendor "$empty_vendor" \
-       --destination "$project_destination" --check >/dev/null 2>&1; then
-    ok "Git projection check retains Core-owned empty DeckUI directories"
-  else
-    fail "Git projection check excluded a Core-owned empty directory"
-  fi
-else
-  fail "Core-owned empty-directory projection failed"
-fi
-
 echo
 echo "── wrapper/Core version independence ──"
 fixture="$WORK/version-independent"
@@ -1628,14 +1373,11 @@ else
 fi
 
 echo
-echo "── authoritative Deck runtime cache reuse ──"
-fixture="$WORK/second-host-cache-reuse"
-output="$WORK/second-host-cache-reuse.out"
-error_output="$WORK/second-host-cache-reuse.err"
+echo "── cross-profile lock provenance ──"
+fixture="$WORK/cross-profile-lock"
+output="$WORK/cross-profile-lock.out"
 copy_fixture "$fixture"
-second_host_cache="$WORK/second-host-cache"
 second_host_candidate="$WORK/second-host-candidate"
-second_host_authoritative="$WORK/second-host-authoritative"
 second_host_profile="$WORK/second-host-codex.env"
 cat >"$second_host_profile" <<'EOF'
 SCV_HOST_PROFILE_API=1
@@ -1654,27 +1396,9 @@ EOF
   --source "$SOURCE_CORE" \
   --target "$second_host_candidate" \
   --profile "$second_host_profile" >/dev/null
-mkdir -p "$second_host_authoritative/node_modules/cross-wrapper"
-printf 'authoritative second-host runtime\n' \
-  > "$second_host_authoritative/node_modules/cross-wrapper/owner.txt"
-second_host_runtime=$(
-  SCV_DECK_CACHE_DIR="$second_host_cache" \
-    bash "$second_host_candidate/core/scripts/deck-runtime.sh" migrate \
-      --from "$second_host_authoritative"
-)
-mkdir -p "$fixture/DeckUI/node_modules/cross-wrapper"
-printf 'conflicting Claude legacy runtime\n' \
-  > "$fixture/DeckUI/node_modules/cross-wrapper/owner.txt"
-printf 'Claude-only missing runtime entry\n' \
-  > "$fixture/DeckUI/dist-deck/claude-only-runtime.txt"
-second_host_cache_before=$(tree_snapshot "$second_host_cache")
-second_host_legacy_before=$(deck_runtime_snapshot "$fixture/DeckUI")
-reuse_notice='NOTICE: existing Deck runtime cache differs; reusing it as authoritative and skipping this legacy migration'
-if SCV_DECK_CACHE_DIR="$second_host_cache" \
-    bash "$fixture/scripts/sync-core.sh" --source "$SOURCE_CORE" \
-      >"$output" 2>"$error_output" &&
-   [[ "$(cat "$output")" == *"CORE_SYNCED: yes"* &&
-      "$(cat "$output")" == *"DECK_RUNTIME_MIGRATED: $second_host_runtime"* ]] &&
+if bash "$fixture/scripts/sync-core.sh" --source "$SOURCE_CORE" \
+      >"$output" 2>&1 &&
+   [[ "$(cat "$output")" == *"CORE_SYNCED: yes"* ]] &&
    cross_profile_locks_share_source \
      "$fixture/core.lock" "$second_host_candidate/core.lock.json" &&
    grep -q '^SCV_HOST_ID=codex$' \
@@ -1682,54 +1406,45 @@ if SCV_DECK_CACHE_DIR="$second_host_cache" \
    grep -q '^SCV_HOST_ID=claude-code$' \
      "$fixture/vendor/scv-core/core/host-profile.env" &&
    bash "$fixture/scripts/verify-core.sh" >/dev/null 2>&1; then
-  ok "Claude reuses the Codex-seeded authoritative cache and completes the swap"
+  ok "Claude and Codex profiles of one Core share source provenance"
 else
-  fail "second-host authoritative cache reuse blocked or bypassed the wrapper swap"
-  tail -n 20 "$output" "$error_output"
+  fail "cross-profile Core lock provenance diverged or the swap failed"
+  tail -n 20 "$output"
 fi
-if [[ "$(grep -Fxc "$reuse_notice" "$error_output")" -eq 1 ]]; then
-  ok "authoritative cache reuse surfaces exactly one stable NOTICE"
-else
-  fail "authoritative cache reuse NOTICE was missing or duplicated"
-fi
-if [[ "$second_host_cache_before" == \
-      "$(tree_snapshot "$second_host_cache")" &&
-      "$(cat "$second_host_runtime/node_modules/cross-wrapper/owner.txt")" == \
-      "authoritative second-host runtime" ]]; then
-  ok "second-host authoritative cache remains byte/type/mode-exact"
-else
-  fail "Claude sync changed the authoritative second-host cache"
-fi
-if [[ "$second_host_legacy_before" == \
-      "$(deck_runtime_snapshot "$fixture/DeckUI")" &&
-      "$(cat "$fixture/DeckUI/node_modules/cross-wrapper/owner.txt")" == \
-      "conflicting Claude legacy runtime" ]]; then
-  ok "Claude legacy and runtime paths remain byte/type/mode-exact"
-else
-  fail "authoritative reuse changed a Claude legacy runtime path"
-fi
-if [[ ! -e "$second_host_runtime/dist-deck/claude-only-runtime.txt" ]]; then
-  ok "authoritative reuse does not mix a missing Claude-only runtime entry"
-else
-  fail "authoritative reuse partially mixed the Claude legacy runtime"
-fi
-runtime_cache_debris=$(
-  find "$second_host_cache" \
-    \( \
-      -name '.*.lock' -o \
-      -name '.*.lock.new-*' -o \
-      -name '.*.stage-*' -o \
-      -name '.*.install-*' \
-    \) -print -quit
-)
-if [[ -z "$runtime_cache_debris" &&
-      -z "$(transaction_debris "$fixture")" &&
+if [[ -z "$(transaction_debris "$fixture")" &&
       -z "$(quarantine_debris "$fixture")" &&
       ! -e "$fixture/.scv-core-sync.lock" &&
       ! -e "$fixture/.git/index.lock" ]]; then
-  ok "authoritative cache reuse leaves no lock, stage, or transaction debris"
+  ok "successful sync leaves no lock, stage, or transaction debris"
 else
-  fail "authoritative cache reuse left lock, stage, or transaction debris"
+  fail "successful sync left lock, stage, or transaction debris"
+fi
+
+echo
+echo "── top-level DeckUI is outside every sync scope ──"
+fixture="$WORK/legacy-deckui-leftover"
+output="$WORK/legacy-deckui-leftover.out"
+copy_fixture "$fixture"
+if [[ -e "$fixture/DeckUI" || -L "$fixture/DeckUI" ]]; then
+  fail "fixture unexpectedly starts with a top-level DeckUI"
+fi
+mkdir -p "$fixture/DeckUI/node_modules"
+printf 'old maintainer runtime leftover\n' > "$fixture/DeckUI/node_modules/x"
+leftover_before=$(tree_snapshot "$fixture/DeckUI")
+if bash "$fixture/scripts/sync-core.sh" --source "$SOURCE_CORE" \
+      >"$output" 2>&1 &&
+   [[ "$(cat "$output")" == *"CORE_SYNCED: yes"* ]]; then
+  ok "sync succeeds with a leftover untracked top-level DeckUI"
+else
+  fail "leftover top-level DeckUI blocked the sync"
+  tail -n 20 "$output"
+fi
+leftover_content=$(cat "$fixture/DeckUI/node_modules/x" 2>/dev/null)
+if [[ "$leftover_before" == "$(tree_snapshot "$fixture/DeckUI")" &&
+      "$leftover_content" == "old maintainer runtime leftover" ]]; then
+  ok "sync leaves a leftover top-level DeckUI byte/type/mode-exact"
+else
+  fail "sync deleted or changed a leftover top-level DeckUI"
 fi
 
 fixture="$WORK/success"
@@ -1762,21 +1477,10 @@ if [[ "$(cat "$fixture/vendor/wrapper-owned-sibling.txt" 2>/dev/null)" == \
 else
   fail "successful Core sync lost another tracked vendor entry"
 fi
-if runtime_paths_preserved "$fixture"; then
-  ok "successful transaction preserves all ignored/untracked DeckUI paths"
+if [[ ! -e "$fixture/DeckUI" && ! -L "$fixture/DeckUI" ]]; then
+  ok "successful sync leaves no top-level DeckUI"
 else
-  fail "successful transaction lost ignored/untracked DeckUI paths"
-fi
-deck_runtime_path=$(
-  "$fixture/vendor/scv-core/core/scripts/deck-runtime.sh" path
-)
-if [[ -f "$deck_runtime_path/node_modules/.scv-atomicity-sentinel" &&
-      -f "$deck_runtime_path/scripts/deckdoc/node_modules/.scv-atomicity-sentinel" &&
-      -f "$deck_runtime_path/dist-deck/.scv-atomicity-sentinel" &&
-      -f "$deck_runtime_path/src/deck/decks/atomic-runtime/deck.json" ]]; then
-  ok "successful sync migrates known legacy DeckUI runtime into external cache"
-else
-  fail "successful sync did not migrate known DeckUI runtime entries"
+  fail "successful sync created a top-level DeckUI"
 fi
 if bash "$fixture/scripts/verify-core.sh" >/dev/null 2>&1; then
   ok "successful transaction leaves a verified wrapper"

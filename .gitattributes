@@ -33,7 +33,6 @@ scripts/work.sh linguist-generated=true
 scripts/workspace-helper.sh linguist-generated=true
 ralph-template-scv.md linguist-generated=true
 template/** linguist-generated=true
-DeckUI/** linguist-generated=true
 assets/** linguist-generated=true
 protocols/** linguist-generated=true
 tests/fixtures/** linguist-generated=true

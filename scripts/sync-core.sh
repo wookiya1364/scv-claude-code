@@ -147,9 +147,6 @@ TX_PATHS=()
 TX_ORIGINAL_STATES=()
 TX_STAGE_INSTALLED=()
 TX_INSTALLED_DIGESTS=()
-TX_DECK_INVENTORY=()
-TX_DECK_INVENTORY_FILE=
-TX_PRESERVED_PATHS=()
 TX_EXPECTED_STATES=()
 TX_EXPECTED_DIGESTS=()
 TRANSACTION_PATHS=(
@@ -159,7 +156,6 @@ TRANSACTION_PATHS=(
   skills
   tests
   template
-  DeckUI
   assets
   protocols
   ralph-template-scv.md
@@ -320,7 +316,7 @@ acquire_sync_lock() {
 
 quarantine_owned_live() {
   local index=$1 relative=$2 live=$3 installed installed_digest
-  local discard inventory= current_digest
+  local discard current_digest
   installed=${TX_STAGE_INSTALLED[$index]:-no}
   installed_digest=${TX_INSTALLED_DIGESTS[$index]:-}
   if [[ "$installed" != yes || -z "$installed_digest" ]]; then
@@ -332,8 +328,7 @@ quarantine_owned_live() {
     repository "$relative" \
     transaction "rollback-discard/$relative" \
     "rollback-discard:$relative" || return 1
-  [[ "$relative" != DeckUI ]] || inventory=$TX_DECK_INVENTORY_FILE
-  current_digest=$(path_fingerprint "$discard" "$inventory")
+  current_digest=$(path_fingerprint "$discard")
   if [[ "$current_digest" != "$installed_digest" ]]; then
     echo "ERROR: rollback quarantined a concurrently modified live path: $relative" >&2
     return 1
@@ -341,9 +336,8 @@ quarantine_owned_live() {
 }
 
 rollback_transaction() {
-  local index relative live backup original_state preserved_live preserved_backup
-  local installed installed_digest current_digest inventory failures=0
-  local deck_preserve_failures=0
+  local index relative live backup original_state
+  local installed installed_digest failures=0
   (( TX_ACTIVE )) || return 0
   (( TX_COMMITTED == 0 )) || return 0
   (( TX_ROLLING_BACK == 0 )) || return 0
@@ -360,39 +354,6 @@ rollback_transaction() {
     esac
   fi
 
-  # Untracked/ignored DeckUI paths move from the exact old tree into the new
-  # tree only after its directory swap. Put them back before restoring it.
-  for (( index=${#TX_PRESERVED_PATHS[@]} - 1; index >= 0; index-- )); do
-    relative=${TX_PRESERVED_PATHS[$index]}
-    preserved_live="$REPO_ROOT/$relative"
-    preserved_backup="$TX_BACKUP/$relative"
-    if [[ "${SCV_CORE_SYNC_ROLLBACK_FAILPOINT:-}" == "preserved-collision:$relative" ]]; then
-      mkdir -p "$preserved_backup"
-      printf 'injected preserved-path collision\n' \
-        > "$preserved_backup/.scv-rollback-collision"
-    fi
-    if path_exists "$preserved_live"; then
-      if path_exists "$preserved_backup"; then
-        echo "ERROR: rollback destination already exists: $preserved_backup" >&2
-        failures=$((failures + 1))
-        deck_preserve_failures=$((deck_preserve_failures + 1))
-        continue
-      fi
-      if ! guarded_rename_noreplace \
-        repository "$relative" \
-        transaction "backup/$relative" \
-        "rollback-preserved:$relative"; then
-        echo "ERROR: could not restore preserved path to backup: $relative" >&2
-        failures=$((failures + 1))
-        deck_preserve_failures=$((deck_preserve_failures + 1))
-      fi
-    else
-      echo "ERROR: preserved path disappeared during rollback: $relative" >&2
-      failures=$((failures + 1))
-      deck_preserve_failures=$((deck_preserve_failures + 1))
-    fi
-  done
-
   for (( index=${#TX_PATHS[@]} - 1; index >= 0; index-- )); do
     relative=${TX_PATHS[$index]}
     original_state=${TX_ORIGINAL_STATES[$index]}
@@ -400,10 +361,6 @@ rollback_transaction() {
     installed_digest=${TX_INSTALLED_DIGESTS[$index]:-}
     live="$REPO_ROOT/$relative"
     backup="$TX_BACKUP/$relative"
-    if [[ "$relative" == DeckUI && "$deck_preserve_failures" -gt 0 ]]; then
-      echo "ERROR: rollback preserves live and backup DeckUI after runtime restore failure" >&2
-      continue
-    fi
     if [[ "$original_state" == present ]]; then
       if path_exists "$backup"; then
         if [[ "${SCV_CORE_SYNC_ROLLBACK_FAILPOINT:-}" == "restore:$relative" ]]; then
@@ -501,14 +458,12 @@ scopes = (
     "skills",
     "tests",
     "template",
-    "DeckUI",
     "assets",
     "protocols",
     "ralph-template-scv.md",
     "TEMPLATE_VERSION",
     "host-profile.env",
 )
-protected_local_scopes = tuple(scope for scope in scopes if scope != "DeckUI")
 adapter_owned = {
     "scripts/apply-model-policy.sh",
     "scripts/hydrate.sh",
@@ -591,11 +546,11 @@ dirty = names(
 )
 untracked = names(
     "ls-files", "--others", "--exclude-standard", "-z",
-    "--", *protected_local_scopes
+    "--", *scopes
 )
 ignored = names(
     "ls-files", "--others", "--ignored", "--exclude-standard", "-z",
-    "--", *protected_local_scopes
+    "--", *scopes
 )
 flagged = set()
 for record in git("ls-files", "-v", "-z", "--", *scopes).split(b"\0"):
@@ -750,7 +705,7 @@ for path in sorted(dirty):
     violations.append(("tracked change", path))
 
 for path in sorted(untracked | ignored):
-    if not in_scope(path) or path == "DeckUI" or path.startswith("DeckUI/"):
+    if not in_scope(path):
         continue
     if path in adapter_owned:
         continue
@@ -1233,8 +1188,8 @@ cleanup_transaction_tree() {
 }
 
 path_fingerprint() {
-  local target=$1 inventory=${2:-}
-  python3 - "$target" "$inventory" <<'PY'
+  local target=$1
+  python3 - "$target" <<'PY'
 import hashlib
 import os
 import stat
@@ -1242,23 +1197,6 @@ import sys
 from pathlib import Path
 
 target = Path(sys.argv[1])
-inventory = Path(sys.argv[2]) if sys.argv[2] else None
-excluded = set()
-if inventory is not None:
-    for encoded in inventory.read_bytes().split(b"\0"):
-        if not encoded:
-            continue
-        relative = os.fsdecode(encoded).rstrip("/")
-        if relative.startswith("DeckUI/"):
-            excluded.add(relative.removeprefix("DeckUI/"))
-
-def is_excluded(relative: str) -> bool:
-    parts = relative.split("/")
-    return any(
-        "/".join(parts[:index]) in excluded
-        for index in range(1, len(parts) + 1)
-    )
-
 if not target.exists() and not target.is_symlink():
     print("absent")
     raise SystemExit(0)
@@ -1267,8 +1205,6 @@ digest = hashlib.sha256()
 stack = [(target, ".")]
 while stack:
     item, relative = stack.pop()
-    if relative != "." and is_excluded(relative):
-        continue
     metadata = item.lstat()
     mode = metadata.st_mode
     digest.update(
@@ -1308,31 +1244,27 @@ PY
 }
 
 capture_transaction_preimage() {
-  local relative live state digest inventory
+  local relative live state digest
   TX_EXPECTED_STATES=()
   TX_EXPECTED_DIGESTS=()
   for relative in "${TRANSACTION_PATHS[@]}"; do
     live="$REPO_ROOT/$relative"
     state=absent
     path_exists "$live" && state=present
-    inventory=
-    [[ "$relative" != DeckUI ]] || inventory=$TX_DECK_INVENTORY_FILE
-    digest=$(path_fingerprint "$live" "$inventory")
+    digest=$(path_fingerprint "$live")
     TX_EXPECTED_STATES+=("$state")
     TX_EXPECTED_DIGESTS+=("$digest")
   done
 }
 
 validate_transaction_preimage() {
-  local index relative live state digest inventory failures=0
+  local index relative live state digest failures=0
   for (( index=0; index < ${#TRANSACTION_PATHS[@]}; index++ )); do
     relative=${TRANSACTION_PATHS[$index]}
     live="$REPO_ROOT/$relative"
     state=absent
     path_exists "$live" && state=present
-    inventory=
-    [[ "$relative" != DeckUI ]] || inventory=$TX_DECK_INVENTORY_FILE
-    digest=$(path_fingerprint "$live" "$inventory")
+    digest=$(path_fingerprint "$live")
     if [[ "$state" != "${TX_EXPECTED_STATES[$index]}" ||
           "$digest" != "${TX_EXPECTED_DIGESTS[$index]}" ]]; then
       echo "ERROR: live path changed after projection snapshot: $relative" >&2
@@ -1343,9 +1275,8 @@ validate_transaction_preimage() {
 }
 
 validate_original_preimage() {
-  local index=$1 relative=$2 actual=$3 state=$4 inventory= digest
-  [[ "$relative" != DeckUI ]] || inventory=$TX_DECK_INVENTORY_FILE
-  digest=$(path_fingerprint "$actual" "$inventory")
+  local index=$1 relative=$2 actual=$3 state=$4 digest
+  digest=$(path_fingerprint "$actual")
   if [[ "$state" != "${TX_EXPECTED_STATES[$index]}" ||
         "$digest" != "${TX_EXPECTED_DIGESTS[$index]}" ]]; then
     echo "ERROR: original path drifted before atomic backup: $relative" >&2
@@ -1354,23 +1285,13 @@ validate_original_preimage() {
 }
 
 validate_backup_preimages() {
-  local index relative backup state digest inventory preserved failures=0
+  local index relative backup state digest failures=0
   for (( index=0; index < ${#TX_PATHS[@]}; index++ )); do
     relative=${TX_PATHS[$index]}
     backup="$TX_BACKUP/$relative"
     state=absent
     path_exists "$backup" && state=present
-    inventory=
-    [[ "$relative" != DeckUI ]] || inventory=$TX_DECK_INVENTORY_FILE
-    if [[ "$relative" == DeckUI ]]; then
-      for preserved in "${TX_DECK_INVENTORY[@]}"; do
-        if path_exists "$backup/${preserved#DeckUI/}"; then
-          echo "ERROR: DeckUI runtime path reappeared in original backup: $preserved" >&2
-          failures=$((failures + 1))
-        fi
-      done
-    fi
-    digest=$(path_fingerprint "$backup" "$inventory")
+    digest=$(path_fingerprint "$backup")
     if [[ "$state" != "${TX_EXPECTED_STATES[$index]}" ||
           "$digest" != "${TX_EXPECTED_DIGESTS[$index]}" ]]; then
       echo "ERROR: original backup changed during Core sync: $relative" >&2
@@ -1378,75 +1299,6 @@ validate_backup_preimages() {
     fi
   done
   (( failures == 0 ))
-}
-
-collect_deckui_inventory() {
-  local suffix=${1:-} git_root raw normalized inventory_path
-  git_root=$(git -C "$REPO_ROOT" rev-parse --show-toplevel 2>/dev/null) || {
-    echo "ERROR: Core sync requires the wrapper repository Git index" >&2
-    return 1
-  }
-  [[ "$(cd "$git_root" && pwd -P)" == "$REPO_ROOT" ]] || {
-    echo "ERROR: Core sync must run at the wrapper Git worktree root" >&2
-    return 1
-  }
-  raw="deckui-inventory${suffix}.raw"
-  normalized="deckui-inventory${suffix}"
-  {
-    git -C "$REPO_ROOT" ls-files \
-      --others --ignored --exclude-standard --directory -z -- DeckUI
-    git -C "$REPO_ROOT" ls-files \
-      --others --exclude-standard --directory -z -- DeckUI
-  } > "$raw"
-  python3 - "$REPO_ROOT" "$raw" "$normalized" <<'PY'
-import os
-import sys
-from pathlib import Path
-
-repo = Path(sys.argv[1])
-raw = Path(sys.argv[2]).read_bytes().split(b"\0")
-output = Path(sys.argv[3])
-candidates = set()
-for encoded in raw:
-    if not encoded:
-        continue
-    value = os.fsdecode(encoded).rstrip("/")
-    path = Path(value)
-    if (
-        path.is_absolute()
-        or len(path.parts) < 2
-        or path.parts[0] != "DeckUI"
-        or any(part in {"", ".", ".."} for part in path.parts)
-    ):
-        raise SystemExit(f"ERROR: unsafe DeckUI runtime inventory path: {value!r}")
-    if not (repo / path).exists() and not (repo / path).is_symlink():
-        raise SystemExit(f"ERROR: DeckUI runtime inventory path disappeared: {value!r}")
-    candidates.add(path.as_posix())
-
-selected = []
-selected_set = set()
-for value in sorted(candidates, key=lambda item: (item.count("/"), item)):
-    parts = value.split("/")
-    if any("/".join(parts[:index]) in selected_set for index in range(2, len(parts))):
-        continue
-    selected.append(value)
-    selected_set.add(value)
-output.write_bytes(
-    b"".join(os.fsencode(value) + b"\0" for value in selected)
-)
-PY
-  if [[ -n "$suffix" ]]; then
-    if ! cmp -s "$TX_DECK_INVENTORY_FILE" "$normalized"; then
-      echo "ERROR: DeckUI runtime inventory changed after projection snapshot" >&2
-      return 1
-    fi
-    return 0
-  fi
-  TX_DECK_INVENTORY=()
-  TX_DECK_INVENTORY_FILE=$normalized
-  while IFS= read -r -d '' inventory_path; do
-    TX_DECK_INVENTORY+=("$inventory_path")
-  done < "$normalized"
 }
 
 VENDOR_PROJECTION="$TMP_DIR/vendor-projection"
@@ -1568,28 +1420,17 @@ python3 -B "$PATH_HELPER" copy-file \
 acquire_git_index_lock
 validate_live_worktree
 TX_INDEX_FINGERPRINT=$(scoped_index_fingerprint)
-collect_deckui_inventory
 capture_transaction_preimage
-for preserved_path in "${TX_DECK_INVENTORY[@]}"; do
-  if path_exists "$TX_STAGE_WRAPPER/$preserved_path"; then
-    echo "ERROR: staged Core conflicts with local runtime path: $preserved_path" >&2
-    exit 1
-  fi
-done
 
 case "${SCV_CORE_SYNC_TEST_DRIFT:-}" in
   "")
     ;;
-  non-deck)
+  local-helper)
     printf 'late local helper sentinel\n' \
       > "$REPO_ROOT/scripts/late-local-helper.sh"
     ;;
   adapter)
     printf '\n# late adapter sentinel\n' >> "$REPO_ROOT/scripts/sync.sh"
-    ;;
-  deck)
-    printf 'late DeckUI runtime sentinel\n' \
-      > "$REPO_ROOT/DeckUI/.scv-late-runtime"
     ;;
   vendor-symlink)
     [[ -n "${SCV_CORE_SYNC_TEST_VENDOR_TARGET:-}" &&
@@ -1615,61 +1456,7 @@ esac
 
 validate_live_worktree
 validate_index_preimage
-collect_deckui_inventory .recheck
 validate_transaction_preimage
-
-DECK_RUNTIME_MIGRATOR="$TX_STAGE_VENDOR/core/scripts/deck-runtime.sh"
-if [[ -x "$DECK_RUNTIME_MIGRATOR" && -d "$REPO_ROOT/DeckUI" ]]; then
-  if [[ -n "${SCV_DECK_CACHE_DIR:-}" ]]; then
-    DECK_CACHE_BASE=$SCV_DECK_CACHE_DIR
-  elif [[ -n "${XDG_CACHE_HOME:-}" ]]; then
-    DECK_CACHE_BASE="$XDG_CACHE_HOME/scv/deckui"
-  elif [[ -n "${HOME:-}" ]]; then
-    DECK_CACHE_BASE="$HOME/.cache/scv/deckui"
-  else
-    echo "ERROR: set SCV_DECK_CACHE_DIR, XDG_CACHE_HOME, or HOME" >&2
-    exit 1
-  fi
-  python3 - \
-    "$DECK_CACHE_BASE" \
-    "$REPO_ROOT" \
-    "$TX_ROOT" \
-    "$TMP_DIR" \
-    "$REPO_ROOT/DeckUI" <<'PY'
-import sys
-from pathlib import Path
-
-raw_cache = Path(sys.argv[1]).expanduser()
-try:
-    cache = raw_cache.resolve(strict=False)
-    protected = [Path(value).resolve(strict=False) for value in sys.argv[2:]]
-except (OSError, RuntimeError) as error:
-    raise SystemExit(f"ERROR: cannot resolve SCV Deck cache boundary: {error}")
-
-if not raw_cache.is_absolute():
-    raise SystemExit("ERROR: SCV Deck cache base must be an absolute path")
-
-def is_relative_to(path: Path, parent: Path) -> bool:
-    try:
-        path.relative_to(parent)
-        return True
-    except ValueError:
-        return False
-
-for boundary in protected:
-    if is_relative_to(cache, boundary) or is_relative_to(boundary, cache):
-        raise SystemExit(
-            "ERROR: SCV Deck cache base overlaps updater-protected path: "
-            f"{cache} <-> {boundary}"
-        )
-PY
-  deck_runtime_path=$(
-    "$DECK_RUNTIME_MIGRATOR" migrate \
-      --from "$REPO_ROOT/DeckUI" \
-      --reuse-existing
-  )
-  echo "DECK_RUNTIME_MIGRATED: $deck_runtime_path"
-fi
 
 transaction_source_relative() {
   case "$1" in
@@ -1681,7 +1468,7 @@ transaction_source_relative() {
 
 swap_transaction_path() {
   local relative=$1 source_relative source live backup
-  local original_state=absent preserved inventory
+  local original_state=absent
   local expected_index actual_original source_digest installed_digest
   source_relative=$(transaction_source_relative "$relative")
   source=$source_relative
@@ -1691,9 +1478,7 @@ swap_transaction_path() {
     echo "ERROR: transaction stage lacks $relative" >&2
     return 1
   }
-  inventory=
-  [[ "$relative" != DeckUI ]] || inventory=$TX_DECK_INVENTORY_FILE
-  source_digest=$(path_fingerprint "$source" "$inventory")
+  source_digest=$(path_fingerprint "$source")
   if path_exists "$live"; then
     original_state=present
   fi
@@ -1736,22 +1521,7 @@ swap_transaction_path() {
     "install:$relative"
   TX_STAGE_INSTALLED[$expected_index]=yes
 
-  if [[ "$relative" == DeckUI && "$original_state" == present ]]; then
-    for preserved in "${TX_DECK_INVENTORY[@]}"; do
-      if path_exists "$backup/${preserved#DeckUI/}"; then
-        path_exists "$live/${preserved#DeckUI/}" && {
-          echo "ERROR: staged DeckUI unexpectedly contains $preserved" >&2
-          return 1
-        }
-        guarded_rename_noreplace \
-          transaction "backup/$preserved" \
-          repository "$preserved" \
-          "preserve:$preserved"
-        TX_PRESERVED_PATHS+=("$preserved")
-      fi
-    done
-  fi
-  installed_digest=$(path_fingerprint "$live" "$inventory")
+  installed_digest=$(path_fingerprint "$live")
   if [[ "$installed_digest" != "$source_digest" ]]; then
     echo "ERROR: installed path changed during atomic swap: $relative" >&2
     return 1
@@ -1769,11 +1539,6 @@ done
 sync_failpoint before-final-verify
 "$SCRIPT_DIR/verify-core.sh"
 sync_failpoint after-final-verify
-if [[ "${SCV_CORE_SYNC_TEST_BEFORE_COMMIT:-}" == recreate-deck-runtime ]]; then
-  mkdir -p "$TX_BACKUP/DeckUI/node_modules"
-  printf 'late backup runtime sentinel\n' \
-    > "$TX_BACKUP/DeckUI/node_modules/.scv-late-backup-runtime"
-fi
 validate_index_preimage
 validate_backup_preimages
 
