@@ -25,7 +25,8 @@ set -uo pipefail
 HERE="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 ROOT="$HERE/.."
 REPO="$( cd "$ROOT/.." && pwd )"
-DECKDOC="$ROOT/DeckUI/scripts/deckdoc"
+DECKUI_DIR="$(bash "$ROOT/scripts/deck-runtime.sh" ensure)" || { echo "FAIL test-deck-numbered-spec: deck runtime unavailable"; exit 1; }   # 실제 deck 과 같은 길: 엔진 자리(SCV_DECKUI_DIR) → 런타임 캐시
+DECKDOC="$DECKUI_DIR/scripts/deckdoc"
 DOC="$DECKDOC/doc.mjs"
 PROMOTE_MD="$ROOT/protocols/promote.md"
 

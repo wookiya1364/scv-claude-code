@@ -48,7 +48,7 @@ Adapter-owned behavior:
 Core-owned behavior:
 
 - action protocols other than the update and model-policy adapters
-- workflow shell helpers, templates, DeckUI, and assets
+- workflow shell helpers, templates, the deck engine (DeckUI, read in place from the vendored Core via `SCV_DECKUI_DIR`), and assets
 - host-neutral state inspection, conflict/hydration reporting, and pointer
   finalization in `core/scripts/state-index.sh`
 - shared fixtures and regression behavior

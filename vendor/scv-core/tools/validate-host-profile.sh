@@ -36,6 +36,7 @@ SCV_AUTO_PROMPT_PREFIX=""
 SCV_AUTO_PROMPT_SUFFIX=""
 SCV_JUDGE_COMMAND=""
 SCV_CHOICE_REJECTED_PREFIX=""
+SCV_DECKUI_DIR=""
 line_no=0
 while IFS= read -r line || [[ -n "$line" ]]; do
   line_no=$((line_no + 1))
@@ -55,7 +56,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     SCV_ARGUMENT_STYLE|SCV_STATE_INDEX|SCV_LEGACY_STATE_INDEXES|SCV_ROOT_ENV|\
     SCV_GRAPH_SKILL_PATHS|SCV_UPDATE_OWNER|SCV_MODEL_POLICY_OWNER|\
     SCV_PROMPTING_GUIDES|SCV_AUTO_PROMPT_TAGS|SCV_CHOICE_TOOL|SCV_CHOICE_OFF_WHEN|\
-    SCV_SESSION_ENV|SCV_AUTO_PROMPT_PREFIX|SCV_AUTO_PROMPT_SUFFIX|SCV_JUDGE_COMMAND|SCV_CHOICE_REJECTED_PREFIX) ;;
+    SCV_SESSION_ENV|SCV_AUTO_PROMPT_PREFIX|SCV_AUTO_PROMPT_SUFFIX|SCV_JUDGE_COMMAND|SCV_CHOICE_REJECTED_PREFIX|SCV_DECKUI_DIR) ;;
     *) echo "profile:$line_no: unknown key: $key" >&2; exit 1 ;;
   esac
   case "|$seen_keys|" in
@@ -155,6 +156,14 @@ if [[ -n "$SCV_CHOICE_REJECTED_PREFIX" ]]; then
         || "$SCV_CHOICE_REJECTED_PREFIX" == [[:space:]]* || "$SCV_CHOICE_REJECTED_PREFIX" == *[[:space:]] ]]; then
     echo "profile: invalid SCV_CHOICE_REJECTED_PREFIX (one line of plain text, at most 100 characters)" >&2; exit 1
   fi
+fi
+
+# 선택 키 (0.72.2+): deck 엔진(DeckUI) 폴더 — 코어 루트 기준 상대 경로 하나(글자 · 숫자 · . _ - 와 / 로 나눈 이름들, 256자까지,
+# 절대 경로 · '..' 조각 없음). 플러그인 밖을 가리키지 못하게 한다(lib/deck-source.sh 도 같은 것을 거절한다).
+if [[ -n "$SCV_DECKUI_DIR" ]]; then
+  [[ ${#SCV_DECKUI_DIR} -le 256 && "$SCV_DECKUI_DIR" =~ ^[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$ \
+     && "/$SCV_DECKUI_DIR/" != *"/../"* ]] \
+    || { echo "profile: invalid SCV_DECKUI_DIR (a folder path relative to the Core root: names of letters, digits, . _ - joined by /, no .., not absolute)" >&2; exit 1; }
 fi
 
 template="$SCV_ACTION_TEMPLATE"

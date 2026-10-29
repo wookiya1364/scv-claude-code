@@ -12,9 +12,9 @@
 - [ ] `bash tests/test-scvroot.sh` green (if scv path resolution touched)
 - [ ] relevant scenario / regression updated
 
-## Deck (only if `/scv:deck` / `DeckUI` touched)
+## Deck (only if `/scv:deck` / `vendor/scv-core/core/DeckUI` touched)
 
-- [ ] `pnpm -C DeckUI typecheck` + `build:deck` green
+- [ ] `d=$(bash scripts/deck-runtime.sh ensure) && pnpm -C "$d" install && pnpm -C "$d" typecheck && pnpm -C "$d" build:deck` green — run it in the deck runtime cache, never inside `vendor/` (installing there breaks `scripts/verify-core.sh`)
 
 ## Checklist
 

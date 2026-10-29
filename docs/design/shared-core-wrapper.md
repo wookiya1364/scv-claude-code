@@ -72,8 +72,11 @@ docs, `INTAKE.md` included) remains hydrated even when divergent active
 indexes cause an rc 4 conflict.
 A pointer without its canonical target remains broken and unhydrated.
 
-Root-level `scripts/`, `template/`, `DeckUI/`, and `assets/` remain for
+Root-level `scripts/`, `template/`, and `assets/` remain for
 backwards compatibility with existing `${CLAUDE_PLUGIN_ROOT}` command paths.
+The deck engine is not projected (Core 0.72.2+): the host profile's
+`SCV_DECKUI_DIR=vendor/scv-core/core/DeckUI` points the deck runtime at the
+vendored copy, so the plugin carries one engine.
 `protocols/` and the common portion of `tests/` are projected for shared
 regression. They are regenerated from `vendor/scv-core/core/` and checked by
 `scripts/verify-core.sh`; edits belong in `scv-core`, not in the projection.
@@ -91,20 +94,13 @@ install step is a rename. An EXIT/error/signal handler restores paths in
 reverse order. If any restore fails, the transaction directory is retained
 and its recovery path is printed instead of deleting the only backup.
 
-Before replacing the legacy in-tree DeckUI, the candidate Core
-`deck-runtime.sh migrate` command copies known mutable runtime entries into
-the external, source-payload-namespaced cache. Migration is additive while the
-destination has no conflicting entry. When another host already populated the
-same cache with different data, the persistent legacy migration treats that
-cache as authoritative and skips the entire legacy source, including equal
-and missing entries, so two hosts are never partially mixed. The old DeckUI
-is never modified; a later wrapper rollback therefore never depends on
-undoing cache writes.
+Up to wrapper 0.72.1 the wrapper also carried a projected top-level `DeckUI/`,
+whose untracked runtime files the sync inventoried and migrated. That copy is
+gone; a leftover untracked `DeckUI/` in an old checkout is outside every
+projected path and is left alone (the deck runtime reinstalls into its cache).
 
 Core-owned dirty files and local-only files under wholesale replacement paths
-fail closed. DeckUI is the explicit exception: every ignored or untracked
-runtime path is inventoried from Git and moved across the swap, provided it
-does not collide with the new Core payload. The projection writer itself can
+fail closed. The projection writer itself can
 write only to an authorized transaction-stage descendant; direct writes to
 the live wrapper are rejected, as are symlinks anywhere in that stage tree.
 Core-owned live files are compared directly with stage-0 index blobs using
