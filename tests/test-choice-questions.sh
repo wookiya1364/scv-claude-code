@@ -810,12 +810,13 @@ fi
 
 echo "── [T35.12] 큰 끝 메시지 속도 — 세 검사를 모두 보는 멈춤 ──"
 # 끝 메시지는 앞 64KB 만 본다(0.64.0 부터의 동작) — 질문이 그 안에 들도록 63KB 로 만든다. 맥 실측(2026-10-02, 시스템 bash 3.2):
-# 고치기 전 2.40초(등록 이유 하나) → 고친 뒤 2.69초(두 이유). 상한 10초는 병적인 느려짐(예전 같은 꼴 158초)을 잡는 자리다.
+# 고치기 전 2.40초(등록 이유 하나) → 고친 뒤 2.69초(두 이유). 상한은 병적인 느려짐(예전 같은 꼴 158초)을 잡는 자리다 —
+# 10초였으나 시험을 동시에 돌리는 러너(codex 래퍼 CI, 4개 동시)에서 11초가 나와 30초로(2026-10-29, 158초는 여전히 잡힌다).
 if [[ -x /bin/bash ]]; then
   R="$(new_repo sg12)"; hook_p "$R" "$WORK/profile-full.env" "로그인 고쳐" >/dev/null   # 등록 없음 → 등록 검사가 걸린 채로 셋 다 판정
   BIGA="$( { for i in $(seq 1 1500); do printf '진행 메모 %s — 이번 단계에서 확인한 것을 적는다.\n' "$i"; done; } | head -c 63000; printf '\n\n릴리스할까요?')"
   t0=$SECONDS; o="$(stop_g /bin/bash "$R" "$BIGA" false)"; t1=$SECONDS
-  [[ "$(sg_tags "$o")" == "block:prompt,choice" ]] && (( t1 - t0 <= 10 )) \
+  [[ "$(sg_tags "$o")" == "block:prompt,choice" ]] && (( t1 - t0 <= 30 )) \
     && ok "끝 메시지 $(printf '%s' "$BIGA" | wc -c | tr -d ' ')바이트 — 시스템 bash $v 로 $((t1 - t0))s, 두 이유 함께" || fail "T35.12 $((t1 - t0))s: $(sg_tags "$o")"
 else
   echo "  (시스템 bash 없음 — T35.12 생략)"
