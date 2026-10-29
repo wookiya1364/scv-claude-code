@@ -17,21 +17,21 @@ const NODE_W = 280;
 const NODE_H = 180;
 const NODE_Y = 270;
 
-type NodeId = "raw" | "promote" | "work" | "archive" | "regression";
+type NodeId = "talk" | "promote" | "work" | "archive" | "regression";
 
 const NODES: Record<
   NodeId,
   { x: number; title: string; subtitle: string; isKey?: boolean }
 > = {
-  raw: {
+  talk: {
     x: 240,
-    title: "scv/raw/",
-    subtitle: "meeting notes\nspecs · screenshots",
+    title: "conversation",
+    subtitle: "just talk —\nevery turn routes to /scv:help",
   },
   promote: {
     x: 720,
-    title: "scv/promote/<slug>/",
-    subtitle: "PLAN.md + TESTS.md\n+ FEATURE_ARCH",
+    title: "plan + tests",
+    subtitle: "scv/promote/<slug>/\nPLAN.md + TESTS.md",
     isKey: true,
   },
   work: {
@@ -41,20 +41,20 @@ const NODES: Record<
   },
   archive: {
     x: 1680,
-    title: "scv/archive/",
-    subtitle: "N plans accumulated",
+    title: "archive",
+    subtitle: "scv/archive/\nN plans accumulated",
   },
   regression: {
     x: 2160,
-    title: "/scv:regression",
-    subtitle: "runs every\narchived TESTS",
+    title: "regression",
+    subtitle: "/scv:regression\nruns every archived TESTS",
     isKey: true,
   },
 };
 
 // Each node's appear frame (cumulative timing across 12s @ 30fps = 360 frames).
 const APPEAR: Record<NodeId, number> = {
-  raw: 30,         // 1.0s
+  talk: 30,        // 1.0s
   promote: 75,     // 2.5s
   work: 135,       // 4.5s
   archive: 195,    // 6.5s
@@ -63,7 +63,7 @@ const APPEAR: Record<NodeId, number> = {
 
 // Edge timing: each edge starts drawing as the destination node appears.
 const EDGES: Array<{ from: NodeId; to: NodeId; startFrame: number; label: string }> = [
-  { from: "raw", to: "promote", startFrame: 75, label: "/scv:promote" },
+  { from: "talk", to: "promote", startFrame: 75, label: "/scv:promote" },
   { from: "promote", to: "work", startFrame: 135, label: "/scv:work" },
   { from: "work", to: "archive", startFrame: 195, label: "tests pass\n+ approval" },
   { from: "archive", to: "regression", startFrame: 240, label: "joins suite" },
@@ -72,8 +72,8 @@ const EDGES: Array<{ from: NodeId; to: NodeId; startFrame: number; label: string
 // Camera keyframes: focus moves across the canvas, then zooms out.
 // Each keyframe: [frame, focusX, scale]
 const CAMERA: Array<[number, number, number]> = [
-  [0, 240, 1.0],            // start at Raw
-  [60, 240, 1.0],            // hold on Raw
+  [0, 240, 1.0],            // start at Conversation
+  [60, 240, 1.0],            // hold on Conversation
   [105, 720, 1.0],           // pan to Promote
   [165, 1200, 1.0],          // pan to Work
   [225, 1680, 1.0],          // pan to Archive

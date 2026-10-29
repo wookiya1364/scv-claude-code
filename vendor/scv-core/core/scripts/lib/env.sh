@@ -30,9 +30,28 @@ env_load() {
   # 넘기지 않는다: 아카이브 계약은 "설정 없음" 을 전제하고 짜였고, 이 저장소에 설정
   # 파일이 생긴 날 열 개가 실행기 안에서만 붉었다. 사용자가 직접 export 한 값은 그대로 흐른다.
   SCV_ENV_LOADED_KEYS=""
-  local _key _val
+  local _key _val _pj _sj _pm _sm _from_s _from_p
+  # 두 파일을 한 번씩 읽고 모든 키를 jq 한 번으로 꺼낸다 — 키마다 settings_get 을 부르면 jq 를
+  # 키 수만큼(47개) 띄워, 빈 저장소에서도 한 번에 약 2초(맥)가 들었다. 우선순위 · 비밀 키 규칙은
+  # settings_get 과 같다: 환경 > 비밀 파일 > 일반 파일, 비밀 키는 일반 파일에서 읽지 않는다.
+  _pj="$(_settings_slurp "$SCV_SETTINGS_FILE")"
+  _sj="$(_settings_slurp "$SCV_SETTINGS_SECRET_FILE")"
+  _settings_warn_unmigrated
+  _pm="$(settings_lookup_many_json "$_pj" "$SCV_PLAIN_KEYS $SCV_SECRET_KEYS")"
+  _sm="$(settings_lookup_many_json "$_sj" "$SCV_PLAIN_KEYS $SCV_SECRET_KEYS")"
   for _key in $SCV_PLAIN_KEYS $SCV_SECRET_KEYS; do
-    _val="$(settings_get "$_key")"
+    _settings_map_get "$_sm" "$_key" "$_sj"; _from_s="$_SCV_MAP_VALUE"
+    _from_p=""
+    if settings_is_secret "$_key"; then
+      _settings_map_get "$_pm" "$_key" "$_pj"
+      if [[ -n "$_SCV_MAP_VALUE" ]]; then
+        echo "scv: $_key is a secret and must not live in $SCV_SETTINGS_FILE (that file is committed) — the value was IGNORED; move it to $SCV_SETTINGS_SECRET_FILE." >&2
+      fi
+    else
+      _settings_map_get "$_pm" "$_key" "$_pj"; _from_p="$_SCV_MAP_VALUE"
+    fi
+    # settings_resolve 와 같은 순서(환경 > 비밀 > 일반) — 키마다 $(...) 를 피하려고 그 자리에서 고른다.
+    _val="${!_key:-}"; [[ -n "$_val" ]] || _val="$_from_s"; [[ -n "$_val" ]] || _val="$_from_p"
     [[ -n "$_val" ]] || continue
     [[ -n "${!_key+x}" ]] || SCV_ENV_LOADED_KEYS="${SCV_ENV_LOADED_KEYS:+$SCV_ENV_LOADED_KEYS }$_key"
     export "$_key=$_val"
