@@ -53,8 +53,9 @@ set -uo pipefail
 
 HERE="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 ROOT="$HERE/.."
-DECKDOC="$ROOT/DeckUI/scripts/deckdoc"
-MD2DECK="$ROOT/DeckUI/scripts/md-to-deck.mjs"
+DECKUI_DIR="$(bash "$ROOT/scripts/deck-runtime.sh" ensure)" || { echo "FAIL test-deck-doc: deck runtime unavailable"; exit 1; }   # 실제 deck 과 같은 길: 엔진 자리(SCV_DECKUI_DIR) → 런타임 캐시
+DECKDOC="$DECKUI_DIR/scripts/deckdoc"
+MD2DECK="$DECKUI_DIR/scripts/md-to-deck.mjs"
 FIX="$HERE/fixtures/deck-sample.md"
 SLUG="decktest-tmp"   # already-normalized temp slug; md-to-deck writes into the deck registry — cleaned on exit
 
@@ -71,7 +72,7 @@ if [[ ! -d "$DECKDOC/node_modules" ]]; then
 fi
 
 TMP=$(mktemp -d)
-trap 'rm -rf "$TMP"; rm -rf "$ROOT/DeckUI/src/deck/decks/$SLUG"' EXIT
+trap 'rm -rf "$TMP"; rm -rf "$DECKUI_DIR/src/deck/decks/$SLUG"' EXIT
 
 # ---- renders: default (with source) + --no-source (structural asserts target NS) ----
 node "$DECKDOC/doc.mjs" "$FIX" "$SLUG" --out "$TMP/doc.html" --emit-json > "$TMP/out.txt" 2>&1
@@ -168,7 +169,7 @@ has "$TMP/slide.out.txt" "DECK_SLUG:" "slide path prints DECK_SLUG"
 has "$TMP/slide.out.txt" "DECK_JSON:" "slide path prints DECK_JSON"
 has "$TMP/slide.out.txt" "SLIDES:"    "slide path prints SLIDES"
 has "$TMP/slide.out.txt" "LINT:"      "slide path prints LINT"
-SLIDE_JSON="$ROOT/DeckUI/src/deck/decks/$SLUG/deck.json"
+SLIDE_JSON="$DECKUI_DIR/src/deck/decks/$SLUG/deck.json"
 DOC_JSON="$TMP/$SLUG.deck.json"
 if [[ -f "$SLIDE_JSON" && -f "$DOC_JSON" ]] && diff -q "$SLIDE_JSON" "$DOC_JSON" >/dev/null; then
   pass=$((pass+1))
@@ -399,7 +400,7 @@ has "$TMP/combine-ko.html" '구조 · FEATURE_ARCHITECTURE' "slug combine divide
 # byte-identical invariant must survive a non-default SCV_LANG (both CLIs read the same var)
 SCV_LANG=korean node "$MD2DECK" "$FIX" "$SLUG" >/dev/null 2>&1
 SCV_LANG=korean node "$DECKDOC/doc.mjs" "$FIX" "$SLUG" --out "$TMP/lang-inv.html" --emit-json >/dev/null 2>&1
-if diff -q "$ROOT/DeckUI/src/deck/decks/$SLUG/deck.json" "$TMP/$SLUG.deck.json" >/dev/null 2>&1; then
+if diff -q "$DECKUI_DIR/src/deck/decks/$SLUG/deck.json" "$TMP/$SLUG.deck.json" >/dev/null 2>&1; then
   pass=$((pass+1))
 else
   echo "  ✗ doc/slide transform diverge under SCV_LANG=korean (lint messages must match between the two CLIs)"; fail=$((fail+1))

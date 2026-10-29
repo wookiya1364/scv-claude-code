@@ -190,7 +190,8 @@ for f in "$STANDARD_ROOT"/protocols/*.md; do
 done
 
 # ---- [7] deck render never exposes the markers -----------------------------
-DECKDOC="$STANDARD_ROOT/DeckUI/scripts/deckdoc"
+DECKUI_DIR="$(bash "$STANDARD_ROOT/scripts/deck-runtime.sh" ensure)" || { echo "FAIL test-guidance: deck runtime unavailable"; exit 1; }   # 실제 deck 과 같은 길
+DECKDOC="$DECKUI_DIR/scripts/deckdoc"
 if command -v node >/dev/null 2>&1 && command -v pnpm >/dev/null 2>&1 \
   && { [[ -d "$DECKDOC/node_modules" ]] || ( cd "$DECKDOC" && pnpm install ) >/dev/null 2>&1; }; then
   cat > "$TMP/marked.md" <<MD
