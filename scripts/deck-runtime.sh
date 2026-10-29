@@ -5,6 +5,30 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 CORE_DIR="$(cd "$SCRIPT_DIR/.." && pwd -P)"
 SOURCE_DECKUI="$CORE_DIR/DeckUI"
+# 래퍼 설정 SCV_DECKUI_DIR(0.72.2+)이 엔진 자리를 알려 줄 수 있다 — 두 라이브러리가 함께 있을 때만(이 스크립트만 따로 복사한 트리는 지금 자리).
+if [[ -f "$SCRIPT_DIR/lib/host-profile.sh" && -f "$SCRIPT_DIR/lib/deck-source.sh" ]]; then
+  # shellcheck source=lib/host-profile.sh
+  source "$SCRIPT_DIR/lib/host-profile.sh"
+  # shellcheck source=lib/deck-source.sh
+  source "$SCRIPT_DIR/lib/deck-source.sh"
+  scv_host_profile_load
+  # 코어 루트의 DeckUI 는 진짜 엔진(package.json · 문서 생성기)이 있을 때만 — 예전 작업본에 남은 실행 찌꺼기 폴더는 엔진이 아니다.
+  _own=no
+  [[ -d "$CORE_DIR/DeckUI" && ! -L "$CORE_DIR/DeckUI" && -f "$CORE_DIR/DeckUI/package.json" \
+     && -f "$CORE_DIR/DeckUI/scripts/deckdoc/doc.mjs" ]] && _own=yes
+  SOURCE_DECKUI="$(scv_deck_source_dir "$CORE_DIR" "${SCV_DECKUI_DIR:-}" "$_own")" || {
+    echo "ERROR: host profile SCV_DECKUI_DIR must be a path inside the plugin, relative to the Core root: ${SCV_DECKUI_DIR:-}" >&2
+    exit 1
+  }
+  # 설정 자리는 실제 위치(연결을 푼 곳)도 코어 루트 안이어야 한다 — 중간 폴더가 연결이면 밖을 가리킬 수 있다.
+  if [[ "$_own" == no && -n "${SCV_DECKUI_DIR:-}" && -d "$SOURCE_DECKUI" ]]; then
+    _real="$(cd "$SOURCE_DECKUI" && pwd -P)"
+    case "$_real/" in
+      "$CORE_DIR"/*) ;;
+      *) echo "ERROR: host profile SCV_DECKUI_DIR resolves outside the Core root: $_real" >&2; exit 1 ;;
+    esac
+  fi
+fi
 COMMAND="${1:-}"
 LEGACY_ROOT=
 REUSE_EXISTING=0

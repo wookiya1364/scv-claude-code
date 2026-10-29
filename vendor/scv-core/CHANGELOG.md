@@ -2,6 +2,15 @@
 
 All notable changes to SCV Core are documented here.
 
+## [0.72.2] - 2026-10-29
+
+### deck 엔진 자리를 래퍼 설정으로 — claude 래퍼의 중복 DeckUI 없애기
+
+- 새 호스트 프로필 키 `SCV_DECKUI_DIR`(코어 루트 기준 상대 경로, 절대 경로 · `..` 거절). `core/scripts/deck-runtime.sh` 는 코어 루트 아래 `DeckUI` 에 엔진 파일(`package.json` · `scripts/deckdoc/doc.mjs`)이 있으면 그것을, 없으면 설정 자리를 쓴다. 설정 자리는 실제 위치도 코어 루트 안이어야 한다. 순수부 `lib/deck-source.sh`, 시험 `test-deck-source.sh`.
+  코어 · codex 는 동작 그대로. claude 래퍼는 맨 위 DeckUI 사본을 지우고 이 키로 코어 사본 안 엔진을 가리킨다 — 같은 계획에서 같은 deck HTML(바이트 동일)을 확인했다.
+- 고친 버그: 런타임 캐시에서 도는 deck 생성기가 코어의 Graft 어댑터를 못 찾아 변경 지도가 붙지 않았다. `deck.sh` 가 `SCV_DECK_CORE_ROOT` 를 넘긴다 — Graft 가 준비된 곳에서는 deck 문서에 변경 지도가 붙는다(의도된 변화).
+- 코어 deck 시험들이 실제 deck 과 같은 런타임 준비(`deck-runtime.sh ensure`)를 지난다.
+
 ## [0.72.1] - 2026-10-29
 
 ### 다시 쓴 요청 속도 검사 상한을 동시 실행 러너에 맞춤

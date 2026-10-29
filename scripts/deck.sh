@@ -38,6 +38,8 @@ fi
 set -uo pipefail
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+# 엔진은 런타임 캐시에서 돈다 — 문서 생성기가 코어(Graft 어댑터 scripts/graft.sh)를 찾을 자리를 넘긴다.
+export SCV_DECK_CORE_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
 DECK_RUNTIME="$SCRIPT_DIR/deck-runtime.sh"
 [[ -x "$DECK_RUNTIME" ]] || {
   echo "ERROR: Deck runtime helper not found at $DECK_RUNTIME" >&2

@@ -42,6 +42,9 @@ SCV_JUDGE_COMMAND=""
 # 보고는 결과가 오류이고 이 글로 시작하는 확인 창을 묻기로 세지 않는다 — 사람이 보고 닫은 창(거절 표시 없음)은 물은 것으로 센다.
 # 비면 가르지 않는다(모든 확인 창을 물은 것으로 센다).
 SCV_CHOICE_REJECTED_PREFIX=""
+# 0.72.2+ 선택 키: deck 엔진(DeckUI) 폴더 — 코어 루트 기준 상대 경로('..' · 절대 경로는 거절). 코어 루트 바로 아래 DeckUI 가
+# 없을 때만 쓴다(lib/deck-source.sh). 클로드 래퍼는 스킬이 플러그인 최상위에서 돌아 코어 사본 안 엔진을 가리킨다. 비면 코어 루트 아래.
+SCV_DECKUI_DIR=""
 
 _scv_profile_assign() {
   local key="$1" value="$2"
@@ -66,6 +69,7 @@ _scv_profile_assign() {
     SCV_AUTO_PROMPT_SUFFIX) SCV_AUTO_PROMPT_SUFFIX="$value" ;;
     SCV_JUDGE_COMMAND) SCV_JUDGE_COMMAND="$value" ;;
     SCV_CHOICE_REJECTED_PREFIX) SCV_CHOICE_REJECTED_PREFIX="$value" ;;
+    SCV_DECKUI_DIR) SCV_DECKUI_DIR="$value" ;;
   esac
 }
 
