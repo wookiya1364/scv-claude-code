@@ -2,6 +2,14 @@
 
 All notable changes to SCV Core are documented here.
 
+## [0.72.3] - 2026-10-31
+
+### 매 턴 훅 속도 — 같은 판단은 한 번, 설정은 파일당 jq 한 번
+
+- `settings_get` 이 설정 파일 내용 → 키·값 표를 jq 한 번으로 만들어 다시 쓴다(`lib/settings.sh`, `settings_preload`). 탭 · 줄바꿈 · NUL 값, 같은 키가 두 번, 이름 모양이 아닌 키는 예전 키별 읽기로 돌아간다. 자주 읽는 다섯 곳(매 턴 훅 · model-prompting · help · choice-gate · show-real)은 처음에 미리 읽는다.
+- 매 턴 훅이 사람 메시지 판별(kind)과 선택 창 상태(choice-gate state)를 한 번 구해 `show-real.sh` 에 넘긴다. 넘기지 않으면 `show-real.sh` 는 예전처럼 스스로 구한다.
+- 동작 변화 없음: 훅 출력 · 설정 값은 옛 길과 바이트까지 같다(fixture 1100개 × bash 5.3 · 3.2 · jq 없음). 이 맥에서 훅 1회 1.04 → 0.72초, CI 맥 시험 조각 합 1570 → 1119초. 시험 `test-hook-dedupe.sh`.
+
 ## [0.72.2] - 2026-10-29
 
 ### deck 엔진 자리를 래퍼 설정으로 — claude 래퍼의 중복 DeckUI 없애기
