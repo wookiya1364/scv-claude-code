@@ -1,3 +1,5 @@
+# 설정 표를 이 셸에 한 번 펼쳐 둔다(lib/settings.sh settings_preload) — $(settings_get …) 하위 셸이 물려받는다.
+declare -F settings_preload >/dev/null 2>&1 && { settings_preload 2>/dev/null || true; }
 #!/usr/bin/env bash
 # show-real.sh — 실체 보여 주기(contracts/show-real.md)의 효과부 (v0.66.0+). 읽기 · 출력은 여기서만, 판단은 lib/show-real.sh.
 #
@@ -17,20 +19,34 @@ source "$SCRIPT_DIR/lib/settings.sh" 2>/dev/null || true
 
 case "${1:-}" in
   line)
+    # 매 턴 훅은 이미 구한 값을 넘긴다(--kind · --tool · --unattended) — 같은 판단을 두 번 하지 않게. 넘기지 않은 값만
+    # 아래에서 스스로 구한다(직접 부를 때는 셋 다).
+    shift
+    _gk=""; _gt=""; _gu=""; _kind=""; _tool=""; _un=0
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --kind) _gk=1; _kind="${2:-}"; shift 2 2>/dev/null || shift ;;
+        --tool) _gt=1; _tool="${2:-}"; shift 2 2>/dev/null || shift ;;
+        --unattended) _gu=1; _un="${2:-0}"; shift 2 2>/dev/null || shift ;;
+        *) shift ;;
+      esac
+    done
     _raw=""; declare -F settings_get >/dev/null 2>&1 && _raw="$(settings_get SCV_SHOW_REAL 2>/dev/null || true)"
     _sw="$(scv_show_real_switch "$_raw")"
     [[ "$_sw" == "on" ]] || exit 0
     # 이번 입력이 자동 알림인지 — 매 턴 훅이 자기 판별에 쓰는 명령과 같은 명령(model-prompting.sh kind: 프롬프트 앞 64KB ·
     # 호스트 설정의 자동 입력 모양)으로 가른다. 두 판별이 갈라지지 않게(독립 검토 2026-10-07: 64KB 넘는 알림에서 갈렸다).
-    _kind="human"
-    if [[ ! -t 0 && -f "$SCRIPT_DIR/model-prompting.sh" ]] && command -v jq >/dev/null 2>&1; then
-      _kind="$(jq -r 'try (.prompt // "") catch ""' 2>/dev/null | bash "$SCRIPT_DIR/model-prompting.sh" kind 2>/dev/null || true)"
-      [[ "$_kind" == "auto" ]] || _kind="human"
+    # 훅이 넘긴 값이 그 판별 결과다.
+    if [[ -z "$_gk" ]]; then
+      _kind="human"
+      if [[ ! -t 0 && -f "$SCRIPT_DIR/model-prompting.sh" ]] && command -v jq >/dev/null 2>&1; then
+        _kind="$(jq -r 'try (.prompt // "") catch ""' 2>/dev/null | bash "$SCRIPT_DIR/model-prompting.sh" kind 2>/dev/null || true)"
+      fi
     fi
-    _tool=""; _un=0
+    [[ "$_kind" == "auto" ]] || _kind="human"
     if [[ -f "$SCRIPT_DIR/choice-gate.sh" ]]; then
-      _tool="$(bash "$SCRIPT_DIR/choice-gate.sh" tool 2>/dev/null || true)"
-      _un="$(bash "$SCRIPT_DIR/choice-gate.sh" unattended 2>/dev/null || true)"
+      [[ -n "$_gt" ]] || _tool="$(bash "$SCRIPT_DIR/choice-gate.sh" tool 2>/dev/null || true)"
+      [[ -n "$_gu" ]] || _un="$(bash "$SCRIPT_DIR/choice-gate.sh" unattended 2>/dev/null || true)"
     fi
     scv_show_real_rule "$_sw" "$(scv_show_real_channel "$_tool" "$_un" "$_kind")"
     ;;
