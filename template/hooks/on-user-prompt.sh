@@ -35,6 +35,8 @@ _scv_settings_lib="${SCV_CORE_ROOT:-$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.
 if [[ -f "$_scv_settings_lib" ]]; then
   # shellcheck disable=SC1090
   source "$_scv_settings_lib" 2>/dev/null || true
+  # 설정 표를 이 셸에 한 번 펼쳐 둔다 — 아래 $(_scv_read …) 하위 셸들이 물려받아 jq 를 다시 띄우지 않는다.
+  declare -F settings_preload >/dev/null 2>&1 && { settings_preload 2>/dev/null || true; }
 fi
 _scv_read() {  # <KEY> — 라이브러리가 없으면 기본값으로 간다.
   # .env 로 되돌아가지 않는다: 설정은 scv/ 아래 두 파일에만 있다. 옛 파일을 몰래
@@ -74,15 +76,46 @@ INPUT="$(cat 2>/dev/null || true)"
 
 # v0.64.0+ — 고르게 할 때 규칙(contracts/choices.md): 호스트 설정에 선택지 도구가 있으면 매 턴(자동 알림 턴 포함) 한 줄로
 # 알린다 — 사용자에게 고르게 하는 것은 그 도구로 묻는다. 도구가 없으면(기본 · 코덱스) 아무것도 싣지 않는다.
+# 선택 창 상태(도구 · 사람 없는 실행)와 안내 줄을 한 번에 받는다 — 실체 보여 주기가 같은 값을 쓴다(같은 판단을 세 번 하지 않게).
+# 첫 줄 모양이 다르면(받지 못하면) 예전처럼 안내 줄만 따로 부르고, 실체 보여 주기는 스스로 구한다.
 _scv_cgs="$CORE_HOME/scripts/choice-gate.sh"
-if [[ -f "$_scv_cgs" ]]; then bash "$_scv_cgs" line 2>/dev/null || true; fi
+_scv_cg_ok=""; _scv_cg_tool=""; _scv_cg_un=""
+if [[ -f "$_scv_cgs" ]]; then
+  _scv_cg_out="$(bash "$_scv_cgs" state 2>/dev/null; printf x)"; _scv_cg_out="${_scv_cg_out%x}"
+  _scv_cg_head="${_scv_cg_out%%$'\n'*}"
+  if [[ "$_scv_cg_head" == "CG_STATE"$'\t'*$'\t'* && "$_scv_cg_out" == *$'\n'* ]]; then
+    _scv_cg_ok=1; _scv_cg_head="${_scv_cg_head#CG_STATE$'\t'}"
+    _scv_cg_tool="${_scv_cg_head%%$'\t'*}"; _scv_cg_un="${_scv_cg_head#*$'\t'}"
+    printf '%s' "${_scv_cg_out#*$'\n'}"
+  else
+    bash "$_scv_cgs" line 2>/dev/null || true
+  fi
+fi
+
+# ---------- auto turns — 판별 (v0.63.0+, 한 번만 v0.72.3+) -------------------
+# 이번 입력이 사람 메시지인지 자동 알림인지 — 이 턴에 한 번만 가른다. 실체 보여 주기(_scv_sr_kind)와 아래 자동 턴 처리가 이 값을 쓴다.
+# 호스트가 스스로 보낸 입력(배경 작업 완료 알림 등 — 래퍼 호스트 프로필 SCV_AUTO_PROMPT_TAGS)은 사람 턴이 아니다.
+_scv_kind="human"
+_scv_mp_sh="$CORE_HOME/scripts/model-prompting.sh"
+if [[ -f "$_scv_mp_sh" && -n "$INPUT" ]] && command -v jq >/dev/null 2>&1; then
+  _scv_kind="$(printf '%s' "$INPUT" | jq -r 'try (.prompt // "") catch ""' 2>/dev/null | bash "$_scv_mp_sh" kind 2>/dev/null || true)"
+  [[ "$_scv_kind" == "auto" ]] || _scv_kind="human"
+fi
+_scv_sr_kind="$_scv_kind"
+# ---------- /auto turns ------------------------------------------------------
 
 # ---------- show-real (v0.66.0+) ---------------------------------------------
 # 실체 보여 주기 안내 세 줄 — 규칙 본문은 contracts/show-real.md 한 곳. 매 턴, 고르게 할 때 줄 바로 뒤에 싣는다(확인을 묻는
-# 통로가 그 규칙의 판단과 같다). 자동 알림 턴 · 사람 없는 실행에는 묻지 않는 문구다 — 판별에 이 훅의 입력을 넘긴다. 막는 검사는 없다.
-# 설정 SCV_SHOW_REAL=off 면 아무것도 싣지 않는다 — 이 구간을 지운 훅과 바이트 단위로 같다(test-show-real 이 견준다).
+# 통로가 그 규칙의 판단과 같다). 자동 알림 턴 · 사람 없는 실행에는 묻지 않는 문구다 — 위에서 구한 판별 · 선택 창 상태를 넘긴다.
+# 막는 검사는 없다. 설정 SCV_SHOW_REAL=off 면 아무것도 싣지 않는다 — 이 구간을 지운 훅과 바이트 단위로 같다(test-show-real 이 견준다).
 _scv_srs="$CORE_HOME/scripts/show-real.sh"
-if [[ -f "$_scv_srs" ]]; then { printf '%s' "$INPUT" | bash "$_scv_srs" line; } 2>/dev/null || true; fi
+if [[ -f "$_scv_srs" ]]; then
+  if [[ -n "$_scv_cg_ok" ]]; then
+    bash "$_scv_srs" line --kind "${_scv_sr_kind:-human}" --tool "$_scv_cg_tool" --unattended "$_scv_cg_un" < /dev/null 2>/dev/null || true
+  else
+    bash "$_scv_srs" line --kind "${_scv_sr_kind:-human}" < /dev/null 2>/dev/null || true
+  fi
+fi
 # ---------- /show-real -------------------------------------------------------
 
 # ---------- preflight (v0.40.0+) --------------------------------------------
@@ -135,12 +168,7 @@ _scv_tdir="${SCV_JOURNAL_DIR:-scv/journal}"
 # 안내 · 위임 블록 · help 다시 읽기 횟수 · 예약 경고 소비를 모두 건너뛴다(경고는 다음 사람 턴에 실린다).
 # 판별은 모델별 프롬프팅 명령이 한다 — 호스트 프로필을 읽는 곳. 태그가 없으면(기본) 늘 사람 턴이라 이전과 같다.
 # 전체 스위치가 꺼져 있으면 사람 턴도 표를 새로 쓰지 않으므로, 자동 표시도 남기지 않는다(표시가 옛 표에 눌어붙지 않게).
-_scv_kind="human"
-_scv_mp_sh="$CORE_HOME/scripts/model-prompting.sh"
-if [[ -f "$_scv_mp_sh" && -n "$INPUT" ]] && command -v jq >/dev/null 2>&1; then
-  _scv_kind="$(printf '%s' "$INPUT" | jq -r 'try (.prompt // "") catch ""' 2>/dev/null | bash "$_scv_mp_sh" kind 2>/dev/null || true)"
-  [[ "$_scv_kind" == "auto" ]] || _scv_kind="human"
-fi
+# 판별 값(_scv_kind)은 위에서 이 턴에 한 번 구했다.
 # 사람 입력이면 지난 자동 표시를 지운다 — 표를 새로 쓰지 않는 입력(빈 프롬프트 등)에서도 이 턴의 검사가 꺼지지 않게.
 # v0.65.0+ — 지우기와 "이 세션이 사람 메시지를 받았다" 표시는 모델별 프롬프팅 명령이 한다(세션 자리를 아는 곳). 그 명령이 없으면 예전처럼.
 if [[ "$_scv_kind" != "auto" ]]; then

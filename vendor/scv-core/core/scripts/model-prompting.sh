@@ -1,3 +1,5 @@
+# 설정 표를 이 셸에 한 번 펼쳐 둔다(lib/settings.sh settings_preload) — $(settings_get …) 하위 셸이 물려받는다.
+declare -F settings_preload >/dev/null 2>&1 && { settings_preload 2>/dev/null || true; }
 #!/usr/bin/env bash
 # model-prompting.sh — 모델별 프롬프팅의 효과부. 읽기·쓰기는 여기서만, 판단은 lib/model-prompting.sh.
 #
