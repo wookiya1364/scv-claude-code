@@ -45,6 +45,8 @@ source "$SCRIPT_DIR/lib/workspace.sh"
 source "$SCRIPT_DIR/lib/scvroot.sh"
 # shellcheck source=lib/settings.sh
 source "$SCRIPT_DIR/lib/settings.sh"
+# 설정 표를 이 셸에 한 번 펼쳐 둔다(lib/settings.sh settings_preload) — $(settings_get …) 하위 셸이 물려받는다.
+declare -F settings_preload >/dev/null 2>&1 && { settings_preload 2>/dev/null || true; }
 # Help is usually the first action a session runs, so it is the first honest
 # chance to close a template-version gap (see scv_autosync's header). It does
 # not use scv_init_paths, hence the explicit call.

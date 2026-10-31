@@ -1,9 +1,12 @@
+# 설정 표를 이 셸에 한 번 펼쳐 둔다(lib/settings.sh settings_preload) — $(settings_get …) 하위 셸이 물려받는다.
+declare -F settings_preload >/dev/null 2>&1 && { settings_preload 2>/dev/null || true; }
 #!/usr/bin/env bash
 # choice-gate.sh — 고르게 할 때 규칙(contracts/choices.md)의 효과부. 읽기 · 쓰기는 여기서만, 판단은 lib/choices.sh.
 #
 #   choice-gate.sh line                         매 턴 훅이 부른다: 호스트 설정에 선택지 도구가 있으면 안내 한 줄(없으면 아무것도)
 #   choice-gate.sh tool                         (v0.66.0+) 실체 보여 주기가 부른다: 이번 실행에 쓸 선택지 도구 이름(없으면 아무것도)
 #   choice-gate.sh unattended                   (v0.66.0+) 실체 보여 주기가 부른다: 사람 없는 실행 조건(SCV_CHOICE_OFF_WHEN)이 맞으면 1, 아니면 0
+#   choice-gate.sh state                        매 턴 훅이 부른다: tool · unattended 값과 line 출력을 한 번에(첫 줄 CG_STATE<TAB>tool<TAB>unattended)
 #   choice-gate.sh stop [--active 0|1] [--turn-dir <폴더>] < 마지막 답  종료 훅이 부른다: 글로 묻거나 번호로 고르게 하면서 끝났으면
 #                                                 CHOICE_GATE: block + CHOICE_REASON: <이유>. --active 1(v0.64.2+ 종료 훅이
 #                                                 주는 "이 검사가 이번 턴에 이미 이유를 냄", 그 전에는 "이미 계속 중")이면
@@ -50,6 +53,12 @@ case "${1:-}" in
   unattended)
     printf '%s\n' "$OFFRUN"
     ;;
+  state)
+    # 매 턴 훅이 한 번에 받는다: 첫 줄 'CG_STATE<TAB><tool 값><TAB><unattended 값>', 그 뒤는 line 과 바이트까지 같은 출력.
+    # 셋을 따로 부르면 이 스크립트를 세 번 띄운다(같은 판단을 세 번).
+    printf 'CG_STATE\t%s\t%s\n' "$TOOL" "$OFFRUN"
+    scv_choice_line "$TOOL"
+    ;;
   stop)
     shift
     ACTIVE=0; TDIR_ARG=""
@@ -80,6 +89,6 @@ case "${1:-}" in
       fi
     fi
     ;;
-  *) echo "usage: choice-gate.sh line | tool | unattended | stop [--active 0|1] [--turn-dir <dir>]" >&2 ;;
+  *) echo "usage: choice-gate.sh line | tool | unattended | state | stop [--active 0|1] [--turn-dir <dir>]" >&2 ;;
 esac
 exit 0

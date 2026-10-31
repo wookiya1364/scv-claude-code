@@ -261,20 +261,22 @@ settings_get() {
   local from_secret="" from_plain=""
 
   local plain_json secret_json
-  plain_json="$(_settings_slurp "$SCV_SETTINGS_FILE")"
-  secret_json="$(_settings_slurp "$SCV_SETTINGS_SECRET_FILE")"
+  _settings_read_into "$SCV_SETTINGS_FILE"; plain_json="$_SCV_READ_VALUE"
+  _settings_read_into "$SCV_SETTINGS_SECRET_FILE"; secret_json="$_SCV_READ_VALUE"
 
   _settings_warn_unmigrated
   if [[ -n "$plain_json" || -n "$secret_json" ]]; then
-    from_secret="$(settings_lookup_json "$secret_json" "$key")"
+    _settings_index_lookup secret "$secret_json" "$key"; from_secret="$_SCV_MAP_VALUE"
     if settings_is_secret "$key"; then
       # 비밀 키가 일반 파일에 있으면 읽지 않는다. 값은 절대 찍지 않는다 —
       # 경고 문구가 유출 경로가 되면 안 된다.
-      if [[ -n "$(settings_lookup_json "$plain_json" "$key")" ]]; then
+      _settings_index_lookup plain "$plain_json" "$key"
+      if [[ -n "$_SCV_MAP_VALUE" ]]; then
         echo "scv: $key is a secret and must not live in $SCV_SETTINGS_FILE (that file is committed) — the value was IGNORED; move it to $SCV_SETTINGS_SECRET_FILE." >&2
       fi
+      _SCV_MAP_VALUE=""
     else
-      from_plain="$(settings_lookup_json "$plain_json" "$key")"
+      _settings_index_lookup plain "$plain_json" "$key"; from_plain="$_SCV_MAP_VALUE"
     fi
   fi
 
@@ -312,7 +314,84 @@ _settings_map_get() {
   rest="${map#*$'\n'"$key"$'\t'}"
   [[ "$rest" != "$map" ]] || return 0
   _SCV_MAP_VALUE="${rest%%$'\n'*}"
-  if [[ "$_SCV_MAP_VALUE" == $'\001' ]]; then _SCV_MAP_VALUE="$(settings_lookup_json "$json" "$key")"; fi
+  # 같은 키가 또 나오면(JSON 문서가 여럿 이어 붙은 파일) settings_lookup_json 은 값을 줄마다 모두 낸다 — 그쪽으로 다시 읽는다.
+  if [[ "$_SCV_MAP_VALUE" == $'\001' || "$rest" == *$'\n'"$key"$'\t'* ]]; then _SCV_MAP_VALUE="$(settings_lookup_json "$json" "$key")"; fi
+  return 0
+}
+
+# settings_index_json <json> — 설정 JSON 의 모든 키를 '<키><TAB><값>' 줄로 낸다(jq 한 번).
+# settings_lookup_many_json 과 같은 값 규칙 · 같은 표시(\001: 그 키는 settings_lookup_json 으로 다시 읽는다)이고,
+# 키 목록 대신 파일에 있는 키 전부를 낸다 — settings_get 은 목록 밖의 키도 읽는다. 이름 모양(영문 · 숫자 · _)이
+# 아닌 키는 내지 않는다(그런 키는 _settings_index_lookup 이 늘 다시 읽는다). NUL 이 든 값도 표시로 —
+# 다시 읽어야 $(...) 의 경고까지 지금과 같다. jq 가 없으면 아무것도 내지 않는다.
+# 디스크를 만지지 않는다 — 인자로 받은 텍스트만 본다.
+# @deterministic
+settings_index_json() {
+  local json="${1:-}"
+  [[ -n "$json" ]] || return 0
+  command -v jq >/dev/null 2>&1 || return 0
+  printf '%s' "$json" | jq -r '
+    if type == "object" then
+      to_entries[] | select(.key | test("^[A-Za-z_][A-Za-z0-9_]*$"))
+      | .key as $k | (.value // empty) | (if type == "string" then . else tostring end)
+      | if test("[\t\n\r\u0000]") then "\($k)\t\u0001" else "\($k)\t\(.)" end
+    else empty end' 2>/dev/null || true
+}
+
+# _settings_read_into <file> — 파일 내용을 변수 _SCV_READ_VALUE 에 넣는다. _settings_slurp 를 $(...) 로 받은 것과
+# 같은 값(없음 · 심볼릭 링크 · 못 읽음은 빈 문자열, 끝 줄바꿈은 지운다)이지만 프로세스를 띄우지 않는다.
+# NUL 이 든 파일은 _settings_slurp 로 읽는다($(...) 가 내는 경고까지 같게).
+_settings_read_into() {
+  local f="${1:-}" v=""
+  _SCV_READ_VALUE=""
+  [[ -n "$f" && -f "$f" && ! -L "$f" ]] || return 0
+  if IFS= read -r -d '' v 2>/dev/null < "$f"; then
+    _SCV_READ_VALUE="$(_settings_slurp "$f")"
+    return 0
+  fi
+  while [[ "$v" == *$'\n' ]]; do v="${v%$'\n'}"; done
+  _SCV_READ_VALUE="$v"
+  return 0
+}
+
+# 펼친 표 자리(프로세스 안에서만 — 디스크에 쓰지 않는다). _SRC 는 표를 만든 파일 내용, _SET 은 만들었는지.
+_SCV_IDX_PLAIN_SRC=""; _SCV_IDX_PLAIN_MAP=""; _SCV_IDX_PLAIN_SET=""
+_SCV_IDX_SECRET_SRC=""; _SCV_IDX_SECRET_MAP=""; _SCV_IDX_SECRET_SET=""
+
+# _settings_index_lookup <plain|secret> <json> <key> — 값을 _SCV_MAP_VALUE 에. settings_lookup_json 을 $(...) 로
+# 받은 것과 같은 값이다. 그 파일의 표가 같은 내용으로 이미 있으면 다시 쓰고, 없으면 만든다(jq 한 번). $(...) 안에서
+# 만든 표는 그 하위 셸과 함께 사라지므로, 여러 번 읽는 스크립트는 처음에 settings_preload 를 부른다.
+_settings_index_lookup() {
+  local which="${1:-}" json="${2:-}" key="${3:-}"
+  _SCV_MAP_VALUE=""
+  [[ -n "$json" && -n "$key" ]] || return 0
+  if ! command -v jq >/dev/null 2>&1 || [[ ! "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+    _SCV_MAP_VALUE="$(settings_lookup_json "$json" "$key")"
+    return 0
+  fi
+  if [[ "$which" == "secret" ]]; then
+    if [[ -z "$_SCV_IDX_SECRET_SET" || "$json" != "$_SCV_IDX_SECRET_SRC" ]]; then
+      _SCV_IDX_SECRET_MAP="$(settings_index_json "$json")"; _SCV_IDX_SECRET_SRC="$json"; _SCV_IDX_SECRET_SET=1
+    fi
+    _settings_map_get "$_SCV_IDX_SECRET_MAP" "$key" "$json"
+  else
+    if [[ -z "$_SCV_IDX_PLAIN_SET" || "$json" != "$_SCV_IDX_PLAIN_SRC" ]]; then
+      _SCV_IDX_PLAIN_MAP="$(settings_index_json "$json")"; _SCV_IDX_PLAIN_SRC="$json"; _SCV_IDX_PLAIN_SET=1
+    fi
+    _settings_map_get "$_SCV_IDX_PLAIN_MAP" "$key" "$json"
+  fi
+}
+
+# settings_preload — 두 설정 파일의 표를 지금 셸에 만들어 둔다. settings_get 을 $(...) 안에서 여러 번 부르는
+# 스크립트가 처음에 한 번 부른다 — 하위 셸은 이 표를 물려받아 jq 를 다시 띄우지 않는다. 값은 바꾸지 않는다:
+# 파일이 나중에 바뀌면 내용이 달라 표를 새로 만든다. 어떤 실패도 0.
+settings_preload() {
+  local pj sj
+  _settings_read_into "$SCV_SETTINGS_FILE"; pj="$_SCV_READ_VALUE"
+  _settings_read_into "$SCV_SETTINGS_SECRET_FILE"; sj="$_SCV_READ_VALUE"
+  [[ -n "$pj" ]] && _settings_index_lookup plain "$pj" SCV_PRELOAD
+  [[ -n "$sj" ]] && _settings_index_lookup secret "$sj" SCV_PRELOAD
+  _SCV_MAP_VALUE=""
   return 0
 }
 
