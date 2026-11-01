@@ -64,6 +64,9 @@ env_load() {
 # 사용자가 직접 export 한 키는 SCV_ENV_LOADED_KEYS 에 없으므로 그대로 흐른다. 호출자 둘(regression.sh,
 # pr-helper.sh)이 같은 함수를 쓴다 — 0.54.0 에는 regression.sh 안에만 있어 pr-helper 가 같은 누출을 탔다.
 # @pure
+# 역할: SCV_ENV_LOADED_KEYS 의 키마다 "-u 키" 두 줄을 내 env 명령에 넘길 인자를 만든다(환경변수 필요)
+# 종류: 조립
+# 예:  → ""
 env_settings_unset_args() {
   local k
   for k in ${SCV_ENV_LOADED_KEYS:-}; do printf -- '-u\n%s\n' "$k"; done
