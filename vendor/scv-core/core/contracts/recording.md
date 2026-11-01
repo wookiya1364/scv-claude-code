@@ -18,7 +18,7 @@ help 만 기록하고 나머지 액션은 기록하지 않던 때, sync 를 돌�
 3. **형식** — 대화 파일에는 help 와 같은 Turn 블록(`## Turn <N> — <ISO>` · `protocol:` · `**User**` ·
    `**<host agent>**` — help 가 쓰는 그 이름). 저널은 한 줄. 모델별 프롬프팅이 켜진 help 턴(v0.59.0+)은
    `**Rewritten request**:`(해석된 언어로, 예: `**다시 쓴 요청**:`) 단락을 더한다 — 모양은
-   `protocols/help/prompt-refine.md` 7단계.
+   `protocols/help/prompt-refine.md` 5단계.
 4. **리댁션** — 양쪽 모두 `journal-append.sh --redact-only` 를 거친 출력만 쓴다. 필터는 그물이지 면허가 아니다:
    비밀은 처음부터 적지 않는다.
 5. **짧은 턴** — 상태 출력만 있거나 한 낱말 확인이면 한 줄 요약으로 충분하다. 덧붙이되 새 파일을 열지 않는다.
@@ -26,7 +26,7 @@ help 만 기록하고 나머지 액션은 기록하지 않던 때, sync 를 돌�
 ## 어디서 가리키나
 
 모든 Core 액션 프로토콜의 `## Recording` 절 한 줄. help 는 자기 루프 안에 형식을 상세히 가지고 있다 — 그것은
-이 계약의 *구현* 이며, 어긋나면 이 계약을 따른다(우선 관계는 `scv/SCV.md` Top-level rules 참조).
+이 계약의 *구현* 이다 — 둘이 어긋나 보이면 `scv/SCV.md` Top-level rules 의 해소 순서로 정한다.
 
 ## 검사
 

@@ -291,7 +291,7 @@ done
 [[ $c -eq 9 ]] && ok "순수부: 요지 8개 + 도구 없으면 빈 값" || fail "T8 순수부 $c/9"
 R="$(new_repo t8)"
 o="$(hook_p "$R" "$WORK/profile-pick.env" "안녕")"
-[[ "$(grep -c '^\[SCV choices\] Ask the user.s decisions with PickTool' <<<"$o")" == 1 ]] && ok "사람 턴: 한 줄 실림" || fail "T8 사람 턴: $(head -3 <<<"$o")"
+[[ "$(grep -c '^\[SCV choices\] Ask decisions with PickTool' <<<"$o")" == 1 ]] && ok "사람 턴: 한 줄 실림" || fail "T8 사람 턴: $(head -3 <<<"$o")"
 R="$(new_repo t8b)"; hook_p "$R" "$WORK/profile-full.env" "로그인 고쳐" >/dev/null; reg_full "$R" >/dev/null
 stop_p "$R" "$WORK/profile-full.env" "$(printf '%s\n\n%s' "$QUOTE" "끝.")" false >/dev/null
 o="$(hook_p "$R" "$WORK/profile-full.env" $'<machine-event>\n<status>completed</status>\n</machine-event>')"
@@ -830,7 +830,7 @@ r8="$(awk '/^8\. What to do next is not/{p=1} p&&/^Information is not a decision
   && grep -q "taste or scope" <<<"$r8" && grep -q "cannot" <<<"$r8" \
   && ok "규약 규칙 8 — 막힌 것 없으면 계속 · 끝났으면 서술 · 진짜 결정 세 종류 · 자동 알림 턴 포함" || fail "NI.T1: [$r8]"
 l="$(bash -c 'source "$1"; scv_choice_line PickTool' _ "$LIB")"
-grep -q "Next step is no decision: unblocked, go on; work done, state it unasked." <<<"$l" \
+grep -q "Next step is no decision (bar first-run check): unblocked, go on; work done, state it unasked." <<<"$l" \
   && [[ -z "$(bash -c 'source "$1"; scv_choice_line ""' _ "$LIB")" ]] \
   && ok "매 턴 줄에 '다음 할 일은 결정 아님' 구절, 도구 없으면 줄 없음" || fail "NI.T2: [$l]"
 

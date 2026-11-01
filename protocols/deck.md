@@ -37,9 +37,11 @@ and needs neither.
 
 Resolve the user's preferred language with this priority, then pass it to `deck.sh` as `--lang <LANG_RESOLVED>` in Step 1 — it selects the deck's UI chrome (buttons, headings, lint messages; never the user's own PLAN.md/TESTS.md/screen-mockup content, which always renders verbatim):
 
-1. `scv/scv_settings.json` — `SCV_LANG` (set by `/scv:help`'s first-time setup).
-2. Auto-detect from the user's most recent message language.
-3. Default to English.
+1. When the input is a plan folder whose PLAN.md has `lang:`, that value — the same one `/scv:promote`
+   and `/scv:work` pass, so a folder's deck looks the same whoever builds it.
+2. `scv/scv_settings.json` — `SCV_LANG` (set by `/scv:help`'s first-time setup).
+3. Auto-detect from the user's most recent message language.
+4. Default to English.
 
 `LANG_RESOLVED` values: `english` (default) / `korean` / `japanese`; anything else falls back to English (same rule `deck.sh`/`doc.mjs` apply if `--lang` is omitted and `scv/scv_settings.json SCV_LANG` is unset).
 

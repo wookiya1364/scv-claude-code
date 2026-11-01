@@ -15,13 +15,17 @@
 These seven clauses are the highest layer of every SCV rule. Each clause summarizes a
 rule that already exists elsewhere and points at it — the clause is the authority, the
 pointer is the provenance. No document below this section may contradict a clause, and
-no document states its own precedence: it refers here instead.
+no document invents its own precedence: it refers here instead (a supersede declaration under
+order (4) below is a reference, not its own precedence).
 
-1. **Ask, don't guess** — never fill a plan section without an explicit user answer, and
-   complete one section (user confirms) before starting the next.
+1. **Ask, don't guess** — never fill a plan section without an explicit user answer. The
+   questions may come in one batch and the drafted sections may be shown together, but the
+   user confirms them before the next step builds on them.
    Source: this section since 1.0 (formerly "No speculation" + "One at a time").
-2. **The archive is immutable** — never edit the body of any document under `scv/archive/`;
-   obsoleting a plan touches only three frontmatter fields on its PLAN.md.
+2. **The archive is immutable** — never edit the body of any document a person wrote under
+   `scv/archive/` (PLAN.md, TESTS.md, ARCHIVED_AT.md and the like); obsoleting a plan touches
+   only three frontmatter fields on its PLAN.md. Files a script regenerates from those
+   documents — the archive index, a plan's deck HTML — are not records and may be rebuilt.
    Source: the work, regression and sync protocols ("Never" lists).
 3. **No write without a receipt** — creating a plan file, or writing outside `scv/`,
    requires a host-issued action receipt. Source: `core/contracts/guard.md`.
@@ -36,7 +40,11 @@ no document states its own precedence: it refers here instead.
    protocol's `## 순수함수 · 파이프라인` requirement, the work protocol's implementation
    principles, and `core/contracts/purity.md`.
 7. **Yield to the user** — when an SCV rule contradicts an explicit instruction from the
-   user, the SCV rule yields, and the answer says so in one line.
+   user, the SCV rule yields, and the answer says so in one line. One exception the user set
+   in advance: a requested change measured to be harmful, or to have no effect, is not put in
+   as asked — it is asked about once (choice tool, else one text question; with no one to ask,
+   the real cause is fixed instead) even when the user said not to ask, and the user's pick,
+   "as requested anyway" included, stands (`core/contracts/rewrite-principle.md`).
    Source: this section (rule-constitution plan, 2026-09).
 
 **Resolution order.** When two rules disagree, decide in this order: (1) a clause above;
