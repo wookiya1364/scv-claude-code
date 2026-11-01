@@ -99,11 +99,11 @@ flowchart LR
   Archive["scv/archive/"]
   Regression["회귀<br>(아카이브된 테스트 전부)"]
 
-  Raw -->|대화| Promote
+  Raw -->|"대화"| Promote
   Promote --> Work
-  Work -->|테스트 통과 + 승인| Archive
+  Work -->|"테스트 통과 + 승인"| Archive
   Archive --> Regression
-  Regression -.->|다음 변경의 안전망| Promote
+  Regression -.->|"다음 변경의 안전망"| Promote
 
   classDef key fill:#FFE082,stroke:#F57C00,stroke-width:2px,color:#000
   class Promote,Regression key
