@@ -48,6 +48,7 @@ Skip Steps B0–B6 entirely. Instead:
      supersedes: <slug if any>
    ```
 
-6. End with a single follow-up offer: `"Want to start a new plan based on one of these? Tell me which folder and I'll open it as a conversation seed."` If the user picks one, copy the relevant excerpts into a new `scv/conversations/<timestamp>-<slug>.md` and proceed as Mode B from Step B1.
+6. End with one offer, asked per `core/contracts/choices.md` — "Start a new plan from one of
+   these?", the found folders (best first) plus "Not now" as options. If the user picks one, copy the relevant excerpts into a new `scv/conversations/<timestamp>-<slug>.md` and proceed as Mode B from Step B1.
 
 Do not enter the long Mode B conversation loop here — Mode B' answers the question and stops.

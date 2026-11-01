@@ -142,6 +142,22 @@ grep -q 'ask the user one independent question' "$REG" && fail "옛 Step 2 문�
 grep -q 'one decisions table' "$REG" && grep -q 'replaces the earlier' "$REG" && ok "새 규칙 + 대체 선언" || fail "새 규칙 또는 대체 선언 없음"
 grep -q 'must NOT ask interactive questions' "$REG" && ok "--ci 규칙 그대로" || fail "--ci 규칙이 사라졌다"
 
+echo "── T11. 지침 충돌 정리 (instruction-conflicts T5~T8, 2026-11-01) ──"
+# 서로 반대로 요구하던 글이 한쪽으로 정해진 채 남아 있는지 — 문장 뜻은 비교하지 않고, 정한 쪽 문구만 본다.
+AS="$CORE/protocols/help/archive-search.md"
+grep -q "Tell me which folder" "$AS" && fail "보관 검색 끝이 아직 글 질문" || ok "보관 검색 끝: 글 질문 없음"
+grep -q 'archive-search.md`, step 6' "$CORE/contracts/choices.md" && ok "choices 가 보관 검색 끝을 대체한다고 적었다" || fail "choices 대체 목록에 보관 검색 없음"
+grep -q "no conversation file yet, it is one journal line" "$CORE/protocols/help.md" \
+  && grep -q "it is one journal line and opens no file" "$CORE/protocols/help/full.md" \
+  && ok "짧은 턴: help · full 이 기록 계약과 같은 말" || fail "짧은 턴 규칙이 기록 계약과 다르다"
+grep -q "marking an incoming handoff \`claimed\`" "$CORE/protocols/promote.md" && ok "promote 금지 목록에 handoff 예외" || fail "promote 금지 목록에 handoff 예외 없음"
+grep -q "^- Touch files outside the plan's scope\.$" "$CORE/protocols/codegen.md" && fail "codegen 금지 목록이 아직 '범위 밖 금지'" || ok "codegen 금지 목록: 묻지 않고는 금지"
+printf '%s\n' "$SECTION" | grep -q "measured to be harmful" \
+  && ok "7조에 해로운 변경 예외" || fail "7조에 해로운 변경 예외 없음"
+grep -q "comes before those words\|그 말들보다 앞선다" "$CORE/contracts/rewrite-principle.md" \
+  && fail "rewrite-principle 이 아직 스스로 우선순위를 선언" || ok "rewrite-principle: 자기 우선순위 선언 없음"
+grep -q "first-run check of \`contracts/show-real.md\`" "$CORE/contracts/choices.md" && ok "choices 8: 첫 결과 확인은 묻는 예외" || fail "choices 8 에 첫 결과 확인 예외 없음"
+
 echo "── T2. 검사 a — 해소 순서 서술은 한 곳뿐 ──"
 [[ -f "$BASELINE" ]] && base="$(strip_comments "$BASELINE")" || base=""
 run_checks "$CORE" "$base"

@@ -11,10 +11,12 @@
 ## 무엇을
 
 1. **범위 밖 파일** — 계획의 범위(`scope:` 또는 Suggested path 가 자연히 정하는 범위) 밖의 파일을 지우거나 옮기지 않는다.
+   고치는 것은 먼저 사용자에게 묻고 답을 받은 뒤에만 한다(codegen 의 범위 경고가 그 질문이다).
 2. **보관된 TESTS.md 본문** — 보관 폴더의 TESTS.md 는 고쳐 쓰지 않는다. 폐기(obsolete) 표시는 그 폴더 PLAN.md
    프런트매터의 세 필드로만 한다: `status: obsolete` · `obsoleted_at` · `obsoleted_by`.
 3. **ARCHIVED_AT.md 와 보관 폴더의 나머지** — 보관 기록은 불변이다. supersede 전파(work 9c · regression 삭감)도
-   위 세 필드 외에는 아무것도 만지지 않는다.
+   위 세 필드 외에는 아무것도 만지지 않는다. 기록이 아닌 것 — 그 기록에서 스크립트가 다시 만드는 보관 색인
+   (`scv/archive/INDEX.yaml`)과 계획의 기획서 HTML — 은 다시 만들어도 된다(`scv/SCV.md` Top-level rules 2조).
 
 codegen 의 "구현 중 TESTS.md 본문을 고치지 않는다 — 테스트가 스펙이다" 는 이 계약이 아니라 codegen 고유의 요구다.
 보관 전 TESTS.md 를 다루기 때문이다.

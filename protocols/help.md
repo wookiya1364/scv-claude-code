@@ -18,7 +18,8 @@ For this free-form help action, preserve the complete request as exactly one
 No branch decides a turn carries nothing worth keeping and returns without writing — that
 branch was rejected on purpose. A short turn (an acknowledgement, a thank-you, a one-word
 confirmation) is appended to the conversation file this session is already writing, never
-given a file of its own; no conversation file yet, open one. Short turns skip this question entirely.
+given a file of its own; with no conversation file yet, it is one journal line
+(`core/contracts/recording.md`). Short turns skip the resume-or-new question entirely.
 
 ## Language preference — resolve FIRST, before any user-facing output
 

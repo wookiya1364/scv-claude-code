@@ -22,7 +22,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/handoff.sh" adopt "<handoff_id>"
 
 This writes a local `scv/promote/<slug>/PLAN.md` + `TESTS.md` seeded from the handoff's "what to build" + acceptance criteria, with a `refs: type=handoff-origin` back-link. It is **local-only** (no write to the workspace root). Then refine the scaffolded PLAN/TESTS with the user and implement via `/scv:codegen <slug>` (TDD-first) or `/scv:work <slug>`. The rest of this document (raw → promote) is the normal, single-repo path.
 
-Optionally, so the umbrella's `/scv:status` reflects that this work is underway, mark the handoff **claimed** in the root (then push with the user's consent — same rule as `/scv:handoff`):
+Optionally, so the umbrella's `/scv:status` reflects that this work is underway, mark the handoff **claimed** in the root — ask first, since the mark commits there (then push with the user's consent — same rule as `/scv:handoff`):
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/handoff.sh" mark "<handoff_id>" claimed
@@ -282,7 +282,7 @@ Question: "Want me to apply Socratic clarification on your 5 answers? I'll re-re
     description:
     "I'll re-read your answers (scope / slug / title / raw sources / invariants), identify the most ambiguous aspects (unstated boundaries, missing guardrails, missing risk scenarios, undefined exit criteria, missing verification means, etc.), then fire up to 50 sequential follow-up questions — one per ambiguity, in priority order. Your base 5 answers are preserved as-is; clarifications are added on top into PLAN.md's Guardrails / Exit criteria / Risks sections. Stop anytime by answering 'that's enough' / 'skip the rest' to a follow-up — early termination is encouraged."
 
-[2] "No — proceed with answers as-is (default)"
+[2] "No — proceed with answers as-is"
     description:
     "Use the 5 answers as written. Fast path, good for small or familiar plans. You can always re-promote later via a fresh /scv:promote on the same raw materials if more clarity surfaces."
 ```
@@ -1088,8 +1088,8 @@ Summarize:
 
 ## Never
 
-- Delete / move / rename files under `scv/raw/`
+- Delete / move / rename files under `scv/raw/` — apart from Step 8's `readpath.sh consume`, the one sanctioned move
 - Promote without per-folder approval
 - Overwrite an existing promote or archive folder
 - Set `status: active` — leave scaffolds as `planned`
-- Commit or push — leave version control to the user
+- Commit or push — leave version control to the user (the one exception: marking an incoming handoff `claimed` or `done` — the mark commits to the workspace root — with the user's consent, see "Handoff-aware" above)
