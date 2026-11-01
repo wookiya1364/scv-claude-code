@@ -6,7 +6,7 @@
 # The contract's own assertions still run every time — only the three exact
 # gate invocations are memoized.
 #   T1. three slugs calling `bash core/tests/run-dry.sh` → the stub runs ONCE, all three pass
-#   T2. a failing gate is reused as a failure (all three fail, stub ran once)
+#   T2. a failing gate is reused as a failure (all three fail, stub ran twice: together, then alone)
 #   T3. --no-memo runs the gate per slug (stub runs three times)
 #   T4. the core-tests loop is memoized as a unit; a slug's own extra command still runs per slug
 #   T5. a block with no gate is untouched (byte-identical rewrite)
@@ -50,7 +50,8 @@ P="$(mk_project t2 1)"
 for s in a b c; do mk_slug "$P" "20260824-tester-$s" "bash -euo pipefail -c '" "bash core/tests/run-dry.sh >/dev/null || { echo FAIL-gate; exit 1; }" "'"; done
 out="$(cd "$P" && bash "$RUNNER" --quiet 2>&1)"
 grep -q "FAILED_SLUGS: 3" <<<"$out" && ok "all three fail on the shared red gate" || fail "T2: $(grep -E 'PASSED|FAILED' <<<"$out" | head -2)"
-[[ "$(count "$P/counter-rundry")" == "1" ]] && ok "the failing gate still ran only once" || fail "T2 gate ran $(count "$P/counter-rundry") times"
+# 실패한 공유 시험은 동시 실행 뒤 혼자 한 번 더 돈다(2026-11-01) — 계획이 셋이어도 많아야 두 번.
+[[ "$(count "$P/counter-rundry")" == "2" ]] && ok "the failing gate ran twice (together, then alone) — not once per slug" || fail "T2 gate ran $(count "$P/counter-rundry") times"
 
 echo "── T3 --no-memo runs per slug ──"
 P="$(mk_project t3 0)"
@@ -71,7 +72,7 @@ echo "── T5 a block without gates is left byte-identical ──"
 src="$(sed -n '/^memo_rewrite_block()/,/^}/p' "$RUNNER")"
 [[ -n "$src" ]] && ok "rewrite function present" || fail "T5 rewrite function missing"
 blk=$'echo hello\nbash core/tests/test-alpha.sh\nls -la'
-res="$(cd "$WORK" && QUIET=1 TIMEOUT=5 bash -c 'source <(sed -n "/^declare -A MEMO_RC/,/^}/p" "'"$RUNNER"'" | head -1); '"$(sed -n '/^memo_rewrite_block()/,/^}/p' "$RUNNER" | sed 's/^/ /')"'; printf "%s\n" "$0" | memo_rewrite_block' "$blk" 2>/dev/null || true)"
+res="$(cd "$WORK" && QUIET=1 TIMEOUT=5 bash -c 'source "'"$CORE/scripts/lib/regression-memo.sh"'"; source <(sed -n "/^declare -A MEMO_RC/,/^}/p" "'"$RUNNER"'" | head -1); '"$(sed -n '/^memo_rewrite_block()/,/^}/p' "$RUNNER" | sed 's/^/ /')"'; printf "%s\n" "$0" | memo_rewrite_block' "$blk" 2>/dev/null || true)"
 [[ "$res" == "$blk" ]] && ok "no gate → unchanged" || fail "T5 rewrite changed a gate-free block: [$res]"
 
 echo

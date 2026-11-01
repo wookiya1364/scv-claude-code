@@ -12,22 +12,20 @@
 # 코어는 호스트 중립이다 — 이 파일은 이벤트 이름도 matcher 값도 모른다. 어느 경우에
 # 훅이 뜰지는 래퍼의 등록이 정한다.
 
-# @pure
+# shellcheck source=switch.sh
+declare -F scv_switch >/dev/null 2>&1 || source "${BASH_SOURCE[0]%/*}/switch.sh"
+
 # 스위치 해석 — off 만 끈다. 값이 없거나 다른 값이면 켜져 있다. 기존 세 스위치
 # (쉬운말·항상 라우팅·preflight)와 같은 규칙이라야 사용자가 규칙을 하나만 기억한다.
-# force-help.sh 의 함수와 규칙이 같지만 일부러 따로 둔다 — 두 훅이 서로 묶이지 않게.
-scv_resume_switch() {
-  local v="${1:-}"
-  v="${v//[[:space:]]/}"
-  v="${v//\"/}"
-  v="${v//\'/}"
-  case "$v" in
-    [Oo][Ff][Ff]) printf 'off' ;;
-    *)            printf 'on'  ;;
-  esac
-}
+# 두 훅이 서로의 lib 에 묶이지 않게, 공용 구현은 어느 기능의 것도 아닌 lib/switch.sh 에 둔다.
+# 같은 규칙의 구현은 lib/switch.sh 의 scv_switch 하나다 — 이 이름은 기존 호출을 위해 남긴다.
+scv_resume_switch() { scv_switch "$@"; }
 
 # @pure
+# 역할: 컨텍스트가 비워진 이유 한 줄 머리말을 만든다 — source 값이 있으면 그대로 보여 주고 없으면 일반 문구
+# 종류: 조립
+# 예: clear → $'[SCV resume] The context was just reset (source: clear). Nothing was lost — below is what this project was in the\nmiddle of: active plans, recent decisions, and the active conversation. Continue\nfrom here instead of asking the user to repeat themselves. Switch:\nscv/scv_settings.json SCV_RESUME_RECAP=off.'
+# 예: '' → $'[SCV resume] The context was just reset. Nothing was lost — below is what this project was in the\nmiddle of: active plans, recent decisions, and the active conversation. Continue\nfrom here instead of asking the user to repeat themselves. Switch:\nscv/scv_settings.json SCV_RESUME_RECAP=off.'
 # 머리말 — 무슨 일로 비워졌는지 한 줄. 입력은 호스트가 stdin JSON 으로 준 source 값
 # (있으면). 값이 없거나 모르는 값이면 일반 문구로 간다 — 호스트마다 값이 다를 수 있고,
 # 여기서 값을 열거해 두면 코어가 호스트를 아는 셈이 된다. 값은 있으면 그대로 보여 줄 뿐.
@@ -48,6 +46,9 @@ scv_resume_header() {
 }
 
 # @pure
+# 역할: "경로 status mtime" 줄들 중 active 이고 mtime 이 가장 큰 경로 하나를 고른다(동률이면 뒤 줄)
+# 종류: 고르기
+# 예: $'a.md\tactive\t5\nb.md\tactive\t9\nc.md\tdone\t99' → "b.md"
 # 활성 대화 고르기 — "경로<TAB>status<TAB>mtime" 줄 목록에서 status 가 active 인 것 중
 # mtime 이 가장 큰 경로 하나를 낸다. 없으면 아무것도 내지 않는다.
 # mtime 은 정수(에포크 초). 비교는 산술로 — 문자열 비교는 자릿수가 다르면 틀린다.
@@ -64,6 +65,9 @@ scv_resume_pick_active() {
 }
 
 # @pure
+# 역할: 고른 경로를 뺀 나머지 active 경로들을 한 줄씩 낸다
+# 종류: 고르기
+# 예: $'a.md\tactive\t5\nb.md\tactive\t9' b.md → "a.md"
 # 나머지 활성 대화 — 고른 것을 뺀 active 경로들을 한 줄에 하나씩. 전문은 싣지 않고
 # 경로만 — 가장 최근 것 하나만 전문이라는 것이 계획의 결정이다.
 scv_resume_other_active() {

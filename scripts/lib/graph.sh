@@ -22,6 +22,10 @@
 _SCV_GRAPH_ANGLES=$'\x3c\x3e'   # "<>" — 자리표시자·글롭 문자 집합의 일부
 
 # @pure
+# 역할: 경로의 "./" 와 "a/../" 를 접고 겹친 슬래시를 하나로 줄인다 (앞의 "/" 는 유지하지 않는다)
+# 종류: 변환
+# 예: "./a/b/../c.md" → "a/c.md"
+# 예: "a/./b//c" → "a/b/c"
 # 경로 문자열 정규화 — "./" 와 "a/../" 를 접는다. 선행 "/" 는 유지하지 않는다(저장소 상대 경로만 다룬다).
 scv_graph_normpath() {
   local p="${1:-}" seg out=() IFS='/'
@@ -37,6 +41,12 @@ scv_graph_normpath() {
 }
 
 # @pure
+# 역할: 토큰이 저장소 상대 파일 경로처럼 보이는지 판정한다 (URL · 절대 경로 · 글롭 · 확장자 없음 · 버전 번호는 아님; 두 번째 인자 1 이면 슬래시 필요)
+# 종류: 판정
+# 예: "core/scripts/x.sh" 1 → ""
+# 예: "x.sh" 1 → [1]
+# 예: "http://a/b.md" 0 → [1]
+# 예: "v1.2" 0 → [1]
 # 토큰 하나가 저장소 상대 파일 경로처럼 보이는가. need_slash=1 이면 슬래시가 있어야 한다.
 #   제외: URL(://) · 절대 경로 · 글롭·자리표시자(*<>{}) · 확장자 없음 · 확장자가 숫자로 시작(버전)
 scv_graph_is_path() {
@@ -53,6 +63,9 @@ scv_graph_is_path() {
 }
 
 # @pure
+# 역할: 마크다운 본문에서 상대 .md 링크만 뽑아 "문서\x1f대상(정규화)" 줄들로 낸다 (앵커 · URL · 이미지 제외)
+# 종류: 꺼내기
+# 예: "docs/a.md" $'see [b](b.md) and [c](../c.md#top) and [x](http://e.com/y.md) ![i](p.md)\n' → $'docs/a.md\x1fc.md\ndocs/a.md\x1fdocs/b.md'
 # <문서 경로> <마크다운 본문> → "doc\x1ftarget" 줄들. 상대 .md 링크만, 앵커·URL·이미지·절대 경로 제외.
 scv_graph_doc_links() {
   local doc="${1:-}" s="${2:-}" us=$'\x1f' dir prefix target rest
@@ -97,6 +110,9 @@ _SCV_GRAPH_AWK_PLAN='
   }'
 
 # @deterministic
+# 역할: PLAN.md 본문에서 건드리는 파일(scope 항목 · 백틱 속 경로)을 뽑아 "slug\x1fepic\x1ftitle\x1ffiles" 한 줄로 낸다
+# 종류: 꺼내기
+# 예: s1 $'---\ntitle: "T one"\nepic: e1\nscope:\n  - core/a.sh\n  - b.md\n---\nbody `core/a.sh` and `x.md` and `lib/z.sh`\n' → $'s1\x1fe1\x1fT one\x1fcore/a.sh b.md lib/z.sh'
 # <슬러그> <PLAN.md 본문> → "slug\x1fepic\x1ftitle\x1ffiles". files 는 공백 구분, 첫 등장 순서, 중복 제거
 # (정렬은 그래프를 만드는 jq 가 한다). frontmatter scope: 항목 — 토큰 중 경로 모양(확장자 필요, 슬래시 불필요)만.
 # 본문 백틱 안 — 슬래시 있는 경로만. awk 한 번 + 토큰 검증만 셸에서 — 계획마다 줄 단위 셸 루프를 돌면 1초가 넘는다.
@@ -107,6 +123,9 @@ scv_graph_plan_touches() {
 }
 
 # @pure
+# 역할: awk 가 뽑은 T/E/S/B 레코드에서 경로 모양 토큰만 걸러 중복 없이 "slug\x1fepic\x1ftitle\x1ffiles" 한 줄로 낸다
+# 종류: 꺼내기
+# 예: s1 $'T\x1fTitle\nE\x1fep\nS\x1fcore/a.sh\nB\x1flib/z.sh\nB\x1fnoslash.md\nB\x1flib/z.sh\n' → $'s1\x1fep\x1fTitle\x1fcore/a.sh lib/z.sh'
 # <슬러그> <awk 레코드들(T/E/S/B)> → "slug\x1fepic\x1ftitle\x1ffiles" — 토큰 검증과 중복 제거만 한다.
 scv_graph_plan_records() {
   local slug="${1:-}" recs="${2:-}" us=$'\x1f' rec kind val tok title="" epic=""
@@ -134,6 +153,9 @@ scv_graph_plan_records() {
 }
 
 # @pure
+# 역할: 여러 계획의 awk 레코드(F 줄로 경계)를 계획마다 "slug\x1fepic\x1ftitle\x1factive\x1ffiles" 줄로 낸다 (경로에 /promote/ 가 있으면 active=1)
+# 종류: 꺼내기
+# 예: $'F\x1fscv/promote/20261101-a-x/PLAN.md\nT\x1fTitle\nE\x1fep\nB\x1flib/z.sh\n' → $'20261101-a-x\x1fep\x1fTitle\x1f1\x1flib/z.sh'
 # 여러 계획의 awk 레코드(F<us>path 로 경계) → touches 줄들 "slug\x1fepic\x1ftitle\x1factive\x1ffiles".
 # active 는 경로에 /promote/ 가 있으면 1. 한 번의 awk 로 55개 계획을 처리하려고 있다.
 scv_graph_plans_batch() {
@@ -153,6 +175,9 @@ scv_graph_plans_batch() {
 }
 
 # @pure
+# 역할: DECISIONS.md 에서 결정 제목과 그 결정이 참조한 계획 slug 쌍을 "제목\x1fslug" 줄들로 뽑는다
+# 종류: 꺼내기
+# 예: $'## [2026-10-01 09:00] me — Do thing\n- refs: scv/promote/foo/PLAN.md, scv/archive/bar/PLAN.md\n' → $'Do thing\x1ffoo\nDo thing\x1fbar'
 # <DECISIONS.md 본문> → "decision title\x1fplan slug" 줄들. 제목은 "## [시각] 작성자 — 제목" 의 제목.
 scv_graph_decision_refs() {
   local text="${1:-}" us=$'\x1f' line title="" rest
@@ -172,6 +197,12 @@ scv_graph_decision_refs() {
 }
 
 # @pure
+# 역할: 노드 종류 · id · epic 으로 군집 라벨을 정한다 (파일은 상위 두 폴더, 계획은 epic 아니면 슬러그 연월, 결정은 "decisions")
+# 종류: 지문
+# 예: plan 20261101-x-y → "2026-11"
+# 예: plan 20261101-x-y epic1 → "epic1"
+# 예: file core/scripts/lib/a.sh → "core/scripts"
+# 예: decision x → "decisions"
 # <kind> <id> [epic] → 군집 라벨. 파일·문서는 상위 두 폴더, 계획은 epic 아니면 슬러그 연월(YYYY-MM), 결정은 "decisions".
 scv_graph_community() {
   local kind="${1:-}" id="${2:-}" epic="${3:-}" a b
@@ -201,6 +232,9 @@ _SCV_GRAPH_JQ_COCHANGE_MAIN='
     | cochange | .[] | [.a, .b, (.weight|tostring), (.evidence|join(" "))] | join($us)'
 
 # @deterministic
+# 역할: 계획별 파일 목록(touches 줄들)에서 함께 바뀐 파일 쌍과 횟수 · 근거 slug 를 "a\x1fb\x1f횟수\x1f근거" 줄들로 센다 (jq 필요)
+# 종류: 세기
+# 예: $'p1\x1fa b c\np2\x1fa b\n' → $'a\x1fb\x1f2\x1fp1 p2\na\x1fc\x1f1\x1fp1\nb\x1fc\x1f1\x1fp1'
 # touches 줄들("slug\x1f…\x1ffiles" 또는 "slug\x1ffiles") → cochange 줄들.
 scv_graph_cochange() {
   local text="${1:-}"
@@ -213,6 +247,9 @@ _SCV_GRAPH_JQ_GOD='
     | sort_by([-.degree, .id]) | .[:$n] | .[] | .id'
 
 # @deterministic
+# 역할: 그래프 JSON 에서 연결(차수)이 많은 노드 id 를 상위 n 개(기본 10) 한 줄씩 낸다 (동률은 id 순, jq 필요)
+# 종류: 고르기
+# 예: '{"nodes":[{"id":"a"},{"id":"b"},{"id":"c"}],"links":[{"source":"a","target":"b"},{"source":"a","target":"c"}]}' 2 → $'a\nb'
 # <graph json> [n=10] → 차수 내림차순·동률 id 순 상위 n 개 id, 한 줄에 하나.
 scv_graph_god_nodes() {
   local json="${1:-}" n="${2:-10}"; [[ -n "$json" ]] || json="{}"
@@ -257,6 +294,9 @@ _SCV_GRAPH_JQ_BUILD='
         communities: ($NODES | group_by(.community) | map({key: .[0].community, value: (map(.id)|sort)}) | from_entries) }'
 
 # @deterministic
+# 역할: links · touches · refs · 존재 목록 · 문서 목록으로 graph.json 한 줄(노드 · 링크 · 군집 · god_nodes)을 만든다 (jq 필요)
+# 종류: 조립
+# 예: "" "" "" x.sh x.sh g t → '{"version":1,"built_at":"t","sources":{"docs":"g","plans":0,"decisions":0},"nodes":[{"id":"x.sh","kind":"doc","community":".","degree":0,"label":"x.sh"}],"links":[],"god_nodes":["x.sh"],"communities":{".":["x.sh"]}}'
 # <links> <touches> <refs> <exists 줄들> <docs 줄들> <docs globs> <built_at> → graph.json 텍스트.
 scv_graph_build() {
   local links="${1:-}" touches="${2:-}" refs="${3:-}" exists="${4:-}" docs="${5:-}" globs="${6:-}" built_at="${7:-}"
@@ -292,6 +332,9 @@ _SCV_GRAPH_JQ_REPORT='
   '
 
 # @deterministic
+# 역할: graph.json 텍스트를 GRAPH_REPORT.md 마크다운(출처 · 군집 · god node · 동시변경 · 없는 경로)으로 만든다 (jq 필요)
+# 종류: 조립
+# 예: '{"built_at":"t","sources":{"docs":"d","plans":0,"decisions":0},"nodes":[],"links":[],"god_nodes":[],"communities":{}}' → $'# SCV graph report\n\nBuilt: t · nodes 0 · links 0\n\n## Sources\n\n- docs: d\n- plans: 0 · decisions: 0\n\n## Communities\n\n\n## God Nodes\n\n\n## Co-change pairs\n\n\n## Missing paths\n\n- (none)'
 # <graph json> → GRAPH_REPORT.md 텍스트.
 scv_graph_report() {
   local json="${1:-}"; [[ -n "$json" ]] || json="{}"
@@ -327,6 +370,10 @@ _SCV_GRAPH_JQ_IMPACT='
       end'
 
 # @deterministic
+# 역할: graph.json 에서 경로마다 함께 바뀐 파일 · 계획 · 결정 · 문서를 조회해 text 블록이나 json 으로 낸다 (jq 필요)
+# 종류: 조립
+# 예: '{"nodes":[],"links":[]}' text zzz.sh → "▸ zzz.sh — 근거 없음"
+# 예: '{"nodes":[{"id":"a.sh"}],"links":[{"source":"p1","target":"a.sh","kind":"touches"}]}' json a.sh → '[{"path":"a.sh","known":true,"cochange":[],"plans":[],"docs":[],"decisions":[]}]'
 # <graph json> <text|json> <path…> → 영향 조회. 텍스트는 경로마다 한 블록, 모르는 경로는 "근거 없음".
 scv_graph_impact() {
   local json="${1:-}" mode="${2:-text}"; shift 2 || true; [[ -n "$json" ]] || json="{}"
@@ -336,6 +383,11 @@ scv_graph_impact() {
 }
 
 # @pure
+# 역할: 그래프 존재 여부와 파일 시각으로 missing | stale | built 중 하나를 정한다
+# 종류: 판정
+# 예: 0 0 0 → "missing"
+# 예: 1 5 10 → "stale"
+# 예: 1 10 10 → "built"
 # <graph 존재 0|1> <graph mtime> <재료 최신 mtime> → missing | stale | built
 scv_graph_status_of() {
   local exists="${1:-0}" gm="${2:-0}" sm="${3:-0}"

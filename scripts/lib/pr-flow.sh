@@ -7,6 +7,11 @@
 # 읽기(git 상태 · 설정)와 쓰기(스테이징 · 커밋 · 푸시)는 pr-helper.sh 가 한다. 여기는 문자열만 다룬다.
 
 # @pure
+# 역할: PR 대상 브랜치를 정한다 — 에픽 > 설정 값 > origin 기본 브랜치 > main 순
+# 종류: 고르기
+# 예: '' develop main → "develop"
+# 예: e1 develop main → "epic/e1"
+# 예: '' '' '' → "main"
 # <에픽> <SCV_PR_BASE 값> <origin 기본 브랜치> → 대상 브랜치. 설정 값의 공백 · 따옴표는 뺀다.
 scv_pr_base_branch() {
   local epic="${1:-}" setting="${2:-}" head="${3:-}"
@@ -19,6 +24,9 @@ scv_pr_base_branch() {
 }
 
 # @pure
+# 역할: git 상태 기록에서 허용 경로 밖의 변경 경로만 줄마다 하나 낸다(끝이 / 인 허용 경로는 폴더)
+# 종류: 고르기
+# 예: $' M scv/a.md\n M src/x.sh' $'scv/' → "src/x.sh"
 # <상태 기록> <허용 경로들 — 줄마다 하나, 끝이 / 면 폴더> → 허용 밖 경로, 줄마다 하나.
 # 상태 기록은 `git -c core.quotepath=off status --porcelain -z` 의 NUL 을 줄바꿈으로 바꾼 것이다 — 경로가 그대로 온다
 # (따옴표 · 8진수 이스케이프 없음 — 한글 폴더도, 이름 안의 " -> " 도 그대로). 이름 바뀜 · 복사(R/C)는 다음 줄이 원래

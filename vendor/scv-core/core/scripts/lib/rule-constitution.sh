@@ -26,6 +26,10 @@ SCV_RC_CANON_SED='s#(\$|/)[a-z][a-z0-9-]*:([a-z][a-z-]*)#action:\2#g'
 
 # scv_rc_is_precedence <본문> — 우선순위 어휘가 있으면 참.
 # @pure
+# 역할: 본문에 우선순위 어휘(overrides · 우선한다 등)가 있으면 참
+# 종류: 판정/answer
+# 예: 'This rule overrides the others' → ""
+# 예: 'Write tests first' → "" [1]
 scv_rc_is_precedence() {
   local text="${1:-}"
   shopt -s nocasematch
@@ -37,6 +41,11 @@ scv_rc_is_precedence() {
 
 # scv_rc_is_normative <본문> — 규범 동사가 있으면 참.
 # @pure
+# 역할: 본문에 규범 동사(never · must · 반드시 등)가 있으면 참
+# 종류: 판정/answer
+# 예: 'You must run tests' → ""
+# 예: '절대 지우지 마라' → ""
+# 예: 'Tests are nice' → "" [1]
 scv_rc_is_normative() {
   local text="${1:-}"
   shopt -s nocasematch
@@ -48,6 +57,10 @@ scv_rc_is_normative() {
 
 # scv_rc_is_reference <본문> — Top-level rules 를 가리키는 참조형이면 참.
 # @pure
+# 역할: 본문이 Top-level rules 를 가리키는 참조형이면 참
+# 종류: 판정/answer
+# 예: 'See Top-level rules above' → ""
+# 예: 'Write tests' → "" [1]
 scv_rc_is_reference() {
   [[ "${1:-}" == *"$SCV_RC_REFERENCE"* ]]
 }
@@ -60,6 +73,11 @@ scv_rc_is_reference() {
 # 절) 밖이며, 허용목록("<파일>\t<본문>" 줄들; '#' 로 시작하는 줄은 주석)에도 없는 줄을
 # 그대로 낸다. 아무것도 안 내면 통과.
 # @pure
+# 역할: 우선순위 어휘를 담은 줄 중 참조형 · 허용 구간 · 허용목록 밖의 것을 그대로 낸다
+# 종류: 고르기
+# 예: $'a.md\t3\tThis overrides everything' a.md 10 20 '' → $'a.md\t3\tThis overrides everything'
+# 예: $'a.md\t15\tThis overrides everything' a.md 10 20 '' → ""
+# 예: $'a.md\t3\tThis overrides everything\nb.md\t4\tSee Top-level rules, which win over this' a.md 10 20 '' → $'a.md\t3\tThis overrides everything'
 scv_rc_precedence_violations() {
   local rows="${1:-}" allowed_file="${2:-}" from="${3:-0}" to="${4:-0}" allow="${5:-}"
   local file ln text allow_nl=$'\n'"$allow"$'\n'
@@ -77,6 +95,9 @@ scv_rc_precedence_violations() {
 
 # scv_rc_normative_rows — 표준입력 rows → 규범 문장인 rows 만.
 # @pure
+# 역할: 표준입력 "파일 줄번호 본문" 표에서 규범 동사가 든 줄만 남긴다
+# 종류: 고르기
+# 예: <<< $'a.md\t1\tYou must test\na.md\t2\tNice day' → $'a.md\t1\tYou must test'
 scv_rc_normative_rows() {
   local file ln text
   while IFS=$'\t' read -r file ln text; do
@@ -105,12 +126,19 @@ SCV_RC_AWK_DUPS='{ c[$1]++ } END { for (k in c) if (c[k]>=2) print k }'
 
 # scv_rc_demand_keys — 표준입력 rows → "<키>\t<파일>". 표준입력 필터만 부른다.
 # @deterministic
+# 역할: 표준입력 "파일 줄번호 본문" 줄에서 앞 8단어 키를 만들어 "키 파일" 로 낸다(6단어 미만은 버림)
+# 종류: 지문
+# 예: <<< $'a.md\t1\tYou MUST always run the unit tests first, then commit.' → $'you must always run the unit tests first\ta.md'
+# 예: <<< $'a.md\t1\tToo short line' → ""
 scv_rc_demand_keys() {
   tr 'A-Z' 'a-z' | awk -F'\t' "$SCV_RC_AWK_KEYS"
 }
 
 # scv_rc_duplicate_keys — 표준입력 "<키>\t<파일>" → 두 파일 이상에 나온 키, 정렬.
 # @deterministic
+# 역할: 표준입력 "키 파일" 줄에서 두 파일 이상에 나온 키만 정렬해 낸다
+# 종류: 고르기
+# 예: <<< $'k1\ta.md\nk1\tb.md\nk2\ta.md' → "k1"
 scv_rc_duplicate_keys() {
   LC_ALL=C sort -u | awk -F'\t' "$SCV_RC_AWK_DUPS" | LC_ALL=C sort
 }
@@ -119,6 +147,9 @@ scv_rc_duplicate_keys() {
 # 허용목록은 의도된 반복 — 같은 블록을 모든 프로토콜에 일부러 찍는 것 — 을 이유와 함께 적은 것이다. 래칫 앞에서
 # 걸러 기준선이 진짜 빚만 담게 한다. 골격은 ratchet_new 와 같다.
 # @pure
+# 역할: 후보 키에서 허용목록에 있는 키를 뺀 나머지를 낸다
+# 종류: 고르기
+# 예: $'k1\nk2\nk3' $'k2' → $'k1\nk3'
 scv_rc_allowed_out() {
   local cand="${1:-}" allow="${2:-}" k allow_nl
   allow_nl=$'\n'"$allow"$'\n'   # 같은 local 문에서 앞 변수를 쓰면 확장이 먼저라 바깥 값을 본다
@@ -130,13 +161,5 @@ scv_rc_allowed_out() {
 }
 
 # scv_rc_ratchet_new <후보 키들> <기준선 키들> — 기준선에 없는 후보만 낸다. 비면 통과.
-# @pure
-scv_rc_ratchet_new() {
-  local cand="${1:-}" base="${2:-}" k base_nl
-  base_nl=$'\n'"$base"$'\n'
-  while IFS= read -r k; do
-    [[ -z "$k" ]] && continue
-    [[ "$base_nl" == *$'\n'"$k"$'\n'* ]] && continue
-    printf '%s\n' "$k"
-  done <<< "$cand"
-}
+# 구현은 scv_rc_allowed_out 과 같다(목록에 없는 줄만 남기기) — 이름만 남긴다.
+scv_rc_ratchet_new() { scv_rc_allowed_out "$@"; }

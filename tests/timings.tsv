@@ -79,3 +79,5 @@ tests/test-profile-and-export.sh	19
 tests/test-promote-wait.sh	7
 tests/test-state-index.sh	3
 tests/test-sync-dry-run.sh	1
+core/tests/test-pure-catalog.sh	7
+core/tests/test-project-pure-catalog.sh	8
