@@ -102,11 +102,11 @@ flowchart LR
   Archive["scv/archive/"]
   Regression["regression<br>(every archived test)"]
 
-  Raw -->|conversation| Promote
+  Raw -->|"conversation"| Promote
   Promote --> Work
-  Work -->|tests pass + approval| Archive
+  Work -->|"tests pass + approval"| Archive
   Archive --> Regression
-  Regression -.->|safety net for the next change| Promote
+  Regression -.->|"safety net for the next change"| Promote
 
   classDef key fill:#FFE082,stroke:#F57C00,stroke-width:2px,color:#000
   class Promote,Regression key
