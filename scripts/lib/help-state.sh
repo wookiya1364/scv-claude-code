@@ -17,6 +17,8 @@
 
 # shellcheck source=switch.sh
 declare -F scv_switch >/dev/null 2>&1 || source "${BASH_SOURCE[0]%/*}/switch.sh"
+# shellcheck source=text.sh
+declare -F scv_is_topline >/dev/null 2>&1 || source "${BASH_SOURCE[0]%/*}/text.sh"
 
 # @pure
 # 역할: 표식 JSON 한 줄(깨져도 됨)을 \x1f 로 구분한 상태 필드 여섯 개로 풀어 낸다
@@ -188,6 +190,30 @@ scv_lint_strip_quoted() {
 }
 
 # @pure
+# 역할: 답의 첫 줄이 맨 위 '이해한 대로' 줄이면 그 줄과 뒤 빈 줄을 떼고 나머지를 낸다 — 아니면 그대로
+# 종류: 다듬기
+# 예: $'이렇게 이해하고 일함: 정리.\n\n결론이다.\n' → "결론이다."
+# 예: $'결론이다.\n둘째.\n' → $'결론이다.\n둘째.'
+# 예: $'> 이렇게 이해하고 일함: 인용\n본문.\n' → $'> 이렇게 이해하고 일함: 인용\n본문.'
+# 맨 위 줄은 머리말이고 결론은 그다음 문단이다 — 첫 문단 검사가 둘을 한 문단으로 세지 않게 한다
+# (instruction-conflicts 1번, 2026-11-01). 첫 비어 있지 않은 줄 하나만 본다.
+scv_lint_skip_top_line() {
+  local text="${1:-}" line out="" seen=0 dropping=0 nl=$'\n'
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if (( ! seen )); then
+      [[ "$line" != *[![:space:]]* ]] && continue
+      seen=1
+      if [[ "$(scv_is_topline "$line")" == "1" ]]; then dropping=1; continue; fi
+    elif (( dropping )); then
+      [[ "$line" != *[![:space:]]* ]] && continue
+      dropping=0
+    fi
+    out+="$line$nl"
+  done <<<"$text"
+  printf '%s' "${out%$nl}"
+}
+
+# @pure
 # 역할: 답 본문의 골격(결론 문단 · 첫 문단 문장 수 · 코드값 · 결정표 추천 칸)이 계약을 벗어난 줄들을 낸다
 # 종류: 판정/answer
 # 예: $'| a | b |\n|---|---|\n| 1 | 2 |\n' → "lead-missing"
@@ -204,6 +230,7 @@ scv_answer_lint() {
   local text="${1:-}" cap="${2:-2}" line infence=0 lead="" lead_done=0 lead_kind="" n=0 rest tok
   local intable=0 is_decision=0 row c1 c2 c3 bt='`' gt=$'\x3e' pat_code pat_end pat_num
   [[ "$cap" =~ ^[1-9][0-9]*$ ]] || cap=2
+  text="$(scv_lint_skip_top_line "$text")"
   pat_code="${bt}([^${bt}]+)${bt}(.*)\$"
   pat_end='^(.*)[.!?]([[:space:]].*)?$'
   pat_num='^[0-9]+[.)][[:space:]]'
@@ -224,7 +251,10 @@ scv_answer_lint() {
           esac
         fi
       else
-        lead="$lead $line"
+        case "$line" in   # 표 · 인용 · 목록 · 제목 줄이 오면 결론 문단은 거기서 끝난다 — 빈 줄 없이 붙어도
+          \|*|\#*|-\ *|\*\ *|+\ *|"$gt"*) lead_done=1 ;;
+          *) lead="$lead $line" ;;
+        esac
       fi
     fi
     if [[ "$line" =~ ^[[:space:]]*\| ]]; then

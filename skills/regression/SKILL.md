@@ -134,7 +134,8 @@ Verdicts (per row):
          status: done → obsolete
          obsoleted_at: <today's date>
          obsoleted_by: manual     (this is the runtime-triage path so 'manual' is fixed)
-     - TESTS.md, ARCHIVED_AT.md, and other files are never touched (immutable archive principle).
+     - TESTS.md, ARCHIVED_AT.md, and the other records are never touched (immutable archive principle;
+       the archive index and deck HTML are regenerated files, not records).
 
      Why is this needed?
      - From now on, /scv:regression permanently skips '<slug>'s TESTS.
@@ -223,7 +224,6 @@ Do not auto-add tags to existing PLANs. The user owns the tag taxonomy.
 - Modify the body of archived TESTS.md or ARCHIVED_AT.md.
 - Run a slug already declared in another's `supersedes:` outside the runner.
 - Ask the user for confirmation in `--ci` mode.
-- Bundle multiple failures into a single question.
 - Auto-mark an undeclared failure as obsolete without the user's answer.
 
 ## Suite-gate memoization (v0.34.0+)

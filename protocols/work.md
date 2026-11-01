@@ -242,7 +242,7 @@ When emitted, print this as a single info block (not a question — work proceed
 Legacy PLANs that have only `## Steps` are still fully valid: treat `## Steps` as the Suggested path and TESTS.md's `## Pass criteria` as the Exit criteria.
 
 <!-- SCV:GUIDANCE -->
-Once you hold PLAN.md's **Guardrails / Exit criteria** and TESTS.md's **verification means** (the `## How to run` commands), do not wait for — or ask for — step-by-step procedural instructions: **run to completion**. The Suggested path is a suggestion; Guardrails and Exit criteria are the contract. Work autonomously until the Exit criteria are met and TESTS pass, checking back with the user only at the decision points this protocol defines (split proposals, archive, PR). When you get stuck, **strengthen the verification means first** — add a failing repro, tighten an assertion, improve observability — instead of asking the user to micro-specify the procedure.
+Once you hold PLAN.md's **Guardrails / Exit criteria** and TESTS.md's **verification means** (the `## How to run` commands), do not wait for — or ask for — step-by-step procedural instructions: **run to completion**. The Suggested path is a suggestion; Guardrails and Exit criteria are the contract. Work autonomously until the Exit criteria are met and TESTS pass, checking back with the user only at the decision points this protocol defines (split proposals, archive, PR) and the one first-run check of `contracts/show-real.md`. When you get stuck, **strengthen the verification means first** — add a failing repro, tighten an assertion, improve observability — instead of asking the user to micro-specify the procedure.
 
 Relation to Ralph Loop: this paragraph is what owns `/scv:work`'s long-run behavior — no external loop harness is required for a plan to run to completion (an external loop remains an optional accelerant, not a dependency).
 <!-- /SCV:GUIDANCE -->
@@ -423,7 +423,7 @@ Condition: All TESTS passed in Step 7 and not in pre-declared archive mode.
 Ask: "Run accumulated regression (entire `scv/archive/`) before archiving? Slugs declared in PLAN's `supersedes:` are auto-skipped."
 
 Options:
-- **Yes, run `/scv:regression` now** (default) — invoke the command immediately
+- **Yes, run `/scv:regression` now** (recommended) — invoke the command immediately
 - **Skip — just archive** — go straight to Step 9b
 - **Let me review first** — pause (stop the command flow)
 
@@ -565,7 +565,8 @@ Options:
          status: done → obsolete
          obsoleted_at: <today's date>
          obsoleted_by: <A-slug>
-     - TESTS.md, ARCHIVED_AT.md, and other files are never touched (immutable archive principle).
+     - TESTS.md, ARCHIVED_AT.md, and the other records are never touched (immutable archive principle;
+       the archive index and deck HTML are regenerated files, not records).
 
      Why is this needed?
      - /scv:regression will permanently skip '<B-slug>'s TESTS from now on (excluded from
@@ -592,7 +593,7 @@ Options:
      next supersede target. You can manually mark this slug later, or re-enter via
      /scv:regression triage."
 
-Default: [1] Yes (pre-selected)
+Recommended: [1] Yes (listed first — with no answer, nothing is marked; `contracts/choices.md`)
 ```
 <!-- /SCV:GUIDANCE -->
 

@@ -38,8 +38,9 @@ turns included:
    background job reports back, in automatic-notification turns alike. When the asked work is done,
    state the recommended next step in one line, without a question, and end the turn. Ask only a real
    decision: a step that is hard to reverse or reaches outside (deleting, pushing, publishing,
-   sending), a choice of taste or scope that only the user can make, or a point where the work cannot
-   go on without the user's input. (2026-10-21: in real use, one week-long session raised 225
+   sending), a choice of taste or scope that only the user can make, a point where the work cannot
+   go on without the user's input, or the one first-run check of `contracts/show-real.md` (shown
+   once, at the first runnable result; after it, the work runs on). (2026-10-21: in real use, one week-long session raised 225
    windows, 115 of them right after a background job reported back, mostly "what next?".)
 
 Information is not a decision. Tables that report — the unit table of the rewrite principle, result
@@ -58,7 +59,8 @@ The help answer shape states this rule in its Decisions slot (`protocols/help.md
 slot 6 — the section's lock was renewed with that wording on 2026-10-01). Where the host names a choice
 tool, this rule also replaces the numbered Decisions table echoed in `protocols/help/full.md`, the one
 decisions table of regression triage (`protocols/regression.md`, Step 2), the question form of the offer
-in the plain-language section's example, and the text rendering of every `Question: … options:` block in
+in the plain-language section's example, the follow-up offer that ends an archive search
+(`protocols/help/archive-search.md`, step 6), and the text rendering of every `Question: … options:` block in
 the protocols. It is the narrower rule — it applies only when the host has the tool, and only to
 decisions — and it declares here that it supersedes those texts (Top-level rules, resolution order 2
 and 4).

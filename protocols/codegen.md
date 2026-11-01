@@ -212,7 +212,7 @@ Backend domain logic, pure functions, and frontend custom hook (`.ts`) logic typ
 
 - Modify TESTS.md body to make a failing case pass. The test is the spec — revise it only via dialogue with the user.
 - Weaken / delete / narrow assertions in the test the plan's `## How to run` runs (e.g. a per-slug `e2e/<slug>.spec.ts`) to make a case pass — it is a test contract; revise it only via dialogue.
-- Touch files outside the plan's scope.
+- Edit a file outside the plan's scope without asking first (Step 7's scope guard), or delete or move one (`core/contracts/boundaries.md`).
 - Skip Step 6 (Red pre-flight).
 - Exceed the iteration budget (3 per case) without surfacing to the user.
 - Archive without going through `/scv:work` Step 9b's user approval.

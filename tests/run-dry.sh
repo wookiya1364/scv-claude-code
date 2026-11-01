@@ -1268,7 +1268,7 @@ assert_contains "$WORK_CMD" "Yes — mark as obsolete"
 assert_contains "$WORK_CMD" "Skip — runtime skip only"
 assert_contains "$WORK_CMD" "status: done → obsolete"
 assert_contains "$WORK_CMD" "permanently skip"
-assert_contains "$WORK_CMD" "Default: [1] Yes"
+assert_contains "$WORK_CMD" "Recommended: [1] Yes"
 
 echo
 echo "=== [11u] work.sh — ARCHIVED_AT propagates supersedes ==="

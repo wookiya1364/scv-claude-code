@@ -17,3 +17,5 @@ Every message, however short (v0.62.0+). Hooks enforce steps 1, 4 and 5.
    (its REWRITE line, principle tag included) as a `>` block right after the conclusion,
    with its ctx/asked items; add `**Rewritten request**:` (e.g. `**다시 쓴 요청**:`)
    to the turn block; work from it. Never hide the user's words or change model or effort.
+   The top line is a header; the lead is the paragraph after it. The `>` block is quoted as
+   registered — "no code values" does not reach inside it.

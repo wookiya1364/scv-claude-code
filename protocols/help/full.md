@@ -68,7 +68,7 @@ Read `<plugin root>/protocols/help/hydrate.md` now and follow it.
 | Mixed / unclear ("결제 관련" with no other signal) | Ask once, then proceed |
 
 If unsure, ask one concise question — [1] "Build / change something new" / [2] "Find what
-we already did" — defaulting to [1]. Never ask it for a short acknowledgement.
+we already did" — with [1] recommended (listed first). Never ask it for a short acknowledgement.
 
 #### → Mode B' (archive search)
 
@@ -89,7 +89,7 @@ file and say so in one line. This narrower rule is what lets the turn keep its o
 
 **Short turns skip this question entirely.** An acknowledgement or thank-you is appended to
 the session's conversation file — the one this session opened or resumed — with no prompt;
-only when the session has no file yet does a short turn open one.
+when the session has no file yet, it is one journal line and opens no file (`core/contracts/recording.md`).
 
 #### Step B1 — Create / open the conversation file
 

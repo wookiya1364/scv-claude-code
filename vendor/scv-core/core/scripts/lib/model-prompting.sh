@@ -898,20 +898,19 @@ scv_mp_scope_forbid() {
 # 종류: 판정/answer
 # 예: "이렇게 이해하고 일함: 정리" → "1"
 # 예: "없음" → "0"
+# 예: $'결론이다.\n이렇게 이해하고 일함: 정리' → "1"
+# 한 줄 판정(lib/text.sh scv_is_topline)을 답 전체의 줄마다 쓴다 — 둘째 줄 이하에 있어도 찾는다.
 # <답 본문> → 1(코드 블록 밖에 맨 위 한 줄의 이름표로 시작하는 줄이 있다) | 0. 이름표: "이렇게 이해하고 일함" · "Understood as" ·
 # "こう理解して進める" 뒤에 쌍점(: 또는 ：). 굵게 표시(**) 같은 꾸밈 글자는 무시한다. 인용 줄('>')은 맨 위 한 줄이 아니다.
 scv_mp_answer_has_topline() {
-  local text="${1:-}" line t fence=0 q=$'\x3e'
+  local text="${1:-}" line t fence=0
   while IFS= read -r line || [[ -n "$line" ]]; do
     t="${line#"${line%%[![:space:]]*}"}"
     if [[ "$t" == '```'* ]]; then fence=$(( 1 - fence )); continue; fi
     (( fence )) && continue
-    [[ "${t:0:1}" == "$q" ]] && continue
-    t="${t//\*/}"; t="${t//_/}"
-    case "$t" in
-      "이렇게 이해하고 일함:"*|"이렇게 이해하고 일함 :"*|"이렇게 이해하고 일함："*|"Understood as:"*|"Understood as :"*|"understood as:"*|"こう理解して進める:"*|"こう理解して進める："*)
-        printf '1'; return 0 ;;
-    esac
+    # 이름표 글자가 없는 줄은 판정을 부르지 않는다 — 긴 답에서 줄마다 하위 셸을 띄우지 않으려고.
+    case "$t" in *"이렇게 이해하고 일함"*|*"nderstood as"*|*"こう理解して進める"*) ;; *) continue ;; esac
+    [[ "$(scv_is_topline "$t")" == "1" ]] && { printf '1'; return 0; }
   done <<< "$text"
   printf '0'
 }
