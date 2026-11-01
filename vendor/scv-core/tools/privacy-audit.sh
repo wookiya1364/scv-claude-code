@@ -27,7 +27,7 @@ if terms_file:
 RULES = [
     ("session-line", re.compile(rb"(^|[^A-Za-z])[A-Z][A-Za-z]*-Session:\s|/code/session_[A-Za-z0-9]")),
     ("session-id", re.compile(rb"session_01[A-Za-z0-9]{10,}")),
-    ("local-path", re.compile(rb"/Users/[A-Za-z0-9._-]+/|/home/[A-Za-z0-9._-]+/|/private/tmp/claude-[0-9]+")),
+    ("local-path", re.compile(rb"/Users/[A-Za-z0-9._-]{2,}/|/home/[A-Za-z0-9._-]{2,}/|/private/tmp/claude-[0-9]+")),
     ("personal-email", re.compile(rb"[A-Za-z0-9._%+-]+@(gmail|googlemail|naver|daum|hanmail|kakao|nate|hotmail|outlook|live|yahoo|icloud|me|proton|protonmail)\.[a-z.]+", re.I)),
 ]
 TERMS = [(i + 1, re.compile(rb"(?<![A-Za-z0-9])" + re.escape(t.encode()) + rb"(?![A-Za-z0-9])", re.I)) for i, t in enumerate(terms)]

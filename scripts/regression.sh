@@ -37,6 +37,8 @@ source "$SCRIPT_DIR/lib/yaml.sh"
 source "$SCRIPT_DIR/lib/env.sh"
 # shellcheck source=lib/scvroot.sh
 source "$SCRIPT_DIR/lib/scvroot.sh"
+# shellcheck source=lib/regression-memo.sh
+source "$SCRIPT_DIR/lib/regression-memo.sh"
 env_load 2>/dev/null || true
 
 # ---- flag defaults ----
@@ -299,6 +301,11 @@ read_test_command() {
 #   for t in core/tests/test-*.sh; do bash "$t" ... ; done   (the loop as a unit)
 # --no-memo (or SCV_REGRESSION_MEMO=off) restores per-slug execution.
 declare -A MEMO_RC=()
+declare -A MEMO_USES=()      # 공유 시험 키 → 이번 회귀에서 쓴 계획 수
+declare -A MEMO_OUT=()       # 공유 시험 키 → 그 출력 파일(실패한 계획에 꼬리를 보여 준다)
+declare -A MEMO_OK_SLUG=()   # 공유 결과를 써도 되는 계획
+MEMO_TABLE=""
+MEMO_DIR=""
 MEMO_HITS=0
 MEMO_GATES=0
 memo_gate_run() {  # memo_gate_run <key> <command> — run once (in THIS shell, so the cache persists); count reuse
@@ -320,14 +327,19 @@ memo_gate_run() {  # memo_gate_run <key> <command> — run once (in THIS shell, 
 # memo_prepare_block <block> — runs (once) every gate the block mentions. Must be
 # called in the main shell: a command substitution would fork and lose the cache.
 memo_prepare_block() {
-  local line
+  local line key
   while IFS= read -r line || [[ -n "$line" ]]; do
-    if [[ "$line" =~ ^[[:space:]]*for[[:space:]]+t[[:space:]]+in[[:space:]]+core/tests/test-\*\.sh\;[[:space:]]*do[[:space:]]+bash[[:space:]]+\"\$t\".*done[[:space:]]*$ ]]; then
-      memo_gate_run core-tests 'for t in core/tests/test-*.sh; do bash "$t" >/dev/null 2>&1 || exit 1; done'
-    elif [[ "$line" =~ ^[[:space:]]*bash[[:space:]]+core/tests/run-dry\.sh([[:space:]].*)?$ ]]; then
-      memo_gate_run run-dry 'bash core/tests/run-dry.sh'
-    elif [[ "$line" =~ ^[[:space:]]*bash[[:space:]]+tests/run\.sh([[:space:]].*)?$ ]]; then
-      memo_gate_run tests-run 'bash tests/run.sh'
+    if scv_reg_is_core_loop "$line"; then
+      if [[ -n "${MEMO_RC[core-tests]+x}" && -n "$MEMO_TABLE" ]]; then
+        MEMO_USES[core-tests]=$(( ${MEMO_USES[core-tests]:-0} + 1 ))
+      else
+        memo_gate_run core-tests 'for t in core/tests/test-*.sh; do bash "$t" >/dev/null 2>&1 || exit 1; done'
+      fi
+    else
+      # 시험 파일 하나를 부르는 줄 — 회귀 시작 때 한 번씩 동시에 돌려 둔 결과를 쓴다(memo_prerun_shared).
+      while IFS= read -r key; do
+        [[ -n "$key" && -n "${MEMO_RC[$key]+x}" ]] && MEMO_USES[$key]=$(( ${MEMO_USES[$key]:-0} + 1 ))
+      done <<< "$(scv_reg_collect_keys "$line")"
     fi
   done <<< "$1"
 }
@@ -340,15 +352,74 @@ memo_rewrite_block() {  # stdin: block → stdout: block with memoized gates rep
         tail="${BASH_REMATCH[2]}"; tail="${tail%%;*}"
         printf '%s( exit %s )%s\n' "${BASH_REMATCH[1]}" "$rc" "${tail//\$t/core/tests}"; continue
       fi
-    elif [[ "$line" =~ ^([[:space:]]*)bash[[:space:]]+core/tests/run-dry\.sh([[:space:]].*)?$ ]]; then
-      rc="${MEMO_RC[run-dry]:-}"
-      if [[ -n "$rc" ]]; then printf '%s( exit %s )%s\n' "${BASH_REMATCH[1]}" "$rc" "${BASH_REMATCH[2]}"; continue; fi
-    elif [[ "$line" =~ ^([[:space:]]*)bash[[:space:]]+tests/run\.sh([[:space:]].*)?$ ]]; then
-      rc="${MEMO_RC[tests-run]:-}"
-      if [[ -n "$rc" ]]; then printf '%s( exit %s )%s\n' "${BASH_REMATCH[1]}" "$rc" "${BASH_REMATCH[2]}"; continue; fi
     fi
-    printf '%s\n' "$line"
+    printf '%s\n' "$(scv_reg_rewrite_line "$line" "$MEMO_TABLE")"
   done
+}
+# memo_prerun_shared <targets…> — 회귀 대상 계획들의 블록에서 '시험 파일 하나를 부르는 줄'을 모아
+# 같은 줄은 한 번만, 여러 개를 동시에 돌려 MEMO_RC 에 코드를 남긴다(2026-11-01 — 같은 시험이
+# 계획마다 반복돼 회귀가 49분 넘게 미완). 장면 건너뛰기가 있는 계획 · 다른 폴더로 옮겨 가는 계획은
+# 공유 결과를 쓰지 않는다(MEMO_OK_SLUG 에 없음). `# scv-test: serial` 표시 시험은 동시 실행 뒤 하나씩.
+memo_prerun_shared() {
+  local line src slug dir tests cmd text="" key k
+  for line in "$@"; do
+    IFS='|' read -r src slug dir <<< "$line"
+    [[ -n "${skip_slug_by[$slug]:-}" || -n "${obsolete_slugs[$slug]:-}" ]] && continue
+    tests="${dir}TESTS.md"; [[ -f "$tests" ]] || continue
+    cmd="$(read_test_command "$tests")"; [[ -n "$cmd" ]] || continue
+    for k in "${!skip_scenario_by[@]}"; do [[ "$k" == "$slug:T"* ]] && continue 2; done
+    scv_reg_block_memo_ok "$cmd" || continue
+    MEMO_OK_SLUG[$slug]=1
+    text+="$cmd"$'\n'
+  done
+  local -a keys=() serial=() core_keys=()
+  while IFS= read -r key; do [[ -n "$key" ]] && keys+=("$key"); done < <(scv_reg_collect_keys "$text")
+  # '코어 시험 전부' 반복 줄은 시험 파일 하나하나로 나눠 같이 동시에 돈다 — 한 덩어리로 돌면 하나씩
+  # 차례로라 13분쯤 걸렸다(2026-11-01). 반복 줄의 결과는 그중 하나라도 실패하면 1.
+  local l has_loop=0 f
+  while IFS= read -r l || [[ -n "$l" ]]; do scv_reg_is_core_loop "$l" && { has_loop=1; break; }; done <<< "$text"
+  if [[ $has_loop -eq 1 ]]; then
+    for f in core/tests/test-*.sh; do
+      [[ -f "$f" ]] || continue
+      key="bash $f"; core_keys+=("$key")
+      [[ $'\n'"$(printf '%s\n' "${keys[@]}")"$'\n' == *$'\n'"$key"$'\n'* ]] || keys+=("$key")
+    done
+  fi
+  [[ ${#keys[@]} -gt 0 ]] || return 0
+  MEMO_DIR="$(mktemp -d "${TMPDIR:-/tmp}/scv-regression-memo.XXXXXX")"
+  local jobs="${SCV_TEST_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}" i=0 file
+  [[ "$jobs" =~ ^[1-9][0-9]*$ ]] || jobs=4
+  [[ $QUIET -eq 0 ]] && echo "  ↺ shared tests: ${#keys[@]} distinct, $jobs at a time"
+  for (( i = 0; i != ${#keys[@]}; i++ )); do
+    key="${keys[i]}"; file="${key#bash }"; file="${file%% *}"
+    if [[ -f "$file" ]] && head -30 "$file" | grep -q '^# scv-test: serial'; then serial+=("$i"); continue; fi
+    while (( $(jobs -rp | wc -l) >= jobs )); do wait -n; done
+    ( rc=0; run_scenario_clean "$key" >"$MEMO_DIR/$i.out" 2>&1 || rc=$?; echo "$rc" > "$MEMO_DIR/$i.rc" ) &
+  done
+  wait
+  # 동시에 돌다 실패한 시험은 다 끝난 뒤 혼자 한 번 더 — 시간 한도를 재는 시험이 다른 시험과 겹쳐 느려져
+  # 떨어진 것을 하나씩 돌던 예전 판정과 같게 맞춘다(2026-11-01: 실체 보여 주기 T11 60초 한도가 66초).
+  # 혼자 돌아도 실패하면 그대로 실패다.
+  local -a again=()
+  local serial_set=" ${serial[*]} "
+  for (( i = 0; i != ${#keys[@]}; i++ )); do
+    [[ "$serial_set" == *" $i "* ]] && continue
+    [[ "$(cat "$MEMO_DIR/$i.rc" 2>/dev/null || echo 1)" == 0 ]] || again+=("$i")
+  done
+  for i in "${serial[@]}" "${again[@]}"; do
+    ( rc=0; run_scenario_clean "${keys[i]}" >"$MEMO_DIR/$i.out" 2>&1 || rc=$?; echo "$rc" > "$MEMO_DIR/$i.rc" )
+  done
+  [[ $QUIET -eq 0 && ${#again[@]} -gt 0 ]] && echo "  ↺ reran ${#again[@]} failed shared test(s) alone"
+  MEMO_TABLE=""
+  for (( i = 0; i != ${#keys[@]}; i++ )); do
+    MEMO_RC[${keys[i]}]="$(cat "$MEMO_DIR/$i.rc" 2>/dev/null || echo 1)"
+    MEMO_OUT[${keys[i]}]="$MEMO_DIR/$i.out"
+    MEMO_TABLE+="${keys[i]}"$'\t'"${MEMO_RC[${keys[i]}]}"$'\n'
+  done
+  if [[ ${#core_keys[@]} -gt 0 ]]; then
+    MEMO_RC[core-tests]=0
+    for key in "${core_keys[@]}"; do [[ "${MEMO_RC[$key]}" == 0 ]] || { MEMO_RC[core-tests]=1; break; }; done
+  fi
 }
 run_scenario_clean() {
   # The runner's own marks, and nothing else: the autosync re-entry guard plus
@@ -523,6 +594,10 @@ main() {
   declare -A slug_outcome=()        # slug → pass|fail|skipped
   declare -A slug_output_tail=()    # slug → last-20-lines
 
+  if [[ $MEMO -eq 1 && "${SCV_REGRESSION_MEMO:-on}" != "off" ]]; then
+    memo_prerun_shared "${targets[@]}"
+  fi
+
   local idx=0
   for line in "${targets[@]}"; do
     IFS='|' read -r src slug dir <<< "$line"
@@ -573,7 +648,8 @@ main() {
     local out_file; out_file=$(mktemp)
     local rc=0
     local before_ts; before_ts=$(date +%s)
-    if [[ $MEMO -eq 1 && "${SCV_REGRESSION_MEMO:-on}" != "off" ]]; then
+    local orig_cmd="$cmd"
+    if [[ $MEMO -eq 1 && "${SCV_REGRESSION_MEMO:-on}" != "off" && -n "${MEMO_OK_SLUG[$slug]:-}" ]]; then
       memo_prepare_block "$cmd"
       cmd="$(printf '%s\n' "$cmd" | memo_rewrite_block)"
     fi
@@ -604,6 +680,22 @@ main() {
       echo "  --- output tail ---"
       printf '%s\n' "$tail_out" | sed 's/^/  /'
       echo "  --- end ---"
+      # 공유로 한 번 돈 시험이 실패했으면 그 출력 꼬리도 보인다 — 이 계획의 블록엔 '( exit N )' 만 남아 있다.
+      local sk
+      while IFS= read -r sk; do
+        [[ -n "$sk" && -n "${MEMO_RC[$sk]+x}" && "${MEMO_RC[$sk]}" != 0 && -n "${MEMO_OK_SLUG[$slug]:-}" ]] || continue
+        echo "  --- shared test: $sk (exit ${MEMO_RC[$sk]}) ---"
+        tail -n 10 "${MEMO_OUT[$sk]}" 2>/dev/null | sed 's/^/  /'
+      done < <(
+        scv_reg_collect_keys "$orig_cmd"
+        # '코어 시험 전부' 반복 줄이 실패했으면 그 안에서 실패한 시험 파일들을
+        while IFS= read -r cl || [[ -n "$cl" ]]; do
+          if scv_reg_is_core_loop "$cl" && [[ "${MEMO_RC[core-tests]:-0}" != 0 ]]; then
+            for ck in "${!MEMO_RC[@]}"; do [[ "$ck" == "bash core/tests/"* ]] && printf '%s\n' "$ck"; done
+            break
+          fi
+        done <<< "$orig_cmd"
+      )
     fi
     rm -f "$out_file"
   done
@@ -612,7 +704,10 @@ main() {
   echo ""
   echo "=== summary ==="
   echo "EXECUTED_SLUGS: $executed"
-  echo "MEMOIZED_GATES: $MEMO_GATES (reused $MEMO_HITS time(s))"
+  local gen_used=0 gen_hits=0 uk
+  for uk in "${!MEMO_USES[@]}"; do gen_used=$((gen_used + 1)); gen_hits=$((gen_hits + ${MEMO_USES[$uk]} - 1)); done
+  echo "MEMOIZED_GATES: $((MEMO_GATES + gen_used)) (reused $((MEMO_HITS + gen_hits)) time(s))"
+  [[ -n "$MEMO_DIR" && -d "$MEMO_DIR" && "${SCV_REGRESSION_KEEP:-}" != 1 ]] && rm -rf "$MEMO_DIR"
   echo "PASSED_SLUGS: $passed"
   echo "FAILED_SLUGS: $failed"
   if [[ $failed -gt 0 ]]; then

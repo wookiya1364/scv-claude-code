@@ -83,6 +83,11 @@ _SCV_AS_AWK_SCORE='
 # awk 가 알아서 아무것도 내지 않으므로 따로 막지 않아도 된다.
 
 # @deterministic
+# 역할: 물음 한 줄을 낱말 목록(줄바꿈 구분)으로 쪼갠다 — 따옴표로 묶은 덩어리는 하나로 남긴다
+# 종류: 꺼내기
+# 예: '로그인 오류 수정' → $'로그인\n오류\n수정'
+# 예: '"로그인 오류" 수정' → $'로그인 오류\n수정'
+# 예: '' → ""
 # <물음 한 줄> → 낱말 목록(줄바꿈 구분). 따옴표로 묶은 덩어리는 하나로 남긴다.
 scv_as_parse_terms() {
   local raw="${1:-}"
@@ -90,6 +95,12 @@ scv_as_parse_terms() {
 }
 
 # @pure
+# 역할: 파일 경로 모양만 보고 기록의 종류(계획 · 검사 · 대화 · 결정 · 기타 …)를 정한다
+# 종류: 판정/answer
+# 예: scv/archive/x/PLAN.md → "계획"
+# 예: scv/conversations/a.md → "대화"
+# 예: scv/DECISIONS.md → "결정"
+# 예: README.md → "기타"
 # <파일 경로> → 기록의 종류. 경로 모양만 보고 정한다.
 scv_as_kind_of() {
   case "${1:-}" in
@@ -105,6 +116,11 @@ scv_as_kind_of() {
 }
 
 # @pure
+# 역할: 파일 경로에서 묶음 이름을 낸다 — 보관된 계획의 네 문서는 폴더 이름 하나로 합친다
+# 종류: 변환
+# 예: scv/archive/20260101-a-x/PLAN.md → "20260101-a-x"
+# 예: scv/archive/20260101-a-x/TESTS.md → "20260101-a-x"
+# 예: scv/DECISIONS.md → "DECISIONS"
 # <파일 경로> → 묶음 이름. 보관된 계획의 네 문서는 한 폴더 이름으로 합친다 —
 # 합치지 않으면 한 계획이 네 칸을 차지해 다른 답이 밀려난다.
 scv_as_group_of() {
@@ -116,6 +132,10 @@ scv_as_group_of() {
 }
 
 # @deterministic
+# 역할: 한 줄에 낱말 목록 중 몇 개가 들어 있는지 센다(대소문자 무시)
+# 종류: 세기
+# 예: 'Fix the Login bug' $'login\nbug\nlogout' → "2"
+# 예: 'nothing' $'login' → "0"
 # <줄 내용> <낱말 목록> → 그 줄에 함께 나온 낱말 수. 대소문자를 가리지 않는다.
 scv_as_count_terms() {
   local line="${1:-}" terms="${2:-}" t n=0
@@ -132,6 +152,9 @@ scv_as_count_terms() {
 }
 
 # @deterministic
+# 역할: 훑은 "파일:줄번호:내용" 줄들에 낱말 맞은 수 점수를 매겨 점수 US 묶음 US 종류 US 줄번호 US 대목 줄로 낸다
+# 종류: 고르기
+# 예: $'scv/DECISIONS.md:3:login bug fixed' $'login\nbug' → $'2\x1fDECISIONS\x1f결정\x1f3\x1flogin bug fixed'
 # <훑은 줄들> <낱말 목록> → 점수 매긴 줄들. 자르기는 하지 않는다 —
 # 327줄을 다 잘라도 보여주는 것은 다섯 줄뿐이고, mawk 는 한글을 바이트로 세어
 # 글자 중간을 자른다. 자르기는 보여줄 줄에만, 글자를 아는 셸에서 한다.
@@ -151,6 +174,10 @@ scv_as_score_lines() {
 }
 
 # @deterministic
+# 역할: 아주 긴 줄에서 낱말이 맞은 자리 앞뒤만 남긴 대목을 낸다(짧으면 그대로)
+# 종류: 다듬기
+# 예: 'short line' short 100 → "short line"
+# 예: 'aaaaaaaaaaaaaaaaaaaaTARGETbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' TARGET 20 → "…aaaaaaTARGETbbbbbbbb…"
 # <아주 긴 줄> <낱말 하나> <상한> → 맞은 자리 앞뒤만 남긴 대목.
 scv_as_excerpt() {
   local line="${1:-}" term="${2:-}" max="${3:-100}"
@@ -175,6 +202,10 @@ scv_as_excerpt() {
 }
 
 # @deterministic
+# 역할: 점수 매긴 줄들에서 두 낱말 이상 맞은 줄이 있으면 하나만 맞은 줄을 버린다
+# 종류: 고르기
+# 예: $'2\x1fg1\x1f계획\x1f1\x1fa\n1\x1fg2\x1f결정\x1f2\x1fb' → $'2\x1fg1\x1f계획\x1f1\x1fa'
+# 예: $'1\x1fg2\x1f결정\x1f2\x1fb' → $'1\x1fg2\x1f결정\x1f2\x1fb'
 # <점수 매긴 줄들> → 잡음을 뒤로 민 줄들.
 # 여러 낱말이 맞은 줄이 하나라도 있으면, 하나만 맞은 줄은 전부 버린다 —
 # 시제품에서 상위 다섯 중 셋이 낱말 하나만 맞은 잡음이었다.
@@ -192,6 +223,9 @@ scv_as_drop_weak() {
 }
 
 # @deterministic
+# 역할: 점수 매긴 줄들에서 묶음마다 가장 높은 점수 줄 하나만 남기고 점수 내림차순으로 낸다
+# 종류: 고르기
+# 예: $'1\x1fg1\x1f계획\x1f1\x1fa\n3\x1fg1\x1f계획\x1f2\x1fb\n2\x1fg2\x1f결정\x1f3\x1fc' → $'3\x1fg1\x1f계획\x1f2\x1fb\n2\x1fg2\x1f결정\x1f3\x1fc'
 # <점수 매긴 줄들> → 묶음마다 가장 잘 맞은 줄 하나만 남긴 줄들 (점수 내림차순).
 scv_as_group_best() {
   local rows="${1:-}"
@@ -203,6 +237,9 @@ scv_as_group_best() {
 }
 
 # @deterministic
+# 역할: 묶음 줄들을 사람이 읽는 검색 결과 글로 만든다 — 없으면 못 찾았다고 말한다
+# 종류: 조립
+# 예: '' 0 1 5 x → $'ARCHIVE_SEARCH: 0\n찾은 것이 없습니다.'
 # <묶음 줄들> <전체 줄 수> <낱말 수> <상한> <첫 낱말> → 사람이 읽는 글.
 # 찾은 것이 없으면 그렇게 말한다 — 비슷한 것을 대신 내놓지 않는다.
 scv_as_render() {

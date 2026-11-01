@@ -55,12 +55,18 @@ SCV_GRAFT_LANG_EXTS='ts tsx js jsx mjs cjs py go java kt kts php swift r R rs c 
 _SCV_GRAFT_AWK_HIST='{ n=split($0, a, "/"); f=a[n]; d=index(f, "."); if (d==0) next; sub(/^.*\./, "", f); if (f=="") next; c[f]++ } END { for (e in c) print e "\t" c[e] }'
 
 # @deterministic
+# 역할: 표준입력 파일 경로들에서 "확장자 개수" 표를 만든다(확장자 없는 파일은 뺌, 순서 불정)
+# 종류: 세기
+# 예: <<< $'a.py\nb.py\nREADME' → $'py\t2'
 # 표준입력: 파일 경로 한 줄에 하나 → "<확장자>\t<개수>" 줄들 (순서 불정). 확장자 없는 파일은 뺀다.
 scv_graft_ext_histogram() {
   awk "$_SCV_GRAFT_AWK_HIST"
 }
 
 # @pure
+# 역할: 확장자 히스토그램에서 지원 언어 파일 수의 합을 낸다
+# 종류: 세기
+# 예: $'py\t3\nmd\t5\nts\t2' → "5"
 # <히스토그램 텍스트> [지원 확장자 목록=SCV_GRAFT_LANG_EXTS] → 지원 언어 파일 수(정수).
 scv_graft_supported_count() {
   local hist="${1:-}" exts=" ${2:-$SCV_GRAFT_LANG_EXTS} " ext n total=0
@@ -72,6 +78,11 @@ scv_graft_supported_count() {
 }
 
 # @pure
+# 역할: Graft 상태와 지원 파일 수를 보고 안내 한 줄을 낸다 — 해당 없으면 빈 값
+# 종류: 조립
+# 예: no-graph 5 → "Graft 는 있지만 이 저장소에 그래프가 없습니다 — 만들면 계획·구현 헤더에 관련 코드 후보가 붙습니다 (지원 언어 파일 5개). 실행: graft init --no-hooks --no-statusline"
+# 예: ready 5 → ""
+# 예: absent 0 → ""
 # <GRAFT_STATUS> <지원 언어 파일 수> → 안내 한 줄, 또는 빈 문자열. absent/no-graph 이고 지원 파일이 1개 이상일 때만.
 scv_graft_notice() {
   local status="${1:-absent}" n="${2:-0}"
@@ -86,6 +97,12 @@ scv_graft_notice() {
 }
 
 # @pure
+# 역할: graft 실행 파일 · 그래프 유무와 스위치로 absent · no-graph · ready · off 중 하나를 낸다
+# 종류: 판정
+# 예: 0 0 auto → "absent"
+# 예: 1 0 auto → "no-graph"
+# 예: 1 1 auto → "ready"
+# 예: 1 1 off → "off"
 # <graft 실행 파일 있음 0|1> <graft/ 그래프 있음 0|1> <스위치 auto|off|''> → absent | no-graph | ready | off
 scv_graft_status() {
   local has_bin="${1:-0}" has_graph="${2:-0}" sw="${3:-auto}"
@@ -97,6 +114,11 @@ scv_graft_status() {
 }
 
 # @deterministic
+# 역할: blast JSON 을 "파일수 US 심볼수 US 상위" 한 줄로 줄인다
+# 종류: 꺼내기
+# 예: '{"files":[{"path":"a.py","symbols":[1,2]},{"path":"b.py","symbols":[1]}]}' → $'2\x1f3\x1fa.py:2 b.py:1'
+# 예: '{}' → $'0\x1f0\x1f'
+# 예: 'not json' → ""
 # <blast JSON> → "files US symbols US top". 모르는 모양이면 "? US ? US <N>B", 빈 객체면 "0 US 0 US". 깨진 JSON 이면 빈 출력.
 scv_graft_blast_summary() {
   local json="${1:-}"; [[ -n "$json" ]] || json="{}"
@@ -104,6 +126,10 @@ scv_graft_blast_summary() {
 }
 
 # @deterministic
+# 역할: ask JSON 에서 점수 높은 후보 n 개를 "경로:줄 US 이름" 줄로 낸다
+# 종류: 꺼내기
+# 예: '{"hits":[{"path":"a.py","line":3,"name":"foo","score":1},{"path":"b.py","line":9,"name":"bar","score":5}]}' → $'b.py:9\x1fbar\na.py:3\x1ffoo'
+# 예: '{}' → ""
 # <ask JSON> [n=10] → "path:line US label" 줄들, 점수 내림차순 상위 n. 후보 없음·깨진 JSON 이면 빈 출력.
 scv_graft_ask_summary() {
   local json="${1:-}" n="${2:-10}"; [[ -n "$json" ]] || json="{}"
@@ -112,6 +138,10 @@ scv_graft_ask_summary() {
 }
 
 # @pure
+# 역할: blast 요약 레코드를 사람이 읽을 줄들로 풀어 쓴다
+# 종류: 조립
+# 예: $'3\x1f5\x1fa.py' → $'  닿는 파일 3 · 심볼 5\n  상위: a.py'
+# 예: $'?\x1f?\x1f12B' → "  요약 불가 — 원문 12B"
 # <blast 요약 레코드> → 사람이 읽을 줄들.
 scv_graft_render_blast() {
   local rec="${1:-}" us=$'\x1f' files symbols top
@@ -124,6 +154,10 @@ scv_graft_render_blast() {
 }
 
 # @pure
+# 역할: ask 후보 줄들을 사람이 읽을 줄들로 풀어 쓴다 — 없으면 "(후보 없음)"
+# 종류: 조립
+# 예: $'a.py:3\x1ffoo' → "  a.py:3 — foo"
+# 예: '' → "  (후보 없음)"
 # <ask 후보 줄들> → 사람이 읽을 줄들. 없으면 "(후보 없음)".
 scv_graft_render_ask() {
   local lines="${1:-}" us=$'\x1f' line pl label

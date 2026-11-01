@@ -17,6 +17,11 @@
 # scv_ver_lt A B — A 가 B 보다 앞 세 자리 기준으로 오래됐으면 참.
 # 순수 bash. `sort -V` 는 이 스크립트가 도는 모든 곳에 있지는 않다.
 # @pure
+# 역할: 첫 버전이 둘째 버전보다 낮으면 참(숫자로 비교, 접미사는 무시)
+# 종류: 비교
+# 예: 0.9.1 0.10.0 → ""
+# 예: 1.2.3 1.2.3 → "" [1]
+# 예: 0.10.0 0.9.1 → "" [1]
 scv_ver_lt() {
   local a1 a2 a3 arest b1 b2 b3 brest
   IFS='.-' read -r a1 a2 a3 arest <<< "$1."
@@ -55,6 +60,11 @@ scv_ver_lt() {
 # 지문만 보게 만들면, 번호 스탬프만 낡고 내용은 같은 프로젝트가 영영 안 고쳐진다 —
 # 그 번호를 읽는 다른 코드들이 계속 틀린 값을 본다.
 # @pure
+# 역할: 도장 · 꾸러미의 지문과 버전을 보고 템플릿을 어떻게 할지 한 단어(skip:backward 등)로 판정한다
+# 종류: 판정/gate
+# 예: abc abc 1.0.0 1.0.0 → "skip:same"
+# 예: abc def 1.1.0 1.0.0 → "skip:backward"
+# 예: abc def 1.1.0 1.2.0 → "refresh"
 scv_template_decide() {
   local stamped_digest="${1:-}" payload_digest="${2:-}"
   local stamped_ver="${3:-}"    payload_ver="${4:-}"
@@ -106,6 +116,11 @@ scv_template_decide() {
 #
 # 디스크를 만지지 않는다 — 표준입력을 받아 표준출력을 낸다.
 # @deterministic
+# 역할: 표준입력 줄들을 정렬한 뒤 sha256 지문 하나로 접는다 — 줄 순서와 무관
+# 종류: 지문
+# 예: <<< $'b\na' → "911169ddaaf146aff539f58c26c489af3b892dff0fe283c1c264c65ae5aa59a2"
+# 예: <<< $'a\nb' → "911169ddaaf146aff539f58c26c489af3b892dff0fe283c1c264c65ae5aa59a2"
+# 예: <<< $'a' → "87428fc522803d31065e7bce3cf03fe475096631e5e07bbd7a0fde60c4cf25c7"
 scv_digest_fold() {
   LC_ALL=C sort | {
     if command -v sha256sum >/dev/null 2>&1; then

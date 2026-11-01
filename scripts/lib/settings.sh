@@ -47,6 +47,11 @@ JIRA_BASE_URL LINEAR_BASE_URL CONFLUENCE_BASE_URL"
 
 # settings_is_secret <key> — 비밀 키면 0, 아니면 1. 순수하다 (문자열 비교뿐).
 # @pure
+# 역할: 설정 키가 비밀 키 목록(토큰 등)에 있으면 참
+# 종류: 판정
+# 예: SLACK_BOT_TOKEN → ""
+# 예: SCV_LANG → "" [1]
+# 예: '' → "" [1]
 settings_is_secret() {
   local key="${1:-}" k
   [[ -n "$key" ]] || return 1
@@ -67,6 +72,11 @@ settings_is_secret() {
 #
 # 순수하다 — 파일도 시각도 무작위도 네트워크도 만지지 않는다.
 # @pure
+# 역할: 환경변수 · 설정 파일 · 프로젝트 · 기본값 중 앞에서부터 처음 값이 있는 것을 고른다
+# 종류: 고르기
+# 예: env '' proj def → "env"
+# 예: '' set '' def → "set"
+# 예: '' '' '' def → "def"
 settings_resolve() {
   local e="${1:-}" s="${2:-}" p="${3:-}" d="${4:-}"
   if [[ -n "$e" ]]; then printf '%s\n' "$e"; return 0; fi
@@ -91,6 +101,9 @@ settings_resolve() {
 # 어느 쪽이 깨져 있으면 사용자 원본을 그대로 낸다. 병합하다 설정을 잃느니
 # 아무것도 안 하는 편이 낫다.
 # @deterministic
+# 역할: 사용자 JSON 에 기본값 JSON 을 깔아 병합한다 — 사용자 값이 이긴다
+# 종류: 변환
+# 예: '{"a":1}' '{"a":0,"b":2}' → $'{\n  "a": 1,\n  "b": 2\n}'
 settings_merge_defaults() {
   local user="${1:-}" defaults="${2:-}"
   [[ -n "$defaults" ]] || { printf '%s' "$user"; return 0; }
@@ -140,6 +153,11 @@ print(json.dumps(merged, indent=2, ensure_ascii=False))
 #
 # 디스크를 만지지 않는다 — 인자로 받은 텍스트만 본다.
 # @deterministic
+# 역할: JSON 객체에서 키 하나의 값을 문자열로 꺼낸다 — 없으면 빈 값
+# 종류: 꺼내기
+# 예: '{"a":"x","n":3}' a → "x"
+# 예: '{"a":"x","n":3}' n → "3"
+# 예: '{"a":"x"}' z → ""
 settings_lookup_json() {
   local json="${1:-}" key="${2:-}"
   [[ -n "$json" && -n "$key" ]] || return 0
@@ -291,6 +309,9 @@ settings_get() {
 # 값에 탭 · 줄바꿈이 있으면 값 대신 \001 한 글자를 내어 부른 쪽이 settings_lookup_json 으로 다시 읽게 한다.
 # 디스크를 만지지 않는다 — 인자로 받은 텍스트만 본다.
 # @deterministic
+# 역할: JSON 객체에서 공백으로 나눈 키 여럿의 값을 "키 탭 값" 줄들로 꺼낸다
+# 종류: 꺼내기
+# 예: '{"a":"x","b":2}' 'a b' → $'a\tx\nb\t2'
 settings_lookup_many_json() {
   local json="${1:-}" keys="${2:-}"
   [[ -n "$json" && -n "$keys" ]] || return 0
@@ -326,6 +347,9 @@ _settings_map_get() {
 # 다시 읽어야 $(...) 의 경고까지 지금과 같다. jq 가 없으면 아무것도 내지 않는다.
 # 디스크를 만지지 않는다 — 인자로 받은 텍스트만 본다.
 # @deterministic
+# 역할: JSON 객체의 모든 최상위 키를 "키 탭 값" 줄들로 꺼낸다(셸 이름으로 못 쓰는 키는 뺌)
+# 종류: 꺼내기
+# 예: '{"a":"x","b":2}' → $'a\tx\nb\t2'
 settings_index_json() {
   local json="${1:-}"
   [[ -n "$json" ]] || return 0
