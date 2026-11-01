@@ -24,18 +24,18 @@
 # 꺾쇠 글자는 순수 함수 안에 그대로 쓰지 않는다 — 순수성 검사가 리다이렉션으로 본다(lib/choices.sh 와 같은 이유). HTML 조각은
 # « » 로 적고 scv_dreams_tag 가 짧은 조각마다 바꾼다(긴 글에 글자 단위 치환을 쓰지 않는다 — bash 3.2 에서 느리다).
 
-# @pure
+# shellcheck source=switch.sh
+declare -F scv_switch >/dev/null 2>&1 || source "${BASH_SOURCE[0]%/*}/switch.sh"
+
 # <설정 값 원문> → on | off. off 만 끈다(대소문자 · 공백 · 따옴표 무관) — 다른 SCV 스위치와 같은 규칙.
-scv_dreams_switch() {
-  local v="${1:-}"
-  v="${v//[[:space:]]/}"; v="${v//\"/}"; v="${v//\'/}"
-  case "$v" in
-    [Oo][Ff][Ff]) printf 'off' ;;
-    *)            printf 'on'  ;;
-  esac
-}
+# 같은 규칙의 구현은 lib/switch.sh 의 scv_switch 하나다 — 이 이름은 기존 호출을 위해 남긴다.
+scv_dreams_switch() { scv_switch "$@"; }
 
 # @pure
+# 역할: 훅 입력의 source 값이 드림을 띄울 때(clear · compact)인지 1 또는 0 으로 낸다
+# 종류: 판정/gate
+# 예: clear → '1'
+# 예: startup → '0'
 # <훅 입력의 source 값> → 1(드림을 띄움: clear · compact) | 0(resume · startup · 그 밖).
 scv_dreams_start_trigger() {
   case "${1:-}" in
@@ -45,6 +45,11 @@ scv_dreams_start_trigger() {
 }
 
 # @pure
+# 역할: 지난 드림 날짜와 오늘 날짜가 달라 드림을 띄울 때인지 1 또는 0 으로 낸다
+# 종류: 판정/gate
+# 예: "" 20261001 → '1'
+# 예: 20261001 20261001 → '0'
+# 예: 20260930 20261001 → '1'
 # <지난 드림 날짜 YYYYMMDD — 빈 값 가능> <오늘 YYYYMMDD> → 1(날짜가 바뀜 — 띄움) | 0.
 scv_dreams_day_trigger() {
   local last="${1:-}" today="${2:-}"
@@ -54,6 +59,9 @@ scv_dreams_day_trigger() {
 }
 
 # @deterministic
+# 역할: 세션 기록 JSONL(표준입력)에서 사람 메시지(U) · 모델 활동(A) · 등록 명령(G)을 기록 항목 줄로 뽑는다
+# 종류: 꺼내기
+# 예: <<< $'{"type":"user","timestamp":"2026-10-01T01:00:00Z","message":{"role":"user","content":"hi there"}}\n{"type":"assistant","message":{"content":[{"type":"text","text":"ok"}]}}\n' → $'U\t2026-10-01T01:00:00Z\thi there\thi there\nA'
 # 표준입력: 세션 기록 JSONL(한 세션, NUL 은 효과부가 미리 지운다) → 기록 순서대로
 #   "U<탭><시각><탭><앞 1000자><탭><판별용 글>"(사람이 쓴 것으로 보이는 메시지 · 프롬프트가 든 첨부 — 실사용 보고와 같은 모양)
 #   "A"(모델이 무언가 함 — 글 · 도구 호출이 든 모델 줄)
@@ -96,6 +104,9 @@ scv_dreams_entries() {
 }
 
 # @pure
+# 역할: 기록 항목 줄들에서 모델이 일한 사람 턴만 "세션 번호 시각 메시지" 줄로 뽑는다
+# 종류: 꺼내기
+# 예: s1 $'U\t2026-10-01T01:00:00Z\thi\thi\nA\nU\t2026-10-01T02:00:00Z\tyo\tyo\nA'    → $'s1\t1\t2026-10-01T01:00:00Z\thi\ns1\t2\t2026-10-01T02:00:00Z\tyo'
 # <세션> <기록 항목 줄들(scv_dreams_entries)> <자동 입력 태그> <앞말> <뒷말> → 사람 턴 줄들(기록 순서).
 # 사람 턴: 자동 입력이 아닌(scv_mp_prompt_kind 가 human) 메시지 하나부터 다음 사람 메시지 전까지. 번호는 사람 메시지마다 1부터 —
 # 모델이 아무것도 하지 않은 턴(중단 표시 · 명령 출력 줄 등)은 번호만 먹고 줄을 내지 않는다(실사용 보고와 같은 기준).
@@ -120,6 +131,9 @@ scv_dreams_human_turns() {
 }
 
 # @pure
+# 역할: 기록 항목 줄들에서 사람 턴마다 마지막 등록 하나(goal · depth · finish)를 뽑는다
+# 종류: 꺼내기
+# 예: s1 $'U\t2026-10-01T01:00:00Z\thi\thi\nG\t2026-10-01T01:01:00Z\tmsg\tctx\tasked'    → $'s1\t1\t2026-10-01T01:01:00Z\tmsg\tctx\tasked'
 # <세션> <기록 항목 줄들> <자동 입력 태그> <앞말> <뒷말> → 등록 줄들. 사람 턴마다 그 턴의 마지막 등록 하나(첫 사람 메시지 앞의
 # 등록은 버린다). 번호는 scv_dreams_human_turns 와 같다.
 scv_dreams_register_features() {
@@ -142,6 +156,9 @@ scv_dreams_register_features() {
 }
 
 # @deterministic
+# 역할: "계획 이름 탭 archived_at" 줄들에서 보관 날짜 줄 "YYYYMMDD 탭 이름"을 날짜 · 이름 순으로 뽑는다(없는 날은 뺀다)
+# 종류: 꺼내기
+# 예: $'b\t"2026-10-05T10:00:00Z"\na\t2026-10-05\nc\t2026-02-30' → $'20261005\ta\n20261005\tb'
 # <"<계획 이름><탭><archived_at 값>" 줄들> → 보관 줄들 "<YYYYMMDD><탭><계획 이름>"(날짜 · 이름 순). 값은 앞의 YYYY-MM-DD 만 본다
 # (따옴표 · 뒤의 시각 무관). 날짜가 없거나 없는 날이면 그 계획은 뺀다.
 scv_dreams_archive_dates() {
@@ -156,6 +173,10 @@ scv_dreams_archive_dates() {
 }
 
 # @pure
+# 역할: 사람 턴 수로 기간 단위를 정한다(100턴 이상이면 dekad, 아니면 month)
+# 종류: 판정
+# 예: 100 → 'dekad'
+# 예: 5 → 'month'
 # <사람 턴 수> → 기간 단위 dekad(열흘 — 1~10 · 11~20 · 21~말일) | month. 100턴 이상이면 dekad — 표본이 작으면 한 달로 묶는다.
 scv_dreams_unit() {
   local n="${1:-0}"
@@ -164,6 +185,10 @@ scv_dreams_unit() {
 }
 
 # @pure
+# 역할: 날짜 YYYYMMDD 를 기간 단위(dekad · month)의 순번 정수로 바꾼다
+# 종류: 변환
+# 예: 20261015 dekad → '72964'
+# 예: 20261015 month → '24321'
 # <YYYYMMDD> <dekad|month> → 기간 순번(정수). 다음 기간은 순번 + 1.
 scv_dreams_period_ord() {
   local d="${1:-}" unit="${2:-month}" y m dd k
@@ -178,6 +203,10 @@ scv_dreams_period_ord() {
 }
 
 # @pure
+# 역할: 기간 순번과 단위로 "시작 끝" YYYYMMDD 를 낸다
+# 종류: 변환
+# 예: 72964 dekad → '20261011 20261020'
+# 예: 72963 dekad → '20261001 20261010'
 # <기간 순번> <dekad|month> → "<시작 YYYYMMDD> <끝 YYYYMMDD>".
 scv_dreams_period_range() {
   local o="${1:-0}" unit="${2:-month}" mo k y m from to last=31
@@ -194,6 +223,10 @@ scv_dreams_period_range() {
 }
 
 # @pure
+# 역할: 두 수로 비율 "n.n"(소수 한 자리 반올림)을 만든다(나누는 수가 0 이면 "-")
+# 종류: 조립
+# 예: 7 2 → '3.5'
+# 예: 1 0 → '-'
 # <q> <a> → 비율 "n.n"(반올림, 소수 한 자리) | "-"(a 가 0).
 scv_dreams_ratio() {
   local q="${1:-0}" a="${2:-0}" r
@@ -203,6 +236,9 @@ scv_dreams_ratio() {
 }
 
 # @pure
+# 역할: 사람 턴 줄들과 보관 줄들을 기간별 질의 · 보관 수와 비율 줄로 센다
+# 종류: 세기
+# 예: $'s1\t1\t2026-10-01T01:00:00Z\tfix it\ns1\t2\t2026-10-02T01:00:00Z\tdo more' $'20261002\tplan-a' 0 month → $'20261001\t20261031\t2\t1\t2.0'
 # <사람 턴 줄들> <보관 줄들> <지역 오프셋(분)> <dekad|month> → 기간 줄들(첫 사람 턴의 기간부터 마지막 턴 · 보관의 기간까지, 빈 기간 포함).
 # 턴은 사람 메시지의 지역 날짜로 기간에 든다. 보관은 첫 사람 턴 날 이후(그날 포함)의 것만 센다 — 기록이 없던 때의 보관은 질의와
 # 짝지을 수 없다. 사람 턴이 없으면 빈 값.
@@ -237,6 +273,10 @@ scv_dreams_periods() {
 }
 
 # @pure
+# 역할: 사람 메시지가 붙여 넣은 글로 보이면 종료 0, 사람이 쓴 요청이면 1
+# 종류: 판정/answer
+# 예: $'```\nx\n```' → [0]
+# 예: "고쳐 줘" → [1]
 # <사람 메시지 글> → 종료 0(붙여 넣은 글로 보임) | 1(사람이 쓴 요청). 근거는 사람이 쓴 요청에서만 고른다 — 붙여 넣은 글(답변 · 메일 ·
 # 로그)을 근거로 고르면 판정자 조언이 엇나간다(2026-10-21 첫 실실행: 붙여 넣은 이전 답변이 근거로 뽑힘). 표시: 코드 울타리(```),
 # pasted_content 태그, 이미지 표시([Image), 굵은 글씨 표시(**) 세 쌍 이상.
@@ -248,6 +288,9 @@ scv_dreams_pasted() {
 }
 
 # @pure
+# 역할: 계획마다 보관까지의 사람 질의 수와 근거 턴 id 를 센다(마지막 줄 #open 은 보관 뒤 질의 수)
+# 종류: 세기
+# 예: $'s1\t1\t2026-10-01T01:00:00Z\tfix it\ns1\t2\t2026-10-02T01:00:00Z\tdo more' $'20261002\tplan-a' 0 → $'plan-a\t20261002\t2\ts1/1\n#open\t0'
 # <사람 턴 줄들> <보관 줄들> <지역 오프셋(분)> → 분포 줄들. 계획마다 '보관까지 질의 수' = 바로 앞 보관 날 다음 날부터 그 보관 날까지의
 # 사람 턴 수(첫 계획은 첫 사람 턴부터). 같은 날 보관된 계획 k 개는 그 구간을 나눠 갖는다(몫, 나머지는 이름 순으로 앞 계획부터 하나씩).
 # 근거 턴은 구간에서 붙여 넣은 글이 아닌 가장 이른 턴(scv_dreams_pasted, 같은 날 묶음의 첫 계획에만, 모두 붙여 넣은 글이면 -). 첫 사람 턴 날보다 이른 보관은 뺀다. 마지막 줄 "#open<탭><n>" 은 마지막
@@ -298,6 +341,9 @@ scv_dreams_distribution() {
 }
 
 # @pure
+# 역할: 등록 · 사람 턴 · 분포 줄들에서 개선점 줄(finish · depth · correction · plan)이 필요한지 가려 낸다
+# 종류: 판정
+# 예: $'s1\t1\tt\t-\t-\tasked\ns1\t2\tt\t-\t-\tasked\ns1\t3\tt\t-\t-\tasked'   → $'finish\t0\t3\t\ts1/1 s1/2 s1/3\ndepth\t0\t3\t\ts1/1 s1/2 s1/3'
 # <등록 줄들> <사람 턴 줄들> <분포 줄들> → 개선점 줄들(문턱은 protocols/dreams.md 의 '개선점 규칙'):
 #   finish · depth — 등록 3건 이상에서 그 항목을 사람이 직접 말한(msg) 비율이 절반 미만. a=msg 수, b=등록 수, 근거=msg 가 아닌 마지막 3턴
 #   correction    — 사람 턴 5개 이상에서 고쳐 달라는 턴(세션의 첫 턴 제외, scv_show_real_is_correction)이 20% 이상. a=정정 턴, b=사람 턴,
@@ -362,6 +408,10 @@ scv_dreams_tips() {
 }
 
 # @deterministic
+# 역할: 글을 한 줄로 줄이고 경로 · 메일 · id · 열쇠 값을 가려 정해진 글자 수까지 자른다
+# 종류: 다듬기
+# 예: "mail a@b.com token=abc123 /opt/x/y" → 'mail [메일] token=[REDACTED] [경로]'
+# 예: "abcdefghij" 5 → 'abcde…'
 # <글> [<최대 글자 수, 기본 160>] → 가린 한 줄 발췌. 경로(/… · ~/… · C:\…) → [경로], 메일 → [메일], 세션 id · UUID → [id],
 # 열쇠 모양 값(password · token · secret · api key 뒤의 값, Bearer, 알려진 접두 토큰, 32자 이상 무작위 문자열) → [REDACTED].
 # 글자 단위로 자른다(jq). 효과부는 이 뒤에 저널 가림 필터(journal-append.sh --redact-only)를 한 번 더 거친다.
@@ -381,6 +431,9 @@ scv_dreams_mask() {
 }
 
 # @deterministic
+# 역할: 개선점 줄들이 가리킨 턴 id 의 사람 메시지를 가려 근거 줄(개선점 번호, 발췌)로 고른다
+# 종류: 고르기
+# 예: $'finish\t1\t3\t\ts1/1 s1/2' $'s1\t1\t2026-10-01T01:00:00Z\tfix it\ns1\t2\t2026-10-02T01:00:00Z\tdo more' → $'1\tfix it\n1\tdo more'
 # <개선점 줄들> <사람 턴 줄들> → 근거 줄들 "<개선점 번호><탭><가린 발췌>"(개선점마다 근거 턴 id 순서대로, 많아야 3개,
 # 붙여 넣은 글로 보이는 턴은 뺀다 — scv_dreams_pasted).
 scv_dreams_evidence() {
@@ -405,6 +458,10 @@ scv_dreams_evidence() {
 }
 
 # @pure
+# 역할: 개선점 줄 하나를 사람이 읽는 한 문장으로 만든다
+# 종류: 조립
+# 예: $'finish\t1\t3\t\ts1/1' → '요청에 완료 기준(무엇이 되면 끝인지)을 직접 말한 비율 1/3(33%)'
+# 예: $'plan\t12\t4\tplan-a\t' → '보관까지 질의가 많았던 계획 plan-a — 12번(중앙값 4번)'
 # <개선점 줄 하나> → 사람이 읽는 한 문장(보고서 · 요약 · 판정자 질문이 같은 문장을 쓴다).
 scv_dreams_tip_text() {
   local tab=$'\t' kind a b x rest pct=0
@@ -422,6 +479,10 @@ scv_dreams_tip_text() {
 }
 
 # @pure
+# 역할: 개선점 줄의 종류로 판정자에게 권할 가이드 규칙 이름(finish · depth · goal)을 낸다
+# 종류: 판정
+# 예: $'finish\t1\t3\t\t' → 'finish'
+# 예: $'correction\t2\t5\t\t' → 'goal'
 # <개선점 줄 하나> → 판정자에게 권할 가이드 규칙 이름(요구 항목 id).
 scv_dreams_tip_rule() {
   case "${1%%$'\t'*}" in
@@ -432,6 +493,10 @@ scv_dreams_tip_rule() {
 }
 
 # @pure
+# 역할: 개선점 줄 하나와 가린 발췌들로 판정자에게 보낼 질문 글을 만든다(개선점이 없으면 빈 값)
+# 종류: 조립
+# 예: $'finish\t1\t3\t\ts1/1' $'fix it' → $'You coach a person on writing better prompts for an AI coding assistant. Answer with one JSON object only.\n\nFinding from their recent sessions: 요청에 완료 기준(무엇이 되면 끝인지)을 직접 말한 비율 1/3(33%).\n\nSuggested prompting-guide rule: finish (name the rule from the model\'s official prompting guide that fits best).\n\nExcerpts of the person\'s own requests (redacted):\n1. fix it\n\nReply with exactly one JSON object: {"rule": "GUIDE RULE NAME", "advice": "ONE OR TWO SENTENCES: WHAT TO ADD NEXT TIME", "example": "ONE REWRITTEN REQUEST"}. Write advice and example in the same language as the excerpts. Do not include paths, emails, names, or ids.'
+# 예: "" "" → ""
 # <개선점 줄 하나> <그 개선점의 가린 발췌들(줄마다 하나)> → 판정자에게 보낼 글. 판정자는 발췌 · 숫자만 본다(경로 · 세션 id 없음).
 # 답은 JSON 객체 하나 {"rule": …, "advice": …, "example": …}.
 scv_dreams_judge_prompt() {
@@ -450,6 +515,10 @@ scv_dreams_judge_prompt() {
 }
 
 # @deterministic
+# 역할: 판정자 답 글에서 rule · advice 가 있는 첫 JSON 객체를 "규칙 탭 조언 탭 예시" 한 줄로 뽑는다(깨진 답은 빈 값)
+# 종류: 꺼내기
+# 예: "{\"rule\":\"goal\",\"advice\":\"say the goal\",\"example\":\"do X\"}" → $'goal\tsay the goal\tdo X'
+# 예: "no json" → ""
 # <판정자 답 글> → "<규칙><탭><조언><탭><예시>" | 빈 값(깨진 답). 답 글에서 rule · advice 가 빈 글이 아닌 첫 JSON 객체를 쓴다.
 scv_dreams_judge_parse() {
   [[ -n "${1:-}" ]] || return 0
@@ -463,6 +532,9 @@ scv_dreams_judge_parse() {
 }
 
 # @pure
+# 역할: «  » 로 적은 짧은 HTML 조각을 꺾쇠 태그로 바꾼다
+# 종류: 변환
+# 예: "«b»hi«/b»" → '<b>hi</b>'
 # <짧은 HTML 조각 — « » 로 꺾쇠를 적음> → 꺾쇠로 바꾼 조각.
 scv_dreams_tag() {
   local s="${1:-}" lt=$'\x3c' gt=$'\x3e'
@@ -471,6 +543,10 @@ scv_dreams_tag() {
 }
 
 # @pure
+# 역할: 글의 & · 꺾쇠 · 따옴표 · « » 를 HTML 에 넣을 수 있게 이스케이프한다
+# 종류: 다듬기
+# 예: "a & b" → 'a &amp; b'
+# 예: "x«y»" → 'x&laquo;y&raquo;'
 # <글> → HTML 에 넣을 수 있게 & · 꺾쇠 · 따옴표 · « » 를 바꾼 글(짧은 글에만 쓴다). « » 도 바꾸는 것은 scv_dreams_tag 가 사람 글 속의
 # « » 를 꺾쇠로 만들지 않게 하려는 것이다.
 scv_dreams_esc() {
@@ -483,6 +559,10 @@ scv_dreams_esc() {
 }
 
 # @pure
+# 역할: YYYYMMDD 를 YYYY-MM-DD 로 바꾼다(모양이 다르면 그대로)
+# 종류: 변환
+# 예: 20261001 → '2026-10-01'
+# 예: abc → 'abc'
 # <YYYYMMDD> → "YYYY-MM-DD".
 scv_dreams_day() {
   local d="${1:-}"
@@ -491,6 +571,9 @@ scv_dreams_day() {
 }
 
 # @pure
+# 역할: 기간 줄들에서 마지막 보관이 있는 기간까지의 질의 합과 보관 합을 센다
+# 종류: 세기
+# 예: $'20261001\t20261010\t5\t0\t-\n20261011\t20261020\t3\t2\t1.5' → $'8\t2'
 # <기간 줄들> → "<질의 합><탭><보관 합>"(마지막 보관이 있는 기간까지의 질의 — 비율의 분자 · 분모).
 scv_dreams_totals() {
   local tab=$'\t' line rest q a sq=0 sa=0 pend=0
@@ -504,6 +587,9 @@ scv_dreams_totals() {
 }
 
 # @pure
+# 역할: 기간 · 개선점 줄들로 다음 턴에 싣는 [SCV 드림] 한 줄 요약을 만든다
+# 종류: 조립
+# 예: "" "" report.html 0 → '[SCV 드림] 아직 셀 것이 없음(보관된 계획 0개 · 사람 질의 0번) · 보고서 report.html'
 # <기간 줄들> <개선점 줄들> <보고서 경로(저장소 기준)> <사람 턴 수> → 다음 턴에 싣는 한 줄 요약.
 scv_dreams_render_summary() {
   local periods="${1:-}" tips="${2:-}" rel="${3:-}" nt="${4:-0}" tot sq sa first tip=""
@@ -517,6 +603,9 @@ scv_dreams_render_summary() {
 }
 
 # @pure
+# 역할: 제목과 "라벨 탭 값" 줄들로 막대 차트 SVG 한 덩이를 만든다
+# 종류: 조립
+# 예: t $'a\t2\nb\t4' '#fff' → '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 220" role="img" aria-label="t"><rect x="30" y="105" width="76" height="75" rx="3" fill="#fff"><title>a: 2</title></rect><text x="68" y="101" text-anchor="middle" class="v">2</text><text x="68" y="198" text-anchor="middle" class="l">a</text><rect x="110" y="30" width="76" height="150" rx="3" fill="#fff"><title>b: 4</title></rect><text x="148" y="26" text-anchor="middle" class="v">4</text><text x="148" y="198" text-anchor="middle" class="l">b</text><line x1="26" y1="180" x2="630" y2="180" class="axis"/></svg>'
 # <제목> <"<라벨><탭><값>" 줄들> <막대 색> → 막대 차트 SVG 한 덩이(값 0 은 높이 0, 막대가 16개를 넘으면 아래 라벨은 생략).
 scv_dreams_svg_bars() {
   local title="${1:-}" rows="${2:-}" color="${3:-#7aa2f7}" tab=$'\t' line lbl v n=0 max=0 i w=640 h=220 bw x y bh
@@ -541,6 +630,9 @@ scv_dreams_svg_bars() {
 }
 
 # @pure
+# 역할: 기간 · 분포 · 개선점 · 근거 · 조언 줄들로 한 파일짜리 드림 보고서 HTML 을 만든다
+# 종류: 조립
+# 예: "" "" "" "" "" stamp month 0 0 0 → $'<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">\n<title>SCV 드림</title><style>:root{--bg:#171922;--panel:#1e1e1e;--line:#3a3d4a;--text:#e7e9f0;--muted:#9096a8;--accent:#7aa2f7;--warn:#e0af68}\nbody{margin:0;background:var(--bg);color:var(--text);font:15px/1.6 -apple-system,"Segoe UI",sans-serif}\nmain{max-width:880px;margin:0 auto;padding:24px 16px}h1{font-size:22px;margin:0 0 4px}h2{font-size:17px;margin:28px 0 8px}\n.muted{color:var(--muted)}.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 16px;margin:10px 0}\ntable{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left}td.n{text-align:right}\nsvg{width:100%;height:auto;margin:8px 0}svg .v{fill:var(--text);font-size:11px}svg .l{fill:var(--muted);font-size:10px}svg .axis{stroke:var(--line)}\n.ex{border-left:3px solid var(--line);padding-left:10px;margin:6px 0;color:var(--muted)}.adv{border-left:3px solid var(--accent);padding-left:10px;margin:8px 0}\n.none{color:var(--warn)}\n</style></head><body><main>\n<h1>SCV 드림 — 프롬프트 코치</h1><p class="muted">stamp · 세션 0개 · 사람 질의 0번 · 등록 0건 · 기간 단위: 달</p>\n<div class="card">아직 셀 것이 없음 — 기록이 있는 동안 보관된 계획이 0개다. 지금까지 사람 질의 0번.</div>\n<h2>기간별 질의 ÷ 보관</h2>\n<p class="muted">아직 셀 것이 없음 — 세션 기록에서 사람 질의를 찾지 못했다.</p>\n<h2>계획마다 보관까지 걸린 질의</h2>\n<p class="muted">아직 셀 것이 없음 — 기록이 있는 동안 보관된 계획이 없다.</p>\n<h2>개선점</h2>\n<p class="muted">규칙에 걸린 개선점이 없다.</p>\n<p class="muted">드림은 입력(세션 기록 · 보관 기록)을 바꾸지 않는다. 발췌는 경로 · 메일 · 비밀값 · id 를 가린 짧은 글이다. 규칙: protocols/dreams.md</p></main></body></html>'
 # <기간 줄들> <분포 줄들> <개선점 줄들> <근거 줄들> <조언 줄들> <만든 시각 글> <기간 단위> <사람 턴 수> <세션 수> <등록 수>
 # → 한 파일로 된 HTML(내장 SVG · 외부 자원 없음, scv 어두운 화면).
 scv_dreams_render_html() {

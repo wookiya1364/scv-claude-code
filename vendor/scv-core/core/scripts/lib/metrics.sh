@@ -17,6 +17,9 @@
 # ---------------------------------------------------------------- 내부 도우미
 
 # @pure
+# 역할: 앞뒤 공백 · 탭 · 줄바꿈을 지운다
+# 종류: 다듬기
+# 예: "  a b  " → "a b"
 # <문자열> → 앞뒤 공백을 뗀 문자열.
 scv_mx_trim() {
   local s="${1:-}"
@@ -26,6 +29,9 @@ scv_mx_trim() {
 }
 
 # @pure
+# 역할: 값 뒤의 " # 주석" 과 감싼 따옴표를 떼고 남은 값을 낸다
+# 종류: 다듬기
+# 예: '"my title" # note' → "my title"
 # <값> → 뒤따르는 " # 주석" 과 감싼 따옴표를 뗀 값. 첫 낱말만 남기지 않는다 —
 # 경로에 공백은 없지만 제목에는 있다.
 scv_mx_strip_comment() {
@@ -40,6 +46,10 @@ scv_mx_strip_comment() {
 # ---------------------------------------------------------------- 시각
 
 # @pure
+# 역할: "YYYY-MM-DD HH:MM" 을 1970-01-01 00:00 기준 분 수로 바꾼다 (형식이 아니면 빈 값)
+# 종류: 변환
+# 예: "1970-01-02 00:30" → "1470"
+# 예: "nope" → ""
 # "YYYY-MM-DD HH:MM" → 1970-01-01 00:00 기준 분(정수). 형식이 아니면 빈 값.
 # days-from-civil 공식 — date 를 부르지 않는다.
 scv_mx_civil_to_minutes() {
@@ -60,6 +70,9 @@ scv_mx_civil_to_minutes() {
 # ---------------------------------------------------------------- 파싱
 
 # @pure
+# 역할: INDEX.yaml 텍스트에서 slug · status · obsoleted_by 를 탭 구분 줄로 뽑는다
+# 종류: 꺼내기
+# 예: $'- slug: a\n  status: adopted\n- slug: b\n  status: archived\n  obsoleted_by: a\n' → $'a\tadopted\t\nb\tarchived\ta'
 # <INDEX.yaml 텍스트> → 색인 레코드 줄들 (slug \t status \t obsoleted_by).
 scv_mx_parse_index() {
   local text="${1:-}" line key val slug="" status="" obs="" out=""
@@ -83,6 +96,9 @@ scv_mx_parse_index() {
 }
 
 # @pure
+# 역할: PLAN.md 프런트매터에서 대화 경로 · supersedes 개수 · 순수함수 절 유무를 한 줄로 뽑는다
+# 종류: 꺼내기
+# 예: $'---\nraw_sources:\n  - scv/conversations/c1.md\n  - docs/x.md\nsupersedes: [a, b]\n---\n## 순수함수 · 파이프라인\n' → $'scv/conversations/c1.md\t2\t1'
 # <PLAN.md 텍스트> → 계획 레코드 한 줄 (conv1,conv2 \t supersedes_n \t has_purity).
 # 프런트매터의 raw_sources(블록·인라인) 중 conversations/ 경로만, supersedes 의
 # 항목 수, 본문에 "## 순수함수 · 파이프라인" 헤딩이 있는지.
@@ -107,7 +123,8 @@ scv_mx_parse_plan() {
         esac
         continue
       fi
-      if [[ "$line" == [a-z_]*:* ]]; then
+      # 맥 기본 bash 3.2 는 UTF-8 지역 설정에서 [a-z] 범위가 대문자까지 맞춘다 — 글자를 하나하나 적는다
+      if [[ "$line" == [abcdefghijklmnopqrstuvwxyz_]*:* ]]; then
         list=""
         key="${line%%:*}"; inline="$(scv_mx_strip_comment "${line#*:}")"
         case "$key" in
@@ -139,6 +156,9 @@ scv_mx_parse_plan() {
 }
 
 # @pure
+# 역할: 계획서에 적힌 대화 경로를 SCV_DIR 기준 후보 경로 두 줄(그대로 · archive 아래)로 바꾼다
+# 종류: 변환
+# 예: "scv/conversations/c1.md" → $'conversations/c1.md\nconversations/archive/c1.md'
 # <계획서에 적힌 대화 경로> → SCV_DIR 기준 후보 경로 두 줄: 그대로(앞의 scv/ 는 뗀다),
 # conversations/archive/<basename>. 실존 확인은 효과층이 한다.
 scv_mx_resolve_conv_path() {
@@ -150,6 +170,9 @@ scv_mx_resolve_conv_path() {
 }
 
 # @pure
+# 역할: 대화 파일 텍스트의 "## Turn N" 헤딩 수를 센다 (코드 블록 안은 제외)
+# 종류: 세기
+# 예: $'## Turn 1 — a\n```\n## Turn 2 — x\n```\n## Turn 3 — b\n' → "2"
 # <대화 파일 텍스트> → "## Turn N —" 헤딩 수. 코드 블록(```) 안은 세지 않는다.
 scv_mx_count_turns() {
   local text="${1:-}" line n=0 fence=0
@@ -162,6 +185,9 @@ scv_mx_count_turns() {
 }
 
 # @pure
+# 역할: DECISIONS.md 에서 (slug, verdict, 분 단위 시각) 결정 레코드를 탭 구분 줄로 뽑는다
+# 종류: 꺼내기
+# 예: $'## [2026-10-01 09:00] me — t\n- verdict: adopted | x\n- refs: scv/promote/foo/PLAN.md\n' → $'foo\tadopted\t29847420'
 # <DECISIONS.md 텍스트> → 결정 레코드 줄들 (slug|unmatched \t verdict \t minutes).
 # 헤더 "## [YYYY-MM-DD HH:MM] author — title" 만 엔트리다 — 템플릿 행([YYYY-…])은
 # 시각이 아니라서 버려지고, 그 아래 verdict/refs 도 함께 버려진다.
@@ -202,6 +228,9 @@ scv_mx_parse_decisions() {
 # ---------------------------------------------------------------- 지표
 
 # @pure
+# 역할: 색인의 slug 마다 가장 이른 adopted 에서 archived 까지 걸린 분 수를 낸다 (없으면 none)
+# 종류: 세기
+# 예: $'a\tx\ty\n' $'a\tadopted\t100\na\tarchived\t160\n' → $'a\t60'
 # <색인 레코드들> <결정 레코드들> → 지표 줄들 (slug \t minutes|none).
 # 같은 slug 의 가장 이른 adopted 시각과, 그 뒤 가장 이른 archived 시각의 차.
 scv_mx_metric_lead_time() {
@@ -229,6 +258,9 @@ scv_mx_metric_lead_time() {
 }
 
 # @pure
+# 역할: 색인의 slug 마다 후속 계획이 있으면 1, 없으면 0 을 낸다 (obsoleted_by 대상 또는 supersedes 보유)
+# 종류: 판정
+# 예: $'a\tx\tb\nb\tx\t\n' "" → $'a\t0\nb\t1'
 # <색인 레코드들> <slug\tsupersedes_n 줄들> → 지표 줄들 (slug \t 0|1).
 # 1 = 누군가의 obsoleted_by 대상이거나 supersedes 가 비어 있지 않다 (합집합).
 scv_mx_metric_followup() {
@@ -250,6 +282,9 @@ scv_mx_metric_followup() {
 }
 
 # @pure
+# 역할: 지표 줄들을 값 있는 수 · 전체 수 · 합 · 평균x10 · 중앙값x10 한 줄로 요약한다
+# 종류: 세기
+# 예: $'a\t10\nb\t20\nc\tnone\n' → $'2\t3\t30\t150\t150'
 # <지표 줄들 (slug \t value|none)> → 요약 한 줄 (n \t m \t sum \t avg10 \t med10).
 # n = 값이 있는 계획 수, m = 전체. avg10·med10 은 소수 한 자리를 정수로 (x10).
 # none 만 있으면 avg10·med10 은 빈 값.
@@ -280,6 +315,10 @@ scv_mx_aggregate() {
 }
 
 # @pure
+# 역할: 10배 한 정수를 소수 한 자리 "d.d" 로 바꾼다 (빈 값이면 "—")
+# 종류: 변환
+# 예: 25 → "2.5"
+# 예: "" → "—"
 # <x10 정수> → "d.d". 빈 값이면 "—".
 scv_mx_fmt10() {
   local x="${1:-}"
@@ -288,6 +327,9 @@ scv_mx_fmt10() {
 }
 
 # @pure
+# 역할: 네 요약 줄(턴 · 리드타임 · 후속 · 순수)을 파이프 구분 지표 표로 만든다
+# 종류: 조립
+# 예: $'1\t2\t3\t30\t30' $'1\t1\t5\t50\t50' $'1\t2\t1\t\t' $'1\t2\t1\t\t' → $'지표 | 값 | 적용 범위 | 중앙값\n계획당 대화 턴 수 | 평균 3.0 | 1/2 | 3.0\n승인→보관 리드타임(분) | 평균 5.0 | 1/1 | 5.0\n후속 재발률 | 1/2 | 1/2 | —\n순수 절 보유율 | 1/2 | 1/2 | —'
 # <턴 요약> <리드타임 요약> <후속 요약> <순수 요약> → 표 텍스트 (파이프 구분, 네 지표 한 줄씩).
 scv_mx_render_table() {
   local t="${1:-}" l="${2:-}" f="${3:-}" p="${4:-}" n m sum avg10 med10
@@ -303,6 +345,9 @@ scv_mx_render_table() {
 }
 
 # @pure
+# 역할: 지표 이름과 지표 줄들을 (지표, slug, 값) TSV 행들로 만든다
+# 종류: 조립
+# 예: lead $'a\t5\nb\tnone\n' → $'lead\ta\t5\nlead\tb\tnone'
 # <지표 이름> <지표 줄들> → TSV 행들 (metric \t slug \t value).
 scv_mx_render_tsv() {
   local name="${1:-}" lines="${2:-}" slug v
@@ -313,6 +358,9 @@ scv_mx_render_tsv() {
 }
 
 # @pure
+# 역할: 저널에서 답 기록 머리줄을 모델 id 별로 세어 많은 순으로 낸다 (표기 없는 답은 라벨 "-")
+# 종류: 세기
+# 예: $'### [09:00:00] assistant · m1\n### [09:01:00] assistant\n### [09:02:00] assistant · m1\n' → $'m1\t2\n-\t1'
 # <저널 텍스트(여러 파일 이어붙임)> → "라벨\t답 수" 줄들, 답 수가 많은 순(같으면 처음 나온 순 — 안정 정렬).
 # 답 기록 머리줄 "### [HH:MM:SS] assistant · <모델 id>" 의 모델 id 가 라벨이다(v0.59.0+).
 # 모델 표기가 없는 옛 답("### [..] assistant")은 라벨 "-" 로 센다.
@@ -339,6 +387,10 @@ scv_mx_count_answers() {
 }
 
 # @pure
+# 역할: 모델별 답 수 줄들을 표의 "모델별 답 수" 한 줄로 만든다
+# 종류: 조립
+# 예: $'m1\t2\n-\t1\n' → "모델별 답 수 | m1 2 · 표기 없음 1 | 2/3 | —"
+# 예: "" → "모델별 답 수 | — | 0/0 | —"
 # <"라벨\t답 수" 줄들> → 표의 한 줄: "모델별 답 수 | A 3 · B 2 · 표기 없음 1 | <표기된 답>/<모든 답> | —".
 # 답이 하나도 없으면 "모델별 답 수 | — | 0/0 | —".
 scv_mx_render_models() {

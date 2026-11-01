@@ -40,6 +40,12 @@ EMAILS=on expect "(a) SCV_PRIVACY_EMAILS=on 이면 개인 메일 작성자는 �
 d="$(new_repo path)"; commit "$d" notes.md 'see /Us''ers/alice/work/repo' 'docs: path'
 expect "(b) 추가 줄의 /Users 경로는 막힘" 1 "$d" "notes.md:1 local-path"
 
+# 사용자 이름이 한 글자인 경로(/Users/x/)는 예시로 본다 — 실제 계정명은 두 글자 이상(2026-11-01).
+d="$(new_repo onechar)"; commit "$d" notes.md 'e.g. /Us''ers/x/y masks to [경로]' 'docs: example path'
+expect "(b2) 한 글자 이름 경로는 예시로 통과" 0 "$d" "OK privacy"
+d="$(new_repo twochar)"; commit "$d" notes.md 'see /Us''ers/ab/work' 'docs: path'
+expect "(b3) 두 글자 이상 이름 경로는 그대로 막힘" 1 "$d" "notes.md:1 local-path"
+
 d="$(new_repo trailer)"; commit "$d" docs.md 'y' "$(printf 'docs: y\n\nHost-Sess''ion: https://example.ai/code/sess''ion_01AbCdEfGhIjKlMn')"
 expect "(c) 세션 링크 줄은 막힘" 1 "$d" "commit message: session-line"
 

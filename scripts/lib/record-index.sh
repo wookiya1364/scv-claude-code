@@ -15,6 +15,9 @@
 # 색인 형식: 탭 구분 한 줄에 하나. append-only. 자리는 scv/INDEX.tsv.
 #   <종류>\t<키>\t<파일>\t<오프셋>\t<길이>\t<시각>\t<한 줄 요약>
 
+# shellcheck source=text.sh
+declare -F scv_lower >/dev/null 2>&1 || source "${BASH_SOURCE[0]%/*}/text.sh"
+
 # 알려진 종류. 이 밖의 값은 조용히 무시한다 — 기록 자체는 막지 않는다.
 #
 #   decision  결정 로그(scv/DECISIONS.md)의 엔트리. **세 지점에서 자동으로 붙는다**
@@ -35,13 +38,18 @@ SCV_JOURNAL_MARKS="$SCV_RECORD_KINDS"   # 예전 이름 — 0.32.0 호환
 # 대소문자와 앞뒤 공백만 허용 오차로 둔다. 오타를 알아서 고쳐 주지 않는다 —
 # 그러면 무엇이 기록됐는지 부르는 쪽이 모르게 된다.
 # @pure
+# 역할: 기록 종류 이름의 앞뒤 공백을 떼고 소문자로 맞춘다 — 모르는 종류는 빈 값
+# 종류: 다듬기
+# 예: ' Decision ' → "decision"
+# 예: plan → "plan"
+# 예: nope → ""
 record_kind_normalize() {
   local m="${1:-}" k
   # 앞뒤 공백만 떼어 낸다. 가운데 공백까지 지우면 "de cision" 이 조용히
   # "decision" 이 되어, 무엇이 기록됐는지 부르는 쪽이 모르게 된다.
   m="${m#"${m%%[![:space:]]*}"}"
   m="${m%"${m##*[![:space:]]}"}"
-  m="${m,,}"          # bash 4+ 소문자 확장 — 외부 도구가 필요 없다
+  m="$(scv_lower "$m")"   # ${m,,} 는 bash 4 부터 — 맥 기본 bash 3.2 에서 깨졌다
   [[ -n "$m" ]] || return 0
   for k in $SCV_RECORD_KINDS; do
     [[ "$k" == "$m" ]] && { printf '%s\n' "$k"; return 0; }
@@ -57,6 +65,10 @@ record_kind_normalize() {
 # 표시가 알려진 것이 아니거나 오프셋·길이가 숫자가 아니면 빈 값을 낸다.
 # 부르는 쪽은 빈 값이면 색인에 적지 않는다.
 # @pure
+# 역할: 종류 · 키 · 파일 · 오프셋 · 길이 · 시각 · 요약을 탭으로 이은 색인 한 줄을 만든다 — 잘못된 입력은 빈 값
+# 종류: 조립
+# 예: decision k1 f.md 0 10 2026-01-01 요약 → $'decision\tk1\tf.md\t0\t10\t2026-01-01\t요약'
+# 예: nope k1 f.md 0 10 t s → ""
 record_index_entry() {
   local mark key file off len ts summary
   mark="$(record_kind_normalize "${1:-}")"
@@ -80,6 +92,9 @@ record_index_entry() {
 # 같은 키가 여러 번 나오면 **마지막 것이 이긴다** — 나중 기록이 그 주제의 최신
 # 상태다. 색인은 append-only 이므로 옛 기록도 남아 있지만 읽히는 것은 최신이다.
 # @pure
+# 역할: 색인 텍스트에서 키가 같은 레코드를 낸다 — 같은 키가 여럿이면 마지막 것
+# 종류: 고르기
+# 예: $'decision\tk1\tf.md\t0\t5\tt\ts1\ndecision\tk1\tf.md\t5\t5\tt\ts2' k1 → $'decision\tk1\tf.md\t5\t5\tt\ts2'
 record_index_lookup() {
   local index="${1:-}" want="${2:-}" line found=""
   [[ -n "$index" && -n "$want" ]] || return 0
@@ -98,6 +113,9 @@ record_index_lookup() {
 # 그 표시가 붙은 레코드들을 낸다. 표시가 비어 있으면 전부.
 # 같은 키의 옛 레코드는 걸러 낸다 — 최신 하나만 남는다.
 # @pure
+# 역할: 색인 텍스트에서 종류가 맞는 레코드만, 키마다 최신 하나씩 남긴다(종류를 비우면 전체)
+# 종류: 고르기
+# 예: $'decision\tk1\tf\t0\t5\tt\ts1\nplan\tk2\tf\t5\t5\tt\ts2' plan → $'plan\tk2\tf\t5\t5\tt\ts2'
 record_index_filter() {
   local index="${1:-}" want="${2:-}" line
   [[ -n "$index" ]] || return 0
@@ -139,6 +157,9 @@ record_index_filter() {
 # 레코드를 개행 구분 필드로 낸다: 표시·키·파일·오프셋·길이·시각·요약.
 # 부르는 쪽이 `read -r` 로 받아 쓴다.
 # @pure
+# 역할: 색인 레코드 한 줄을 표시 · 키 · 파일 · 오프셋 · 길이 · 시각 · 요약 일곱 줄로 푼다
+# 종류: 꺼내기
+# 예: $'decision\tk1\tf.md\t0\t5\tt\ts' → $'decision\nk1\nf.md\n0\n5\nt\ns'
 record_index_fields() {
   local line="${1:-}"
   [[ -n "$line" ]] || return 0

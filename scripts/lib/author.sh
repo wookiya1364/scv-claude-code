@@ -17,6 +17,9 @@
 #
 # Usage:  source lib/author.sh; AUTHOR="$(scv_author)"
 
+# shellcheck source=text.sh
+declare -F scv_lower >/dev/null 2>&1 || source "${BASH_SOURCE[0]%/*}/text.sh"
+
 scv_author_raw() {
   local name=""
   if command -v git >/dev/null 2>&1; then
@@ -36,11 +39,12 @@ scv_author_raw() {
 
 scv_author_slug() {
   local in="${1:-}" out="" ch i
-  in="${in,,}"   # lowercase (ASCII; multibyte chars pass through unchanged)
+  in="$(scv_lower "$in")"   # lowercase (ASCII; multibyte chars pass through unchanged) — ${in,,} is bash 4+
   for (( i = 0; i < ${#in}; i++ )); do
     ch="${in:i:1}"
     case "$ch" in
-      [a-z0-9._-]) out+="$ch" ;;
+      # 맥 기본 bash 3.2 는 UTF-8 지역 설정에서 [a-z] 범위가 대문자까지 맞춘다 — 글자를 하나하나 적는다
+      [abcdefghijklmnopqrstuvwxyz0123456789._-]) out+="$ch" ;;
       *)
         # Any other ASCII char (space, /, :, quotes, control chars, ...) is
         # unsafe or ambiguous in a filename → dash. Non-ASCII (한글 etc.) kept.

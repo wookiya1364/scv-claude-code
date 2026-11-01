@@ -22,6 +22,10 @@
 #       폴백한다).
 
 # @pure
+# 역할: 계획 슬러그로 실행 매니페스트 파일 경로를 만든다
+# 종류: 조립
+# 예: my-plan → "test-results/.scv/my-plan.manifest"
+# 예: my-plan out → "out/.scv/my-plan.manifest"
 run_manifest_path() {
   local slug="${1:?slug}" base="${2:-test-results}"
   printf '%s/.scv/%s.manifest\n' "$base" "$slug"

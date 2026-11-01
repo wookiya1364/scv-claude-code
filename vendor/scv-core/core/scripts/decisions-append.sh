@@ -58,10 +58,14 @@ case "$VERDICT" in
 esac
 
 # @pure
+# 역할: 제목에서 부를 이름을 만든다 — 소문자 · 숫자 · 한글만 남기고 나머지는 -, 최대 48자
+# 종류: 지문
+# 예: 'Hello, World!  Fix #12' → "hello-world-fix-12"
+# 예: '  --a--  ' → "a"
 # decisions_slug <제목> — 제목에서 부를 이름을 만든다. 문자열만 다룬다.
 decisions_slug() {
   local t="${1:-}"
-  t="${t,,}"
+  t="$(scv_lower "$t")"   # ${t,,} 는 bash 4 부터 — 맥 기본 bash 3.2 에서 깨졌다
   t="${t//[^a-z0-9가-힣]/-}"
   while [[ "$t" == *--* ]]; do t="${t//--/-}"; done
   t="${t#-}"; t="${t%-}"

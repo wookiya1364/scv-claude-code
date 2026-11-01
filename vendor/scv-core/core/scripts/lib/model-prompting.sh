@@ -19,28 +19,30 @@
 _SCV_MP_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 # shellcheck source=metrics.sh
 source "$_SCV_MP_LIB_DIR/metrics.sh"   # scv_mx_civil_to_minutes — 날짜 산술을 한 곳에서
+# shellcheck source=text.sh
+source "$_SCV_MP_LIB_DIR/text.sh"      # scv_lower — 맥 기본 bash 3.2 에서도 되는 소문자
 
 # @pure
+# 역할: 모델 id 를 앞뒤 공백 없이 소문자로 바꾸고 끝의 "[…]" 표기를 지운다
+# 종류: 다듬기
+# 예: "  Model-X-4[1m] " → "model-x-4"
+# 예: "X-5" → "x-5"
 # <원시 모델 id> → 정규화 id: 앞뒤 공백 제거 · 소문자 · 끝의 "[…]" 표기(예: 컨텍스트 길이) 제거.
-# bash 3.2 에는 ${v,,} 가 없어 글자 표로 바꾼다. 글자 범위([A-Z])는 쓰지 않는다 — bash 3.2 는 UTF-8
-# 지역 설정에서 [A-Z] 가 소문자까지 맞춰 id 를 망가뜨린다(리뷰가 재현: 소문자가 통째로 빠짐). 대문자 26자를 그대로 적는다.
+# 소문자 바꾸기는 lib/text.sh 의 scv_lower(bash 3.2 에서도 되는 글자 표) 를 쓴다.
 scv_mp_normalize_id() {
-  local s="${1:-}" up="ABCDEFGHIJKLMNOPQRSTUVWXYZ" lo="abcdefghijklmnopqrstuvwxyz" out="" c i head
+  local s="${1:-}"
   s="${s#"${s%%[![:space:]]*}"}"
   s="${s%"${s##*[![:space:]]}"}"
   s="${s%%\[*}"
   s="${s%"${s##*[![:space:]]}"}"
-  for (( i = 0; i < ${#s}; i++ )); do
-    c="${s:i:1}"
-    case "$up" in
-      *"$c"*) head="${up%%"$c"*}"; out+="${lo:${#head}:1}" ;;
-      *) out+="$c" ;;
-    esac
-  done
-  printf '%s' "$out"
+  scv_lower "$s"
 }
 
 # @pure
+# 역할: 색인에서 모델 id 가 정확히 맞는 첫 행의 키 · 파일 · 날짜를 탭으로 잇는다
+# 종류: 꺼내기
+# 예: "m-2" $'m-1\tk1\tf1.md\tu\t2026-01-01\nm-2\tk2\tf2.md\tu\t2026-02-02' → $'k2\tf2.md\t2026-02-02'
+# 예: "zz" $'m-1\tk1\tf1.md\tu\t2026-01-01\nm-2\tk2\tf2.md\tu\t2026-02-02' → ""
 # <정규화 id> <색인 텍스트> → "<키>\t<파일>\t<가져온 날짜>" (정확히 일치하는 첫 행) 또는 빈 값.
 # 접두어로 맞추지 않는다 — 앞이 같은 id(예: "x-5" 와 "x-5-5")가 있기 때문이다.
 scv_mp_lookup() {
@@ -57,6 +59,10 @@ scv_mp_lookup() {
 }
 
 # @pure
+# 역할: 색인에서 모든 모델에 붙는 공통 원문의 파일과 날짜를 꺼낸다
+# 종류: 꺼내기
+# 예: $'*\tcommon\tc.md\tu\t2026-01-01' → $'c.md\t2026-01-01'
+# 예: $'m-1\tk1\tf1.md\tu\t2026-01-01\nm-2\tk2\tf2.md\tu\t2026-02-02' → ""
 # <색인 텍스트> → 공통 원문 "<파일>\t<가져온 날짜>" 또는 빈 값.
 scv_mp_common() {
   local index="${1:-}" mid key file src fetched
@@ -67,6 +73,10 @@ scv_mp_common() {
 }
 
 # @pure
+# 역할: 색인의 "@이름" 행(예: refresh)의 값을 꺼낸다
+# 종류: 꺼내기
+# 예: $'@refresh\tr.sh' refresh → "r.sh"
+# 예: $'@refresh\tr.sh' other → ""
 # <색인 텍스트> <이름> → "@<이름>" 행의 값 (예: refresh → 갱신 스크립트 경로) 또는 빈 값.
 scv_mp_meta() {
   local index="${1:-}" name="${2:-}" mid val rest
@@ -78,6 +88,10 @@ scv_mp_meta() {
 }
 
 # @pure
+# 역할: 읽음 기록 한 줄을 "지문 모델id" 두 칸으로 나눠 다듬는다(깨졌으면 빈 칸)
+# 종류: 꺼내기
+# 예: $'abc\x1fm-1' → $'abc\x1fm-1'
+# 예: abc → $'\x1f'
 # <읽음 기록 한 줄> → "<지문>\x1f<모델 id>" (깨졌으면 빈 필드).
 scv_mp_read_parse() {
   local s="${1:-}" us=$'\x1f' nonce="" model=""
@@ -87,6 +101,11 @@ scv_mp_read_parse() {
 }
 
 # @pure
+# 역할: 색인 행 유무 · 읽음 기록 · 지금 지문 · 모델 id 로 원문을 읽어야 하는지(load · loaded · none) 정한다
+# 종류: 판정/gate
+# 예: 1 $'n1\x1fm' n1 m → "loaded"
+# 예: 1 "" n1 m → "load"
+# 예: 0 "" n1 m → "none"
 # <색인에 행이 있나 0|1> <읽음 기록(파싱됨)> <지금 규약 지문> <지금 정규화 id> → load | loaded | none
 #   none   : 행이 없다(모름 · 색인에 없음 · 끔).
 #   loaded : 이 컨텍스트(같은, 비어 있지 않은 지문)에서 같은 모델 원문을 이미 읽었다.
@@ -99,6 +118,10 @@ scv_mp_decision() {
 }
 
 # @pure
+# 역할: 읽음 기록의 옛 지문을 새 지문으로 바꾼 줄을 낸다(옛 지문이 다르면 빈 값)
+# 종류: 변환
+# 예: $'old\x1fm' old new → $'new\x1fm'
+# 예: $'zzz\x1fm' old new → ""
 # <읽음 기록 한 줄> <옛 지문> <새 지문> → 새 지문으로 바꾼 기록 한 줄, 또는 빈 값(바꾸지 않음).
 # 규약을 다시 읽어 지문이 새로 생길 때(help-state.sh mark) 부른다: 같은 턴에 — 같은 컨텍스트에서 — 원문을 먼저
 # 읽고 표시했다면 기록의 지문은 옛 지문(빈 값일 수 있다)과 같다. 그 기록만 새 지문으로 옮긴다.
@@ -111,6 +134,10 @@ scv_mp_restamp() {
 }
 
 # @pure
+# 역할: 색인 폴더 안의 평범한 파일 이름이면 그대로, 경로 · 점 시작 · ".." 이면 빈 값을 낸다
+# 종류: 판정
+# 예: "guide-1.md" → "guide-1.md"
+# 예: "../x" → ""
 # <이름> → 색인 폴더 안의 평범한 파일 이름이면 그대로, 아니면 빈 값. 경로 구분자 · 점으로 시작 · ".." 금지 —
 # 색인은 래퍼가 싣는 데이터지만, 그 값을 모델에게 "읽으라" 는 경로와 명령으로 내보내므로 폴더 밖을 가리키지 못하게 한다.
 scv_mp_safe_name() {
@@ -124,6 +151,10 @@ scv_mp_safe_name() {
 }
 
 # @pure
+# 역할: 가져온 날짜부터 오늘까지 지난 일수를 센다(형식 오류면 빈 값)
+# 종류: 세기
+# 예: 2026-01-01 2026-01-11 → "10"
+# 예: 2026-01-11 2026-01-01 → "0"
 # <가져온 날짜 YYYY-MM-DD> <오늘 YYYY-MM-DD> → 경과 일수(정수) 또는 빈 값(형식 오류).
 scv_mp_age_days() {
   local a b
@@ -134,6 +165,11 @@ scv_mp_age_days() {
 }
 
 # @pure
+# 역할: 결정 · 키 · 경로 · 경과 일수로 help 의 GUIDE 출력 줄들을 만든다
+# 종류: 조립
+# 예: load k1 m.md c.md 5 90 "" "" → $'GUIDE: load k1\nGUIDE_FILE: m.md\nGUIDE_FILE: c.md\n'
+# 예: loaded k1 "" "" 100 90 r.sh "" → $'GUIDE: loaded k1\nGUIDE_STALE: 100 days old (limit 90) — refresh: bash "r.sh"\n'
+# 예: none → $'GUIDE: none\n'
 # <결정> <키> <모델 원문 경로> <공통 원문 경로> <경과 일수> <기준 일수> <갱신 스크립트 경로> <빠진 파일>
 #   → help 출력 줄들:
 #   GUIDE: none | GUIDE: loaded <키> | GUIDE: load <키>
@@ -163,6 +199,12 @@ scv_mp_guide_lines() {
 }
 
 # @pure
+# 역할: 스위치 값을 on|off 로 정한다(기본 on, "off" 만 끈다)
+# 종류: 판정
+# 예: " OFF " → "off"
+# 예: "" → "on"
+# 예: yes → "on"
+# 예: "off[1m]" → "off"
 # <스위치 값> → on|off (기본 on; "off" 만 끈다, 대소문자·따옴표·공백 무시).
 scv_mp_switch() {
   local v
@@ -171,6 +213,11 @@ scv_mp_switch() {
 }
 
 # @pure
+# 역할: 프로필 값이 절대 경로면 그대로, 상대 경로면 코어 루트 아래 경로로 바꾼다
+# 종류: 변환
+# 예: /root guides → "/root/guides"
+# 예: /root /abs/g → "/abs/g"
+# 예: /root "" → ""
 # <코어 루트> <프로필 값> → 색인 폴더 경로. 절대 경로면 그대로, 상대면 코어 루트 기준. 빈 값이면 빈 값.
 scv_mp_guides_dir() {
   local root="${1:-}" v="${2:-}"
@@ -182,6 +229,11 @@ scv_mp_guides_dir() {
 }
 
 # @pure
+# 역할: 대화 기록의 모델 id 로 저널 화자 이름("assistant · id")을 만든다
+# 종류: 조립
+# 예: "claude-x-4[1m]" → "assistant · claude-x-4[1m]"
+# 예: "a b!" → "assistant · ab"
+# 예: "" → "assistant"
 # <답한 모델 id(대화 기록에서)> → 저널 화자 이름: "assistant" 또는 "assistant · <id>".
 # id 는 글자·숫자·. _ : - [ ] 만 남긴다 — 제목 줄에 들어가는 값이라 다른 글자는 버린다. 64자까지.
 scv_mp_speaker_label() {
@@ -199,6 +251,10 @@ scv_mp_speaker_label() {
 # 이번 턴 기록 (.help-guide-turn, 한 줄): <지문>\x1f<정규화 모델 id>\x1f<결정 load|loaded>\x1f<키>
 
 # @pure
+# 역할: 이번 턴 기록 한 줄을 "지문 모델 결정 키" 로 나눈다(결정이 load|loaded 가 아니면 빈 값)
+# 종류: 꺼내기
+# 예: $'n\x1fm\x1fload\x1fk' → $'n\x1fm\x1fload\x1fk'
+# 예: $'n\x1fm\x1fnone\x1fk' → ""
 # <턴 기록 한 줄> → "<지문>\x1f<모델>\x1f<결정>\x1f<키>" (결정이 load|loaded 가 아니면 빈 값).
 scv_mp_turn_parse() {
   local s="${1:-}" us=$'\x1f' nonce model dec key rest
@@ -213,6 +269,11 @@ scv_mp_turn_parse() {
 }
 
 # @pure
+# 역할: 이 컨텍스트에서 그 모델 원문을 이미 읽었는지 1|0 으로 정한다
+# 종류: 판정
+# 예: $'n\x1fm\x1fload\x1fk' $'n\x1fm' cur → "1"
+# 예: $'n\x1fm\x1fload\x1fk' $'z\x1fm' cur → "0"
+# 예: $'n\x1fm\x1fload\x1fk' $'cur\x1fm' cur → "1"
 # <턴 기록(파싱됨)> <읽음 기록(파싱됨)> <지금 지문> → 1(이 컨텍스트에서 그 모델을 읽음) | 0.
 # 읽음 기록의 지문이 턴 기록의 지문 또는 지금 지문과 같아야 한다 — 멈춤 훅의 드리프트 재설정이 지금 지문을
 # 먼저 비웠을 수 있고, 규약 재표시가 지문을 옮겼을 수 있어서 둘 다 본다. 빈 지문은 증거가 아니다.
@@ -229,6 +290,10 @@ scv_mp_was_read() {
 }
 
 # @pure
+# 역할: 대화 블록에 "다시 쓴 요청" 단락이 있는지 1|0 으로 정한다
+# 종류: 판정/gate
+# 예: $'a\n**Rewritten request**: x' → "1"
+# 예: "없음" → "0"
 # <이번 턴 대화 블록 텍스트> → 1(다시 쓴 요청 단락이 있다) | 0. 라벨은 영문 또는 한국어.
 scv_mp_rewrite_recorded() {
   local text="${1:-}" line
@@ -241,6 +306,10 @@ scv_mp_rewrite_recorded() {
 }
 
 # @pure
+# 역할: 이번 턴 기록의 옛 지문을 새 지문으로 바꾼 줄을 낸다(맞지 않으면 빈 값)
+# 종류: 변환
+# 예: $'old\x1fm\x1fload\x1fk' old new → $'new\x1fm\x1fload\x1fk'
+# 예: $'zz\x1fm\x1fload\x1fk' old new → ""
 # <턴 기록 한 줄> <옛 지문> <새 지문> → 지문만 바꾼 줄 (옛 지문이 맞지 않거나 형식이 아니면 빈 값).
 # help-state mark 가 같은 턴에 규약을 다시 읽어 지문을 바꿀 때, 이번 턴 기록도 새 지문으로 옮긴다.
 scv_mp_turn_restamp() {
@@ -252,6 +321,10 @@ scv_mp_turn_restamp() {
 }
 
 # @pure
+# 역할: 답 본문의 코드 블록 밖에 ">" 인용 줄이 있는지 1|0 으로 정한다
+# 종류: 판정/answer
+# 예: $'text\n> quote' → "1"
+# 예: $'```\n> in code\n```' → "0"
 # <답 본문> → 1(코드 블록 밖에 '>' 로 시작하는 인용 줄이 있다) | 0.
 scv_mp_answer_has_quote() {
   local text="${1:-}" line fence=0 t q=$'\x3e'   # q = 인용 표시 문자 (순수성 검사가 글자 그대로를 방향 기호로 본다)
@@ -265,6 +338,11 @@ scv_mp_answer_has_quote() {
 }
 
 # @pure
+# 역할: 결정 · 읽음 · 기록 · 인용 여부로 경고 판정(unread · unshown)을 낸다
+# 종류: 판정/gate
+# 예: load 0 0 "" → $'unread\n'
+# 예: loaded 1 1 0 → $'unshown\n'
+# 예: none 0 0 0 → ""
 # <결정> <읽음 0|1> <다시 쓴 요청 기록됨 0|1> <답 인용 있음 0|1|""(답을 못 얻음)> → 판정 줄들: unread · unshown (없으면 빈 값).
 scv_mp_turn_verdict() {
   local dec="${1:-}" read="${2:-0}" recorded="${3:-0}" quoted="${4:-}"
@@ -275,6 +353,10 @@ scv_mp_turn_verdict() {
 }
 
 # @pure
+# 역할: 판정 줄들을 다음 턴에 실을 경고 문장으로 바꾼다
+# 종류: 조립
+# 예: unshown k1 → $'[SCV 가이드] 직전 턴에 다시 쓴 요청을 기록만 하고 답에 보이지 않았다 — 이번 턴에는 답 맨 위에 \'이렇게 이해하고 일함: …\' 한 줄, 결론 바로 뒤에 전문을 인용 블록으로 보여라.\n'
+# 예: "" → ""
 # <판정 줄들> <키> [<상세 줄들>] → 다음 턴에 실을 경고 문장들 (매 턴 훅이 지시 바로 뒤에 한 번 싣는다).
 # 상세 줄(v0.60.1+)은 help 가 그 턴에 실제로 낸 `GUIDE_FILE:` · `GUIDE_MARK_CMD:` 줄 — 안 읽음 경고 뒤에 두 칸 들여 붙여,
 # help 출력을 보지 않고도 경고만으로 따라 할 수 있게 한다. 들여 쓴 줄은 초기화 때 경고와 함께 남는다(scv_mp_warn_keep).
@@ -291,6 +373,9 @@ scv_mp_warn_lines() {
 }
 
 # @pure
+# 역할: 경고 파일에서 "[SCV 가이드]" 줄과 그 뒤 두 칸 들여 쓴 줄만 남긴다
+# 종류: 고르기
+# 예: $'[SCV 가이드] a\n  detail\nother' → $'[SCV 가이드] a\n  detail\n'
 # <경고 파일 내용> → 초기화(재개 · 압축 · 지우기) 뒤에도 남길 줄들: `[SCV 가이드]` 로 시작하는 줄과 그 뒤에 이어지는 두 칸
 # 들여 쓴 줄. 나머지(규약 지문 · 답 모양 경고)는 버린다 — 규약은 어차피 다시 읽히지만, 가이드 원문을 건너뛴 사실은
 # 초기화로 사라지지 않는다(0.60.0 실측: 재개 훅이 경고를 지워 다음 턴 모델에게 닿지 않았다).
@@ -310,6 +395,10 @@ scv_mp_warn_keep() {
 # 기록: 첫 줄 = 모델 id 또는 "none", 둘째 줄부터 = help 가 낸 GUIDE_FILE · GUIDE_MARK_CMD 줄.
 
 # @pure
+# 역할: 새 컨텍스트 첫 턴에 실을 가이드 안내 블록을 만든다(싣지 않으면 빈 값)
+# 종류: 조립
+# 예: on 0 0 $'m-1\nGUIDE_FILE: g.md' → $'[SCV 가이드] 이 컨텍스트에서 아직 이 모델의 프롬프팅 가이드 원문을 읽지 않았다 — 답하기 전에 아래 원문을 끝까지 읽고 아래 명령을 실행하라(지난 모델 m-1 기준 — 지금 모델이 다르면 help 의 GUIDE 줄을 따르라).\n  GUIDE_FILE: g.md\n'
+# 예: on 1 0 "" → ""
 # <스위치 on|off> <읽음 0|1> <가이드 경고 예약됨 0|1> <기록 전문> → 매 턴 훅이 실을 블록 (싣지 않으면 빈 값).
 scv_mp_first_turn_lines() {
   local sw="${1:-on}" read="${2:-0}" warned="${3:-0}" rec="${4:-}" model detail d
@@ -328,6 +417,10 @@ scv_mp_first_turn_lines() {
 # 제출(등록) 형식: 줄마다 "<id>\t<msg|ctx|asked|na>\t<값>", 그리고 "rewrite\t-\t<다시 쓴 요청>" 한 줄. na = 이번 요청에 해당 없음(값에 이유).
 
 # @pure
+# 역할: 색인에서 공통(*) 행의 키를 꺼낸다
+# 종류: 꺼내기
+# 예: $'*\tcommon\tc.md' → "common"
+# 예: $'m-1\tk1\tf1.md\tu\t2026-01-01\nm-2\tk2\tf2.md\tu\t2026-02-02' → ""
 # <색인 텍스트> → 공통(*) 행의 키 또는 빈 값.
 scv_mp_common_key() {
   local index="${1:-}" mid key rest
@@ -338,6 +431,10 @@ scv_mp_common_key() {
 }
 
 # @pure
+# 역할: 가이드 폴더 후보 경로들을 한 줄씩 낸다(절대 경로면 하나, 상대면 위로 세 단계까지)
+# 종류: 조립
+# 예: /r /abs → $'/abs\n'
+# 예: /r prompting → $'/r/prompting\n/r/../prompting\n/r/../../prompting\n/r/../../../prompting\n'
 # <코어 루트> <프로필 값> → 가이드 폴더 후보들(한 줄에 하나, 앞에서부터 시도). 절대 경로면 그것 하나. 상대 경로면 코어 루트
 # 기준과, 그 위로 세 단계까지 — 클로드 래퍼는 플러그인 최상위 기준 값(prompting)을 쓰는데 훅은 벤더 코어에서 돈다.
 scv_mp_guides_candidates() {
@@ -353,11 +450,16 @@ scv_mp_guides_candidates() {
 }
 
 # @pure
+# 역할: 공통 목록과 모델 목록을 "id\tlabel" 줄로 합친다(같은 id 는 모델 쪽 label 이 이긴다)
+# 종류: 조립
+# 예: $'a\tA\nb\tB' $'b\tB2\nc\tC' → $'a\tA\nb\tB2\nc\tC\n'
+# 예: $'# c\nBad\tX' '' → ""
 # <공통 목록 tsv> <모델 목록 tsv> → 병합된 "id\tlabel" 줄들. 주석 · 빈 줄 · 형식이 깨진 줄(id · label 없음)은 버린다.
 # 순서: 공통 순서대로, 같은 id 는 모델 쪽 label 이 이긴다, 그 뒤 모델에만 있는 항목. id 는 소문자 · 숫자 · - 만.
 scv_mp_checklist_merge() {
   local common="${1:-}" model="${2:-}" id label rest out="" mids="" mlabels="" line
-  _ok_id() { [[ -n "$1" ]] || return 1; local t="${1//[a-z0-9-]/}"; [[ -z "$t" ]]; }
+  # 맥 기본 bash 3.2 는 UTF-8 지역 설정에서 [a-z] 범위가 대문자까지 맞춘다 — 글자를 하나하나 적는다
+  _ok_id() { [[ -n "$1" ]] || return 1; local t="${1//[abcdefghijklmnopqrstuvwxyz0123456789-]/}"; [[ -z "$t" ]]; }
   while IFS=$'\t' read -r id label rest || [[ -n "$id" ]]; do
     [[ -z "$id" || "$id" == \#* || -z "$label" ]] && continue; _ok_id "$id" || continue
     mids="$mids|$id|"; mlabels="$mlabels$id"$'\t'"$label"$'\n'
@@ -381,6 +483,10 @@ scv_mp_checklist_merge() {
 }
 
 # @pure
+# 역할: 병합 목록과 제출 텍스트를 견줘 빠진 · 잘못된 항목 줄들을 낸다(통과면 빈 값)
+# 종류: 판정/gate
+# 예: $'a\tA' $'a\tmsg\tv\nrewrite\t-\tr' → ""
+# 예: $'a\tA' '' → $'missing a\nmissing rewrite\n'
 # <병합 목록> <제출 텍스트> → 문제 줄들(없으면 빈 값 = 통과): "missing <id>" · "bad-status <id>" · "empty <id>" · "missing rewrite".
 scv_mp_register_problems() {
   local list="${1:-}" sub="${2:-}" id label st val seen="" rw=0 out=""
@@ -403,6 +509,10 @@ scv_mp_register_problems() {
 }
 
 # @pure
+# 역할: 제출 텍스트에서 rewrite 행의 값(다시 쓴 요청)을 꺼낸다
+# 종류: 꺼내기
+# 예: $'a\tmsg\tv\nrewrite\t-\t다시 쓴 글' → "다시 쓴 글"
+# 예: $'a\tmsg\tv' → ""
 # <제출 텍스트> → 다시 쓴 요청 한 줄(rewrite 행의 값) 또는 빈 값.
 scv_mp_register_rewrite() {
   local sub="${1:-}" id st val
@@ -416,6 +526,10 @@ scv_mp_register_rewrite() {
 # 호스트가 스스로 보낸 입력(배경 작업 완료 알림 등)은 사람 턴이 아니다 — 태그 이름은 래퍼 호스트 설정 SCV_AUTO_PROMPT_TAGS 가 준다.
 
 # @pure
+# 역할: 프롬프트가 알림 태그 블록뿐이면 auto, 사람이 쓴 글이 섞이면 human 으로 정한다
+# 종류: 판정/answer
+# 예: "<task-notification>done</task-notification>" "task-notification" → "auto"
+# 예: "hi <task-notification>x</task-notification>" "task-notification" → "human"
 # <프롬프트> <태그 이름 목록(공백으로 나눔)> → auto | human. 입력이 태그 블록과 공백만으로 이뤄질 때만 auto — 앞뒤 공백을 빼고
 # 목록의 "<이름>" · "<이름 " 으로 시작하고 "</이름>" 으로 끝나며, 어느 닫는 태그 뒤에도(공백 다음) 태그가 아닌 글이 오지 않아야
 # 한다. 알림 앞 · 뒤 · 사이에 사람이 쓴 글이 있으면 사람 턴이다(그 요청은 등록돼야 한다). 실제 알림 입력은 태그 블록 하나뿐이다
@@ -466,6 +580,10 @@ scv_mp_prompt_kind() {
 # 원칙 문구는 contracts/rewrite-principle.md 한 곳에만 있다. 여기는 그 본문을 받아 고르고 붙이는 판단만 한다.
 
 # @pure
+# 역할: 코어 루트로 원칙 파일 후보 경로 두 개를 한 줄씩 낸다
+# 종류: 조립
+# 예: /core → $'/core/contracts/rewrite-principle.md\n/core/vendor/scv-core/core/contracts/rewrite-principle.md\n'
+# 예: "" → ""
 # <코어 루트> → 원칙 파일 후보(한 줄에 하나): 코어 루트 아래, 그다음 래퍼가 벤더링한 코어 아래 —
 # 투영된 플러그인 루트에서 도는 스크립트도 벤더 사본의 원칙 파일을 찾는다.
 scv_mp_principle_candidates() {
@@ -476,6 +594,11 @@ scv_mp_principle_candidates() {
 }
 
 # @pure
+# 역할: SCV_LANG 값을 원칙 구역 이름(korean · english · japanese)으로 바꾼다
+# 종류: 변환
+# 예: ko → "korean"
+# 예: "" → "english"
+# 예: FR → "fr"
 # <SCV_LANG 값> → 원칙 구역 이름(korean | english | japanese | 소문자 그대로). 짧은 표기(ko · en · ja)도 받는다.
 scv_mp_principle_lang() {
   local v
@@ -489,6 +612,10 @@ scv_mp_principle_lang() {
 }
 
 # @pure
+# 역할: 원칙 파일 본문에서 이름이 맞는 구역의 전문을 꺼낸다
+# 종류: 꺼내기
+# 예: $'<!-- principle:english -->\nEN text\n<!-- principle:korean -->\nKO text' korean → "KO text"
+# 예: $'<!-- principle:english -->\nEN text' korean → ""
 # <원칙 파일 본문> <구역 이름> → 그 구역(표식 줄 + 전문, 끝 줄바꿈 없음). 없으면 빈 값.
 scv_mp_principle_pick() {
   # 꺾쇠는 글자 코드로 적는다 — 순수성 검사가 < > 를 파일 리다이렉션으로 본다(scv_mp_answer_shows_rewrite 와 같은 방식).
@@ -507,6 +634,10 @@ scv_mp_principle_pick() {
 }
 
 # @pure
+# 역할: 원칙 파일 본문에서 언어에 맞는 구역을 꺼낸다(없으면 english 구역)
+# 종류: 꺼내기
+# 예: $'<!-- principle:english -->\nEN text\n<!-- principle:korean -->\nKO text' ko → "KO text"
+# 예: $'<!-- principle:english -->\nEN text' ja → "EN text"
 # <원칙 파일 본문> <SCV_LANG 값> → 그 언어의 구역. 구역이 없는 언어는 english 구역, 그것도 없으면 빈 값.
 scv_mp_principle_section() {
   local body="${1:-}" lang out
@@ -517,6 +648,10 @@ scv_mp_principle_section() {
 }
 
 # @pure
+# 역할: 구역 첫 줄 "tag: " 뒤의 표식을 꺼낸다
+# 종류: 꺼내기
+# 예: $'tag: [P]\nbody' → "[P]"
+# 예: body → ""
 # <구역> → 표식(첫 줄 "tag: " 뒤). 표식 줄이 없으면 빈 값.
 scv_mp_principle_tag() {
   local first="${1:-}"
@@ -526,6 +661,10 @@ scv_mp_principle_tag() {
 }
 
 # @pure
+# 역할: 구역에서 표식 줄과 통로별 해로운 변경 줄을 뺀 원칙 전문을 낸다
+# 종류: 다듬기
+# 예: $'tag: [P]\nbody\nharm-text: x' → "body"
+# 예: plain → "plain"
 # <구역> → 원칙 전문(표식 줄과 통로별 해로운 변경 줄 "harm-choice: " · "harm-text: " · "harm-none: " 을 뺀 나머지).
 # 표식 줄이 없으면 구역 전체에서 통로별 줄만 뺀다. 통로별 줄이 없는 구역은 이 기능 전과 같은 값이다.
 scv_mp_principle_text() {
@@ -543,6 +682,10 @@ scv_mp_principle_text() {
 }
 
 # @pure
+# 역할: 구역에서 통로(choice|text|none)에 맞는 "harm-" 줄의 값을 꺼낸다
+# 종류: 꺼내기
+# 예: $'tag: t\nharm-choice: C\nharm-text: T' choice → "C"
+# 예: $'harm-text: T' none → ""
 # <구역> <choice|text|none> → 그 통로의 해로운 변경 줄("harm-<통로>: " 뒤). 모르는 통로는 text, 줄이 없으면 빈 값.
 # 통로는 실체 보여 주기와 같은 판단(scv_show_real_channel — choice-gate.sh tool · unattended)으로 고른다(2026-10-08).
 scv_mp_harm_line() {
@@ -555,6 +698,10 @@ scv_mp_harm_line() {
 }
 
 # @pure
+# 역할: 다시 쓴 요청 뒤에 표식을 붙인 REWRITE 줄 값을 만든다(off · 표식 없음이면 요청 그대로)
+# 종류: 조립
+# 예: "요청" on "[P]" → "요청 [P]"
+# 예: "요청" off "[P]" → "요청"
 # <다시 쓴 요청> <스위치 on|off> <표식> → REWRITE 줄 값. off · 표식 없음 · 요청 없음이면 요청 그대로(이 기능 전과 같다).
 scv_mp_rewrite_tagged() {
   local rw="${1:-}" sw="${2:-on}" tag="${3:-}"
@@ -562,6 +709,10 @@ scv_mp_rewrite_tagged() {
 }
 
 # @pure
+# 역할: 답의 코드 블록 밖 인용 줄에 다시 쓴 요청이 보이는지 1|0 으로 정한다
+# 종류: 판정/answer
+# 예: $'> **다시 쓴 요청**: 무엇을 한다' '무엇을 한다' → "1"
+# 예: $'본문만' '무엇을 한다' → "0"
 # <답 본문> <다시 쓴 요청> → 1(코드 블록 밖 인용 줄에 다시 쓴 요청이 보인다) | 0. 인용 줄이 "다시 쓴 요청" · "Rewritten request"
 # 라벨을 담거나, 다시 쓴 요청의 앞 16글자(공백 제외)를 담으면 보인 것으로 본다.
 scv_mp_answer_shows_rewrite() {
@@ -580,6 +731,11 @@ scv_mp_answer_shows_rewrite() {
 }
 
 # @pure
+# 역할: 등록 · 보임 · 이미 전달 · 맨 위 한 줄로 종료를 허용할지(ok · block · warn) 정한다
+# 종류: 판정/gate
+# 예: 1 1 0 1 → "ok"
+# 예: 0 "" 0 "" → "block"
+# 예: 0 "" 1 "" → "warn"
 # <등록됨 0|1> <보임 0|1|""(답을 못 얻음)> <이미 전달 0|1> [<맨 위 한 줄 0|1|"">] → ok | block | warn.
 # 이미 전달했으면 절대 막지 않는다(같은 턴 한 번) — 다음 턴 경고로 넘긴다. 답을 못 얻었으면 "보임" 은 판정하지 않는다.
 # 세 번째 값은 종료 훅이 검사마다 준다(v0.64.2+, lib/stop-gates.sh) — 그 전에는 호스트의 "이미 계속 중" 값이었다.
@@ -599,6 +755,11 @@ scv_mp_stop_gate() {
 # 한 줄과 결론 바로 뒤 전문 인용 둘 다 보인다. 가이드 원문 다시 읽기는 대화 기록(마지막 압축 경계 뒤의 읽음 표시)으로 정한다.
 
 # @pure
+# 역할: 세션 id 가 폴더 이름으로 안전하면 그대로, 아니면 빈 값을 낸다
+# 종류: 판정
+# 예: "sess-1" → "sess-1"
+# 예: "a/b" → ""
+# 예: "a..b" → "a..b"
 # <세션 id 원문> → 세션 폴더 이름. 영문 · 숫자 · . _ - 만으로 된 64자 이하이고 점으로 시작하지 않을 때만 그대로, 아니면 빈 값
 # (빈 값 = 프로젝트 공용 자리 — 이 기능 전과 같다). 다른 글자를 지워 맞추지 않는다 — 서로 다른 세션이 한 폴더로 겹치지 않게.
 scv_mp_session_key() {
@@ -612,6 +773,10 @@ scv_mp_session_key() {
 }
 
 # @pure
+# 역할: 저널 폴더와 세션 이름으로 이번 턴 상태 폴더 경로를 만든다(이름이 비면 저널 폴더)
+# 종류: 조립
+# 예: scv/journal sess-1 → "scv/journal/.help-turns/sess-1"
+# 예: scv/journal "" → "scv/journal"
 # <저널 폴더> <세션 폴더 이름> → 이번 턴 상태를 두는 폴더. 이름이 비면 저널 폴더 그대로(공용).
 scv_mp_turn_dir() {
   local j="${1:-scv/journal}" k="${2:-}"
@@ -620,6 +785,10 @@ scv_mp_turn_dir() {
 }
 
 # @pure
+# 역할: 넘겨받은 폴더가 저널 폴더나 그 아래 세션 폴더면 그대로, 아니면 저널 폴더를 낸다
+# 종류: 판정
+# 예: scv/journal scv/journal/.help-turns/s1 → "scv/journal/.help-turns/s1"
+# 예: scv/journal /etc → "scv/journal"
 # <저널 폴더> <넘겨받은 폴더> → 그 폴더가 저널 폴더 자신이거나 그 아래 세션 폴더(.help-turns/<이름>)면 그대로, 아니면 저널 폴더.
 # 종료 훅이 고른 폴더를 다른 스크립트에 넘길 때 — 엉뚱한 곳에 쓰지 않게 모양만 본다.
 scv_mp_turn_dir_ok() {
@@ -631,6 +800,10 @@ scv_mp_turn_dir_ok() {
 }
 
 # @pure
+# 역할: 등록 첫 줄에서 세 번째 칸(차례)을 꺼낸다
+# 종류: 꺼내기
+# 예: $'t\x1fm\x1f7' → "7"
+# 예: $'t\x1fm' → ""
 # <등록 첫 줄(표\x1f모델[\x1f차례])> → 차례(등록마다 새로 생기는 값). 없으면 빈 값(이 기능 전 형식).
 scv_mp_reg_seq() {
   local line="${1:-}" us=$'\x1f' rest
@@ -640,6 +813,11 @@ scv_mp_reg_seq() {
 }
 
 # @pure
+# 역할: 이번 턴 등록 상태로 파일 쓰기를 허용할지(ok · unregistered · answered · forbidden) 정한다
+# 종류: 판정/gate
+# 예: tok1 "" "" 0 0 → "unregistered"
+# 예: tok1 $'tok1\x1fm\x1f3' '' 1 1 → "forbidden"
+# 예: "" "" "" 0 0 → "ok"
 # <이번 턴 표> <등록 첫 줄> <답 기록 줄(표\x1f차례)> <범위 금지 0|1> <프로젝트 파일 0|1> → ok | unregistered | answered | forbidden.
 #   unregistered: 이번 턴 등록이 없다(이 기능 전과 같은 거절).
 #   answered    : 이번 턴의 마지막 등록 뒤에 선택 창 답이 왔다 — 다시 등록(범위가 그대로면 --keep)해야 편집한다.
@@ -658,6 +836,10 @@ scv_mp_write_gate() {
 }
 
 # @pure
+# 역할: 제출 텍스트(탭 구분)에서 항목 id 의 값을 꺼낸다
+# 종류: 꺼내기
+# 예: $'a\tmsg\tv1\nb\tna\tv2' b → "v2"
+# 예: $'a\tmsg\tv1' z → ""
 # <제출 텍스트(탭 구분)> <항목 id> → 그 항목의 값(첫 줄). 없으면 빈 값.
 scv_mp_register_value() {
   local sub="${1:-}" want="${2:-}" id st val
@@ -669,6 +851,10 @@ scv_mp_register_value() {
 }
 
 # @pure
+# 역할: 범위 칸이 변경을 막는 첫머리면 그 문구를, 아니면 빈 값을 낸다
+# 종류: 판정/gate
+# 예: "읽기 전용 — 코드는 안 건드림" → "읽기 전용"
+# 예: "파일은 바꾸지 않고 새 문서만" → ""
 # <범위(scope) 칸 값> → 변경을 막는 첫머리(맞은 문구) 또는 빈 값. 칸의 **첫머리**만 보고, 문구 뒤가 끝 · 줄표 · 쌍점 · 쉼표 ·
 # 마침표 · 괄호 · 빗금일 때만 맞는다 — 문장 중간의 부분 금지('설정 파일은 바꾸지 않는다', '다른 실패는 보고만')나 이어지는 말
 # ('파일은 바꾸지 않고 새 문서만', '조회만 하고 결과를 기록', 'No changes to the API')을 전체 금지로 오판하지 않게. 칸 어디든 예외를
@@ -708,6 +894,10 @@ scv_mp_scope_forbid() {
 }
 
 # @pure
+# 역할: 답에 "이렇게 이해하고 일함:" 같은 맨 위 한 줄이 있는지 1|0 으로 정한다
+# 종류: 판정/answer
+# 예: "이렇게 이해하고 일함: 정리" → "1"
+# 예: "없음" → "0"
 # <답 본문> → 1(코드 블록 밖에 맨 위 한 줄의 이름표로 시작하는 줄이 있다) | 0. 이름표: "이렇게 이해하고 일함" · "Understood as" ·
 # "こう理解して進める" 뒤에 쌍점(: 또는 ：). 굵게 표시(**) 같은 꾸밈 글자는 무시한다. 인용 줄('>')은 맨 위 한 줄이 아니다.
 scv_mp_answer_has_topline() {
@@ -727,6 +917,10 @@ scv_mp_answer_has_topline() {
 }
 
 # @pure
+# 역할: 종료를 막는 이유 한 줄을 만든다(빠진 쪽을 이름으로 말한다)
+# 종류: 조립
+# 예: 1 1 0 tok1 x.sh m s1 → "답 맨 위의 '이렇게 이해하고 일함: …' 한 줄이 없다 — 맨 위에 한 줄로 보여라(결론 바로 뒤의 전문 인용은 그대로)."
+# 예: 1 1 1 tok1 x.sh m s1 → "결론 바로 뒤에 다시 쓴 요청 전문을 인용 블록으로 보이지 않았다 — '> **다시 쓴 요청**: …'(REWRITE 줄 그대로). 맨 위 한 줄은 그대로 둔다."
 # <등록됨 0|1> <전문 보임 0|1|""> <맨 위 한 줄 0|1|""> <이번 턴 표> <스크립트 경로> <모델 id> <세션 id> → 종료를 막는 이유 한 줄
 # (머리말 없이). 빠진 쪽(맨 위 한 줄 · 결론 뒤 전문)을 이름으로 말한다.
 scv_mp_stop_reason() {
@@ -745,6 +939,10 @@ scv_mp_stop_reason() {
 }
 
 # @pure
+# 역할: 편집 거절 판정에 맞는 사유 한 줄을 만든다(ok 면 빈 값)
+# 종류: 조립
+# 예: answered tok1 x.sh m s1 → $'SCV 프롬프트: 마지막 등록 뒤에 선택 창 답이 왔다 — 편집 전에 다시 등록하라. 범위가 바뀌었으면 bash "x.sh" register --model "m" --session "s1" (전체 다시), 그대로면 bash "x.sh" register --keep --session "s1" (한 줄). 그다음 다시 시도하라.'
+# 예: ok tok1 → ""
 # <판정 ok|unregistered|answered|forbidden> <이번 턴 표> <스크립트 경로> <모델 id> <세션 id> <맞은 금지 문구> → 편집 거절 사유 한 줄
 # (ok 면 빈 값). 다시 등록하는 명령을 그대로 준다.
 scv_mp_gate_reason() {
@@ -762,6 +960,10 @@ scv_mp_gate_reason() {
 }
 
 # @pure
+# 역할: 하위 에이전트의 쓰기를 거절하는 사유 한 줄을 만든다(answered · forbidden 이 아니면 빈 값)
+# 종류: 조립
+# 예: forbidden "읽기만" → "SCV 프롬프트(하위 에이전트): 이 세션의 마지막 등록의 범위(scope) 칸이 변경을 막는다('읽기만') — 하위 에이전트는 등록하지 않는다. 이 편집은 하지 말고 리드에게 돌려보내라(범위가 바뀌었으면 리드가 다시 등록한다)."
+# 예: ok "" → ""
 # <판정 answered|forbidden> <맞은 금지 문구> → 하위 에이전트(훅 입력의 에이전트 id)의 쓰기를 거절하는 사유 한 줄(그 밖이면 빈 값).
 # 하위 에이전트는 등록하지 않는다 — 고칠 사람은 리드라서, 편집을 멈추고 리드에게 돌려보내라고 말한다.
 scv_mp_gate_reason_sub() {
@@ -776,6 +978,10 @@ scv_mp_gate_reason_sub() {
 }
 
 # @pure
+# 역할: 모델이 실행한 mark 명령 사건들로 읽은 모델 집합을 쌓는다(경계 "B" 는 집합을 비운다)
+# 종류: 꺼내기
+# 예: '' $'M\x1fbash model-prompting.sh mark --model Model-4' → $'model-4'
+# 예: 'm-1' $'B' → ""
 # <집합(공백 구분 모델 id)> <사건 줄들> → 새 집합. 사건 줄(효과부가 대화 기록에서 차례대로 뽑는다): "B" = 압축 경계 — 집합을
 # 비운다(경계 앞의 읽음은 그 뒤 컨텍스트에 없다). "M\x1f<명령>" = 모델이 실행한 셸 명령 중 model-prompting.sh 가 든 것 — 그중
 # "model-prompting.sh … mark --model <id>" 의 모델을 더한다. 명령을 안내한 출력(help 결과)은 효과부가 넘기지 않는다.
@@ -805,6 +1011,11 @@ scv_mp_guide_fold() {
 }
 
 # @pure
+# 역할: 읽은 모델 집합에 이 모델이 있으면 loaded, 없으면 load 로 정한다
+# 종류: 판정/gate
+# 예: "m-1 m-2" m-1 → "loaded"
+# 예: "m-1" m-2 → "load"
+# 예: N m-1 → ""
 # <집합 또는 "N"(판단 못 함)> <정규화 모델 id> → loaded(이 모델을 마지막 압축 경계 뒤에 읽음) | load | 빈 값(판단 못 함 — 이 기능
 # 전의 판단으로 간다).
 scv_mp_guide_decide() {
@@ -814,6 +1025,10 @@ scv_mp_guide_decide() {
 }
 
 # @pure
+# 역할: 사건 줄들을 접어 이 모델 원문을 읽었는지(loaded · load) 한 번에 정한다
+# 종류: 판정/gate
+# 예: $'M\x1fbash model-prompting.sh mark --model m-1' m-1 → "loaded"
+# 예: N m-1 → ""
 # <사건 줄들 또는 "N"> <정규화 모델 id> → loaded | load | 빈 값. 한 번에 다 본 기록용(접기 + 판정).
 scv_mp_guide_from_events() {
   local ev="${1:-}" id="${2:-}"
@@ -822,6 +1037,10 @@ scv_mp_guide_from_events() {
 }
 
 # @pure
+# 역할: 답에 "문제 표"(위치 · 깨지는 것 칸 등)가 있는지 1|0 으로 정한다
+# 종류: 판정/answer
+# 예: $'| 위치 | 깨지는 것 |\n|---|---|' → "1"
+# 예: "문제 없음" → "0"
 # <답> → 1 | 0. (v0.64.0+) 코드 블록 · 인용 줄 밖에 문제 표 머리('위치' 와 '깨지는 것' 칸)나 '생길 수 있는 문제' 칸이
 # 있는가 — 한국어 · 영어 · 일본어. SCV 원칙은 문제를 따로 보이지 않고 해결책 안에서 막는다(사용자 결정 2026-10-01).
 scv_mp_answer_has_problem_table() {
@@ -844,6 +1063,11 @@ scv_mp_answer_has_problem_table() {
 }
 
 # @pure
+# 역할: 문제 표 · 스위치 · 이미 전달 여부로 종료를 허용할지(ok · block · warn) 정한다
+# 종류: 판정/gate
+# 예: 1 on 0 → "block"
+# 예: 1 on 1 → "warn"
+# 예: 0 on 0 → "ok"
 # <문제 표 있음 0|1> <원칙 스위치 on|off> <이미 전달 0|1> → ok | block | warn. 같은 턴 한 번 — 이미 전달했으면 다음 턴 경고
 # (세 번째 값은 v0.64.2+ 종료 훅이 검사마다 준다 — lib/stop-gates.sh).
 scv_mp_principle_gate() {
@@ -853,12 +1077,19 @@ scv_mp_principle_gate() {
 }
 
 # @pure
+# 역할: 문제 표를 넣어 막힐 때 모델에게 주는 원칙 요지 한 줄을 낸다
+# 종류: 조립
+# 예: → "[SCV 원칙] 답에 문제 표나 '생길 수 있는 문제' 칸을 넣었다 — 문제는 보여 주지 말고 해결책 안에서 막아 다시 써라: '단위 | 해결책 | 추천' 세 칸, 방법마다 그 방법이 부를 문제를 막는 길을 담고, 정할 것은 선택지로 묻고, 남는 한계는 추천 칸 이유에 한 줄(contracts/rewrite-principle.md)."
 # → 막는 이유 한 줄. 모델이 이것만 읽고 다시 쓸 수 있게 원칙 요지를 담는다.
 scv_mp_principle_reason() {
   printf '%s' "[SCV 원칙] 답에 문제 표나 '생길 수 있는 문제' 칸을 넣었다 — 문제는 보여 주지 말고 해결책 안에서 막아 다시 써라: '단위 | 해결책 | 추천' 세 칸, 방법마다 그 방법이 부를 문제를 막는 길을 담고, 정할 것은 선택지로 묻고, 남는 한계는 추천 칸 이유에 한 줄(contracts/rewrite-principle.md)."
 }
 
 # @pure
+# 역할: 매 턴 훅이 싣는 "1:1 비교 · 등록" 지시 블록을 만든다(스위치 off · 토큰 없음이면 빈 값)
+# 종류: 조립
+# 예: on tok1 m-1 "" x.sh → $'[SCV 프롬프트] 이 턴 메시지(짧아도)를 모델 가이드 요구 항목과 1:1 비교 · 등록한 뒤 일하라 — 등록 전 파일 쓰기는 거절, 등록 · 인용 없는 종료는 차단. 선택 창 답 뒤 첫 편집 전에 다시 등록(범위 그대로면 register --keep).\n  항목마다 msg · ctx(출처) · na(이유) · asked(못 찾은 것 중 가장 영향 큰 하나만, 추천 답과 함께) → bash "x.sh" register --model "m-1" (stdin "id | 상태 | 값" 줄들 + "rewrite | - | 다시 쓴 요청"; 파일을 안 바꾸는 턴은 scope 값을 \'변경 없음 — …\' 으로 시작) → 답 맨 위 \'이렇게 이해하고 일함: …\' 한 줄 + 결론 바로 뒤 \'> **다시 쓴 요청**: …\' 전문 인용(ctx · asked 항목 표시), 그것으로 일한다.\n  항목: bash "x.sh" checklist --model "{지금 모델 id}"\n'
+# 예: off tok1 → ""
 # <스위치> <토큰> <모델 id 또는 ""> <병합 목록 또는 ""> <스크립트 경로> [<세션 id>] → 매 턴 훅이 싣는 블록(스위치 off · 토큰 없음이면 빈 값).
 # 토큰은 싣지 않는다 — 같은 상태면 출력이 늘 같아야 한다(등록은 표 파일을 스스로 읽는다). 세션 id(v0.65.0+)는 등록 명령에 그대로
 # 싣는다 — 한 저장소의 여러 세션 중 이 세션 자리에 등록되게(같은 세션이면 늘 같다).
@@ -879,6 +1110,9 @@ scv_mp_turn_block() {
 }
 
 # @pure
+# 역할: 제출 텍스트를 탭 구분 세 칸으로 맞춘다(" | " 도 받고 앞뒤 공백을 자른다)
+# 종류: 다듬기
+# 예: $'a | msg | v\n\nb\tna\tv2' → $'a\tmsg\tv\nb\tna\tv2\n'
 # <제출 텍스트> → 탭 구분으로 맞춘 제출. 탭이 없는 줄은 " | " 로 나눈다(앞 두 번만 — 값에는 | 가 들어갈 수 있다). 앞뒤 공백은 잘라낸다.
 scv_mp_register_normalize() {
   local sub="${1:-}" line a b c sep=" | "

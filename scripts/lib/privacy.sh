@@ -10,6 +10,11 @@
 #   scv_privacy_term_hit <줄> <목록 원문>  → 걸린 목록 줄 번호(1부터) 또는 빈 값 — 낱말 경계, 대소문자 무시
 #   scv_privacy_path_skipped <경로>        → 종료 코드 0 이면 검사하지 않는 경로(가짜 시험 자료 · 래퍼 안 Core 사본)
 # @pure
+# 역할: 공개해도 되는 메일 주소(GitHub noreply · 봇)면 참
+# 종류: 판정
+# 예: 1+a@users.noreply.github.com → ""
+# 예: noreply@anthropic.com → ""
+# 예: me@gmail.com → "" [1]
 
 scv_privacy_email_ok() {
   case "${1:-}" in
@@ -22,7 +27,7 @@ scv_privacy_text_rule() {
   local l="${1:-}"
   if printf '%s' "$l" | grep -qE '(^|[^A-Za-z])[A-Z][A-Za-z]*-Session:[[:space:]]|/code/session_[A-Za-z0-9]'; then echo session-line; return; fi
   if printf '%s' "$l" | grep -qE 'session_01[A-Za-z0-9]{10,}'; then echo session-id; return; fi
-  if printf '%s' "$l" | grep -qE '/Users/[A-Za-z0-9._-]+/|/home/[A-Za-z0-9._-]+/|/private/tmp/claude-[0-9]+'; then echo local-path; return; fi
+  if printf '%s' "$l" | grep -qE '/Users/[A-Za-z0-9._-]{2,}/|/home/[A-Za-z0-9._-]{2,}/|/private/tmp/claude-[0-9]+'; then echo local-path; return; fi
   if printf '%s' "$l" | grep -qiE '[A-Za-z0-9._%+-]+@(gmail|googlemail|naver|daum|hanmail|kakao|nate|hotmail|outlook|live|yahoo|icloud|me|proton|protonmail)\.[a-z.]+'; then echo personal-email; return; fi
   echo ''
 }

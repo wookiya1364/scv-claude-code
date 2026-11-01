@@ -35,6 +35,10 @@ attachment_scope_mode() {
 }
 
 # @pure
+# 역할: 표준입력 줄들에서 슬러그가 든 줄만 남긴다 — 슬러그가 비면 전부 통과
+# 종류: 고르기
+# 예: my-plan <<< $'my-plan/a.md\nother/b.md' → "my-plan/a.md"
+# 예: '' <<< $'x\ny' → $'x\ny'
 attachment_scope_filter() {
   local slug="$1" line
   if [[ -z "$slug" ]]; then cat; return 0; fi

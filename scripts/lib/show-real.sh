@@ -43,20 +43,21 @@
 # 보고의 나누기 · 분류는 lib/model-prompting.sh(scv_mp_prompt_kind)와 lib/choices.sh(scv_asks_in_text · scv_answer_body)를
 # 함께 불러 둔 셸에서 부른다.
 
+# shellcheck source=switch.sh
+declare -F scv_switch >/dev/null 2>&1 || source "${BASH_SOURCE[0]%/*}/switch.sh"
+
 # ---------------------------------------------------------------- 매 턴 안내
 
-# @pure
 # <설정 값 원문> → on | off. off 만 끈다(대소문자 · 공백 · 따옴표 무관) — 없거나 다른 값은 on(다른 SCV 스위치와 같은 규칙).
-scv_show_real_switch() {
-  local v="${1:-}"
-  v="${v//[[:space:]]/}"; v="${v//\"/}"; v="${v//\'/}"
-  case "$v" in
-    [Oo][Ff][Ff]) printf 'off' ;;
-    *)            printf 'on'  ;;
-  esac
-}
+# 같은 규칙의 구현은 lib/switch.sh 의 scv_switch 하나다 — 이 이름은 기존 호출을 위해 남긴다.
+scv_show_real_switch() { scv_switch "$@"; }
 
 # @pure
+# 역할: 쓸 수 있는 선택 창과 실행 상태로 질문 통로(choice · text · none)를 정한다
+# 종류: 판정
+# 예: "ChoiceTool" 0 human → $'choice'
+# 예: "" 0 human → 'text'
+# 예: "ChoiceTool" 1 human → $'none'
 # <이번 실행에 쓸 수 있는 선택 창 이름 — 빈 값 가능> <사람 없는 실행 1|0> <이번 입력 human|auto> → choice | text | none.
 # 사람이 없는 실행이거나 자동 알림 턴이면 none(묻지 않는다 — 계약의 예외). 아니면 이름이 있으면 choice, 없으면 text.
 # 이름과 사람 없는 실행은 고르게 할 때 규칙과 같은 판단의 값이다(choice-gate.sh tool · unattended).
@@ -67,6 +68,10 @@ scv_show_real_channel() {
 }
 
 # @pure
+# 역할: 실체 보여 주기 켬 여부와 통로로 매 턴 블록에 덧붙일 안내 세 줄을 만든다(off 면 빈 값)
+# 종류: 조립
+# 예: off text → ""
+# 예: on none → $'[SCV 실체 보여 주기] 결과물이 바뀌는 일이면, 설명이나 글로 된 견본 대신 처음 돌아가는 순간에 가장 작은 것을 실제로 실행해\n그 결과(명령 출력 · 화면 · 함수 호출 결과)를 보고에 그대로 남겨라 — 사람이 없는 실행이나 자동 알림 턴이라 묻지 않는다. 설명은 한두 줄로.\n결과물이 바뀌지 않는 일은 보여 주지도 묻지도 말고 \'결과물 변화 없음\'이라고 적어라. 본문: contracts/show-real.md'
 # <on|off> <choice|text|none> → 매 턴 블록에 덧붙일 세 줄. off 면 빈 값(이 기능 전과 같은 출력). 문구는 2026-10-06 두 번째 긴 과제
 # 실측에서 잰 지시(사용자 승인)를 바탕으로 한다 — 본문은 contracts/show-real.md 한 곳. 묻는 통로(choice · text)의 둘째 줄에는
 # 사용자가 정해 둔 검토 시점 문구가 붙는다(계획 20261009-wookiya1364-show-real-at-checkpoint — 그 시점을 앞당기지 않고, 그때 요약 대신
@@ -89,6 +94,9 @@ scv_show_real_rule() {
 # ---------------------------------------------------------------- 실사용 보고
 
 # @deterministic
+# 역할: 세션 기록 JSONL(표준입력)에서 사용자 메시지 · 편집 · 실행 · 출력 · 확인 창 · 모델 글을 기록 항목 줄(U E R O X C Z T)로 뽑는다
+# 종류: 꺼내기
+# 예: "" <<< $'{"type":"user","timestamp":"2026-10-01T01:00:00Z","message":{"role":"user","content":"hi there"}}\n{"type":"assistant","message":{"content":[{"type":"text","text":"ok"}]}}\n' → $'U\t2026-10-01T01:00:00Z\thi there\thi there\nT\tok\tok'
 # 표준입력: 세션 기록 JSONL(한 세션). <선택 창 이름> [<거절 표시>] → 기록 항목 줄들(기록 순서 그대로):
 #   "U<탭><시각><탭><앞 1000자><탭><판별용 글>"(사용자 메시지 · 프롬프트가 든 첨부 — 줄바꿈 · 탭은 공백. 판별용 글은 8000자가 넘으면
 #                                            앞 6000자 + 끝 2000자)
@@ -194,6 +202,10 @@ scv_show_real_entries() {
 }
 
 # @deterministic
+# 역할: 실행 출력이 묻는 글 안에 그대로 인용됐는지 1 또는 0 으로 낸다(셋째 인자 line 이면 인용된 출력 줄)
+# 종류: 판정/answer
+# 예: "5 passed" "all 5 passed today" → '1'
+# 예: "5 passed" "nothing here" → '0'
 # <실행 출력 줄들(\x1e 또는 줄바꿈으로 이음)> <묻는 글 · 창(\x1e 또는 줄바꿈으로 이음)> → 1(출력이 그대로 인용됨) | 0.
 # 인용: (가) 공백을 하나로 줄인 출력 한 줄(16바이트 이상, 숫자가 있거나 낱말 셋 이상)이 글 안에 그대로 있다, (나) 출력 한 줄의 이웃한
 # 두 낱말(앞뒤 문장부호를 떼고 소문자로, 둘 다 영문이나 숫자를 품고 숫자가 든 6바이트 이상 — 예: '849 passed', 'pass=87 fail=0')이
@@ -260,6 +272,10 @@ scv_show_real_quotes() {
 }
 
 # @pure
+# 역할: \x1e 로 이은 글을 줄바꿈으로 나눈 글로 바꾼다
+# 종류: 변환
+# 예: $'a\036b' → $'a\nb'
+# 예: "" → ""
 # <\x1e 로 줄을 나눈 글> → 줄바꿈으로 나눈 글. 글자 단위 치환 대신 한 번에 나눠 잇는다(bash 3.2 의 긴 한글 치환이 제곱으로 느리다).
 scv_show_real_lines() {
   local IFS=$'\x1e' parts n
@@ -272,6 +288,10 @@ scv_show_real_lines() {
 }
 
 # @pure
+# 역할: 질문이 계속할지와 고칠 점을 함께 묻는 확인인지 1 또는 0 으로 낸다
+# 종류: 판정/answer
+# 예: "이대로 계속할까요, 고칠 점이 있나요?" → '1'
+# 예: "어떤 방식으로 할까요?" → '0'
 # <확인 창의 질문 또는 글 질문> → 1(계속할지와 고칠 점을 함께 묻는 확인) | 0. 계속 쪽 단서와 고칠 쪽 단서(한 · 영 · 일)가 둘 다
 # 있어야 한다 — 실체 보여 주기 안내의 질문('이대로 계속할까요, 고칠 점이 있나요?')을 다른 결정 창과 가른다. 보기 설명은 보지 않고
 # '진행' 같은 흔한 말은 단서로 쓰지 않는다(실제 기록에서 다른 결정 창이 그것으로 잡혔다, 2026-10-07).
@@ -289,6 +309,9 @@ scv_show_real_is_confirm() {
 }
 
 # @pure
+# 역할: 기록 항목 줄들을 사람 턴 줄들(시각 · 사건 글자 · 메시지 · 끝 글 · 보인 출력 줄)로 나눈다
+# 종류: 꺼내기
+# 예: s1 $'U\t2026-10-01T01:00:00Z\tfix it\tfix it\nE\nR\nX\t5 passed\nT\tdone\tAll 5 passed.' "" "" "" → $'s1\t2026-10-01T01:00:00Z\tERTq\tfix it\tdone\tAll 5 passed.\t5 passed'
 # <세션 이름> <기록 항목 줄들> <자동 입력 태그> <앞말> <뒷말> → 사람 턴 줄들(기록 순서 그대로):
 #   "<세션><탭><시각><탭><사건 글자들 E·R·O·C·K·Q·T·q><탭><사람 메시지 앞 1000자><탭><마지막 글의 끝 두 줄><탭><마지막 글(\x1e 줄바꿈)>
 #    <탭><보인 출력 줄>"
@@ -373,6 +396,10 @@ _scv_show_real_turn_line() {
 }
 
 # @pure
+# 역할: 모델의 글에 결과물 변화 없음 표시가 있는지 1 또는 0 으로 낸다
+# 종류: 판정/answer
+# 예: "결과물 변화 없음" → '1'
+# 예: "done" → '0'
 # <모델의 글> → 1(결과물 변화 없음 표시가 있다) | 0. 안내가 결과물이 안 바뀌는 일에 쓰게 하는 말과 그 영 · 일 대응말을 본다.
 scv_show_real_is_nochange() {
   local m="${1:-}" cue nc=0 hit=0
@@ -387,6 +414,11 @@ scv_show_real_is_nochange() {
 }
 
 # @pure
+# 역할: 사람 메시지가 고쳐 달라는 말인지 단서 낱말(한 · 영 · 일)로 보고 1 또는 0 으로 낸다
+# 종류: 판정/answer
+# 예: "이건 틀렸어" → '1'
+# 예: "looks good" → '0'
+# 예: "fix this" → '1'
 # <사람 메시지> → 1(고쳐 달라는 말) | 0. 단서 낱말(한 · 영 · 일)을 본다 — 기록에서 '완료 뒤 수정 요구'를 세는 용도라 거칠다.
 # '아니면'(또는)은 단서가 아니다.
 scv_show_real_is_correction() {
@@ -411,6 +443,9 @@ scv_show_real_is_correction() {
 }
 
 # @pure
+# 역할: 사람 턴 줄마다 바뀜 · 보여 줌 · 완료 · 수정 요구 · 확인 질문 수를 가려 한 줄로 낸다
+# 종류: 판정/answer
+# 예: $'s1\t2026-10-01T01:00:00Z\tERTq\tfix it\tdone\tAll 5 passed.\t5 passed' → $'s1\t2026-10-01T01:00:00Z\t1\t0\t1\t0\t0'
 # <사람 턴 줄들> → 턴마다 "<세션><탭><시각><탭><바뀜 0|1><탭><보여 줌 0|1><탭><완료 0|1><탭><수정 요구 0|1><탭><확인 질문 수>".
 # 모델이 아무것도 하지 않은 턴은 줄을 내지 않고, 앞 턴의 완료 상태도 끊지 않는다. 바뀜은 편집이 있고 마지막 글에 '결과물 변화
 # 없음'이 없을 때. 보여 줌은 바뀐 턴에서 첫 편집 뒤 실행의 출력을 보인 뒤(또는 보이며) 묻는 확인 창(Q)이 있거나, 보인 턴(q)의 끝
@@ -461,6 +496,10 @@ scv_show_real_classify() {
 # 판정자에게는 애매한 턴의 끝 글 마지막 1,500자와 보인 출력 줄 하나만 간다 — 턴 전체 · 다른 턴 · 사람 메시지는 가지 않는다.
 
 # @pure
+# 역할: 사람 턴 줄들에서 두 기간 안에서 출력을 보였으나 묻지 않은 애매한 턴만 골라 낸다
+# 종류: 고르기
+# 예: $'s1\t2026-10-01T01:00:00Z\tERTq\tfix it\tdone\tAll 5 passed.\t5 passed' 540 "20261001 20261001" "" → $'s1\t2026-10-01T01:00:00Z\tb\t5 passed\tAll 5 passed.'
+# 예: $'s1\t2026-10-01T01:00:00Z\tERTq\tfix it\tdone\tAll 5 passed.\t5 passed' 540 "" "" → ""
 # <사람 턴 줄들(scv_show_real_split)> <지역 오프셋(분)> <켜기 전 "시작 끝"> <켠 뒤 "시작 끝"> → 애매한 턴마다
 #   "<세션><탭><시각><탭><기간 b|a><탭><보인 출력 줄><탭><마지막 글(\x1e 줄바꿈)>".
 # 애매한 턴: 두 기간 중 하나에 든 바뀐 턴 가운데 첫 편집 뒤 실행의 출력을 인용해 보였고(q), 그 뒤 묻는 확인 창이 없고(Q 없음),
@@ -494,6 +533,9 @@ scv_show_real_pick() {
 }
 
 # @deterministic
+# 역할: 애매한 턴 줄마다 보인 출력과 끝 글 마지막 1,500자를 판정자에게 보일 한 줄 발췌로 만든다
+# 종류: 조립
+# 예: $'s1\t2026-10-01T01:00:00Z\tb\t5 passed\tAll 5 passed.' → $'s1\t2026-10-01T01:00:00Z\tb\t[Shown output] 5 passed\x1e[Final message]\x1eAll 5 passed.'
 # <애매한 턴 줄들(scv_show_real_pick)> → "<세션><탭><시각><탭><기간><탭><발췌(\x1e 줄바꿈)>". 발췌는 보인 출력 줄과 끝 글의 마지막
 # 1,500자(글자 단위 — jq 에서 자른다) — 묻는 말은 끝에 있다. 끝 글에서 '=== Excerpt' 로 시작하는 줄은 '== Excerpt' 로 바꿔 질문의
 # 구분선을 흉내 내지 못하게 한다. 줄마다 jq 인자로 넘긴다 — jq 1.6 은 원문 그대로 읽기(-R)에서 4,096바이트
@@ -514,6 +556,9 @@ scv_show_real_excerpts() {
 }
 
 # @deterministic
+# 역할: 글의 SHA-256 16진 지문을 낸다
+# 종류: 지문
+# 예: "abc" → 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'
 # <글> → SHA-256 16진(sha256sum 또는 shasum -a 256 — 같은 값). 둘 다 없으면 cksum 의 수(그 기계 안에서만 같은 값).
 scv_show_real_hash() {
   local h
@@ -525,6 +570,9 @@ scv_show_real_hash() {
 }
 
 # @deterministic
+# 역할: 발췌 줄마다 (세션 · 시각 · 발췌)의 해시 열쇠를 앞에 붙인다
+# 종류: 지문
+# 예: $'s1\t2026-10-01T01:00:00Z\tb\tx' → $'8a27eeea88600e4df47837f14e10d4670017a6d8fb91bb51612b8782242d1430\ts1\t2026-10-01T01:00:00Z\tb\tx'
 # <발췌 줄들(scv_show_real_excerpts)> → 줄마다 앞에 "<열쇠><탭>". 열쇠는 (세션 파일 이름 · 시각 · 발췌)의 해시 — 끝 글이나 보인
 # 출력이 바뀌면 열쇠가 달라져 다시 묻는다. 세션 이름의 '<폴더 번호>/' 앞부분은 빼고 쓴다(보고마다 폴더 순서가 달라도 같은 열쇠).
 scv_show_real_keys() {
@@ -539,6 +587,9 @@ scv_show_real_keys() {
 }
 
 # @deterministic
+# 역할: 열쇠 붙은 발췌 줄마다 저장된 답이 있으면 A 줄, 없으면 물을 턴 Q 줄로 나눠 낸다
+# 종류: 고르기
+# 예: $'k1\ts1\tt\tb\tx\nk2\ts2\tt\ta\ty' $'k1\tyes' → $'A\tk1\ts1\tt\tb\tyes\nQ\tk2\ts2\tt\ta\ty'
 # <열쇠 붙은 발췌 줄들(scv_show_real_keys)> <저장된 답 "<열쇠><탭><yes|no>" 줄들> → 줄마다
 #   저장된 답이 있으면 "A<탭><열쇠><탭><세션><탭><시각><탭><기간><탭><yes|no>",
 #   없으면 "Q<탭><열쇠><탭><세션><탭><시각><탭><기간><탭><발췌>"(물을 턴). 같은 열쇠가 여러 번 저장돼 있으면 마지막 답.
@@ -551,6 +602,9 @@ scv_show_real_lookup() {
 }
 
 # @deterministic
+# 역할: 물을 턴 줄들로 판정자에게 보낼 질문 글을 만든다
+# 종류: 조립
+# 예: $'Q\tk1\ts1\tt\tb\tx' → $'You judge excerpts from an AI coding assistant\'s work log. Answer with one JSON array only.\n\nBelow are 1 excerpts. Each comes from one turn in which the assistant edited files, ran something, and showed part of the run\'s actual output to the user. [Shown output] is an output line the assistant showed; [Final message] is the end of the assistant\'s last message in that turn.\n\nQuestion: in each turn, after showing the actual result, did the assistant ask the user whether to continue or what to fix? Asking can be a choice window or a text question. Even without a question mark, it counts as asking when the assistant asks the user to look at this result and say whether to continue or what to change (e.g. "리뷰 부탁드립니다" / "Please review", "고칠 점이 있으면 알려 주세요" / "Let me know anything to fix", "검토 후 ship it 이면 끝냅니다" / "If it is a ship it after review, I am done"). It does not count when the assistant only reports that the work is done, only says it is waiting for someone\'s review, announces what it will do next, or offers a separate follow-up task (e.g. "다음 작업으로 계획할지는 말씀해 주시면 됩니다" / "Tell me if you want these planned as the next task").\n\nAnswer with one JSON array of 1 items only — "yes" or "no" for each excerpt, in order.\n\n=== Excerpt 1 ===\nx'
 # <물을 턴 줄들("Q<탭>…", 20개까지)> → 판정자에게 보낼 글 하나. 묻는 뜻은 정답 매기기의 질문과 같다(실제 결과를 보인 뒤 계속할지 ·
 # 고칠지를 물었나 — '물음'의 정의 포함) — 애매한 턴이라 결과는 이미 보였으니 끝 글의 묻는 말만 가르면 된다. 답은 발췌 순서대로
 # yes · no 의 JSON 배열. jq 인자로 넘기지 않고 셸에서 잇는다 — 묶음이 커도 인자 길이 한도(리눅스 한 인자 128KB)에 걸리지 않게.
@@ -575,6 +629,10 @@ scv_show_real_judge_prompt() {
 }
 
 # @deterministic
+# 역할: 판정자 답 글에서 길이가 n 인 yes · no JSON 배열을 찾아 한 줄씩 낸다(깨진 답은 빈 값)
+# 종류: 꺼내기
+# 예: "Answer: [\"yes\",\"No\"]" 2 → $'yes\nno'
+# 예: "[\"yes\"]" 2 → ""
 # <판정자 답 글> <발췌 수 n> → n 줄(yes · no). 답 글에서 길이가 n 이고 항목이 모두 yes · no 인 JSON 배열(안에 대괄호가 없는 것,
 # 대소문자 · 앞뒤 공백 무관)을 찾아, 하나뿐이거나 모두 같을 때만 그 답. 설명 속의 다른 괄호('[1]' 같은)는 건너뛴다. 아니면 빈 값 —
 # 깨진 응답(배열이 없음 · 수가 안 맞음 · 서로 다른 배열 · 한도 안내)은 그 묶음 전체를 판정 못 한 턴으로 세고 저장하지 않는다.
@@ -589,6 +647,10 @@ scv_show_real_judge_parse() {
 }
 
 # @pure
+# 역할: 물을 턴 줄들과 판정자 답 줄들을 짝지어 A 줄(yes · no · unjudged)로 만든다
+# 종류: 조립
+# 예: $'Q\tk1\ts1\tt\tb\tx' yes → $'A\tk1\ts1\tt\tb\tyes'
+# 예: $'Q\tk1\ts1\tt\tb\tx' '' → $'A\tk1\ts1\tt\tb\tunjudged'
 # <물을 턴 줄들("Q<탭>…")> <답 줄들(scv_show_real_judge_parse — 빈 값이면 판정 못 함)> → 턴마다
 #   "A<탭><열쇠><탭><세션><탭><시각><탭><기간><탭><yes|no|unjudged>". 답 수가 물은 턴 수와 다르면 모두 unjudged.
 scv_show_real_zip() {
@@ -606,6 +668,9 @@ scv_show_real_zip() {
 }
 
 # @deterministic
+# 역할: 분류된 턴 줄들에서 답이 yes 인 턴의 보여 줌 칸만 1 로 바꾼다
+# 종류: 변환
+# 예: $'s1\t2026-10-01T01:00:00Z\t1\t0\t1\t0\t0' $'A\tk\ts1\t2026-10-01T01:00:00Z\tb\tyes' → $'s1\t2026-10-01T01:00:00Z\t1\t1\t1\t0\t0'
 # <분류된 턴 줄들(scv_show_real_classify)> <답 줄들("A<탭>…")> → 분류된 턴 줄들. 답이 yes 인 턴의 보여 줌 칸만 1 로 바꾼다 — 다른
 # 칸 · 다른 턴은 그대로(no · unjudged 인 턴은 규칙 단계 값 0 그대로).
 scv_show_real_merge() {
@@ -617,6 +682,9 @@ scv_show_real_merge() {
 }
 
 # @pure
+# 역할: 판정자 답 줄들에서 기간마다 판정한 턴 · 그중 보여 줌 · 판정 못 한 턴을 센다
+# 종류: 세기
+# 예: $'A\tk\ts\tt\tb\tyes\nA\tk\ts\tt\tb\tno\nA\tk\ts\tt\ta\tunjudged' → $'before\t2\t1\t0\nafter\t0\t0\t1'
 # <답 줄들("A<탭>…")> → 두 줄 "before<탭><판정자가 정한 턴><탭><그중 보여 줌><탭><판정 못 한 턴>" · "after<탭>…".
 scv_show_real_judge_count() {
   local tab=$'\t' line a p bj=0 by=0 bu=0 aj=0 ay=0 au=0
@@ -636,6 +704,11 @@ scv_show_real_judge_count() {
 }
 
 # @pure
+# 역할: 기록 시각(UTC 또는 ±시간대)과 지역 오프셋(분)으로 그 지역의 날짜 YYYYMMDD 를 낸다
+# 종류: 변환
+# 예: "2026-10-01T20:30:00Z" 540 → '20261002'
+# 예: "2026-03-01T00:30:00+09:00" 0 → '20260228'
+# 예: "nope" 0 → ""
 # <기록 시각 YYYY-MM-DDTHH:MM…> <지역 오프셋(분)> → 그 지역의 날짜 YYYYMMDD. 못 읽으면 빈 값.
 # 시각 끝이 Z 이거나 시간대가 없으면 UTC, ±HH:MM(또는 ±HHMM)이 붙으면 그만큼 빼서 UTC 로 본다.
 # 율리우스 일수로 옮겨 하루를 더하거나 뺀다 — 달 · 해 · 윤년 경계를 바깥 명령 없이 넘는다.
@@ -660,6 +733,11 @@ scv_show_real_local_date() {
 }
 
 # @pure
+# 역할: +HHMM · -HHMM 모양의 오프셋을 분으로 바꾼다(모양이 다르면 0)
+# 종류: 변환
+# 예: +0900 → '540'
+# 예: -0530 → '-330'
+# 예: abc → '0'
 # <지역 오프셋 "+HHMM" · "-HHMM"(date +%z 모양)> → 분(예: +0900 → 540). 모양이 다르면 0.
 scv_show_real_offset() {
   local z="${1:-}" mm
@@ -670,6 +748,10 @@ scv_show_real_offset() {
 }
 
 # @pure
+# 역할: 연 · 월 · 일이 있는 날인지(윤년 포함) 1 또는 0 으로 낸다
+# 종류: 판정
+# 예: 2026 02 30 → '0'
+# 예: 2028 02 29 → '1'
 # <YYYY> <MM> <DD> → 1(있는 날) | 0. 달마다 날 수 · 윤년을 본다(2026-02-30 은 없는 날).
 scv_show_real_valid_day() {
   local y=$(( 10#${1:-0} )) m=$(( 10#${2:-0} )) d=$(( 10#${3:-0} )) dim=31
@@ -682,6 +764,10 @@ scv_show_real_valid_day() {
 }
 
 # @pure
+# 역할: 기간 글 YYYY-MM-DD..YYYY-MM-DD 를 "시작 끝" YYYYMMDD 두 값으로 바꾼다(잘못된 기간은 빈 값)
+# 종류: 변환
+# 예: "2026-10-01..2026-10-11" → '20261001 20261011'
+# 예: "2026-10-11..2026-10-01" → ""
 # <기간 "YYYY-MM-DD..YYYY-MM-DD"> → "YYYYMMDD YYYYMMDD"(시작 · 끝, 끝 날 포함). 모양이 다르거나, 없는 날이거나, 시작이 끝보다
 # 늦으면 빈 값.
 scv_show_real_range() {
@@ -695,6 +781,9 @@ scv_show_real_range() {
 }
 
 # @pure
+# 역할: 분류된 턴 줄들을 두 기간(켜기 전 · 켠 뒤)별로 세션 · 턴 · 바뀐 턴 · 보여 준 턴 등으로 센다
+# 종류: 세기
+# 예: $'s1\t2026-10-01T01:00:00Z\t1\t1\t1\t0\t1\ns1\t2026-10-02T01:00:00Z\t1\t0\t1\t1\t0' 0 "20261001 20261001" "20261002 20261002" → $'before\t1\t1\t1\t1\t0\t1\nafter\t1\t1\t1\t0\t1\t0'
 # <분류된 턴 줄들> <지역 오프셋(분)> <켜기 전 "시작 끝"> <켠 뒤 "시작 끝"> → 두 줄
 #   "before<탭><세션 수><탭><사람 턴><탭><바뀐 턴><탭><보여 준 턴><탭><완료 뒤 수정 요구><탭><확인 질문>" · "after<탭>…"
 # 턴은 사람 메시지의 지역 날짜로 기간에 든다. 두 기간에 다 들지 않는 턴은 세지 않는다. 세션은 그 기간에 턴이 있는 것만 센다.
@@ -733,6 +822,10 @@ scv_show_real_count() {
 }
 
 # @pure
+# 역할: 부분과 전체로 "N% (부분)" 글을 만든다(전체가 0 이면 "- (부분)")
+# 종류: 조립
+# 예: 3 4 → '75% (3)'
+# 예: 0 0 → '- (0)'
 # <부분> <전체> → "N% (부분)". 전체가 0 이면 "- (부분)".
 scv_show_real_pct() {
   local x="${1:-0}" n="${2:-0}"
@@ -740,6 +833,10 @@ scv_show_real_pct() {
 }
 
 # @pure
+# 역할: 합과 세션 수로 세션당 값 "A.BC (합)" 글을 만든다(세션이 0 이면 "- (합)")
+# 종류: 조립
+# 예: 5 2 → '2.50 (5)'
+# 예: 5 0 → '- (5)'
 # <합> <세션 수> → "A.BC (합)" — 세션당 값(소수 둘째 자리까지 버림). 세션이 0 이면 "- (합)".
 scv_show_real_per() {
   local x="${1:-0}" n="${2:-0}" v
@@ -749,6 +846,9 @@ scv_show_real_per() {
 }
 
 # @pure
+# 역할: 셈 두 줄과 언어 · 기간 · 파일 수로 켜기 전 · 켠 뒤 비교 표와 범례를 만든다(숫자와 날짜만)
+# 종류: 조립
+# 예: $'before\t2\t10\t4\t2\t1\t3\nafter\t2\t12\t6\t5\t0\t1' en 2026-09-01..2026-09-30 2026-10-01..2026-10-31 4 0 → $'Show the real thing — real-use report (before · after)\n\n| Period | Sessions | Changed turns | (a) Shown | (b) Fixes/session | (c) Asks/session |\n|---|---|---|---|---|---|\n| Before 2026-09-01..2026-09-30 | 2 | 4 | 50% (2) | 0.50 (1) | 1.50 (3) |\n| After 2026-10-01..2026-10-31 | 2 | 6 | 83% (5) | 0.00 (0) | 0.50 (1) |\n\n(a) Share of changed turns with \'edit → run → the result shown, then a continue-or-fix ask\' (in brackets: turns)\n(b) First answered person message after a completion report that asks for a fix, per session (in brackets: total)\n(c) Choice windows + turn-ending text questions, per session (in brackets: total)\nThe numbers show direction only — the two periods may hold different kinds of work. Counting rules: header of core/scripts/lib/show-real.sh.\nSession record files read: 4'
 # <셈 두 줄(scv_show_real_count)> <언어 SCV_LANG> <켜기 전 기간 원문> <켠 뒤 기간 원문> <읽은 기록 파일 수> <읽지 못한 파일 수>
 # [<판정자 몫 두 줄(scv_show_real_judge_count)>] → 표 한 장과 범례. 숫자와 날짜만 낸다 — 대화 내용 · 경로 · 세션 이름은 내지 않는다.
 # 판정자 몫이 주어지면 규칙만으로 못 가린 턴 가운데 판정자가 정한 턴(그중 보여 줌) · 판정 못 한 턴을 기간마다 한 줄로 더한다.
