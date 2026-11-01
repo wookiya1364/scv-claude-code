@@ -218,9 +218,11 @@ if [[ -f "$HELP_PROTO" ]]; then
   grep -q "appended to the" "$HELP_PROTO" \
     && grep -q "conversation file this session is already writing" "$HELP_PROTO" \
     && ok "세션 파일에 이어 붙인다는 규칙이 있다" || fail "이어 붙이기 규칙이 없다"
-  grep -q "no conversation file yet, open one" "$HELP_PROTO" \
-    && ok "세션 파일이 없을 때 하나 연다는 규칙이 있다" || fail "첫 짧은 턴의 처리가 없다"
-  grep -q "Short turns skip this question entirely" "$HELP_PROTO" \
+  # instruction-conflicts 6번(2026-11-01): 파일이 없으면 열지 않고 저널 한 줄 — 기록 계약과 같은 말.
+  grep -q "no conversation file yet, it is one journal line" "$HELP_PROTO" \
+    && ! grep -q "no conversation file yet, open one" "$HELP_PROTO" \
+    && ok "세션 파일이 없을 때는 저널 한 줄 — 새 파일을 열지 않는다" || fail "첫 짧은 턴의 처리가 기록 계약과 다르다"
+  grep -q "Short turns skip the resume-or-new question entirely" "$HELP_PROTO" \
     && ok "짧은 턴에는 되묻지 않는다" || fail "짧은 턴에도 질문이 붙는다"
 fi
 
