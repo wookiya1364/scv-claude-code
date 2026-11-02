@@ -156,11 +156,10 @@ Answer handling:
 
 - **[1] regression**: Don't modify any files. Offer once: "Want me to analyze the failed output tail with you?" (if yes, use `Read`/`Grep` to explore source, suggestions only). Log `[regression] <slug>` to triage log.
 - **[2] obsolete**: Modify files per this procedure:
-  1. `Read` `scv/archive/<slug>/PLAN.md`
-  2. `Edit` frontmatter — adjust 3 fields:
-     - `status: done` → `status: obsolete`
-     - Add `obsoleted_at: <TODAY>` if missing
-     - Add `obsoleted_by: manual` if missing
+  1. `bash ${CLAUDE_PLUGIN_ROOT}/scripts/obsolete-mark.sh <slug> manual` — changes only the three PLAN.md
+     frontmatter fields (`status: obsolete`, `obsoleted_at`, `obsoleted_by: manual`) and refreshes the
+     archive index in the same call (step 5 below is then already done).
+  2. (merged into step 1 — one script, so work 9c and this triage cannot drift apart again)
   3. Never touch TESTS.md or ARCHIVED_AT.md.
   4. **Decision log append (v0.22.0+)** — the WHY of an obsolete verdict used
      to evaporate with the triage session; record it. Append **one** entry to
@@ -178,9 +177,8 @@ Answer handling:
        as the user explained it in this triage>
      - refs: scv/archive/<slug>/PLAN.md
      ```
-  5. Refresh the archive index so the runner sees the new status now, not after the next archive:
-     `bash ${CLAUDE_PLUGIN_ROOT}/scripts/archive-index.sh` (the runner reads `scv/archive/INDEX.yaml` first; a
-     stale index kept an obsolete slug running — 0.54.0).
+  5. The archive index is already refreshed by step 1's script (the runner reads `scv/archive/INDEX.yaml`
+     first; a stale index kept an obsolete slug running — 0.54.0).
   6. Report one line to the user: "Marked `<slug>` as obsolete (PLAN.md frontmatter + DECISIONS.md entry + index refreshed)."
   7. Log `[obsolete] <slug>` to triage log.
 - **[3] flaky**: Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/regression.sh --only <slug> --quiet` up to 2 times. On pass, log `[flaky→pass on retry N] <slug>`. If both retries fail, put the slug back into the triage table as its only row.
