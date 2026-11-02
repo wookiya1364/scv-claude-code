@@ -13,9 +13,9 @@ Every message, however short (v0.62.0+). Hooks enforce steps 1, 4 and 5.
 4. Register it (`model-prompting.sh register`) before any write; a turn that changes no
    file starts its `scope` with `변경 없음 —`. After a choice-tool answer, register again
    before the next write (`register --keep` when the scope is unchanged).
-5. Show it twice: a top line `이렇게 이해하고 일함: …` (Understood as: …), and the rewrite
-   (its REWRITE line, principle tag included) as a `>` block right after the conclusion,
+5. Show it once, first: the rewrite (its REWRITE line, principle tag included) as a `>` block
+   that is the answer's first line — `> **다시 쓴 요청**: …` (`> **Rewritten request**: …`) —
    with its ctx/asked items; add `**Rewritten request**:` (e.g. `**다시 쓴 요청**:`)
    to the turn block; work from it. Never hide the user's words or change model or effort.
-   The top line is a header; the lead is the paragraph after it. The `>` block is quoted as
+   The bold topic and its bullets follow it (`contracts/writing.md`). The `>` block is quoted as
    registered — "no code values" does not reach inside it.

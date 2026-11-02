@@ -123,7 +123,7 @@ stop_in "$P" "$(jq -cn --arg p "$TR" '{transcript_path:$p}')" >/dev/null; L="$(d
 
 echo "── [T6] 따옴표·괄호 안 마침표는 문장 끝이 아니다 ──"
 v="$(scv_answer_lint "$QUOTE2" 2)"; [[ -z "$v" ]] && ok "따옴표 안 마침표 → 2문장 통과" || fail "quote2: $v"
-v="$(scv_answer_lint "$QUOTE3" 2)"; grep -q '^lead-sentences=3>2$' <<<"$v" && ok "실제 3문장은 여전히 잡힘" || fail "quote3: $v"
+v="$(scv_answer_lint "$QUOTE3" 2)"; grep -q '^prose-long=3>2$' <<<"$v" && ok "실제 3문장은 여전히 잡힘" || fail "quote3: $v"
 v="$(scv_answer_lint $'"인용 하나. 인용 둘." 밖 문장이다. 둘째 문장.\n' 2)"; [[ -z "$v" ]] && ok "곧은 따옴표 안의 문장 여러 개도 안 센다" || fail "quote-inner: $v"
 v="$(scv_answer_lint $'괄호(예: 이것.) 안도 같다. 둘째 문장.\n' 2)"; [[ -z "$v" ]] && ok "괄호 안 마침표도 안 센다" || fail "paren: $v"
 v="$(scv_answer_lint $'“굽은 따옴표. 안.” 하나. 둘.\n' 2)"; [[ -z "$v" ]] && ok "굽은 따옴표 안도 안 센다" || fail "curly: $v"
@@ -173,23 +173,22 @@ P=$(ready t11b); TR="$WORK/t11b.jsonl"; tr_write "$TR" "U:안녕" "A:$BAD4" "U:�
 stop_in "$P" "$(jq -cn --arg p "$TR" '{transcript_path:$p}')" >/dev/null; L="$(drift_last "$P")"
 [[ "$L" == *"lint=0 reload=0 src=none" ]] && ok "진짜 사람 프롬프트는 지금처럼 경계" || fail "T11b 줄: $L"
 
-echo "── [T12] 맨 위 '이렇게 이해하고 일함' 줄은 첫 문단으로 세지 않는다 (instruction-conflicts T1~T4) ──"
-# 두 규칙(결론 1~2문장 · 맨 위 한 줄)이 같은 답에 걸린다. 맨 위 줄은 머리말이고 결론은 그다음 문단이다.
-TOP=$'이렇게 이해하고 일함: 계획 전에 방향을 정함.'
-v="$(scv_answer_lint "$TOP"$'\n\n방금 표는 안 보였습니다. 그래서 다시 적습니다. 각 줄은 이렇습니다.\n' 2)"
-grep -q '^lead-sentences=3>2$' <<<"$v" && ok "맨 위 줄 뒤 결론 3문장은 잡힌다" || fail "T12a: [$v]"
-v="$(scv_answer_lint "$TOP"$'\n방금 표는 안 보였습니다. 그래서 다시 적습니다.\n' 2)"
-[[ -z "$v" ]] && ok "맨 위 줄 바로 다음 두 문장은 통과" || fail "T12b: [$v]"
-v="$(scv_answer_lint $'**Understood as:** fix the lint.\n\nOne. Two. Three.\n' 2)"
-grep -q '^lead-sentences=3>2$' <<<"$v" && ok "영어 · 굵게 꾸민 맨 위 줄도 같게" || fail "T12c: [$v]"
+echo "── [T12] 맨 위 다시 쓴 요청 인용은 줄글로 세지 않고, 뒤에 오면 위반 (answer-bullets T1·T4) ──"
+RW=$'> **다시 쓴 요청**: 계획 전에 방향을 정해 줘.'
+v="$(scv_answer_lint "$RW"$'\n\n방금 표는 안 보였습니다. 그래서 다시 적습니다. 각 줄은 이렇습니다.\n' 2)"
+grep -q '^prose-long=3>2$' <<<"$v" && ok "인용 뒤 줄글 3문장은 잡힌다" || fail "T12a: [$v]"
+v="$(scv_answer_lint "$RW"$'\n방금 표는 안 보였습니다. 그래서 다시 적습니다.\n' 2)"
+[[ -z "$v" ]] && ok "인용 바로 다음 두 문장은 통과" || fail "T12b: [$v]"
+v="$(scv_answer_lint $'> **Rewritten request**: fix the lint.\n\nOne. Two. Three.\n' 2)"
+grep -q '^prose-long=3>2$' <<<"$v" && ok "영어 인용도 같게" || fail "T12c: [$v]"
 v="$(scv_answer_lint $'결론이다. 둘째. 셋째.\n' 2)"
-grep -q '^lead-sentences=3>2$' <<<"$v" && ok "맨 위 줄 없는 답은 전과 같다" || fail "T12d: [$v]"
-v="$(scv_answer_lint "$TOP"$'\n' 2)"
-[[ -z "$v" ]] && ok "맨 위 줄만 있는 답은 위반 없음" || fail "T12e: [$v]"
-v="$(scv_answer_lint "$TOP"$'\n\n결론입니다. 둘째입니다.\n> **다시 쓴 요청**: `core/a.sh` 를 고쳐 줘. 시험도.\n' 2)"
-[[ -z "$v" ]] && ok "결론 바로 밑에 붙은 인용 블록은 결론 문단이 아니다" || fail "T12g: [$v]"
-v="$(scv_lint_skip_top_line $'> 이렇게 이해하고 일함: 인용\n본문.\n' 2>/dev/null)"
-[[ "$v" == $'> 이렇게 이해하고 일함: 인용\n본문.' ]] && ok "인용 줄은 맨 위 줄이 아니다 — 그대로" || fail "T12f: [$v]"
+grep -q '^prose-long=3>2$' <<<"$v" && ok "인용 없는 답의 긴 줄글도 잡힌다" || fail "T12d: [$v]"
+v="$(scv_answer_lint "$RW"$'\n' 2)"
+[[ -z "$v" ]] && ok "인용만 있는 답은 위반 없음" || fail "T12e: [$v]"
+v="$(scv_answer_lint $'결론입니다. 둘째입니다.\n> **다시 쓴 요청**: `core/a.sh` 를 고쳐 줘. 시험도.\n' 2)"
+[[ "$v" == "rewrite-not-top" ]] && ok "결론 뒤에 온 인용은 맨 위가 아니다" || fail "T12g: [$v]"
+v="$(scv_answer_lint $'**결과**\n- 됨\n\n> 다른 인용이다. 셋. 넷.\n' 2)"
+[[ -z "$v" ]] && ok "다시 쓴 요청이 아닌 인용은 위치를 보지 않는다" || fail "T12f: [$v]"
 
 echo; echo "test-answer-lint-source: pass=$PASS fail=$FAIL skip=$SKIP"
 (( FAIL == 0 ))

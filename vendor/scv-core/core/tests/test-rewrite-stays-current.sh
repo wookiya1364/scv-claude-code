@@ -3,7 +3,7 @@
 # scv-test: serial — 시간 한도를 잰다(다른 시험과 겹치면 흔들림). run-focused.sh 가 끝에 혼자 돌린다.
 #
 # 계획: scv/promote/20261003-wookiya1364-rewrite-stays-current/TESTS.md 의 T1~T10 (픽스처로 도는 자동 검사).
-#   T1  보이는 곳 — 맨 위 한 줄 + 결론 뒤 전문, 빠진 쪽을 이름으로 말한다
+#   T1  보이는 곳 — 답 맨 위 전문 인용(0.76.0+), 빠졌거나 맨 위가 아니면 그렇게 말한다
 #   T2  설정 설명 · 매 턴 블록 · 경고 · 규약이 같은 위치를 말한다(옛 문구 0)
 #   T3  선택 창 답 뒤 첫 편집 전 다시 등록 — 거절 → 재등록 → 허용, 답 없는 턴은 그대로
 #   T4  '그대로' 한 줄 등록(register --keep) — 답 뒤에만 받는다
@@ -47,9 +47,8 @@ export SCV_HOST_PROFILE="$WORK/profile.env" CLAUDE_PLUGIN_ROOT="$CORE" SCV_TODAY
 unset CLAUDE_CODE_SESSION_ID 2>/dev/null || true
 
 RW="Fix the login bug until the login test passes"
-TOP="이렇게 이해하고 일함: 로그인 버그를 고친다"
 QT="> **다시 쓴 요청**: $RW"
-GOOD="$(printf '%s\n\n결론입니다.\n\n%s\n' "$TOP" "$QT")"
+GOOD="$(printf '%s\n\n**결과**\n- 고침\n' "$QT")"
 
 new_repo() {  # <이름> → 가드가 도는 빈 scv 저장소(세션 s1 의 help 표식 포함)
   local d="$WORK/$1"; mkdir -p "$d/scv/journal" "$d/scv/promote" "$d/scv/conversations" "$d/src"
@@ -92,20 +91,20 @@ stop() {  # <저장소> <세션> <답> <계속 중 true|false> → 종료 훅 �
 reason() { jq -r '.reason // empty' <<<"$1" 2>/dev/null; }
 blocked() { [[ "$(jq -r '.decision // empty' <<<"$1" 2>/dev/null)" == block ]]; }
 
-echo "T1. 보이는 곳 — 맨 위 한 줄 + 결론 뒤 전문"
+echo "T1. 보이는 곳 — 답 맨 위 전문 인용"
 c=0
 R="$(new_repo t1)"; hook "$R" s1 "로그인 고쳐" >/dev/null; reg "$R" s1 >/dev/null
-o="$(stop "$R" s1 "$GOOD" false)"; [[ -z "$o" ]] && c=$((c + 1)) || echo "      (a) both shown must pass: $o"
+o="$(stop "$R" s1 "$GOOD" false)"; [[ -z "$o" ]] && c=$((c + 1)) || echo "      (a) quote on top must pass: $o"
 o="$(stop "$R" s1 "$(printf '결론입니다.\n\n%s\n' "$QT")" false)"
 r="$(reason "$o")"
-blocked "$o" && [[ "$r" == *"맨 위"* && "$r" == *"이렇게 이해하고 일함"* && "$r" != *"전문을 인용 블록으로 보이지 않았다"* ]] && c=$((c + 1)) || echo "      (b) quote only must block naming the top line: $r"
-o="$(stop "$R" s1 "$TOP" false)"; r="$(reason "$o")"
-blocked "$o" && [[ "$r" == *"결론 바로 뒤"*"전문"* && "$r" == *"맨 위 한 줄은 그대로"* ]] && c=$((c + 1)) || echo "      (c) top line only must block naming the full quote: $r"
+blocked "$o" && [[ "$r" == *"맨 위에 없다"* && "$r" == *"첫 줄로"* ]] && c=$((c + 1)) || echo "      (b) quote after the conclusion must block saying move it on top: $r"
+o="$(stop "$R" s1 "결론입니다." false)"; r="$(reason "$o")"
+blocked "$o" && [[ "$r" == *"보이지 않았다"* && "$r" == *"맨 위"* ]] && c=$((c + 1)) || echo "      (c) no quote must block naming the quote: $r"
 o="$(stop "$R" s1 "$(printf '결론입니다.\n\n%s\n' "$QT")" false)"; rm -f "$(tf "$R" .help-warn)"
 o="$(stop "$R" s1 "$(printf '결론입니다.\n\n%s\n' "$QT")" true)"
 [[ -z "$o" ]] && grep -q '^\[SCV 가이드\] 직전 턴: .*맨 위' "$(tf "$R" .help-warn)" 2>/dev/null && c=$((c + 1)) \
-  || echo "      (d) continuing: no second block, the next-turn warning names the top line: [$o] $(cat "$(tf "$R" .help-warn)" 2>/dev/null)"
-if [[ $c -eq 4 ]]; then ok "OK [T1] 4/4 both places, the missing one named"; else fail "[T1] $c/4"; fi
+  || echo "      (d) continuing: no second block, the next-turn warning names the top: [$o] $(cat "$(tf "$R" .help-warn)" 2>/dev/null)"
+if [[ $c -eq 4 ]]; then ok "OK [T1] 4/4 quote on top, the miss named"; else fail "[T1] $c/4"; fi
 
 echo
 echo "T2. 설정 설명 · 매 턴 블록 · 경고 · 규약이 같은 위치를 말한다"
@@ -116,10 +115,10 @@ WRN="$(bash -c 'source "$1"; scv_mp_warn_lines unshown k ""; scv_mp_stop_reason 
 REF="$(cat "$CORE/protocols/help/prompt-refine.md")"
 for pair in "settings|$SET" "turn block|$BLK" "warnings|$WRN"; do
   name="${pair%%|*}"; text="${pair#*|}"
-  [[ "$text" == *"맨 위"* && "$text" == *"이렇게 이해하고 일함"* && "$text" == *"결론 바로 뒤"* ]] && c=$((c + 1)) || echo "      ($name) must name the top line and right after the conclusion"
+  [[ "$text" == *"맨 위"* && "$text" != *"이렇게 이해하고 일함"* && "$text" != *"결론 바로 뒤"* ]] && c=$((c + 1)) || echo "      ($name) must name the top and not the old top line"
 done
-[[ "$REF" == *"이렇게 이해하고 일함"* && "$REF" == *"right after the conclusion"* ]] && c=$((c + 1)) || echo "      (protocol) must name the top line and right after the conclusion"
-old="$(grep -rlF '답 앞에 보인다' "$CORE/template" "$CORE/scripts" "$CORE/protocols" "$CORE/contracts" 2>/dev/null || true)"
+[[ "$REF" == *"answer's first line"* && "$REF" != *"이렇게 이해하고 일함"* ]] && c=$((c + 1)) || echo "      (protocol) must name the answer's first line"
+old="$(grep -rlF -e '답 앞에 보인다' -e '이렇게 이해하고 일함' "$CORE/template" "$CORE/protocols" "$CORE/contracts" 2>/dev/null || true)"
 [[ -z "$old" ]] && c=$((c + 1)) || echo "      (old phrase) still in: $old"
 if [[ $c -eq 5 ]]; then ok "OK [T2] 5/5 one placement everywhere, old phrase 0"; else fail "[T2] $c/5"; fi
 
@@ -328,7 +327,7 @@ reg "$R" s1 >/dev/null
 J="$(ls "$R"/scv/journal/2*.md 2>/dev/null | head -n 1)"
 stop "$R" tm-2 "하위 세션의 비밀스러운 결과 문장 SUB-ONLY-7731" false >/dev/null
 ! grep -qF 'SUB-ONLY-7731' "$R"/scv/journal/2*.md 2>/dev/null && c=$((c + 1)) || echo "      (4) a sub-session's answer must not reach the journal"
-stop "$R" s1 "$(printf '%s\n\n리드 답 LEAD-ONLY-4410\n\n%s\n' "$TOP" "$QT")" false >/dev/null
+stop "$R" s1 "$(printf '%s\n\n리드 답 LEAD-ONLY-4410\n' "$QT")" false >/dev/null
 grep -qF 'LEAD-ONLY-4410' "$R"/scv/journal/2*.md 2>/dev/null && c=$((c + 1)) || echo "      (5) the lead's answer is still journaled"
 if [[ $c -eq 5 ]]; then ok "OK [T9b] 5/5 delegated writes follow the lead · sub-session answers stay out of the journal"; else fail "[T9b] $c/5"; fi
 
@@ -407,7 +406,7 @@ pure_dump() {  # <bash> → 이 계획 순수부의 출력 묶음
       printf "wg=%s\n" "$(scv_mp_write_gate t1 "${a%%|*}" "${a#*|}" 0 1)"; done
     printf "wgf=%s|%s\n" "$(scv_mp_write_gate t1 "t1${us}m${us}a" "" 1 1)" "$(scv_mp_write_gate t1 "t1${us}m${us}a" "" 1 0)"
     for v in "파일 · 코드는 바꾸지 않는다" "변경 없음 — x" "No changes to the API" "보고만"; do printf "sf=%s\n" "$(scv_mp_scope_forbid "$v")"; done
-    printf "top=%s%s%s\n" "$(scv_mp_answer_has_topline "이렇게 이해하고 일함: x")" "$(scv_mp_answer_has_topline "> 이렇게 이해하고 일함: x")" "$(scv_mp_answer_has_topline "**Understood as**: x")"
+    printf "top=%s%s%s\n" "$(scv_mp_answer_rewrite_on_top "> **다시 쓴 요청**: x")" "$(scv_mp_answer_rewrite_on_top "$(printf "a\n> **다시 쓴 요청**: x")")" "$(scv_mp_answer_rewrite_on_top "> **Rewritten request**: x")"
     printf "fold=%s\n" "$(scv_mp_guide_fold "" "$(printf "M${us}bash /p/model-prompting.sh mark --model A\nB\nM${us}bash /p/model-prompting.sh mark --model \"b[1m]\"\n")")"
     printf "dec=%s|%s|%s\n" "$(scv_mp_guide_decide "x b" b)" "$(scv_mp_guide_decide N b)" "$(scv_mp_guide_decide "" b)"
     for g in "1 1 0 1" "1 1 0 0" "1 0 0 1" "0 1 0 1" "1 1 1 0"; do set -- $g; printf "sg=%s\n" "$(scv_mp_stop_gate "$1" "$2" "$3" "$4")"; done

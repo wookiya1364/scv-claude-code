@@ -24,7 +24,7 @@ are clear.
 ## Mode B' — Archive Search (retrospective argument, v0.10.0+)
 
 `/scv:help "how did we handle refunds last quarter?"` (*recall* wording): pick the 1–5
-most relevant archives and summarize each in one paragraph.
+most relevant archives and summarize each in bullets.
 
 ## Conversation persistence — committed + redaction-filtered (v0.22.0+)
 
@@ -111,7 +111,7 @@ Refine: **Goal** (one sentence) · **Scope** (in / out) ·
 one question per turn when the next depends on this answer, one Decisions table with a
 recommendation on every row when several are independent (see `Answer shape`).
 
-**Each turn has one shape**: the lead first (1–2 sentences, per `Plain language first`),
+**Each turn has one shape**: the lead first (bold topic + first bullet, per `Plain language first`),
 then the slots the question calls for (per `Answer shape`), and then
 either one dependent question or one Decisions table — never both.
 
