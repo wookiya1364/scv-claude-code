@@ -51,6 +51,7 @@ flowchart LR
 20 個の SCV アクションのうち 14 個を Core が所有します。インストール方法、
 モデル選択、プラグインの入れ替えはホスト依存のため、`update`、`set-models`、
 `mods`、`mods-install`、`mods-remove`、`channel` はアダプター所有です。
+
 正規プロトコルは `action:<name>` と `{{SCV_ARGS}}` を使い、実際のコマンド構文
 と引数形式は検証済みホストプロファイルからのみ注入されます。`scv/SCV.md` は
 最上位の規則と、規則どうしが衝突したときの優先順位から始まり、すべての
@@ -66,7 +67,7 @@ flowchart LR
 | `action:promote` | 資料 → 計画フォルダ(`PLAN.md` + `TESTS.md` + 図) | Core |
 | `action:work` | 実装 · テスト実行 · アーカイブ · 証跡付き PR | Core |
 | `action:codegen` | テスト先行の変種: Red → Green | Core |
-| `action:deck` | 計画 → 番号付き画面設計書(または任意の Markdown → 文書 / スライド) | Core |
+| `action:deck` | 計画 → 番号付き画面設計書、任意の Markdown → 文書/スライド | Core |
 | `action:update` | プラグイン更新の案内 | ラッパー |
 | `action:regression` | アーカイブ済み全計画のテストを一つのスイートで実行 | Core |
 | `action:report` | フェーズの結果を成果物付きで Slack/Discord へ | Core |
@@ -80,7 +81,7 @@ flowchart LR
 | `action:mods` | インストール済み SCV mod の更新 + 一覧 | ラッパー |
 | `action:mods-install` | SCV mod を一つインストール | ラッパー |
 | `action:mods-remove` | SCV mod を一つ削除 | ラッパー |
-| `action:channel` | 開発 · ステージング · 本番チャンネルの入れ替え — リリース前に新しい作業を確認 | ラッパー |
+| `action:channel` | 開発 · ステージング · 本番チャンネル入れ替え — リリース前に新作業確認 | ラッパー |
 
 ### ループ
 
@@ -146,6 +147,13 @@ flowchart LR
   アクションは計画の図の文書（`FEATURE_ARCHITECTURE.md`）を番号付き画面設計書
   として描きます。大きな図一枚に番号を振り、番号ごとの説明を横に置き、検証
   メッセージの表を添え、`PLAN.md` と `TESTS.md` は原文タブとして付きます。
+- **純粋関数の辞書** — `@pure` または `@deterministic` の印が付いた関数ごとに、
+  役割・種類・例をコードの横に書き、`core/scripts/pure-catalog.sh build` が
+  それを辞書（目次一枚と種類ごとのファイル）にします。`check` は空欄、書いた
+  とおりに動かない例、同じ入力に同じ出力を返す二つの関数、古い辞書を拒否します。
+- **辞書の再利用** — work と codegen は新しい純粋関数を書く前に辞書を読み、既存の関数を作り直さず
+  に再利用します。`build --project` はコメントの先頭記号だけを知り、どの
+  プロジェクト・どの言語でも同じことをします（[純粋性の契約](core/contracts/purity.md)）。
 - **SCV 独自のグラフ** — 文書リンク、保管された計画とファイル、決定の参照、一緒に
   変わるファイルを、promote と work が bash と jq だけで自動的に作り直します。
   インストールは不要です（`SCV_GRAPH`）。Graft は任意です。入っていれば計画・
@@ -174,6 +182,7 @@ pointer は正確な `SCV:HOST-POINTER target=SCV.md` marker だけで判定し�
 ビルド出力は Core ペイロードハッシュ別の外部キャッシュに保存されるため、
 Claude Code と Codex は同じランタイムを再利用しながら、どちらのプラグインにも
 書き込みません。既定のユーザーキャッシュは `SCV_DECK_CACHE_DIR` で変更できます。
+
 キャッシュ初期化と旧ランタイム移行は、並行して現れた宛先を置換せず、宛先の
 祖先リンクをたどらず、キャッシュと旧ランタイムが重なる場合は書き込み前に
 停止します。
@@ -183,11 +192,15 @@ install、cleanup は、すべて検証済みのオープン済みディレク�
 転送せず、安全側で停止します。
 
 旧ランタイムの移行は既定で strict です。source と異なる cache 値が既に
-あれば collision として停止します。永続的に残る legacy source に限り、
+あれば collision として停止します。
+
+永続的に残る legacy source に限り、
 `migrate --from PATH --reuse-existing` を明示できます。全対象の preflight
 で既存 destination が一つでも source と異なる場合、現在の cache 全体を
 authoritative とし、legacy source 全体を skip します。同一または未作成の
-項目もコピーしません。相違がなければ従来どおり additive に移行し、
+項目もコピーしません。
+
+相違がなければ従来どおり additive に移行し、
 preflight 後に発生した collision は引き続き fail-closed です。wrapper
 swap 後に削除され得る既存 vendor の recovery は、必ず strict mode の
 まま実行します。
@@ -199,12 +212,15 @@ workspace guard は `PreToolUse` フックとして動き、二つを拒否し�
 ファイルの新規作成と、ワークフローディレクトリ外への書き込みです。このセッション
 中にホストが「SCV アクションが実行中」と報告していれば例外です。そのホスト
 イベントはモデルが偽造できない唯一の信号なので、guard はそれだけを根拠にします。
+
 三つ目の規則は、そのターンの依頼がモデルの要求項目リストに登録されるまで
 ファイルの書き込みを拒否します（上のモデル別プロンプティング）。guard が
 fail-open するのは、payload が空のときと JSON リーダーが無い機械の二つだけで、
 すべてのプロジェクトの書き込みを止める事態を避けます。逆にレシート置き場が
 書けないときは閉じる側に倒れます。SCV を導入していないプロジェクトでは何も
-しません。登録はラッパーの仕事です。ラッパーがフック項目ごとに `SCV_GUARD_MODE`
+しません。
+
+登録はラッパーの仕事です。ラッパーがフック項目ごとに `SCV_GUARD_MODE`
 を渡すため、スクリプト自体はホストを名指ししません。規則は
 [guard 契約](core/contracts/guard.md) にあります。
 
@@ -212,15 +228,27 @@ fail-open するのは、payload が空のときと JSON リーダーが無い�
 `core/scripts/check-provenance.sh` は、コードを変更しながら
 `scv/archive/<slug>/PLAN.md` に保管された計画を追加していない PR を拒否します。
 文書とワークフローディレクトリだけの diff はコード変更とみなしません。
+
 `core/scripts/check-vendor-provenance.sh` は、sync bot 以外のブランチで
 ラッパーの `vendor/scv-core/` を書き換えた PR を拒否します。bot は公開済みの
 リリース成果物を解決して正本ハッシュと具体化後ハッシュの両方を記録しますが、
-手作業のコピーはそのときの作業ツリーの内容をそのまま記録します。どちらのゲート
+手作業のコピーはそのときの作業ツリーの内容をそのまま記録します。
+
+どちらのゲート
 も `stage`・`main` へのリリースチェーンと bot の `chore/core-*` ブランチを除外
 し、PR タイトルで `[no-plan: <理由>]`、`[manual-vendor: <理由>]` として例外を
-宣言できます。理由は必須で、理由のない marker は拒否します。Core 自身の CI は
+宣言できます。理由は必須で、理由のない marker は拒否します。
+
+Core 自身の CI は
 provenance ゲートを実行し、vendor ゲートは vendor された Core を持つラッパーの
 リポジトリ向けに同梱されます。
+
+三つ目のゲートはプライバシーを守ります。`core/scripts/check-privacy.sh` は、
+コミットメッセージや追加された行にローカルのホームパス、セッション id や
+セッションリンク、リポジトリの外に置いた秘密リストの語（`SCV_PRIVACY_TERMS`）
+がある PR を拒否します。作成者の名前とメールは `SCV_PRIVACY_EMAILS=on` の
+ときだけ確認します。Core の CI はすべての PR でこれを実行し、
+`tools/privacy-audit.sh` はリポジトリ全体を走査します。
 
 詳細は [Architecture](docs/architecture.md)、
 [Wrapper integration](docs/wrapper-integration.md)、そして
@@ -281,8 +309,9 @@ tools/release-artifact.sh --output-dir dist
 `vX.Y.Z` タグは両ファイルを公開し、続いて両ラッパーへ Core 同期イベントを
 送信します。リポジトリ間トークンは必須で、通知に失敗したリリース run は失敗と
 して扱われます（公開済みのリリース資産には影響しません）。両ラッパーとも毎日
-ポーリングするため、通知の失敗は伝播を失うのではなく遅らせるだけです。ラッパー
-自動化はチェックサム検証、ホスト別の再生成、回帰テストを行い、`develop` 向け
+ポーリングするため、通知の失敗は伝播を失うのではなく遅らせるだけです。
+
+ラッパー自動化はチェックサム検証、ホスト別の再生成、回帰テストを行い、`develop` 向け
 PR を作成します。`gh workflow run promote.yml` は `develop → stage → main`
 へ昇格し、`-f release=false` を付けるとタグを付けずに昇格するので、文書のように
 リリースの要らない変更に使います。詳細は [Release and integrity](docs/release.md)

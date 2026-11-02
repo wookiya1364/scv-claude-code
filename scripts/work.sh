@@ -343,6 +343,16 @@ if [[ -f "$PLAN" ]]; then
   ' "$PLAN"
 fi
 
+# 통과 기준에 값이 있어야 읽는 사람이 직접 맞춰 본다(contracts/writing.md ①) — 값 · 문구가 하나도 없는
+# 기준은 줄마다 경고만 한다. 막지 않는다.
+if [[ -f "$TESTS" ]]; then
+  # shellcheck source=lib/writing.sh
+  source "$SCRIPT_DIR/lib/writing.sh"
+  while IFS= read -r vague; do
+    [[ -n "$vague" ]] && echo "TESTS_VAGUE: pass criterion has no value or exact text: $vague"
+  done <<< "$(scv_writing_vague_criteria "$(scv_writing_pass_criteria "$(cat "$TESTS")")")"
+fi
+
 # Related Documents
 echo ""
 echo "=== related documents (from PLAN.md) ==="

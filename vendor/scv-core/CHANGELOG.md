@@ -2,6 +2,17 @@
 
 All notable changes to SCV Core are documented here.
 
+## [0.74.0] - 2026-11-02
+
+### 글쓰기 8가지 — 읽는 사람이 덜 헤매게, 선택 창은 그대로
+
+- 글 모양 규칙을 `core/contracts/writing.md` 한 곳에: 결론 한 문장 → 요점 한 문단 → 자세히, 굵게는 줄 머리에만, 번호 목록, 남은 일에 맡은 사람, 내용 있는 제목, 짧은 표 칸. work 결과 보고(Step 8) · report 가 이 문서를 가리킨다.
+- 통과 기준 값 경고: work 머리말이 값 · 정확한 문구가 없는 통과 기준을 `TESTS_VAGUE:` 로 알린다(막지 않음).
+- README 검사(`tools/check-readme.sh`): 표 칸 · 문단 길이를 휴대폰 기준으로 막는다 — 숫자는 `core/scripts/lib/writing.sh` 한 곳(영어 판 60 · 600자, 한 · 일 판 40 · 300자). 코어 README 세 판은 문단을 나누고 칸을 줄였다. 두 래퍼 · 모드 README 도 이 검사를 통과해야 한다.
+- 실물 확인 질문은 결과에서 볼 곳을 짚어 묻는다(`contracts/show-real.md` 2) — 보기 · 횟수는 그대로.
+- promote: 파일을 쓰기 전에 개요(목표 · 안 하는 것 · 단계 · 확인 방법)를 보이고, 그 확인이 곧 폴더 승인(Step 4.5). 묻는 지점 수는 promote 11 · work 10 그대로.
+- 시험: `test-writing-guidance.sh`(8개), `test-check-readme.sh` 깨진 사본 8 → 10.
+
 ## [0.73.1] - 2026-11-01
 
 ### SCV 지침 충돌 정리 — 같은 순간 반대로 시키던 곳을 한쪽으로

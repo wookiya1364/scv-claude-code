@@ -403,7 +403,8 @@ The wrapper runs the `## How to run` block unchanged (same output, same exit cod
 
 ### Step 8 — Report results to the user
 
-Summarize:
+Summarize — shaped per `core/contracts/writing.md` (conclusion first, numbered items, an owner on
+every leftover):
 - Implementation: what changed (files, key decisions).
 - Test results: each scenario pass/fail + overall verdict.
 - Plan's `status:` now `testing` (or back to `in_progress` if failures).
