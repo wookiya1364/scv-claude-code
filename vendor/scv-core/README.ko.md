@@ -50,7 +50,9 @@ flowchart LR
 
 20개 SCV 액션 중 14개는 Core가 소유합니다. 설치 방식, 모델 선택, 플러그인
 바꿔 끼우기는 호스트에 종속되므로 `update`, `set-models`, `mods`,
-`mods-install`, `mods-remove`, `channel`은 어댑터가 소유합니다. 정규 프로토콜은
+`mods-install`, `mods-remove`, `channel`은 어댑터가 소유합니다.
+
+정규 프로토콜은
 `action:<name>`과 `{{SCV_ARGS}}`를 사용하며, 실제 명령 문법과 인자 전달
 방식은 검증된 호스트 프로필로만 주입됩니다. `scv/SCV.md`는 최상위 규칙과,
 규칙끼리 부딪힐 때 무엇이 이기는지의 순서로 시작하며 모든 프로토콜이 이를
@@ -66,7 +68,7 @@ flowchart LR
 | `action:promote` | 자료 → 계획 폴더(`PLAN.md` + `TESTS.md` + 그림) | Core |
 | `action:work` | 구현 · 테스트 실행 · 보관 · 증적 붙은 PR | Core |
 | `action:codegen` | 테스트가 먼저인 변형: Red → Green | Core |
-| `action:deck` | 계획 → 번호식 화면설계서(또는 아무 마크다운 → 문서 / 슬라이드) | Core |
+| `action:deck` | 계획 → 번호식 화면설계서, 아무 마크다운 → 문서/슬라이드 | Core |
 | `action:update` | 플러그인 업데이트 안내 | 래퍼 |
 | `action:regression` | 보관된 모든 계획의 테스트를 한 묶음으로 실행 | Core |
 | `action:report` | 단계 결과를 산출물과 함께 Slack/Discord 로 | Core |
@@ -80,7 +82,7 @@ flowchart LR
 | `action:mods` | 설치된 SCV 모드 업데이트 + 목록 | 래퍼 |
 | `action:mods-install` | SCV 모드 하나 설치 | 래퍼 |
 | `action:mods-remove` | SCV 모드 하나 삭제 | 래퍼 |
-| `action:channel` | 개발 · 스테이징 · 운영 채널 바꿔 끼우기 — 릴리스 전에 새 작업 확인 | 래퍼 |
+| `action:channel` | 개발 · 스테이징 · 운영 채널 바꾸기 — 릴리스 전 새 작업 확인 | 래퍼 |
 
 ### 루프
 
@@ -147,6 +149,13 @@ flowchart LR
   액션은 계획의 그림 문서(`FEATURE_ARCHITECTURE.md`)를 번호식 화면설계서로
   그립니다. 큰 그림 하나에 번호를 달고, 번호마다 설명을 옆에 두고, 검증 문구
   표를 붙이며, `PLAN.md`와 `TESTS.md`는 원문 탭으로 따라옵니다.
+- **순수함수 사전** — `@pure`나 `@deterministic` 표식이 달린 함수마다 역할,
+  종류, 예시를 코드 옆에 적고, `core/scripts/pure-catalog.sh build`가 이를
+  사전(차례 한 장과 종류별 파일)으로 만듭니다. `check`는 빈 칸, 적힌 대로
+  돌지 않는 예시, 같은 입력에 같은 출력을 내는 두 함수, 낡은 사전을 거부합니다.
+- **사전 재사용** — work와 codegen은 새 순수함수를 쓰기 전에 사전을 읽어, 이미 있는 함수를 다시
+  만들지 않고 가져다 씁니다. `build --project`는 주석 앞머리 모양만 알고 어느
+  프로젝트, 어느 언어에서든 같은 일을 합니다([순수성 계약](core/contracts/purity.md)).
 - **SCV 자체 그래프** — 문서 링크, 보관된 계획과 파일, 결정 참조, 함께 바뀌는
   파일을 promote 와 work 가 bash 와 jq 만으로 자동으로 다시 만듭니다. 설치할
   것이 없습니다(`SCV_GRAPH`). Graft 는 선택입니다. 설치돼 있으면 계획 · 구현
@@ -175,6 +184,7 @@ flowchart LR
 Core 페이로드 해시별 외부 캐시에 저장되므로 Claude Code와 Codex가 같은 런타임을
 재사용하면서 어느 플러그인에도 쓰지 않습니다. 기본 사용자 캐시는
 `SCV_DECK_CACHE_DIR`로 바꿀 수 있습니다.
+
 캐시 초기화와 기존 런타임 마이그레이션은 동시에 생긴 목적지를 덮어쓰지 않고,
 목적지 조상의 링크를 따라가지 않으며, 캐시와 기존 런타임 경로가 겹치면 쓰기
 전에 중단합니다.
@@ -184,11 +194,15 @@ cleanup은 모두 검증된 열린 디렉터리 descriptor에 고정됩니다. �
 중단됩니다.
 
 기존 런타임 migration은 기본적으로 strict합니다. source와 다른 cache 값이
-이미 있으면 collision으로 중단합니다. 지속해서 보존되는 legacy source만
+이미 있으면 collision으로 중단합니다.
+
+지속해서 보존되는 legacy source만
 `migrate --from PATH --reuse-existing`을 명시할 수 있습니다. 모든 대상의
 preflight에서 기존 destination 하나라도 source와 다르면 현재 cache 전체를
 authoritative로 선택하고 legacy source 전체를 건너뜁니다. 따라서 같거나 아직
-없는 항목도 복사하지 않습니다. 차이가 없으면 기존처럼 additive하게
+없는 항목도 복사하지 않습니다.
+
+차이가 없으면 기존처럼 additive하게
 migration하며, preflight 뒤 생긴 collision은 여전히 fail-closed입니다.
 wrapper swap 뒤 제거될 수 있는 기존 vendor 복구는 반드시 strict 모드를
 유지해야 합니다.
@@ -199,12 +213,16 @@ Core는 이 워크플로가 지켜지는지 확인하는 장치도 함께 배포
 guard는 `PreToolUse` 훅으로 동작하며 두 가지를 거부합니다. 계획 파일을 새로
 만드는 것과, 워크플로 디렉터리 밖에 쓰는 것입니다. 이번 세션에서 호스트가 SCV
 액션이 실행 중이라고 알린 적이 있으면 예외입니다. 그 호스트 이벤트는 모델이
-위조할 수 없는 유일한 신호이므로 guard는 여기에만 의존합니다. 세 번째 규칙은
+위조할 수 없는 유일한 신호이므로 guard는 여기에만 의존합니다.
+
+세 번째 규칙은
 이번 턴의 요청이 모델의 요구 항목 목록에 등록되기 전까지 파일 쓰기를 거절합니다
 (위의 모델별 프롬프팅). guard는 빈 payload와 JSON 리더가 없는 기계, 이 둘에서만
 fail-open 해서 모든 프로젝트의 쓰기를 막는 사태를 피합니다. 반대로 영수증
 저장소를 쓸 수 없을 때는 닫히는 쪽으로 실패합니다. SCV를 도입하지 않은
-프로젝트에서는 아무 일도 하지 않습니다. 등록은 래퍼의 몫입니다. 래퍼가 훅
+프로젝트에서는 아무 일도 하지 않습니다.
+
+등록은 래퍼의 몫입니다. 래퍼가 훅
 항목마다 `SCV_GUARD_MODE`를 전달하므로 스크립트 자체는 호스트를 언급하지
 않습니다. 규칙은 [guard 계약](core/contracts/guard.md)에 있습니다.
 
@@ -212,15 +230,26 @@ fail-open 해서 모든 프로젝트의 쓰기를 막는 사태를 피합니다.
 `core/scripts/check-provenance.sh`는 코드를 바꾸면서
 `scv/archive/<slug>/PLAN.md`에 보관된 계획을 추가하지 않은 PR을 거부합니다.
 문서와 워크플로 디렉터리만 바뀐 diff는 코드 변경으로 보지 않습니다.
+
 `core/scripts/check-vendor-provenance.sh`는 sync 봇이 아닌 브랜치에서 래퍼의
 `vendor/scv-core/`를 다시 쓴 PR을 거부합니다. 봇은 게시된 릴리스 아티팩트를
 받아 원본 해시와 구체화된 해시를 함께 기록하지만, 손으로 복사하면 그때 작업
-트리에 있던 내용이 그대로 기록됩니다. 두 게이트 모두 `stage`, `main`으로 가는
+트리에 있던 내용이 그대로 기록됩니다.
+
+두 게이트 모두 `stage`, `main`으로 가는
 릴리스 체인과 봇의 `chore/core-*` 브랜치는 예외로 두고, PR 제목에
 `[no-plan: <이유>]`와 `[manual-vendor: <이유>]`로 예외를 선언할 수 있습니다.
-이유는 필수이며, 이유 없는 marker는 거부합니다. Core 자체 CI는 provenance
+이유는 필수이며, 이유 없는 marker는 거부합니다.
+
+Core 자체 CI는 provenance
 게이트를 실행하고, vendor 게이트는 vendor된 Core를 가진 래퍼 저장소를 위해
 배포됩니다.
+
+세 번째 게이트는 개인정보를 지킵니다. `core/scripts/check-privacy.sh`는 커밋
+메시지나 더해진 줄에 로컬 홈 경로, 세션 id나 세션 링크, 저장소 밖에 둔 비밀
+목록의 낱말(`SCV_PRIVACY_TERMS`)이 있는 PR을 거부합니다. 작성자 이름과 메일은
+`SCV_PRIVACY_EMAILS=on`일 때만 봅니다. Core CI는 모든 PR에서 이를 실행하고,
+`tools/privacy-audit.sh`는 저장소 전체를 훑습니다.
 
 자세한 경계는 [아키텍처](docs/architecture.md)와
 [래퍼 통합](docs/wrapper-integration.md)을 참고하세요. 실제 변경을 어느
@@ -282,7 +311,9 @@ tools/release-artifact.sh --output-dir dist
 `vX.Y.Z` 태그는 두 파일을 릴리스한 뒤 두 래퍼에 Core 동기화 이벤트를 보냅니다.
 교차 저장소 토큰은 필수이며, 알림에 실패한 릴리스 run 은 실패로 표시됩니다
 (이미 게시된 릴리스 자산은 영향받지 않습니다). 두 래퍼 모두 매일 폴링하므로
-알림 실패는 전파를 잃는 것이 아니라 늦추는 것입니다. 래퍼 자동화는 체크섬 검증,
+알림 실패는 전파를 잃는 것이 아니라 늦추는 것입니다.
+
+래퍼 자동화는 체크섬 검증,
 호스트별 재생성, 회귀 테스트를 거쳐 `develop` 대상 PR을 엽니다.
 `gh workflow run promote.yml`은 `develop → stage → main`으로 승격하며,
 `-f release=false`를 주면 태그 없이 승격해 문서처럼 릴리스가 필요 없는 변경에
