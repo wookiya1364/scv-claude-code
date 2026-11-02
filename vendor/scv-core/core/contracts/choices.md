@@ -47,6 +47,9 @@ turns included:
    the user (a remote or phone client shows the window, not that text — 2026-11-02, the user saw an
    empty window and answered "안보여"). Put what the decision rests on — the result, in a line or two —
    into the question or the options' descriptions.
+10. A host that also offers an end-of-turn summary box (a desktop app's next-step box) gets the
+    summary there, never the question: the decision still goes through the choice tool. A question
+    written into the box or the final text is a text ask (7).
 
 Information is not a decision. Tables that report — the solution table of the rewrite principle, result
 tables, the help item table — stay as text.

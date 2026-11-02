@@ -172,6 +172,14 @@ for n in $SUBS; do
 done
 v="$(scv_help_budget "$TOTAL_BYTES" "$TOTAL_MAX" total)"
 [[ -z "$v" ]] && ok "본문+부속 합 ${TOTAL_BYTES}B ≤ ${TOTAL_MAX}B" || fail "$v"
+# 0.77.0+: 코어 저장소에서는 100B 여유를 남긴다 — codex 사본은 같은 문서가 약 50B 길어져, 코어에서 통과해도 릴리스 직전 사본에서야
+# 넘쳤다(0.76.0, 46B 초과). 래퍼 사본 안에서는 이 여유 검사를 하지 않는다(상한 그대로).
+_repo="$(cd "$CORE/.." && pwd)"
+if [[ -f "$_repo/VERSION" && -f "$_repo/core/TEMPLATE_DIGEST" && -d "$_repo/scv/archive" ]]; then
+  MARGIN="${SCV_HELP_TOTAL_MARGIN:-100}"
+  (( TOTAL_BYTES <= TOTAL_MAX - MARGIN )) && ok "코어 여유 ${MARGIN}B 남음 (${TOTAL_BYTES}B ≤ $((TOTAL_MAX - MARGIN))B)" \
+    || fail "코어 여유 부족 — ${TOTAL_BYTES}B > $((TOTAL_MAX - MARGIN))B (상한 ${TOTAL_MAX}B - 여유 ${MARGIN}B). 래퍼 사본에서 넘친다"
+fi
 
 echo "── [T10] help.sh — 대화 모드는 파싱 머리만, 다른 두 형태는 그대로 ──"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/scv-help-budget.XXXXXX")"

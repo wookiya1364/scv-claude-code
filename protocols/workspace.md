@@ -13,27 +13,12 @@ skill invocations, paths) as-is.
 ## Plain language first
 
 Skip this section only when `scv/scv_settings.json` sets `SCV_PLAIN_LANGUAGE=off`
-(absent or any other value = on).
-
-Answer shape — every time you explain something to the user (`contracts/writing.md`):
-
-1. A **bold topic** line, then bullets: the first bullet states the result, the
-   next ones unpack it. A prose paragraph holds 1–2 sentences at most (the cap is 2
-   unless `scv/scv_settings.json` sets `SCV_PLAIN_MAX_SENTENCES=<n>`).
-2. Bullets end in noun form (Korean `~함 · ~임`); a question stays a question.
-3. Everyday words, the user's own; explain a new term where it first appears,
-   with one example from the user's situation.
-4. No code values before the user asks: file paths, variable names, version
-   numbers, setting values — use the plain name ("the settings file").
-
-Identifiers the user needs to act on — the next command to run, a file that
-was created — stay exact, after the plain summary.
-
-Bad: "The block landed in `scv_settings.example.json:154-161`."
-Good: "**Settings example** / - Up to date. / - The new 'effort' setting shows there."
-
-This governs everything the user reads: answers, questions, plans, progress
-reports, summaries, and explanations of what went wrong.
+(absent or any other value = on). The per-turn hook carries the answer shape; its body is
+`contracts/writing.md` 1–4: a **bold topic** line, then bullets with the result first; a prose
+paragraph holds 1–2 sentences at most (`SCV_PLAIN_MAX_SENTENCES`); one example from the
+user's situation. No code values before the user asks — identifiers the user acts on
+stay exact, after the plain summary. Bad: a paragraph of paths. Good: **Topic** / - the result.
+This governs everything the user reads.
 
 ## Recording
 
