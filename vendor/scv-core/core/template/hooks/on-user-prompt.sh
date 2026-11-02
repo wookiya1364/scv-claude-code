@@ -48,18 +48,20 @@ _scv_read() {  # <KEY> — 라이브러리가 없으면 기본값으로 간다.
 _scv_plain="$(_scv_read SCV_PLAIN_LANGUAGE | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]' || true)"
 if [[ "${_scv_plain:-on}" != "off" ]]; then
   # Sentence cap (v0.31.0+): .env SCV_PLAIN_MAX_SENTENCES=<n>, positive integer
-  # only — absent or anything else means 2. Rendered into the first rule.
+  # only — absent or anything else means 2. Caps a prose paragraph (0.76.0+).
   _scv_cap="$(_scv_read SCV_PLAIN_MAX_SENTENCES | tr -d '"[:space:]' | tr -d "'" || true)"
   [[ "$_scv_cap" =~ ^[1-9][0-9]*$ ]] || _scv_cap=2
   if [[ "$_scv_cap" == "1" ]]; then _scv_first="one sentence"; else _scv_first="1–${_scv_cap} sentences"; fi
   cat <<PLAIN
-[SCV plain language] Answer shape: (1) first, ${_scv_first} — lead with what
-the user gets; (2) then one example; (3) no code values (paths, variable names,
-versions, settings) before the user asks — use plain names; (4) detail after,
-only when wanted. Identifiers the user needs to act on stay exact, after the
-plain summary. A step rule of the action being executed comes before this
+[SCV plain language] Answer shape: (1) a **bold topic** line, then bullets — the
+first bullet states the result, the next ones unpack it; no prose paragraph over
+${_scv_first}; (2) bullets end in noun form (Korean ~함 · ~임), a question stays a
+question; (3) everyday words, the user's own — explain a new term on the line it
+first appears; (4) no code values (paths, variable names, versions, settings) before
+the user asks. Identifiers the user needs to act on stay exact. Body:
+contracts/writing.md. A step rule of the action being executed comes before this
 always-on text (resolution order: scv/SCV.md Top-level rules). Switches: scv/scv_settings.json SCV_PLAIN_LANGUAGE=off (silence),
-SCV_PLAIN_MAX_SENTENCES=<n> (sentence cap, default 2).
+SCV_PLAIN_MAX_SENTENCES=<n> (prose-paragraph sentence cap, default 2).
 PLAIN
 fi
 
@@ -197,7 +199,7 @@ if [[ "$_scv_kind" != "auto" && -f "$_scv_dr_lib" && -f "$_scv_dr_sh" ]] && comm
   if [[ -f "$_scv_dl" && ! -L "$_scv_dl" && ! -L scv/dreams ]]; then
     _scv_ds="$(jq -r 'try (if .announced == false and (.summary | type) == "string" then .summary else empty end) catch empty' "$_scv_dl" 2>/dev/null | head -n 1 | head -c 600)"
     if [[ -n "$_scv_ds" ]]; then
-      printf '%s (답 맨 위에 이 한 줄을 사용자에게 그대로 알려라)\n' "$_scv_ds"
+      printf '%s (다시 쓴 요청 바로 아래에 이 한 줄을 사용자에게 그대로 알려라)\n' "$_scv_ds"
       { jq -c '.announced = true' "$_scv_dl" > "$_scv_dl.tmp" && mv -f "$_scv_dl.tmp" "$_scv_dl"; } 2>/dev/null || rm -f "$_scv_dl.tmp" 2>/dev/null
     fi
   fi

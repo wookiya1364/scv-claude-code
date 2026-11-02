@@ -511,8 +511,8 @@ case "$cmd" in
         _rt="$(_first_line "$REG_FILE")"; _reg=0; [[ "${_rt%%$'\x1f'*}" == "$_tok" ]] && _reg=1
         _rw=""; (( _reg )) && _rw="$(scv_mp_register_rewrite "$(head -c 16384 "$REG_FILE" 2>/dev/null | tail -n +2)")"
         _shown=""; [[ "$ANSWER" == *[![:space:]]* ]] && _shown="$(scv_mp_answer_shows_rewrite "$ANSWER" "$_rw")"
-        # v0.65.0+ — 답 맨 위의 "이렇게 이해하고 일함: …" 한 줄(등록한 턴만 판정한다 — 등록이 없으면 등록이 먼저다).
-        _top=""; [[ "$ANSWER" == *[![:space:]]* ]] && _top="$(scv_mp_answer_has_topline "$ANSWER")"
+        # 0.76.0+ — 다시 쓴 요청 인용이 답 맨 위에 있나(등록한 턴만 판정한다 — 등록이 없으면 등록이 먼저다).
+        _top=""; [[ "$ANSWER" == *[![:space:]]* ]] && _top="$(scv_mp_answer_rewrite_on_top "$ANSWER")"
         _sg="$(scv_mp_stop_gate "$_reg" "$_shown" "$ACTIVE_ARG" "$_top")"
         echo "STOP_GATE: $_sg"
         # v0.63.0+ — 막지 않으면 이 턴은 끝난다: 자동 입력 턴 표시의 근거(끝난 턴 표). 자동 태그가 없으면 쓰지 않는다(이전과 같은 파일들).

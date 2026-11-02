@@ -18,7 +18,7 @@
 # shellcheck source=switch.sh
 declare -F scv_switch >/dev/null 2>&1 || source "${BASH_SOURCE[0]%/*}/switch.sh"
 # shellcheck source=text.sh
-declare -F scv_is_topline >/dev/null 2>&1 || source "${BASH_SOURCE[0]%/*}/text.sh"
+declare -F scv_is_rewrite_quote >/dev/null 2>&1 || source "${BASH_SOURCE[0]%/*}/text.sh"
 
 # @pure
 # 역할: 표식 JSON 한 줄(깨져도 됨)을 \x1f 로 구분한 상태 필드 여섯 개로 풀어 낸다
@@ -190,101 +190,115 @@ scv_lint_strip_quoted() {
 }
 
 # @pure
-# 역할: 답의 첫 줄이 맨 위 '이해한 대로' 줄이면 그 줄과 뒤 빈 줄을 떼고 나머지를 낸다 — 아니면 그대로
-# 종류: 다듬기
-# 예: $'이렇게 이해하고 일함: 정리.\n\n결론이다.\n' → "결론이다."
-# 예: $'결론이다.\n둘째.\n' → $'결론이다.\n둘째.'
-# 예: $'> 이렇게 이해하고 일함: 인용\n본문.\n' → $'> 이렇게 이해하고 일함: 인용\n본문.'
-# 맨 위 줄은 머리말이고 결론은 그다음 문단이다 — 첫 문단 검사가 둘을 한 문단으로 세지 않게 한다
-# (instruction-conflicts 1번, 2026-11-01). 첫 비어 있지 않은 줄 하나만 본다.
-scv_lint_skip_top_line() {
-  local text="${1:-}" line out="" seen=0 dropping=0 nl=$'\n'
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    if (( ! seen )); then
-      [[ "$line" != *[![:space:]]* ]] && continue
-      seen=1
-      if [[ "$(scv_is_topline "$line")" == "1" ]]; then dropping=1; continue; fi
-    elif (( dropping )); then
-      [[ "$line" != *[![:space:]]* ]] && continue
-      dropping=0
-    fi
-    out+="$line$nl"
-  done <<<"$text"
-  printf '%s' "${out%$nl}"
+# 역할: 한 덩어리 글의 문장 수를 센다 — 따옴표 · 괄호 안 마침표와 "0.49.1" 같은 숫자는 세지 않는다
+# 종류: 세기
+# 예: "결론이다. 둘째. 셋째." → "3"
+# 예: '버전 0.49.1 이다 "a. b" 끝.' → "1"
+# 예: "" → "0"
+scv_lint_sentences() {
+  local rest pat_end='^(.*)[.!?]([[:space:]].*)?$' n=0
+  rest="$(scv_lint_strip_quoted "${1:-}")"; rest="${rest//.../.}"; rest="${rest//…/.}"
+  while [[ "$rest" =~ $pat_end ]]; do rest="${BASH_REMATCH[1]}"; n=$((n + 1)); done
+  printf '%s' "$n"
 }
 
 # @pure
-# 역할: 답 본문의 골격(결론 문단 · 첫 문단 문장 수 · 코드값 · 결정표 추천 칸)이 계약을 벗어난 줄들을 낸다
+# 역할: 불릿 한 줄이 존댓말 서술형('~습니다' · '~해요')으로 끝나면 1, 개조식 · 물음이면 0 을 낸다
 # 종류: 판정/answer
-# 예: $'| a | b |\n|---|---|\n| 1 | 2 |\n' → "lead-missing"
-# 예: $'결론이다. 둘째. 셋째.\n' 2 → "lead-sentences=3>2"
-# 예: $'결론이다.\n' → ""
-# 답 본문 + 첫 문단 문장 상한 → 위반 줄들 (없으면 빈 출력). 골격만 본다 — 내용은 판정하지 않는다.
-#   lead-missing              결론 문단 없이 표·목록·제목으로 시작
-#   lead-sentences=<n>><cap>  첫 문단 문장 수가 상한 초과 (마침표·물음표·느낌표 뒤 공백/끝 기준 — "0.49.1" 은 안 센다,
-#                             따옴표·괄호 안의 마침표도 안 센다 v0.51.0+)
-#   lead-code=<값>            첫 문단의 코드값 (백틱 안 경로·버전·파일·설정 키)
+# 예: "통과했습니다." → "1"
+# 예: "README 검사 통과함" → "0"
+# 예: "이대로 쓸까요?" → "0"
+# 끝의 공백 · 마침표 · 느낌표 · 굵게 표시 · 닫는 괄호는 떼고 본다. 물음표로 끝나면 질문이라 예외. 한국어 어미만 본다.
+scv_lint_bullet_polite() {
+  local t="${1:-}"
+  t="${t%"${t##*[![:space:]]}"}"
+  [[ "$t" == *"?" || "$t" == *"？" ]] && { printf '0'; return 0; }
+  while [[ "$t" == *"." || "$t" == *"!" || "$t" == *"。" || "$t" == *"*" || "$t" == *")" || "$t" == *"）" || "$t" == *" " ]]; do t="${t%?}"; done
+  case "$t" in
+    *니다|*세요|*어요|*아요|*해요|*예요|*에요|*지요|*죠) printf '1' ;;
+    *) printf '0' ;;
+  esac
+}
+
+# @pure
+# 역할: 답 본문의 골격(다시 쓴 요청 위치 · 줄글 문단 길이 · 불릿 어미 · 첫 내용의 코드값 · 결정표 추천 칸)이 계약을 벗어난 줄들을 낸다
+# 종류: 판정/answer
+# 예: $'> **다시 쓴 요청**: x\n\n**주제**\n- 결과임\n- 풀이함\n' → ""
+# 예: $'결론이다. 둘째. 셋째.\n' 2 → "prose-long=3>2"
+# 예: $'결론이다.\n\n> **다시 쓴 요청**: x\n' → "rewrite-not-top"
+# 답 본문 + 줄글 문단 문장 상한 → 위반 줄들 (없으면 빈 출력). 골격만 본다 — 내용은 판정하지 않는다. 본문: contracts/writing.md.
+#   rewrite-not-top           다시 쓴 요청 인용이 있는데 답 맨 위가 아님
+#   prose-long=<n>><cap>      목록 · 표 · 제목 · 인용 · 굵은 주제가 아닌 줄글 문단의 문장 수가 상한 초과(첫 문단 하나만 알림)
+#   bullet-polite=<개수>      '~습니다' · '~해요' 로 끝나는 불릿 수(개조식 '~함 · ~임' 이 아님, 물음은 예외)
+#   lead-code=<값>            첫 내용 줄(불릿이나 줄글)의 코드값 (백틱 안 경로·버전·파일·설정 키)
 #   decision-no-reco=<행>     결정표(| # | … |) 행의 셋째 열(추천)이 비어 있음
 # 코드 블록 안은 보지 않는다. 근사이며, 오탐의 비용은 재읽기 한 번이다.
 scv_answer_lint() {
-  local text="${1:-}" cap="${2:-2}" line infence=0 lead="" lead_done=0 lead_kind="" n=0 rest tok
-  local intable=0 is_decision=0 row c1 c2 c3 bt='`' gt=$'\x3e' pat_code pat_end pat_num
+  local text="${1:-}" cap="${2:-2}" line t infence=0 seen=0 inquote=0 para="" first="" n polite=0 prose_done=0
+  local intable=0 is_decision=0 row c1 c3 bt='`' gt=$'\x3e' pat_code pat_num rest tok
   [[ "$cap" =~ ^[1-9][0-9]*$ ]] || cap=2
-  text="$(scv_lint_skip_top_line "$text")"
   pat_code="${bt}([^${bt}]+)${bt}(.*)\$"
-  pat_end='^(.*)[.!?]([[:space:]].*)?$'
   pat_num='^[0-9]+[.)][[:space:]]'
-  while IFS= read -r line; do
-    if [[ "$line" =~ ^[[:space:]]*\`\`\` ]]; then infence=$((1 - infence)); continue; fi
-    (( infence )) && continue
-    if (( ! lead_done )); then
-      if [[ "$line" != *[![:space:]]* ]]; then
-        [[ -n "$lead" ]] && lead_done=1
-        continue
-      fi
-      if [[ -z "$lead" ]]; then
-        if [[ "$line" =~ $pat_num ]]; then lead_kind="structure"; lead_done=1   # 번호 목록
-        else
-          case "$line" in
-            \|*|\#*|-\ *|\*\ *|+\ *|"$gt"*) lead_kind="structure"; lead_done=1 ;;   # 표·제목·목록·인용
-            *) lead="$line" ;;
-          esac
-        fi
-      else
-        case "$line" in   # 표 · 인용 · 목록 · 제목 줄이 오면 결론 문단은 거기서 끝난다 — 빈 줄 없이 붙어도
-          \|*|\#*|-\ *|\*\ *|+\ *|"$gt"*) lead_done=1 ;;
-          *) lead="$lead $line" ;;
-        esac
-      fi
+  _scv_lint_flush() {
+    [[ -n "$para" ]] || return 0
+    [[ -z "$first" ]] && first="$para"
+    if (( ! prose_done )); then
+      n="$(scv_lint_sentences "$para")"
+      (( n > cap )) && { printf "prose-long=%s${gt}%s\n" "$n" "$cap"; prose_done=1; }
     fi
-    if [[ "$line" =~ ^[[:space:]]*\| ]]; then
+    para=""
+  }
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    t="${line#"${line%%[![:space:]]*}"}"
+    if [[ "$t" == '```'* ]]; then _scv_lint_flush; infence=$((1 - infence)); continue; fi
+    (( infence )) && continue
+    if [[ -z "$t" ]]; then _scv_lint_flush; inquote=0; intable=0; continue; fi
+    if (( ! seen )); then
+      seen=1
+      [[ "$(scv_is_rewrite_quote "$t")" == "1" ]] && { inquote=1; continue; }
+    fi
+    if [[ "${t:0:1}" == "$gt" ]]; then
+      _scv_lint_flush
+      (( inquote )) && continue
+      [[ "$(scv_is_rewrite_quote "$t")" == "1" ]] && printf 'rewrite-not-top\n'
+      continue
+    fi
+    inquote=0
+    if [[ "$t" == \|* ]]; then
+      _scv_lint_flush
       if (( ! intable )); then
         intable=1; is_decision=0
-        [[ "$line" =~ ^[[:space:]]*\|[[:space:]]*#[[:space:]]*\| ]] && is_decision=1
+        [[ "$t" =~ ^\|[[:space:]]*#[[:space:]]*\| ]] && is_decision=1
         continue
       fi
       (( is_decision )) || continue
-      [[ "$line" =~ ^[[:space:]]*\|[[:space:]]*:?-+ ]] && continue
-      row="${line#*|}"; c1="${row%%|*}"; row="${row#*|}"; c2="${row%%|*}"
+      [[ "$t" =~ ^\|[[:space:]]*:?-+ ]] && continue
+      row="${t#*|}"; c1="${row%%|*}"; row="${row#*|}"
       if [[ "$row" == *\|* ]]; then row="${row#*|}"; c3="${row%%|*}"; else c3=""; fi
       [[ "$c3" != *[![:space:]]* ]] && printf 'decision-no-reco=%s\n' "${c1//[[:space:]]/}"
-    else
-      intable=0
+      continue
     fi
+    intable=0
+    if [[ "$t" =~ $pat_num || "$t" == "- "* || "$t" == "* "* || "$t" == "+ "* ]]; then
+      _scv_lint_flush
+      if [[ "$t" =~ $pat_num ]]; then t="${t#*[.)]}"; else t="${t:2}"; fi
+      [[ -z "$first" ]] && first="$t"
+      [[ "$(scv_lint_bullet_polite "$t")" == "1" ]] && polite=$((polite + 1))
+      continue
+    fi
+    if [[ "$t" == \#* || "$t" == \*\** ]]; then _scv_lint_flush; continue; fi
+    para="${para:+$para }$t"
   done <<<"$text"
-  [[ "$lead_kind" == "structure" ]] && printf 'lead-missing\n'
-  if [[ -n "$lead" ]]; then
-    rest="$(scv_lint_strip_quoted "$lead")"; rest="${rest//.../.}"; rest="${rest//…/.}"; n=0
-    while [[ "$rest" =~ $pat_end ]]; do rest="${BASH_REMATCH[1]}"; n=$((n + 1)); done
-    (( n > cap )) && printf "lead-sentences=%s${gt}%s\n" "$n" "$cap"
-    rest="$lead"
-    while [[ "$rest" =~ $pat_code ]]; do
-      tok="${BASH_REMATCH[1]}"; rest="${BASH_REMATCH[2]}"
-      if [[ "$tok" == */* || "$tok" =~ ^[0-9]+\.[0-9]+ || "$tok" =~ ^[A-Z][A-Z0-9_]+$ || "$tok" =~ \.(sh|md|json|ya?ml|js|ts|py)$ ]]; then
-        printf 'lead-code=%s\n' "$tok"
-      fi
-    done
-  fi
+  _scv_lint_flush
+  unset -f _scv_lint_flush
+  (( polite > 0 )) && printf 'bullet-polite=%s\n' "$polite"
+  rest="$first"
+  while [[ "$rest" =~ $pat_code ]]; do
+    tok="${BASH_REMATCH[1]}"; rest="${BASH_REMATCH[2]}"
+    if [[ "$tok" == */* || "$tok" =~ ^[0-9]+\.[0-9]+ || "$tok" =~ ^[A-Z][A-Z0-9_]+$ || "$tok" =~ \.(sh|md|json|ya?ml|js|ts|py)$ ]]; then
+      printf 'lead-code=%s\n' "$tok"
+    fi
+  done
   return 0
 }
 

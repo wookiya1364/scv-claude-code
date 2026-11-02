@@ -212,7 +212,9 @@ if [[ "$_scv_human" == 1 && -f "$_scv_mp" ]]; then
              "$(wc -l < "$TRANSCRIPT" 2>/dev/null | tr -d ' ')" >> "$_scv_jd/.help-drift" 2>/dev/null
     fi
     _scv_all="$(scv_turn_slice "$_scv_tstream" | head -c 65536)"
-    [[ "$_scv_all" == *[![:space:]]* ]] && _scv_ans="$(printf '%s\n\n%s' "$_scv_ans" "$_scv_all")"
+    # 0.76.0+ — 둘 사이에 구분 줄(\x1d 한 글자)을 둔다: '다시 쓴 요청이 맨 위' 판정이 마지막 메시지의 맨 위와 이번 턴 첫 메시지의
+    # 맨 위를 따로 본다. 다른 판정은 글 전체를 훑어 이 줄의 영향이 없다.
+    [[ "$_scv_all" == *[![:space:]]* ]] && _scv_ans="$(printf '%s\n\035\n%s' "$_scv_ans" "$_scv_all")"
   fi
   # v0.64.2+ — 이번 턴의 앞선 글을 못 보는 원본(코덱스 모양 "N" · 경계를 못 찾음 · 자르기 함수 없음)에서는 앞에서 보인 인용을
   # 확인할 수 없다 — 계속 중일 때 등록 검사는 '이미 전달'로 본다(이 기능 전과 같음). 끝 메시지에 인용을 다시 쓰지 않은 답을 막지

@@ -45,24 +45,22 @@ Read `${CLAUDE_PLUGIN_ROOT}/protocols/help/language-setup.md` now and follow it.
 Skip this section only when `scv/scv_settings.json` sets `SCV_PLAIN_LANGUAGE=off`
 (absent or any other value = on).
 
-Answer shape — every time you explain something to the user:
+Answer shape — every time you explain something to the user (`contracts/writing.md`):
 
-1. First, 1–2 sentences. Lead with what the user gets.
-   The cap is 2 unless `scv/scv_settings.json` sets `SCV_PLAIN_MAX_SENTENCES=<n>`
-   (a positive integer) — then up to n.
-2. Then one example — from the user's situation, or an everyday comparison.
-3. No code values before the user asks: file paths, variable names, version
-   numbers, setting values. Use the plain name instead ("the settings file",
-   "last week's plan").
-4. Detail comes after, and only when wanted. Offer it in one line.
+1. A **bold topic** line, then bullets: the first bullet states the result, the
+   next ones unpack it. A prose paragraph holds 1–2 sentences at most (the cap is 2
+   unless `scv/scv_settings.json` sets `SCV_PLAIN_MAX_SENTENCES=<n>`).
+2. Bullets end in noun form (Korean `~함 · ~임`); a question stays a question.
+3. Everyday words, the user's own; explain a new term where it first appears,
+   with one example from the user's situation.
+4. No code values before the user asks: file paths, variable names, version
+   numbers, setting values — use the plain name ("the settings file").
 
 Identifiers the user needs to act on — the next command to run, a file that
 was created — stay exact, after the plain summary.
 
-Bad: "The block landed in `scv_settings.example.json:154-161` and the stamp advanced
-2.1.0 → 2.2.0."
-Good: "Your settings example file is up to date. For example, the new 'effort'
-setting now shows there. Want the exact lines?"
+Bad: "The block landed in `scv_settings.example.json:154-161`."
+Good: "**Settings example** / - Up to date. / - The new 'effort' setting shows there."
 
 This governs everything the user reads: answers, questions, plans, progress
 reports, summaries, and explanations of what went wrong.
@@ -73,21 +71,21 @@ Turns are recorded per `core/contracts/recording.md`.
 
 ## Answer shape — the slots the question calls for
 
-`Plain language first` governs the lead — the first 1–2 sentences. This section
-governs everything after the lead.
+`Plain language first` governs the lead — the bold topic and its first bullet. This
+section governs everything after the lead.
 
 Six slots exist. **They are a vocabulary, not a form.** An answer uses only the slots
 the question calls for, and never adds a slot to look complete. When slots appear,
 they appear in this order:
 
-1. **Lead** — the 1–2 sentence conclusion. The only slot every answer has.
+1. **Lead** — a bold topic line and its first bullet: the result. The only slot every answer has.
 2. **Surprises** — facts found while checking that the user did not expect and that
    bear on a decision. Each one is marked `(confirmed)`.
 3. **Item table** — one row per item the user raised:
    `item | now (confirmed) | change | size (small / large / setting only)`.
    When nothing exists yet, `now` reads `none` — that is a fact, not an empty table.
 4. **Detail** — a short subsection for each `large` item only.
-5. **Cross-cutting** — one paragraph for what spans the items: speed, cost, operations.
+5. **Cross-cutting** — a few bullets for what spans the items: speed, cost, operations.
 6. **Decisions** — `# | question | my recommendation`, and ask the user to answer by
    number. The recommendation column is never omitted. When the host names a choice
    tool, ask each decision through it instead — recommended option first, each option
