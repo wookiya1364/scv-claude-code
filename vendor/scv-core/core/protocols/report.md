@@ -57,6 +57,11 @@ setting now shows there. Want the exact lines?"
 This governs everything the user reads: answers, questions, plans, progress
 reports, summaries, and explanations of what went wrong.
 
+## Report shape
+
+The report is read on a phone: shape it per `core/contracts/writing.md` — conclusion first,
+short table cells, numbered items, an owner on every open item.
+
 ## Recording
 
 Turns are recorded per `core/contracts/recording.md`.

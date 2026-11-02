@@ -51,6 +51,7 @@ flowchart LR
 Core owns 14 of the 20 SCV actions. `update`, `set-models`, `mods`,
 `mods-install`, `mods-remove`, and `channel` are deliberately adapter-owned
 because installation, model selection, and plugin swaps depend on the host.
+
 Canonical protocols use `action:<name>` and `{{SCV_ARGS}}`; wrapper syntax and
 argument transport are supplied only through a validated host profile.
 `scv/SCV.md` opens with the top-level rules and the order in which conflicting
@@ -66,7 +67,7 @@ rules are resolved; every protocol defers to it.
 | `action:promote` | Materials → plan folder (`PLAN.md` + `TESTS.md` + diagrams) | Core |
 | `action:work` | Implement · run tests · archive · PR with evidence | Core |
 | `action:codegen` | TDD-first variant: tests drive the code, Red → Green | Core |
-| `action:deck` | Plan → numbered screen spec (or any markdown → document / slides) | Core |
+| `action:deck` | Plan → numbered screen spec; any markdown → doc / slides | Core |
 | `action:update` | Plugin update guide | wrapper |
 | `action:regression` | Run every archived plan's tests as one suite | Core |
 | `action:report` | Post a phase result to Slack/Discord with artifacts | Core |
@@ -80,7 +81,7 @@ rules are resolved; every protocol defers to it.
 | `action:mods` | Update installed SCV mods + list them | wrapper |
 | `action:mods-install` | Install one SCV mod | wrapper |
 | `action:mods-remove` | Remove one SCV mod | wrapper |
-| `action:channel` | Swap SCV between dev · stage · prod — try new work before a release | wrapper |
+| `action:channel` | Swap SCV dev · stage · prod — try new work before release | wrapper |
 
 ### The loop
 
@@ -154,6 +155,16 @@ read. Every key and its default:
   as a numbered screen spec: one big picture with numbered markers, the detail
   for each number beside it, and a validation table, with `PLAN.md` and
   `TESTS.md` as source tabs.
+- **Pure-function catalog** — every function marked `@pure` or `@deterministic`
+  carries a role, a kind, and examples beside the code, and
+  `core/scripts/pure-catalog.sh build` turns them into a catalog (a contents
+  page plus one file per kind). `check` refuses an empty field, an example that
+  does not run as written, two functions with the same output for the same
+  input, and a stale catalog.
+- **Catalog reuse** — Work and codegen read the catalog before writing
+  a new pure function, so an existing one is reused instead of rewritten.
+  `build --project` does the same for any project and language, knowing only
+  comment prefixes ([the purity contract](core/contracts/purity.md)).
 - **SCV's own graph** — docs links, archived plans → files, decision
   references, and files that change together, rebuilt automatically by
   promote and work with bash and jq, no install (`SCV_GRAPH`). Graft is
@@ -183,6 +194,7 @@ DeckUI source is immutable in installed wrappers. Dependencies, generated
 decks, and build output live in a cache keyed by the canonical Core payload
 hash, so Claude Code and Codex reuse the same runtime without writing into
 either plugin. `SCV_DECK_CACHE_DIR` may override the default user cache.
+
 Cache initialization and legacy migration never replace a destination that
 appears concurrently, never follow destination-ancestor links, and reject
 cache/legacy overlap before writing.
@@ -192,11 +204,15 @@ concurrent path or ancestor replacement therefore fails closed without
 redirecting writes or deletions.
 
 Legacy migration is strict by default: a pre-existing cached value that
-differs from its source is a collision. Persistent legacy sources may
+differs from its source is a collision.
+
+Persistent legacy sources may
 explicitly use `migrate --from PATH --reuse-existing`. After preflighting every
 eligible entry, one differing pre-existing destination makes the current cache
 authoritative and skips the whole legacy source—equal and missing entries are
-not copied. With no mismatch, migration remains additive; a late collision
+not copied.
+
+With no mismatch, migration remains additive; a late collision
 still fails closed. Ephemeral existing-vendor recovery must remain strict
 because that source may be removed after a wrapper swap.
 
@@ -206,12 +222,16 @@ Core also ships the checks that keep this workflow honest. A workspace guard
 runs as a `PreToolUse` hook and refuses two things: creating a plan file, and
 writing outside the workflow directory — unless the host has reported, anywhere
 in this session, that an SCV action is running. That report is the one signal
-the model cannot fabricate, which is why the guard keys on it. A third rule
+the model cannot fabricate, which is why the guard keys on it.
+
+A third rule
 refuses file writes until the current turn's request is registered against the
 model's checklist (per-model prompting, above). The guard fails open on an
 empty payload and where no JSON reader exists, rather than blocking every
 project; a receipt store it cannot write is the one failure that closes. It
-stays inert where SCV was never adopted. Registering it is the wrapper's job:
+stays inert where SCV was never adopted.
+
+Registering it is the wrapper's job:
 the wrapper passes `SCV_GUARD_MODE` per hook entry, so the script never names a
 host. The rules live in [the guard contract](core/contracts/guard.md).
 
@@ -219,16 +239,28 @@ Two merge-time gates cover what a hook cannot see.
 `core/scripts/check-provenance.sh` denies a pull request that changes code but
 adds no archived plan under `scv/archive/<slug>/PLAN.md`; a diff that touches
 nothing but prose and the workflow directory is not a code change.
+
 `core/scripts/check-vendor-provenance.sh` denies a pull request that rewrites a
 wrapper's `vendor/scv-core/` on a branch that is not the sync bot's — the bot
 resolves the published release artifact and records both the canonical and the
 materialized hash, while a hand copy records whatever the working tree happened
-to hold. Both exempt the release chain into `stage` and `main` and the bot's own
+to hold.
+
+Both exempt the release chain into `stage` and `main` and the bot's own
 `chore/core-*` branch, and both accept a declared exception in the pull request
 title: `[no-plan: <reason>]` and `[manual-vendor: <reason>]`. The reason is
-required; an empty marker is refused. Core's own CI runs the provenance gate;
+required; an empty marker is refused.
+
+Core's own CI runs the provenance gate;
 the vendor gate ships for the wrappers, which are the repositories that carry a
 vendored Core.
+
+A third gate guards privacy. `core/scripts/check-privacy.sh` refuses a pull
+request whose commit messages or added lines carry a local home path, a session
+id or session link, or a word from a private list kept outside the repository
+(`SCV_PRIVACY_TERMS`); author name and email are checked only with
+`SCV_PRIVACY_EMAILS=on`. Core's CI runs it on every pull request, and
+`tools/privacy-audit.sh` sweeps the whole repository.
 
 See [Architecture](docs/architecture.md),
 [Wrapper integration](docs/wrapper-integration.md), and the
@@ -291,7 +323,9 @@ A `vX.Y.Z` tag publishes those files and then notifies both wrappers with a
 Core-sync event. The cross-repository token is required: a release that cannot
 notify them is marked failed, though the published assets are unaffected. Both
 wrappers also poll daily, so a failed notification delays propagation rather
-than losing it. Wrapper automation verifies the checksum, regenerates its
+than losing it.
+
+Wrapper automation verifies the checksum, regenerates its
 host-specific projection, runs regression tests, and opens a PR to `develop`.
 `gh workflow run promote.yml` walks `develop → stage → main`; with
 `-f release=false` it promotes without tagging, for changes such as
