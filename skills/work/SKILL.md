@@ -333,6 +333,14 @@ Fan-out is the dominant cost, and a standard plan has not contracted for it.
 archive is the dataset — the classifier's rules survived one backtest and
 must face the next one with this run in it.
 
+### Step progress (0.75.0+)
+
+When the host names a step-report tool (host profile `SCV_STEP_TOOL`) and this session has it, report
+each `Suggested path` step through it as you go — no question, no extra turn: `doing` when you start
+the step, `done` when it is finished, `blocked` with a one-line reason when you cannot go on. `plan`
+is the folder name, `step` the line's number. The per-turn hook reminds you while a plan is
+`in_progress` or `testing`. No tool: skip this — the step list in your report still says it.
+
 ### Step 6 — Implement
 
 Follow `PLAN.md`'s `Suggested path` (legacy PLANs: `Steps`) as the default route — it is a suggestion, not the contract; if you find a better path that satisfies the Guardrails and Exit criteria, take it and tell the user in one line — keep that line: Step 9b.0 records it as the archive's `path delta:`. For each step:

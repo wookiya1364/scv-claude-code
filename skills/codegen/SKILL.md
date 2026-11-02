@@ -123,6 +123,11 @@ one-line notice; `EFFORT_ESCALATION: armed` promotes on the first. The
 expected Red of Step 6 is the contract working, never a promotion trigger.
 Record judged band, used band, and promotions in the archive `--reason`.
 
+### Step progress
+
+Report each `Suggested path` step's start, finish, or block through the host's step-report tool
+exactly as `/scv:work` "Step progress" says — no tool, nothing to do.
+
 ### Step 6 — Red pre-flight (TDD-first specific)
 
 Before any code change, run TESTS in the current state to verify all relevant cases **fail**. This is the safety gate of TDD-first codegen.
