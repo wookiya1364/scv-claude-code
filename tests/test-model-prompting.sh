@@ -538,7 +538,7 @@ W="[SCV 가이드] 직전 턴에 help 가 이 모델의 프롬프팅 가이드 �
 D='  GUIDE_FILE: /g/a.md|  GUIDE_FILE: /g/c.md|  GUIDE_MARK_CMD: bash "/s/model-prompting.sh" mark --model "m"'
 eqc "warn unread carries detail" "$W|$D" "$(g wd1)"
 # (v0.65.0+) 경고 문구도 보이는 곳 두 군데(맨 위 한 줄 + 결론 뒤 전문)를 말한다(계획 rewrite-stays-current 목표 1).
-eqc "warn unshown ignores detail" "[SCV 가이드] 직전 턴에 다시 쓴 요청을 기록만 하고 답에 보이지 않았다 — 이번 턴에는 답 맨 위에 '이렇게 이해하고 일함: …' 한 줄, 결론 바로 뒤에 전문을 인용 블록으로 보여라." "$(g wd2)"
+eqc "warn unshown ignores detail" "[SCV 가이드] 직전 턴에 다시 쓴 요청을 기록만 하고 답에 보이지 않았다 — 이번 턴에는 답 맨 위에 전문을 인용으로 보여라." "$(g wd2)"
 eqc "warn unread without detail" "$W" "$(g wd3)"
 eqc "keep guide block whole" "$W|$D" "$(g wk1)"
 eqc "keep drops protocol warning" "" "$(g wk2)"
@@ -765,7 +765,7 @@ if command -v jq >/dev/null 2>&1; then
     (cd "$r" && jq -cn --arg p "$tr" --arg a "$2" --argjson act "$3" '{transcript_path:$p,last_assistant_message:$a,stop_hook_active:$act}' \
        | CLAUDE_PLUGIN_ROOT="$CORE" SCV_HOST_PROFILE="$WORK/profile-cl.env" GIT_AUTHOR_NAME="Hook User" bash "$STOP" 2>/dev/null)
   }
-  o="$(stop_cl "$R" "$(printf '이렇게 이해하고 일함: 로그인 버그를 고친다\n\ndone\n\n> **Rewritten request**: Fix the login bug until the login test passes\n')" false)"
+  o="$(stop_cl "$R" "$(printf '> **Rewritten request**: Fix the login bug until the login test passes\n\n**Done**\n- fixed\n')" false)"
   [[ -z "$o" ]] && c=$((c + 1)) || echo "      (3) registered + quoted should pass: $o"
   o="$(stop_cl "$R" "done without quote" false)"
   [[ "$(jq -r .decision <<<"$o" 2>/dev/null)" == block ]] && grep -q '인용' <<<"$o" && c=$((c + 1)) || echo "      (4) registered but not shown should block: $o"
@@ -880,7 +880,7 @@ if command -v jq >/dev/null 2>&1; then
   R="$(new_repo t27)"; (cd "$R" && git init -q . 2>/dev/null); mkdir -p "$R/src" "$R/scv/promote"
   hook_cl "$R" "로그인 고쳐" >/dev/null
   rw="$(reg_cl "$R" | sed -n 's/^REWRITE: //p')"
-  o="$(stop_cl "$R" "$(printf 'Understood as: fix the login bug\n\ndone\n\n> **Rewritten request**: %s\n' "$rw")" false)"
+  o="$(stop_cl "$R" "$(printf '> **Rewritten request**: %s\n\n**Done**\n- fixed\n' "$rw")" false)"
   [[ "$rw" == *"$(ptag "$(psec english)")" && -z "$o" ]] && c=$((c + 1)) || echo "      (1) tagged quote should pass: [$rw] [$o]"
   o="$(stop_cl "$R" "done without quote" false)"
   [[ "$(jq -r .decision <<<"$o" 2>/dev/null)" == block ]] && c=$((c + 1)) || echo "      (2) no quote should still block: [$o]"
@@ -908,25 +908,25 @@ principle_missing() {  # <구역> <언어> → 빠진 요소(또는 "있으면 �
   # (v0.64.0+) 문제 표 · '생길 수 있는 문제' 칸 · 위치 표시 문장은 없앴다(사용자 결정 2026-10-01) — 다시 들어오면 붉다.
   local s="$1" m forbid=""
   case "$2" in
-    korean) set -- "정확한 피드백" "듣기 좋은 말 대신 사실" "작은 단위" "'단위 | 해결책 | 추천' 세 칸" "번호를 붙여 모두" "문제를 막는 길" "고른 이유" "다를 수 있다" \
+    korean) set -- "정확한 피드백" "듣기 좋은 말 대신 사실" "작은 항목" "'항목 | 해결책 | 추천' 세 칸" "번호를 붙여 모두" "문제를 막는 길" "고른 이유" "다를 수 있다" \
               "따로 나열하지 않는다" "contracts/choices.md" "한 줄로" "80칸" "줄글처럼 풀려" "번호 메모" "항목 표 대신" \
               "듣기 좋은 행동도 하지 않는다" "2배 이상" "결과를 틀리게" "오류를 숨기" "추정뿐이면" "효과 없음을 전후 측정" \
               "그래도 요청대로" "느려진 함수 이름" "harm-choice: " "harm-text: " "harm-none: " "실제 원인" \
-              "묻지 말고 바로 적용해" "묻거나 보고하기 전에 되돌린다" "밀어붙이지 않았으면" "그 바로 다음 단락"
+              "묻지 말고 바로 적용해" "묻거나 보고하기 전에 되돌린다" "밀어붙이지 않았으면" "그 바로 다음)에"
             forbid=$'문제 표\n생길 수 있는 문제 칸\n문제 번호\n파일:줄\n확인:\n추정:\n번호 | 위치' ;;
-    english) set -- "accurate feedback" "facts instead of pleasing words" "small units" "three columns 'Unit | Solutions | Recommendation'" \
+    english) set -- "accurate feedback" "facts instead of pleasing words" "small items" "three columns 'Item | Solutions | Recommendation'" \
               "every usable solution, numbered" "prevents the problems it would cause" "why it was chosen" "can differ" \
               "Do not list possible problems separately" "contracts/choices.md" "in one line" "80 columns" \
               "unfolds into plain prose" "numbered notes" "replaces the help answer's item table" \
               "No pleasing actions either" "at least 2x slower" "make results wrong" "hide an error" "only an estimate" \
               "lack of effect" "as requested anyway" "name the function that slowed" "harm-choice: " "harm-text: " "harm-none: " "real cause" \
-              "don't ask, apply it now" "revert it before you ask or report" "when the user did not push" "paragraph right after the top line"
+              "don't ask, apply it now" "revert it before you ask or report" "when the user did not push" "right after the rewrite quote"
             forbid=$'Problem table\nPossible problems\'\nproblem numbers\nfile:line\nChecked:\nEstimate:\nNo. | Location' ;;
-    japanese) set -- "正確なフィードバック" "事実を述べよ" "小さな単位" "'単位 | 解決策 | 推奨' の三列" "番号を付けてすべて" "問題を防ぐ手立て" "選んだ理由" "異なりうる" \
+    japanese) set -- "正確なフィードバック" "事実を述べよ" "小さな項目" "'項目 | 解決策 | 推奨' の三列" "番号を付けてすべて" "問題を防ぐ手立て" "選んだ理由" "異なりうる" \
               "別に並べない" "contracts/choices.md" "一行で" "約80桁" "文章のように崩れて" "番号付きメモ" "項目表の代わり" \
               "耳触りのよい行動もしない" "2倍以上" "結果を誤らせる" "エラーを隠す" "推測にすぎなければ" "効果がないこと" \
               "それでも要求どおり" "遅くなった関数名" "harm-choice: " "harm-text: " "harm-none: " "本当の原因" \
-              "聞かずにすぐ適用して" "元に戻す" "押されていなければ" "すぐ次の段落"
+              "聞かずにすぐ適用して" "元に戻す" "押されていなければ" "すぐ次）に"
             forbid=$'問題表\n起こりうる問題\' の\n問題番号\nファイル:行\n確認:\n推定:\n番号 | 場所' ;;
     *) set -- "(unknown language)" ;;
   esac
@@ -990,7 +990,7 @@ stop_p() {  # <저장소> <프로필> <답> <계속 중 true|false> → 종료 �
 }
 reg_p() { (cd "$1" && printf '%s\n' "$SUB_OK" | SCV_HOST_PROFILE="$2" bash "$MP" register --model vendor-model-a >/dev/null 2>&1); }
 # (v0.65.0+) 맨 위 한 줄 + 결론 뒤 전문 인용(계획 rewrite-stays-current 목표 1).
-QUOTED_ANS="$(printf 'Understood as: fix the login bug\n\ndone\n\n> **Rewritten request**: Fix the login bug until the login test passes\n')"
+QUOTED_ANS="$(printf '> **Rewritten request**: Fix the login bug until the login test passes\n\n**Done**\n- fixed\n')"
 
 echo
 echo "T32. 자동 입력 판별 — 순수부"
