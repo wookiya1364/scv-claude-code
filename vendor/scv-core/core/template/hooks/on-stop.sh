@@ -168,7 +168,7 @@ if [[ "$_scv_human" == 1 && -f "$_scv_hs" && -f "$_scv_hslib" ]]; then
       _scv_pick="$(scv_stop_pick_source "$_scv_host" "$_scv_turn")"
       _scv_src="${_scv_pick%%$'\x1f'*}"; _scv_last="${_scv_pick#*$'\x1f'}"
     fi
-    printf '%s' "$_scv_last" | bash "$_scv_hs" stop --echo "$_scv_echo" --lint "$_scv_lint" --cap "$_scv_cap" --src "$_scv_src" --turn-dir "$_scv_tdir" >/dev/null 2>&1 || true
+    printf '%s' "$_scv_last" | bash "$_scv_hs" stop --echo "$_scv_echo" --lint "$_scv_lint" --cap "$_scv_cap" --lang "$(printf '%s' "$(_scv_get SCV_LANG)" | tr -d '"[:space:]')" --src "$_scv_src" --turn-dir "$_scv_tdir" >/dev/null 2>&1 || true
   fi
 fi
 # ---------- /drift check -----------------------------------------------------

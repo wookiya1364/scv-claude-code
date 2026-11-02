@@ -221,6 +221,36 @@ scv_lint_bullet_polite() {
 }
 
 # @pure
+# 역할: 글에서 한글 글자가 한글 · 영문 글자 중 몇 퍼센트인지 센다(앞 4000바이트만)
+# 종류: 세기
+# 예: "로그인 버그를 고침" → "100"
+# 예: "fixed the login bug" → "0"
+# 예: "" → "0"
+# 바이트로 센다(LC_ALL=C): 한글 음절의 첫 바이트(0xEA–0xED) 수와 ASCII 영문 글자 수. 맥 기본 bash 3.2 의 큰 글 치환이 느려 앞
+# 4000바이트만 본다.
+scv_lint_hangul_ratio() {
+  local LC_ALL=C t="${1:-}" h l
+  t="${t:0:4000}"
+  h="${t//[^$'\xea'-$'\xed']/}"; l="${t//[^A-Za-z]/}"
+  if (( ${#h} + ${#l} == 0 )); then printf '0'; return 0; fi
+  printf '%s' "$(( ${#h} * 100 / (${#h} + ${#l}) ))"
+}
+
+# @pure
+# 역할: 설정 언어가 한국어인데 답 글에 한글이 거의 없으면 위반 한 줄을 낸다
+# 종류: 판정/answer
+# 예: korean 0 50 → "lang-mismatch=0%"
+# 예: korean 60 50 → ""
+# 예: english 0 50 → ""
+# <설정 언어> <한글 비율> <글자 수> → 위반 줄 | 빈 값. 글자 40개 미만의 짧은 답 · 한국어가 아닌 설정은 보지 않는다(0.77.0+).
+scv_lint_lang_verdict() {
+  local lang="${1:-}" ratio="${2:-0}" n="${3:-0}"
+  [[ "$lang" == korean || "$lang" == ko ]] || return 0
+  (( n >= 40 && ratio < 20 )) && printf 'lang-mismatch=%s%%\n' "$ratio"
+  return 0
+}
+
+# @pure
 # 역할: 답 본문의 골격(다시 쓴 요청 위치 · 줄글 문단 길이 · 불릿 어미 · 첫 내용의 코드값 · 결정표 추천 칸)이 계약을 벗어난 줄들을 낸다
 # 종류: 판정/answer
 # 예: $'> **다시 쓴 요청**: x\n\n**주제**\n- 결과임\n- 풀이함\n' → ""
@@ -232,9 +262,10 @@ scv_lint_bullet_polite() {
 #   bullet-polite=<개수>      '~습니다' · '~해요' 로 끝나는 불릿 수(개조식 '~함 · ~임' 이 아님, 물음은 예외)
 #   lead-code=<값>            첫 내용 줄(불릿이나 줄글)의 코드값 (백틱 안 경로·버전·파일·설정 키)
 #   decision-no-reco=<행>     결정표(| # | … |) 행의 셋째 열(추천)이 비어 있음
+#   lang-mismatch=<n>%        셋째 인자(설정 언어)가 korean 인데 코드 · 인용 밖 글에 한글이 20% 미만(0.77.0+)
 # 코드 블록 안은 보지 않는다. 근사이며, 오탐의 비용은 재읽기 한 번이다.
 scv_answer_lint() {
-  local text="${1:-}" cap="${2:-2}" line t infence=0 seen=0 inquote=0 para="" first="" n polite=0 prose_done=0
+  local text="${1:-}" cap="${2:-2}" lang="${3:-}" prose="" pl line t infence=0 seen=0 inquote=0 para="" first="" n polite=0 prose_done=0
   local intable=0 is_decision=0 row c1 c3 bt='`' gt=$'\x3e' pat_code pat_num rest tok
   [[ "$cap" =~ ^[1-9][0-9]*$ ]] || cap=2
   pat_code="${bt}([^${bt}]+)${bt}(.*)\$"
@@ -264,6 +295,8 @@ scv_answer_lint() {
       continue
     fi
     inquote=0
+    pl="$t"; while [[ "$pl" =~ ^(.*)\`[^\`]*\`(.*)$ ]]; do pl="${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"; done
+    (( ${#prose} < 4000 )) && prose+="$pl "
     if [[ "$t" == \|* ]]; then
       _scv_lint_flush
       if (( ! intable )); then
@@ -292,6 +325,10 @@ scv_answer_lint() {
   _scv_lint_flush
   unset -f _scv_lint_flush
   (( polite > 0 )) && printf 'bullet-polite=%s\n' "$polite"
+  if [[ -n "$lang" ]]; then
+    local LC_ALL=C letters="${prose//[^A-Za-z$'\xea'-$'\xed']/}"
+    scv_lint_lang_verdict "$lang" "$(scv_lint_hangul_ratio "$prose")" "${#letters}"
+  fi
   rest="$first"
   while [[ "$rest" =~ $pat_code ]]; do
     tok="${BASH_REMATCH[1]}"; rest="${BASH_REMATCH[2]}"
