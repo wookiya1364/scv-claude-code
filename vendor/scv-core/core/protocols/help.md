@@ -36,27 +36,12 @@ Read `${CLAUDE_PLUGIN_ROOT}/protocols/help/language-setup.md` now and follow it.
 ## Plain language first
 
 Skip this section only when `scv/scv_settings.json` sets `SCV_PLAIN_LANGUAGE=off`
-(absent or any other value = on).
-
-Answer shape — every time you explain something to the user (`contracts/writing.md`):
-
-1. A **bold topic** line, then bullets: the first bullet states the result, the
-   next ones unpack it. A prose paragraph holds 1–2 sentences at most (the cap is 2
-   unless `scv/scv_settings.json` sets `SCV_PLAIN_MAX_SENTENCES=<n>`).
-2. Bullets end in noun form (Korean `~함 · ~임`); a question stays a question.
-3. Everyday words, the user's own; explain a new term where it first appears,
-   with one example from the user's situation.
-4. No code values before the user asks: file paths, variable names, version
-   numbers, setting values — use the plain name ("the settings file").
-
-Identifiers the user needs to act on — the next command to run, a file that
-was created — stay exact, after the plain summary.
-
-Bad: "The block landed in `scv_settings.example.json:154-161`."
-Good: "**Settings example** / - Up to date. / - The new 'effort' setting shows there."
-
-This governs everything the user reads: answers, questions, plans, progress
-reports, summaries, and explanations of what went wrong.
+(absent or any other value = on). The per-turn hook carries the answer shape; its body is
+`contracts/writing.md` 1–4: a **bold topic** line, then bullets with the result first; a prose
+paragraph holds 1–2 sentences at most (`SCV_PLAIN_MAX_SENTENCES`); one example from the
+user's situation. No code values before the user asks — identifiers the user acts on
+stay exact, after the plain summary. Bad: a paragraph of paths. Good: **Topic** / - the result.
+This governs everything the user reads.
 
 ## Recording
 
@@ -65,51 +50,30 @@ Turns are recorded per `core/contracts/recording.md`.
 ## Answer shape — the slots the question calls for
 
 `Plain language first` governs the lead — the bold topic and its first bullet. This
-section governs everything after the lead.
-
-Six slots exist. **They are a vocabulary, not a form.** An answer uses only the slots
-the question calls for, and never adds a slot to look complete. When slots appear,
-they appear in this order:
+section governs everything after the lead. Six slots form a vocabulary, not a form: use
+only the slots the question calls for, never adds a slot to look complete; they appear in this order:
 
 1. **Lead** — a bold topic line and its first bullet: the result. The only slot every answer has.
-2. **Surprises** — facts found while checking that the user did not expect and that
-   bear on a decision. Each one is marked `(confirmed)`.
-3. **Item table** — one row per item the user raised:
-   `item | now (confirmed) | change | size (small / large / setting only)`.
-   When nothing exists yet, `now` reads `none` — that is a fact, not an empty table.
-4. **Detail** — a short subsection for each `large` item only.
+2. **Surprises** — unexpected facts that bear on a decision, each marked `(confirmed)`.
+3. **Item table** — `item | now (confirmed) | change | size`, one row per item raised; `now`
+   reads `none` — that is a fact, not an empty table. A problem to solve uses the solution table of
+   `contracts/rewrite-principle.md` instead.
+4. **Detail** — a short subsection per `large` item only.
 5. **Cross-cutting** — a few bullets for what spans the items: speed, cost, operations.
-6. **Decisions** — `# | question | my recommendation`, and ask the user to answer by
-   number. The recommendation column is never omitted. When the host names a choice
-   tool, ask each decision through it instead — recommended option first, each option
-   carrying its own fix (`core/contracts/choices.md`).
+6. **Decisions** — `# | question | my recommendation`; the user can answer by number. The
+   recommendation column is never omitted. When the host names a choice tool, ask each decision through it
+   instead, recommended option first (`core/contracts/choices.md`).
 
-Which slots a question calls for:
+Which slots: a one-word acknowledgement → Lead only; a fresh idea with no code behind it → Lead, Item table (`now` = none), Decisions if any;
+an archive search → Lead, then the records found; a diagnosis → Lead, the diagnosis, one next
+action; several items checked against code → all six.
 
-- a one-word acknowledgement → Lead only.
-- a fresh idea with no code behind it → Lead, Item table (`now` = none), Decisions if any.
-- an archive search → Lead, then the records found.
-- a diagnosis (no argument) → Lead, the diagnosis, and one recommended next action.
-- several items to check against existing code → all six. (The answer this shape was
-  taken from was exactly this case.)
-
-Two rules hold across every slot:
-
-- **Facts and estimates never mix.** Anything you verified carries `(confirmed)`;
-  anything you did not is worded as an estimate.
-- **Dependent questions vs independent decisions.** When the next question depends on
-  the answer to this one, ask that one question and stop — no Decisions table. When
-  several decisions are independent of each other, put them in one Decisions table with
-  a recommendation on every row, so the user can answer them all in one line — with a
-  choice tool, one call of up to four questions.
-- **Speak in the user's words — never coin a label.** The names in this section
-  (Lead, Surprises, Item table, slots) are for you, not for the user; they never appear
-  in an answer. Call each thing by what it is in plain words — "the conclusion", "the
-  table of what changes", "the decisions you need to make" — and reuse the user's own
-  word when they gave one. If a term you did not invent is unavoidable, define it in the
-  same sentence with an example, then stop using it and use the plain description. A
-  sentence that only makes sense to someone who read your earlier turns is a sentence
-  to rewrite.
+- **Facts and estimates never mix.** Verified facts carry `(confirmed)`; the rest is an estimate.
+- **Dependent questions vs independent decisions.** When the next question depends on this
+  answer, ask that one question and stop. When several decisions are independent of each other, put them in one Decisions table, a recommendation on every
+  row — with a choice tool, one call of up to four questions.
+- **Speak in the user's words — never coin a label.** The slot names are for you, not for the user; they never appear in an answer.
+  Call things in plain words and reuse the user's own word; if a term is unavoidable, define it in the same sentence with an example, then stop using it.
 
 ## Run the help script
 

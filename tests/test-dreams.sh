@@ -281,7 +281,10 @@ for src in clear compact resume startup; do
   n="$(launches "$R")"
   want=0; [[ "$src" == clear || "$src" == compact ]] && want=1
   eq "$src: 뜬 횟수 $want" "$want" "$n"
-  awk -v t="$_t" -v b="$_base" 'BEGIN { exit !(t - b <= 1.0 && t <= 1.5) }' && ok "$src: 훅 지연 ${_t}s(드림 구간 없는 훅 ${_base}s, 더한 지연 ≤ 1.0s — 맥 CI 흔들림 여유)" || fail "$src: 훅 지연 ${_t}s (base ${_base}s)"
+  # 상한: 리눅스 더한 지연 1.0s · 전체 1.5s, 맥 2.0s · 2.5s — 맥 CI 기계가 세 번 흔들림(0.70.0 · 0.70.1 · 0.76.0 의 1.3s, 로컬 맥 실측 0.02s).
+  # 사용자 결정 2026-11-02: 맥만 올린다.
+  _add=1.0; _all=1.5; [[ "$(uname -s)" == Darwin ]] && { _add=2.0; _all=2.5; }
+  awk -v t="$_t" -v b="$_base" -v a="$_add" -v m="$_all" 'BEGIN { exit !(t - b <= a && t <= m) }' && ok "$src: 훅 지연 ${_t}s(드림 구간 없는 훅 ${_base}s, 더한 지연 ≤ ${_add}s)" || fail "$src: 훅 지연 ${_t}s (base ${_base}s, 상한 ${_add}s)"
 done
 echo "── [T4] 자동 발동 — 날짜 바뀜 ──"
 R="$(new_repo t4)"; mkdir -p "$R/scv/dreams"; printf '19990101\n' > "$R/scv/dreams/.last"

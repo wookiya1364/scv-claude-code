@@ -393,7 +393,15 @@ case "$cmd" in
       psw="$(scv_mp_switch "$(_setting SCV_REWRITE_PRINCIPLE)")"
       psec=""; [[ "$psw" == "on" ]] && psec="$(scv_mp_principle_section "$(_principle_body)" "$(_setting SCV_LANG)")"
       echo "REWRITE: $(scv_mp_rewrite_tagged "$(scv_mp_register_rewrite "$1")" "$psw" "$(scv_mp_principle_tag "$psec")")"
+      local pf="" pseen=""
+      [[ -n "$TDIR" && -d "$TDIR" ]] && pf="$TDIR/.principle-seen"
+      [[ -n "$pf" && -f "$pf" && ! -L "$pf" ]] && pseen="$(_first_line "$pf")"
+      if [[ -n "$psec" && "$(scv_mp_principle_show "$pseen" "$NONCE")" == "short" ]]; then
+        echo "PRINCIPLE: (이 세션에 이미 실음 — 규칙 그대로, 규약을 다시 읽을 때 전문을 다시 싣는다)"
+        return 0
+      fi
       if [[ -n "$psec" ]]; then
+        [[ -n "$pf" && -n "$NONCE" && ! -L "$pf" ]] && printf '%s\n' "$NONCE" > "$pf" 2>/dev/null
         echo "PRINCIPLE:"
         printf '%s\n' "$(scv_mp_principle_text "$psec")"
         # (2026-10-08+) 해로운 변경 줄 — 이번 실행의 확인 통로에 맞는 한 줄. 통로 판단은 실체 보여 주기와 같다(입구: choice-gate.sh).

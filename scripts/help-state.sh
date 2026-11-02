@@ -129,13 +129,14 @@ case "$cmd" in
           fi
           printf '%s\n' "$json" ;;
   stop)   # 인자: --echo on|off · --lint on|off · --cap N · --now ISO · --src host|transcript|none. stdin = 직전 답 본문(없으면 린트 생략).
-          _esw=on; _lsw=on; _cap=2; _now=""; _src=""
+          _esw=on; _lsw=on; _cap=2; _now=""; _src=""; _lang=""
           while [[ $# -gt 0 ]]; do
             case "$1" in
               --src)  _src="${2:-}"; shift 2 ;;   # v0.51.0+: 본문 출처 host|transcript|none — 드리프트 줄 끝에 남긴다
               --echo) _esw="$(scv_hstate_switch "${2:-}")"; shift 2 ;;
               --lint) _lsw="$(scv_hstate_switch "${2:-}")"; shift 2 ;;
               --cap)  _cap="${2:-2}"; shift 2 ;;
+              --lang) _lang="${2:-}"; shift 2 ;;   # 0.77.0+: 설정 SCV_LANG — 답 언어 검사
               --now)  _now="${2:-}"; shift 2 ;;
               *) shift ;;
             esac
@@ -147,7 +148,7 @@ case "$cmd" in
           IFS=$'\x1f' read -r _s _p _t _d _at _n <<<"$st"
           _rec="$(_turn_record)"; _app="${_rec%%$'\x1f'*}"; _got="${_rec#*$'\x1f'}"
           _echo="$(scv_echo_check "$_got" "${_n:-}" "${_p:-0}" "$_app")"
-          _viol=""; [[ "$_lsw" == "on" && "$_text" == *[![:space:]]* ]] && _viol="$(scv_answer_lint "$_text" "$_cap")"
+          _viol=""; [[ "$_lsw" == "on" && "$_text" == *[![:space:]]* ]] && _viol="$(scv_answer_lint "$_text" "$_cap" "$_lang")"
           _dec="$(scv_drift_decide "$_echo" "$_viol" "$_esw" "$_lsw")"; _reload="${_dec%%$'\x1f'*}"; _warn="${_dec#*$'\x1f'}"
           if [[ "$_reload" == "1" ]]; then
             st="$(scv_hstate_reload "$st" "" reset 0)"   # protocol=0 · 지문 비움 — 다음 mark 가 새 지문을 만든다
