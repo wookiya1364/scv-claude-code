@@ -43,8 +43,8 @@ printf '# source: common.md\ngoal\tState the goal\tfixture quote a\nfinish\tStat
 printf '# source: model-a.md\nfinish\tState the done condition precisely\tfixture quote c\nsources\tName the sources to check\tfixture quote d\n' > "$WORK/guides-cl/checklist-model-a.tsv"
 { cat "$FIX/profile.env"; printf 'SCV_PROMPTING_GUIDES=%s\nSCV_AUTO_PROMPT_TAGS=machine-event\nSCV_CHOICE_TOOL=PickTool\n' "$WORK/guides-cl"; } > "$WORK/profile-full.env"
 SUB_OK="$(printf 'goal | msg | fix the login bug\nfinish | ctx | conversation turn 2: the test passes\nsources | asked | which log file? (recommended: app.log)\nrewrite | - | Fix the login bug until the login test passes')"
-# (v0.65.0+) 보이는 곳 두 군데 — 답 맨 위 한 줄 + 결론 뒤 전문 인용(계획 rewrite-stays-current 목표 1).
-QUOTE=$'Understood as: fix the login bug\n\n> **Rewritten request**: Fix the login bug until the login test passes'
+# (0.76.0+) 보이는 곳 — 답 맨 위 전문 인용(계획 answer-bullets). 그 전에는 맨 위 한 줄 + 결론 뒤 인용.
+QUOTE=$'> **Rewritten request**: Fix the login bug until the login test passes'
 
 new_repo() {  # <이름> → 빈 scv 저장소 경로 (세션 s1 의 help 표식 포함)
   local d="$WORK/$1"; mkdir -p "$d/scv/journal"
@@ -234,11 +234,11 @@ c=0
 
 echo "── [T4] 종료 훅 — 등록을 마친 사람 턴이 글로 묻고 끝나면 같은 턴에 한 번 막는다 ──"
 R="$(new_repo t4)"; hook_p "$R" "$WORK/profile-full.env" "로그인 고쳐" >/dev/null; reg_full "$R" >/dev/null
-o="$(stop_p "$R" "$WORK/profile-full.env" "$(printf '%s\n\n%s\n\n%s' "결론." "$QUOTE" "$C_A")" false)"
+o="$(stop_p "$R" "$WORK/profile-full.env" "$(printf '%s\n\n%s\n\n%s' "$QUOTE" "결론." "$C_A")" false)"
 if [[ "$(jq -r .decision <<<"$o" 2>/dev/null)" == block ]] && grep -q 'SCV 선택지' <<<"$o" && grep -q 'PickTool' <<<"$o" \
    && grep -q '첫 보기가 추천' <<<"$o" && grep -q '4개를 넘으면' <<<"$o"; then ok "첫 번째: 막음 — 이유에 도구 이름 · 추천 첫 보기 · 나누기"; else fail "T4 첫 번째: [$o]"; fi
 rm -f "$(tf "$R" .help-warn)"
-o="$(stop_p "$R" "$WORK/profile-full.env" "$(printf '%s\n\n%s\n\n%s' "결론." "$QUOTE" "$C_A")" true)"
+o="$(stop_p "$R" "$WORK/profile-full.env" "$(printf '%s\n\n%s\n\n%s' "$QUOTE" "결론." "$C_A")" true)"
 [[ -z "$o" ]] && grep -q '^\[SCV 가이드\] 직전 턴: \[SCV 선택지\]' "$(tf "$R" .help-warn)" 2>/dev/null \
   && ok "이미 계속 중: 막지 않고 다음 턴 경고" || fail "T4 계속 중: [$o] / $(cat "$(tf "$R" .help-warn)" 2>/dev/null)"
 (cd "$R" && bash "$CORE/scripts/help-state.sh" reset --turn-dir scv/journal/.help-turns/s1 >/dev/null 2>&1)
@@ -252,7 +252,7 @@ _r="$(jq -r .reason <<<"$o" 2>/dev/null)"
 
 echo "── [T5] 종료 훅 — 자동 알림 턴에도 적용된다 ──"
 R="$(new_repo t5)"; hook_p "$R" "$WORK/profile-full.env" "로그인 고쳐" >/dev/null; reg_full "$R" >/dev/null
-stop_p "$R" "$WORK/profile-full.env" "$(printf '%s\n\n%s\n\n%s' "결론." "$QUOTE" "끝났습니다.")" false >/dev/null   # 사람 턴이 끝난다
+stop_p "$R" "$WORK/profile-full.env" "$(printf '%s\n\n%s\n\n%s' "$QUOTE" "결론." "끝났습니다.")" false >/dev/null   # 사람 턴이 끝난다
 hook_p "$R" "$WORK/profile-full.env" $'<machine-event>\n<status>completed</status>\n</machine-event>' >/dev/null
 gate_auto="$(cd "$R" && printf '%s' "$C_B" | SCV_HOST_PROFILE="$WORK/profile-full.env" bash "$MP" stop --active 0 2>/dev/null | grep '^STOP_GATE')"
 o="$(stop_p "$R" "$WORK/profile-full.env" "$C_B" false)"
@@ -353,17 +353,17 @@ fresh_turn() {  # <이름> → 등록까지 마친 사람 턴의 저장소
 
 echo "── [T19] 턴 자르기 — 내부 메시지 뒤에 끝나도 앞서 보인 인용을 인정한다 ──"
 R="$(fresh_turn t19)"; TR="$WORK/t19.jsonl"
-{ jl_user "로그인 고쳐"; jl_asst "$(printf '결론.\n\n%s' "$QUOTE")"; jl_meta "Base directory for this skill: /x"; jl_tool; jl_asst "끝났습니다."; } > "$TR"
+{ jl_user "로그인 고쳐"; jl_asst "$(printf '%s\n\n결론.' "$QUOTE")"; jl_meta "Base directory for this skill: /x"; jl_tool; jl_asst "끝났습니다."; } > "$TR"
 o="$(stop_tr "$R" "$WORK/profile-full.env" "$TR" "끝났습니다.")"
 [[ -z "$o" ]] && ok "내부 메시지(스킬 불러오기)는 경계가 아니다 — 막지 않음" || fail "T19 (a): [$o]"
 R="$(fresh_turn t19b)"; TR="$WORK/t19b.jsonl"
-{ jl_user "로그인 고쳐"; jl_asst "$(printf '결론.\n\n%s' "$QUOTE")"; jl_user "다음"; jl_tool; jl_asst "끝났습니다."; } > "$TR"
+{ jl_user "로그인 고쳐"; jl_asst "$(printf '%s\n\n결론.' "$QUOTE")"; jl_user "다음"; jl_tool; jl_asst "끝났습니다."; } > "$TR"
 o="$(stop_tr "$R" "$WORK/profile-full.env" "$TR" "끝났습니다.")"
 [[ "$(jq -r .decision <<<"$o" 2>/dev/null)" == block ]] && grep -q '인용' <<<"$o" && ok "진짜 사람 프롬프트는 지금처럼 경계 — 그 뒤에 인용이 없으면 막는다" || fail "T19 (b): [$o]"
 
 echo "── [T20] 긴 턴 — 원본 창(400줄)을 넘어도 이번 사람 턴의 인용을 인정한다 ──"
 R="$(fresh_turn t20)"; TR="$WORK/t20.jsonl"
-{ jl_user "로그인 고쳐"; jl_asst "$(printf '결론.\n\n%s' "$QUOTE")"; for i in $(seq 1 230); do jl_tool; done; jl_asst "끝났습니다."; } > "$TR"
+{ jl_user "로그인 고쳐"; jl_asst "$(printf '%s\n\n결론.' "$QUOTE")"; for i in $(seq 1 230); do jl_tool; done; jl_asst "끝났습니다."; } > "$TR"
 o="$(stop_tr "$R" "$WORK/profile-full.env" "$TR" "끝났습니다.")"
 [[ "$(wc -l < "$TR" | tr -d ' ')" -gt 400 && -z "$o" ]] && ok "$(wc -l < "$TR" | tr -d ' ')줄 턴: 창을 넓혀 경계를 찾고 막지 않음" || fail "T20 (a): [$o]"
 R="$(fresh_turn t20b)"; TR="$WORK/t20b.jsonl"
@@ -391,18 +391,18 @@ done
 echo "── [T23] 문제 표 · 문제 칸 — 종료 훅이 같은 턴에 한 번 막는다 ──"
 PTA=$'| 단위 | 해결책 | 추천 | 생길 수 있는 문제 |\n|---|---|---|---|\n| a | ①x | ① 이유 | P1 |'
 R="$(fresh_turn t23)"
-o="$(stop_p "$R" "$WORK/profile-full.env" "$(printf '%s\n\n%s\n\n%s\n\n%s' "결론." "$QUOTE" "$PTA" "끝났습니다.")" false)"
+o="$(stop_p "$R" "$WORK/profile-full.env" "$(printf '%s\n\n%s\n\n%s\n\n%s' "$QUOTE" "결론." "$PTA" "끝났습니다.")" false)"
 [[ "$(jq -r .decision <<<"$o" 2>/dev/null)" == block ]] && grep -q 'SCV 원칙' <<<"$o" && grep -q '해결책 안에서 막아' <<<"$o" \
   && ok "문제 칸이 있는 끝 메시지 — 막음, 이유에 해결책 안에서 막으라는 말" || fail "T23 막기: [$o]"
 rm -f "$(tf "$R" .help-warn)"
-o="$(stop_p "$R" "$WORK/profile-full.env" "$(printf '%s\n\n%s\n\n%s' "결론." "$QUOTE" "$PTA")" true)"
+o="$(stop_p "$R" "$WORK/profile-full.env" "$(printf '%s\n\n%s\n\n%s' "$QUOTE" "결론." "$PTA")" true)"
 [[ -z "$o" ]] && grep -q '^\[SCV 가이드\] 직전 턴: \[SCV 원칙\]' "$(tf "$R" .help-warn)" 2>/dev/null && ok "이미 계속 중: 막지 않고 다음 턴 경고" || fail "T23 계속 중: [$o]"
-o="$(stop_p "$R" "$WORK/profile-full.env" "$(printf '%s\n\n%s\n\n%s\n\n%s' "결론." "$QUOTE" "$PTA" "릴리스할까요?")" false)"
+o="$(stop_p "$R" "$WORK/profile-full.env" "$(printf '%s\n\n%s\n\n%s\n\n%s' "$QUOTE" "결론." "$PTA" "릴리스할까요?")" false)"
 # v0.64.2+ (계획 stop-gates-each-once) — 예전에는 원칙 이유 하나만 냈다. 이제 한 멈춤에 걸린 이유를 함께 싣는다.
 _r="$(jq -r .reason <<<"$o" 2>/dev/null)"
 [[ "$_r" == *'[SCV 원칙]'*'[SCV 선택지]'* ]] && ok "문제 표와 글 질문이 함께 있으면 두 이유를 한 번에(원칙 → 선택지 순)" || fail "T23 함께 싣기: [$o]"
 R="$(fresh_turn t23off)"; printf '{\n  "SCV_REWRITE_PRINCIPLE": "off"\n}\n' > "$R/scv/scv_settings.json"
-o="$(stop_p "$R" "$WORK/profile-full.env" "$(printf '%s\n\n%s\n\n%s' "결론." "$QUOTE" "$PTA")" false)"
+o="$(stop_p "$R" "$WORK/profile-full.env" "$(printf '%s\n\n%s\n\n%s' "$QUOTE" "결론." "$PTA")" false)"
 [[ -z "$o" ]] && ok "원칙 스위치 off — 판정 없음(이 기능 전과 같다)" || fail "T23 off: [$o]"
 o="$(stop_p "$(new_repo t23nc)" "$WORK/profile-pick.env" "$(printf '%s\n\n%s' "결론." "$PTA")" false)"
 [[ -z "$o" ]] && ok "원칙이 실리지 않는 호스트(요구 항목 데이터 없음) — 판정 없음" || fail "T23 no checklist: [$o]"
@@ -419,7 +419,7 @@ rc="$(printf 'x?' | SCV_HOST_PROFILE="$WORK/profile-pick.env" perl -e 'alarm 5; 
 
 echo "── [T26] 긴 턴 — 종료 훅이 이번 턴만 작게 잘라 빨리 끝난다 ──"
 R="$(fresh_turn t26)"; TR="$WORK/t26.jsonl"
-{ jl_user "로그인 고쳐"; jl_asst "$(printf '결론.\n\n%s' "$QUOTE")"
+{ jl_user "로그인 고쳐"; jl_asst "$(printf '%s\n\n결론.' "$QUOTE")"
   for i in $(seq 1 1500); do jl_tool; jl_asst "진행 메모 $i — 이번 단계에서 확인한 것을 적는다. 다음 단계로 넘어간다."; done; } > "$TR"
 t0=$(date +%s); o="$(stop_tr "$R" "$WORK/profile-full.env" "$TR" "끝났습니다.")"; t1=$(date +%s)
 [[ -z "$o" ]] && ok "$(wc -l < "$TR" | tr -d ' ')줄 · 답 1501개 턴: 앞선 인용을 찾고 막지 않음 ($((t1 - t0))s)" || fail "T26: [$o]"
@@ -445,9 +445,9 @@ grep -q 'SCV choices' <<<"$o" && ok "환경 변수가 없는 실행 — 도구�
 echo "── [T28] 코덱스 모양 원본 — 넓혀 찾지 않고, 판정은 이 기능 전과 같다 ──"
 cx_line() { jq -cn --arg r "$1" --arg t "$2" '{type:"response_item",payload:{type:"message",role:$r,content:[{type:(if $r=="user" then "input_text" else "output_text" end),text:$t}]}}'; }
 R="$(fresh_turn t28)"; TR="$WORK/t28.jsonl"
-{ printf '%s\n' '{"type":"session_meta","payload":{"originator":"fixture"}}'; cx_line user "로그인 고쳐"; cx_line assistant "$(printf '결론.\n\n%s' "$QUOTE")"
+{ printf '%s\n' '{"type":"session_meta","payload":{"originator":"fixture"}}'; cx_line user "로그인 고쳐"; cx_line assistant "$(printf '%s\n\n결론.' "$QUOTE")"
   awk 'BEGIN { for (i = 0; i < 45000; i++) printf "{\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"n\":%d}}\n", i }'; cx_line assistant "끝났습니다."; } > "$TR"
-t0=$(date +%s); o="$(stop_tr "$R" "$WORK/profile-full.env" "$TR" "$(printf '결론.\n\n%s' "$QUOTE")")"; t1=$(date +%s)
+t0=$(date +%s); o="$(stop_tr "$R" "$WORK/profile-full.env" "$TR" "$(printf '%s\n\n결론.' "$QUOTE")")"; t1=$(date +%s)
 [[ -z "$o" ]] && ! grep -q 'turn-boundary=not-found' "$R/scv/journal/.help-drift" 2>/dev/null \
   && ok "$(wc -l < "$TR" | tr -d ' ')줄 코덱스 모양: 끝 메시지의 인용으로 통과, 경계 없음 기록을 남기지 않는다 ($((t1 - t0))s)" || fail "T28 (a): [$o] / $(tail -1 "$R/scv/journal/.help-drift" 2>/dev/null)"
 _fns="$(sed -n '/^_scv_turn_stream() {/,/^}/p;/^_scv_turn_stream_wide() {/,/^}/p' "$STOP_HOOK")"
@@ -459,7 +459,7 @@ o="$(stop_tr "$R" "$WORK/profile-full.env" "$TR" "끝났습니다.")"
 
 echo "── [T29] 도구 출처 표시만 있는 사용자 몫 글도 경계가 아니다 ──"
 R="$(fresh_turn t29)"; TR="$WORK/t29.jsonl"
-{ jl_user "로그인 고쳐"; jl_asst "$(printf '결론.\n\n%s' "$QUOTE")"
+{ jl_user "로그인 고쳐"; jl_asst "$(printf '%s\n\n결론.' "$QUOTE")"
   jq -cn '{type:"user",sourceToolUseID:"toolu_fixture",message:{content:[{type:"text",text:"Base directory for this skill: /x"}]}}'; jl_tool; jl_asst "끝났습니다."; } > "$TR"
 o="$(stop_tr "$R" "$WORK/profile-full.env" "$TR" "끝났습니다.")"
 [[ -z "$o" ]] && ok "내부 표시가 없어도 도구 출처 표시가 있으면 경계가 아니다 — 막지 않음" || fail "T29: [$o]"
@@ -470,7 +470,7 @@ jl_attach() { printf '%s\n' '{"type":"attachment","attachment":{"type":"fixture"
 R="$(fresh_turn t30)"; TR="$WORK/t30.jsonl"
 { for i in $(seq 1 15); do jl_attach; done; jl_user "어디까지 됐어?"; for i in $(seq 1 13); do jl_tool; done
   jq -cn '{type:"user",isMeta:true,sourceToolUseID:"toolu_fixture",message:{content:[{type:"text",text:"Base directory for this skill: /x"}]}}'
-  for i in $(seq 1 93); do jl_tool; done; jl_attach; jl_asst "$(printf '결론.\n\n%s' "$QUOTE")"
+  for i in $(seq 1 93); do jl_tool; done; jl_attach; jl_asst "$(printf '%s\n\n결론.' "$QUOTE")"
   for i in $(seq 1 117); do jl_tool; done; jl_attach; jl_asst "검사 사슬을 배경에 걸어 두었습니다."; } > "$TR"
 _qline="$(grep -n 'Rewritten request' "$TR" | head -1 | cut -d: -f1)"
 _win_u="$(tail -n 400 "$TR" | jq -Rr 'fromjson? | select(.type == "user" and (.isMeta != true) and ((.message.content | type) == "array") and any(.message.content[]; .type == "text")) | "U"' | grep -c U)"
@@ -488,7 +488,7 @@ if [[ -x /bin/bash ]]; then
        | PATH="$SYSB:$PATH" CLAUDE_PLUGIN_ROOT="$CORE" SCV_HOST_PROFILE="$2" GIT_AUTHOR_NAME="Hook User" /bin/bash "$STOP_HOOK" 2>/dev/null)
   }
   R="$(fresh_turn t33a)"; TR="$WORK/t33a.jsonl"
-  BIG="$(printf '결론.\n\n%s\n\n' "$QUOTE"; for i in $(seq 1 1500); do printf '진행 메모 %s — 이번 단계에서 확인한 것을 적는다.\n' "$i"; done)"
+  BIG="$(printf '%s\n\n결론.\n\n' "$QUOTE"; for i in $(seq 1 1500); do printf '진행 메모 %s — 이번 단계에서 확인한 것을 적는다.\n' "$i"; done)"
   { jl_user "로그인 고쳐"; jl_asst "$BIG"; } > "$TR"
   t0=$(date +%s); o="$(stop_sys "$R" "$WORK/profile-full.env" "$TR" "$BIG")"; t1=$(date +%s)
   [[ -z "$o" ]] && (( t1 - t0 <= 30 )) && ok "답 하나 $(printf '%s' "$BIG" | wc -c | tr -d ' ')바이트 — 시스템 bash $v 로 $((t1 - t0))s, 막지 않음" || fail "T33 (a) $((t1 - t0))s: [$o]"
@@ -529,8 +529,8 @@ sg_tags() {  # <종료 훅 출력> → "pass" | "block:<꼬리표들>" — 이�
 }
 sg_warns() { grep -c '^\[SCV 가이드\] 직전 턴:' "$(tf "$1" .help-warn)" 2>/dev/null || true; }
 SG_DONE="작업을 마쳤습니다."                                                       # 묻지도 표도 없음
-SG_QJ="$(printf '%s\n\n%s\n\n%s' "결론." "$QUOTE" "$C_J")"                         # 인용 + 실측 결정 표로 끝
-SG_QP="$(printf '%s\n\n%s\n\n%s\n\n%s' "결론." "$QUOTE" "$PTA" "끝났습니다.")"       # 인용 + 문제 표
+SG_QJ="$(printf '%s\n\n%s\n\n%s' "$QUOTE" "결론." "$C_J")"                         # 인용 + 실측 결정 표로 끝
+SG_QP="$(printf '%s\n\n%s\n\n%s\n\n%s' "$QUOTE" "결론." "$PTA" "끝났습니다.")"       # 인용 + 문제 표
 SG_ALL="$(printf '%s\n\n%s' "$PTA" "$C_J")"                                         # 인용 없음 + 문제 표 + 결정 표로 끝
 
 echo "── [T35.0] 순수부 — 이미 전달 · 기록 · 지우기 · 이유 합치기 ──"
@@ -714,7 +714,7 @@ stop_tra() {  # <저장소> <원본> <마지막 답> <계속 중 true|false> →
   (cd "$1" && jq -cn --arg p "$2" --arg a "$3" --argjson act "$4" '{session_id:"s1",transcript_path:$p,last_assistant_message:$a,stop_hook_active:$act}' \
      | CLAUDE_PLUGIN_ROOT="$CORE" SCV_HOST_PROFILE="$WORK/profile-full.env" GIT_AUTHOR_NAME="Hook User" bash "$STOP_HOOK" 2>/dev/null)
 }
-R="$(fresh_turn sg16)"; TR="$WORK/sg16.jsonl"; A1="$(printf '%s\n\n%s\n\n%s' "결론." "$QUOTE" "$PTA")"
+R="$(fresh_turn sg16)"; TR="$WORK/sg16.jsonl"; A1="$(printf '%s\n\n%s\n\n%s' "$QUOTE" "결론." "$PTA")"
 { printf '%s\n' '{"type":"session_meta","payload":{"originator":"fixture"}}'; cx_line user "로그인 고쳐"; cx_line assistant "$A1"; } > "$TR"
 o1="$(stop_tra "$R" "$TR" "$A1" false)"
 A2=$'표를 고쳤습니다.\n\n| 단위 | 해결책 | 추천 |\n|---|---|---|\n| a | ①x | ① 이유 |'
@@ -728,7 +728,7 @@ echo "── [T35.17] 첫 멈춤에서 새 기록 쓰기만 실패 — 지난 �
 # 같은 검사를 또 막았다. 첫 멈춤은 기록을 쓰기 전에 같은 세션의 지난 기록부터 지운다. 쓰기 실패는 가짜 mktemp 로 만든다.
 mkdir -p "$WORK/nomktemp"; printf '#!/bin/sh\nexit 1\n' > "$WORK/nomktemp/mktemp"; chmod +x "$WORK/nomktemp/mktemp"
 R="$(fresh_turn sg17)"
-stop_p "$R" "$WORK/profile-full.env" "$(printf '%s\n\n%s\n\n%s' "결론." "$QUOTE" "$PTA")" false >/dev/null   # 사람 턴: 원칙을 전달
+stop_p "$R" "$WORK/profile-full.env" "$(printf '%s\n\n%s\n\n%s' "$QUOTE" "결론." "$PTA")" false >/dev/null   # 사람 턴: 원칙을 전달
 stop_p "$R" "$WORK/profile-full.env" "$(printf '%s\n\n%s' "$QUOTE" "끝났습니다.")" true >/dev/null       # 사람 턴이 끝난다
 hook_p "$R" "$WORK/profile-full.env" $'<machine-event>\n<status>completed</status>\n</machine-event>' >/dev/null
 TR="$WORK/sg17.jsonl"; { jl_user "q"; jl_asst "$C_J"; } > "$TR"

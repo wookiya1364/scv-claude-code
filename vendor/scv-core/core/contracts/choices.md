@@ -43,7 +43,12 @@ turns included:
    once, at the first runnable result; after it, the work runs on). (2026-10-21: in real use, one week-long session raised 225
    windows, 115 of them right after a background job reported back, mostly "what next?".)
 
-Information is not a decision. Tables that report — the unit table of the rewrite principle, result
+9. The question stands on its own. Text written before the tool call in the same message may not reach
+   the user (a remote or phone client shows the window, not that text — 2026-11-02, the user saw an
+   empty window and answered "안보여"). Put what the decision rests on — the result, in a line or two —
+   into the question or the options' descriptions.
+
+Information is not a decision. Tables that report — the solution table of the rewrite principle, result
 tables, the help item table — stay as text.
 
 ## When the host names none
