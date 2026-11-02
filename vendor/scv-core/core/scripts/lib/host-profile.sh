@@ -45,6 +45,9 @@ SCV_CHOICE_REJECTED_PREFIX=""
 # 0.72.2+ 선택 키: deck 엔진(DeckUI) 폴더 — 코어 루트 기준 상대 경로('..' · 절대 경로는 거절). 코어 루트 바로 아래 DeckUI 가
 # 없을 때만 쓴다(lib/deck-source.sh). 클로드 래퍼는 스킬이 플러그인 최상위에서 돌아 코어 사본 안 엔진을 가리킨다. 비면 코어 루트 아래.
 SCV_DECKUI_DIR=""
+# 0.75.0+ 선택 키: 계획 단계가 바뀔 때(시작 · 끝 · 막힘) 알리는 호스트 도구 이름. 있으면 구현 중인 계획이 있는 턴에
+# 매 턴 훅이 한 줄로 알린다(scripts/step-report.sh). 비면 아무 일 없다.
+SCV_STEP_TOOL=""
 
 _scv_profile_assign() {
   local key="$1" value="$2"
@@ -70,6 +73,7 @@ _scv_profile_assign() {
     SCV_JUDGE_COMMAND) SCV_JUDGE_COMMAND="$value" ;;
     SCV_CHOICE_REJECTED_PREFIX) SCV_CHOICE_REJECTED_PREFIX="$value" ;;
     SCV_DECKUI_DIR) SCV_DECKUI_DIR="$value" ;;
+    SCV_STEP_TOOL) SCV_STEP_TOOL="$value" ;;
   esac
 }
 

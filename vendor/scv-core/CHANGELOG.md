@@ -2,6 +2,16 @@
 
 All notable changes to SCV Core are documented here.
 
+## [0.75.0] - 2026-11-02
+
+### 단계 보고 — 구현 중 단계가 바뀌면 대시보드에 저절로
+
+- 호스트 설정 칸 `SCV_STEP_TOOL`(선택): 계획 단계를 알리는 호스트 도구 이름. 비면 아무 일 없고 매 턴 훅 출력도 그대로.
+- 구현 중(`in_progress` · `testing`)인 계획이 있을 때만 매 턴 한 줄 `[SCV 단계]` — 단계를 시작 · 끝낼 때 · 막혔을 때(이유 한 줄) 그 도구로 알리라고 한다(`scripts/step-report.sh`, 순수부 `lib/step-report.sh`).
+- work · codegen 규약에 'Step progress' 절.
+- 순수함수 사전 항목 모양(`### 이름` → `- 역할:` → `- 위치:`)을 시험으로 고정 — 대시보드 모드(0.2.15+)가 단계마다 함수 역할을 이 모양으로 읽는다(`contracts/purity.md`).
+- 시험: `test-step-report.sh`(5개), `test-pure-catalog.sh` 형식 고정.
+
 ## [0.74.0] - 2026-11-02
 
 ### 글쓰기 8가지 — 읽는 사람이 덜 헤매게, 선택 창은 그대로

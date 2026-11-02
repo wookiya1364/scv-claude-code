@@ -92,6 +92,11 @@ if [[ -f "$_scv_cgs" ]]; then
   fi
 fi
 
+# v0.75.0+ — 단계 보고(protocols/work.md "Step progress"): 호스트 설정에 단계 보고 도구가 있고 구현 중인 계획이 있으면 한 줄.
+# 도구가 없거나(기본 · 코덱스) 구현 중인 계획이 없으면 아무것도 싣지 않는다 — 이 구간을 지운 훅과 출력이 같다.
+_scv_srp="$CORE_HOME/scripts/step-report.sh"
+[[ -f "$_scv_srp" ]] && { bash "$_scv_srp" line 2>/dev/null || true; }
+
 # ---------- auto turns — 판별 (v0.63.0+, 한 번만 v0.72.3+) -------------------
 # 이번 입력이 사람 메시지인지 자동 알림인지 — 이 턴에 한 번만 가른다. 실체 보여 주기(_scv_sr_kind)와 아래 자동 턴 처리가 이 값을 쓴다.
 # 호스트가 스스로 보낸 입력(배경 작업 완료 알림 등 — 래퍼 호스트 프로필 SCV_AUTO_PROMPT_TAGS)은 사람 턴이 아니다.
