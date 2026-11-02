@@ -731,6 +731,19 @@ scv_mp_answer_shows_rewrite() {
 }
 
 # @pure
+# 역할: 원칙 전문을 이번 등록에 다시 실을지(full) 한 줄만 실을지(short) 정한다
+# 종류: 판정/gate
+# 예: "" abc → "full"
+# 예: abc abc → "short"
+# 예: abc "" → "full"
+# <이 세션에 원칙을 실었을 때의 규약 지문> <지금 규약 지문> → full | short. 지문은 help 규약을 다시 읽을 때(압축 · 비움 ·
+# 시작 · 열 턴마다) 새로 생기므로, 그때마다 전문을 한 번 다시 싣는다(0.77.0+, 매 턴 글 줄이기 — 사용자 결정 2026-11-02).
+scv_mp_principle_show() {
+  local seen="${1:-}" nonce="${2:-}"
+  if [[ -n "$nonce" && "$seen" == "$nonce" ]]; then printf 'short'; else printf 'full'; fi
+}
+
+# @pure
 # 역할: 등록 · 보임 · 이미 전달 · 맨 위 인용으로 종료를 허용할지(ok · block · warn) 정한다
 # 종류: 판정/gate
 # 예: 1 1 0 1 → "ok"
