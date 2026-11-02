@@ -626,11 +626,10 @@ Recommended: [1] Yes (listed first — with no answer, nothing is marked; `contr
 <!-- /SCV:GUIDANCE -->
 
 Answer handling:
-- **[1] Yes**: `Read` → `Edit` `scv/archive/<B-slug>/PLAN.md` frontmatter:
-  - `status: done` → `status: obsolete`
-  - Add `obsoleted_at: <TODAY>` if missing
-  - Add `obsoleted_by: <A-slug>` if missing
-  - Don't touch any other field. Never touch TESTS.md, ARCHIVED_AT.md, or any other file.
+- **[1] Yes**: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/obsolete-mark.sh <B-slug> <A-slug>` — it changes only the three
+  PLAN.md frontmatter fields (`status: obsolete`, `obsoleted_at`, `obsoleted_by`), never TESTS.md or
+  ARCHIVED_AT.md, leaves an already-obsolete plan as it is, and refreshes the archive index at once so
+  the regression runner skips `<B-slug>` from now on (not only after the next archive).
 - **[2] Skip**: Modify nothing. Move to the next slug.
 - **[3] Review**: Defer this slug. Move to the next slug.
 

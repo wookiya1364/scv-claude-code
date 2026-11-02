@@ -2,6 +2,14 @@
 
 All notable changes to SCV Core are documented here.
 
+## [0.75.1] - 2026-11-02
+
+### 폐기 표시를 한 곳으로 — 표시하면 보관 목록도 바로
+
+- `scripts/obsolete-mark.sh <계획> <대체한 계획> [<날짜>]`: 보관된 계획서 앞머리 세 칸(`status: obsolete` · `obsoleted_at` · `obsoleted_by`)만 바꾸고 보관 목록(`INDEX.yaml`)을 바로 다시 만든다. 이미 폐기면 그대로(날짜 덮어쓰지 않음). 순수부 `lib/obsolete.sh` `scv_obsolete_frontmatter`.
+- work 9c(대체 선언)와 regression(분류)의 폐기 표시가 둘 다 이것을 부른다 — 전에는 work 9c 가 목록을 안 새로 만들어, 다음 보관 때까지 회귀가 폐기된 계획을 계속 돌릴 수 있었다.
+- 시험: `test-obsolete-mark.sh`(5개).
+
 ## [0.75.0] - 2026-11-02
 
 ### 단계 보고 — 구현 중 단계가 바뀌면 대시보드에 저절로
