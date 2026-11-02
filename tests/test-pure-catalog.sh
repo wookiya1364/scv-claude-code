@@ -118,6 +118,12 @@ if [[ $RC -eq 0 && -f "$WORK/t4/cat/INDEX.md" && -f "$WORK/t4/cat/tidy.md" && -f
   ok "차례 두 줄(개수 2 · 1)과 종류 파일 두 개, 함수마다 역할 · 위치 · 예"
 else fail "T4 — rc=$RC"; printf '%s\n' "$OUT" | sed 's/^/      /'; ls "$WORK/t4/cat" | sed 's/^/      /'; fi
 
+# 형식 고정(0.75.0+): 대시보드 모드가 단계마다 함수의 역할을 이 모양으로 읽는다 — "### 이름" 바로 밑 줄이 "- 역할:",
+# 그다음이 "- 위치:". 이 순서 · 머리말이 바뀌면 대시보드가 조용히 역할을 못 보인다(contracts/purity.md "사전을 읽는 쪽").
+if awk '/^### t_lt$/{f=1; next} f==1{r=($0 ~ /^- 역할: 두 수 중 앞이 작으면 참$/); f=2; next} f==2{l=($0 ~ /^- 위치: /); exit} END{exit !(r && l)}' "$WORK/t4/cat/compare.md"; then
+  ok "사전 형식 고정 — '### 이름' 밑에 '- 역할:' 그다음 '- 위치:'"
+else fail "T4b — catalog entry layout changed (dashboard reads it)"; sed -n '/^### t_lt$/,+3p' "$WORK/t4/cat/compare.md" | sed 's/^/      /'; fi
+
 echo "T5. 사전이 코드와 어긋나면 실패"
 run t4 check
 [[ $RC -eq 0 ]] && ok "손대지 않으면 통과" || { fail "T5 기준 — rc=$RC"; printf '%s\n' "$OUT" | sed 's/^/      /'; }

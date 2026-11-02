@@ -37,6 +37,7 @@ SCV_AUTO_PROMPT_SUFFIX=""
 SCV_JUDGE_COMMAND=""
 SCV_CHOICE_REJECTED_PREFIX=""
 SCV_DECKUI_DIR=""
+SCV_STEP_TOOL=""
 line_no=0
 while IFS= read -r line || [[ -n "$line" ]]; do
   line_no=$((line_no + 1))
@@ -56,7 +57,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     SCV_ARGUMENT_STYLE|SCV_STATE_INDEX|SCV_LEGACY_STATE_INDEXES|SCV_ROOT_ENV|\
     SCV_GRAPH_SKILL_PATHS|SCV_UPDATE_OWNER|SCV_MODEL_POLICY_OWNER|\
     SCV_PROMPTING_GUIDES|SCV_AUTO_PROMPT_TAGS|SCV_CHOICE_TOOL|SCV_CHOICE_OFF_WHEN|\
-    SCV_SESSION_ENV|SCV_AUTO_PROMPT_PREFIX|SCV_AUTO_PROMPT_SUFFIX|SCV_JUDGE_COMMAND|SCV_CHOICE_REJECTED_PREFIX|SCV_DECKUI_DIR) ;;
+    SCV_SESSION_ENV|SCV_AUTO_PROMPT_PREFIX|SCV_AUTO_PROMPT_SUFFIX|SCV_JUDGE_COMMAND|SCV_CHOICE_REJECTED_PREFIX|SCV_DECKUI_DIR|SCV_STEP_TOOL) ;;
     *) echo "profile:$line_no: unknown key: $key" >&2; exit 1 ;;
   esac
   case "|$seen_keys|" in
@@ -112,6 +113,12 @@ fi
 if [[ -n "$SCV_CHOICE_TOOL" ]]; then
   [[ "$SCV_CHOICE_TOOL" =~ ^[A-Za-z][A-Za-z0-9_-]{0,63}$ ]] \
     || { echo "profile: invalid SCV_CHOICE_TOOL (one tool name: a letter, then letters, digits, _ or -)" >&2; exit 1; }
+fi
+
+# 선택 키 (0.75.0+): 계획 단계 보고 도구 이름 — 선택지 도구와 같은 모양(글자로 시작, 글자 · 숫자 · _ · -, 64자까지).
+if [[ -n "$SCV_STEP_TOOL" ]]; then
+  [[ "$SCV_STEP_TOOL" =~ ^[A-Za-z][A-Za-z0-9_-]{0,63}$ ]] \
+    || { echo "profile: invalid SCV_STEP_TOOL (one tool name: a letter, then letters, digits, _ or -)" >&2; exit 1; }
 fi
 
 # 선택 키 (0.64.0+): 선택지 도구가 없는 실행을 알리는 환경 조건 — "환경 변수 이름=값" 하나(이름은 셸 변수 이름, 값은 글자 · 숫자 ·
