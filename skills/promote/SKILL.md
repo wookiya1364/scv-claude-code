@@ -346,7 +346,18 @@ For each proposed folder name, check the helper's `=== existing promote folders 
 - Suggest `<slug>-v2` (or `-v3`, `-v4` as needed) and re-confirm with user by asking the user.
 - Never silently overwrite.
 
-### Step 5 — Write scaffolds (only after user approval per folder)
+### Step 4.5 — Outline first: this is the per-folder approval
+
+Before writing any file, show each folder's outline — about ten lines: goal, what is out of
+scope, the steps (one line each, naming the pipeline steps), and how it will be verified (with
+values: "exit code 0", "11 · 10 unchanged"). Get the go-ahead through the choice tool
+(`contracts/choices.md`): [1] write it as outlined (recommended) / [2] something to change.
+
+That answer **is** the per-folder approval Step 5 needs — never a second confirmation after the
+files are written, so the user is not asked more often than before. Fixing a story is cheap in an
+outline and costly once paragraphs exist (`contracts/writing.md`).
+
+### Step 5 — Write scaffolds (only after the Step 4.5 approval per folder)
 
 For each approved folder, create the directory and write **two files**:
 

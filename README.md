@@ -139,10 +139,10 @@ is never read or written.
 |---|---|---|
 | `SCV_ALWAYS_ON` | `on` | SCV joins free conversation; `off` = commands only |
 | `SCV_PLAIN_LANGUAGE` | `on` | plain-first answer shape (+ per-turn reminder); `off` silences |
-| `SCV_MODEL_PROMPTING` | `on` | per-model prompting: read the model's guide, compare and register every request |
+| `SCV_MODEL_PROMPTING` | `on` | per-model guide; compare and register every request |
 | `SCV_RESUME_RECAP` | `on` | re-inject progress after `/clear`, compaction, or resume |
-| `SCV_SHOW_REAL` | `on` | run the smallest real thing and show its output when the deliverable changes; `off` silences |
-| `SCV_DELEGATE_EFFORT` | `off` | deep questions go to a background investigator; its report lands in `scv/raw/` |
+| `SCV_SHOW_REAL` | `on` | show a real run when the deliverable changes; `off` silences |
+| `SCV_DELEGATE_EFFORT` | `off` | deep questions → background investigator; report in `scv/raw/` |
 | `SCV_LANG` | auto | output language: `english` · `korean` · `japanese` |
 | `NOTIFIER_PROVIDER` | off | `slack` or `discord` for team reports |
 
@@ -169,7 +169,7 @@ You never need this table — conversation routes for you. For explicit control:
 | `/scv:work <slug>` | Implement · run tests · archive · PR with evidence |
 | `/scv:codegen <slug>` | TDD-first variant: tests drive the code, Red → Green |
 | `/scv:regression` | Run every archived plan's tests as one suite |
-| `/scv:deck [<md>]` | Plan → numbered screen spec (or any markdown → planning document / slides) |
+| `/scv:deck [<md>]` | Plan → numbered screen spec; any md → planning doc · slides |
 | `/scv:report` | Post a phase result to Slack/Discord with artifacts |
 | `/scv:sync` | Refresh SCV templates + detect code↔plan drift |
 | `/scv:routine [<name>]` | Run a one-file maintenance routine |
@@ -177,7 +177,7 @@ You never need this table — conversation routes for you. For explicit control:
 | `/scv:workspace` · `/scv:handoff` | Multi-repo: umbrella setup · cross-repo work declaration |
 | `/scv:update` · `/scv:set-models` · `/scv:install-deps` | Plugin update guide · model policy · CLI deps |
 | `/scv:mods` · `/scv:mods-install` · `/scv:mods-remove` | Update + list SCV mods · install one · remove one |
-| `/scv:channel` | Switch SCV between dev · stage · prod — try new work before a release |
+| `/scv:channel` | Switch SCV dev · stage · prod — try new work pre-release |
 
 ## Guardrails
 
@@ -238,15 +238,24 @@ in this repository only builds the README GIFs — plugin users never need it.
 
 Shared behavior comes from a checksummed, version-pinned
 [scv-core](https://github.com/wookiya1364/scv-core) release vendored into this
-plugin — nothing is fetched at runtime. This repository is the Claude Code
-adapter: slash commands, hooks registration, install/update UX, the
-background investigator agent, and the model prompting guides under
-`prompting/` (verbatim copies of the official guides; CI checks that every
-checklist quote appears in them word for word). Hook stdout delivers the
-per-turn routing, the project diagnosis, the prompting block, and the
-plain-language reminder; the session-start hook re-injects the recap; the stop
-hook checks the answer's shape and the turn's registration; the journal hooks
-capture conversation with redaction before anything hits disk.
+plugin — nothing is fetched at runtime.
+
+This repository is the Claude Code adapter:
+
+- slash commands, hooks registration, install/update UX
+- the background investigator agent
+- the model prompting guides under `prompting/` — verbatim copies of the
+  official guides; CI checks that every checklist quote appears in them word
+  for word
+
+What the hooks do:
+
+- Hook stdout delivers the per-turn routing, the project diagnosis, the
+  prompting block, and the plain-language reminder.
+- The session-start hook re-injects the recap.
+- The stop hook checks the answer's shape and the turn's registration.
+- The journal hooks capture conversation with redaction before anything hits
+  disk.
 
 How the pieces fit — Core is vendored into each host's plugin, the channel
 picks which build you install, and mods come from their own marketplace:

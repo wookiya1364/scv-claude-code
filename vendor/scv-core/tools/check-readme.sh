@@ -157,6 +157,9 @@ diff_lines() {  # <label> <base name> <base> <other name> <other> → 차이 요
 }
 
 # ---------------------------------------------------------------- 입구
+# 표 칸 · 문단 길이 판정은 글 규칙(core/contracts/writing.md)의 것이다 — 숫자도 그 라이브러리 한 곳에.
+# shellcheck source=../core/scripts/lib/writing.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../core/scripts/lib" && pwd)/writing.sh"
 PROFILE=""; ROOT="."
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -170,6 +173,7 @@ case "$PROFILE" in core|claude|codex|mods) : ;; *) echo "usage: check-readme.sh 
 ROOT="$(cd "$ROOT" 2>/dev/null && pwd)" || { echo "✖ repo root not found" >&2; exit 2; }
 SRC="${README_OVERRIDE_DIR:-$ROOT}"
 
+UTF8="$(scv_writing_pick_locale "$(locale -a 2>/dev/null | tr '\n' ' ')" "C.UTF-8 C.utf8 en_US.UTF-8 en_US.utf8")"
 fail=0; nfile=0; ncmd=0; nset=0; nlink=0; ntopic=0; npic=0
 ACTION_IDS=""
 af="$(actions_file "$PROFILE")"
@@ -237,6 +241,14 @@ for set in $(profile_sets "$PROFILE"); do
         [[ -n "$a" ]] && err "$rel: command missing from the README: $(cmd_prefix "$PROFILE")$a"
       done <<< "$(missing_actions "$text" "$(cmd_prefix "$PROFILE")" "$ACTION_IDS")"
     fi
+    # (9) 휴대폰에서 읽히게 — 줄글 표 칸 · 한 화면 넘는 문단 (영어 판 한도의 절반이 한 · 일 판)
+    read -r cell_lim para_lim <<< "$(scv_writing_limits "$rel")"
+    while IFS=$'\t' read -r n c; do
+      [[ -n "$n" ]] && err "$rel: table cell too long ($n > $cell_lim chars, keep cells short): $(LC_ALL="$UTF8"; printf '%s' "${c:0:40}")"
+    done <<< "$(LC_ALL="$UTF8" scv_writing_over_limit "$(scv_writing_table_cells "$text")" "$cell_lim")"
+    while IFS=$'\t' read -r n c; do
+      [[ -n "$n" ]] && err "$rel: paragraph too long ($n > $para_lim chars, split it or make a list): $(LC_ALL="$UTF8"; printf '%s' "${c:0:40}")"
+    done <<< "$(LC_ALL="$UTF8" scv_writing_over_limit "$(scv_writing_paragraphs "$text")" "$para_lim")"
     # (7) 필수 그림
     while IFS= read -r m; do
       [[ -n "$m" ]] && err "$rel: required diagram missing: $m"
