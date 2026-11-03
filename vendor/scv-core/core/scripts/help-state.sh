@@ -159,7 +159,7 @@ case "$cmd" in
               _viol="$(scv_answer_lint "$_text" "$_cap" "$_lang")"
             fi
           fi
-          _dec="$(scv_drift_decide "$_echo" "$_viol" "$_esw" "$_lsw")"; _reload="${_dec%%$'\x1f'*}"; _warn="${_dec#*$'\x1f'}"
+          _dec="$(scv_drift_decide "$_echo" "$_viol" "$_esw" "$_lsw" "$_lang")"; _reload="${_dec%%$'\x1f'*}"; _warn="${_dec#*$'\x1f'}"
           if [[ "$_reload" == "1" ]]; then
             st="$(scv_hstate_reload "$st" "" reset 0)"   # protocol=0 · 지문 비움 — 다음 mark 가 새 지문을 만든다
             _write "$(scv_hstate_render "$st")"; _put "$WARN_FILE" "$_warn"

@@ -255,11 +255,16 @@ scv_lint_lang_verdict() {
 # 종류: 판정/answer
 # 예: "결과임" "Now running the size checks for real, then the hook test." korean → "lang-mismatch-lines=1"
 # 예: "결과임" "" korean → ""
-# <마지막 답> <턴 글> <설정 언어> → lang-mismatch-lines 줄 | 빈 값. 코드 블록 · 인용 · 표 줄 · 백틱 안은 보지 않고, 글자 40개 이상인 줄만
-# 본다. 줄마다 따로 보는 까닭: 긴 한국어 답 사이의 영어 한두 줄은 전체 비율로는 묻힌다(0.78.0+ — 2026-11-03 중간 보고가 세 번
+# 예: "결과임" "Now the implementation." korean → "lang-mismatch-lines=1"
+# 예: "결과임" "- npm test 통과함" korean → ""
+# 예: "결과임" "- PR을 열었음: [owner/repo-name#420](https://github.com/owner/repo-name/pull/420)" korean → ""
+# <마지막 답> <턴 글> <설정 언어> → lang-mismatch-lines 줄 | 빈 값. 코드 블록 · 인용 · 표 줄 · 백틱 안은 보지 않고, 글자 15개 이상인 줄만
+# 본다(0.79.0+ — 40개일 때 'Now the implementation.' 같은 짧은 중간 보고가 빠졌다, 계획 lang-enforce-079 T7). 링크 · 주소도 뺀다.
+# 줄마다 따로 보는 까닭: 긴 한국어 답 사이의 영어 한두 줄은 전체 비율로는 묻힌다(0.78.0+ — 2026-11-03 중간 보고가 세 번
 # 영어로 샜는데 마지막 답만 보는 검사가 놓쳤다).
 scv_lint_lang_turn() {
   local last="${1:-}" turn="${2:-}" lang="${3:-}" line t pl infence=0 n=0 letters
+  local re_link='^(.*)\[[^]]*\]\([^)]*\)(.*)$' re_url='^(.*)https?://[^[:space:]]*(.*)$'
   [[ "$lang" == korean || "$lang" == ko ]] || return 0
   while IFS= read -r line || [[ -n "$line" ]]; do
     t="${line#"${line%%[![:space:]]*}"}"
@@ -267,9 +272,12 @@ scv_lint_lang_turn() {
     (( infence )) && continue
     [[ "$t" == $'\x3e'* || "$t" == \|* ]] && continue
     pl="$t"; while [[ "$pl" =~ ^(.*)\`[^\`]*\`(.*)$ ]]; do pl="${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"; done
+    # 0.79.0+ — 링크([글](주소))와 맨 주소는 이름이다 — 세지 않는다(15자로 낮추자 'PR을 열었음: [저장소#420](https://…)' 가 걸렸다).
+    while [[ "$pl" =~ $re_link ]]; do pl="${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"; done
+    while [[ "$pl" =~ $re_url ]]; do pl="${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"; done
     letters="$(LC_ALL=C; printf '%s' "${pl//[^A-Za-z$'\xea'-$'\xed']/}")"
-    (( ${#letters} >= 40 )) || continue
-    [[ -n "$(scv_lint_lang_verdict "$lang" "$(scv_lint_hangul_ratio "$pl")" "${#letters}")" ]] && n=$((n + 1))
+    (( ${#letters} >= 15 )) || continue
+    [[ "$(scv_lint_hangul_ratio "$pl")" -lt 20 ]] && n=$((n + 1))
   done <<< "$turn"$'\n'"$last"
   (( n > 0 )) && printf 'lang-mismatch-lines=%s\n' "$n"
   return 0
@@ -369,11 +377,11 @@ scv_answer_lint() {
 # 종류: 판정/gate
 # 예: missing "" on on → $'1\x1f[SCV 규약 지문] 직전 턴 기록에 이 세션의 규약 지문이 없다 — 규약이 컨텍스트에서 빠진 것으로 보고 이번 턴에 다시 싣는다.'
 # 예: ok "" on on → $'0\x1f'
-# <메아리 판정> <린트 위반 줄들> <메아리 스위치 on|off> <린트 스위치 on|off>
+# <메아리 판정> <린트 위반 줄들> <메아리 스위치 on|off> <린트 스위치 on|off> [설정 언어 — 0.79.0+, 언어 위반이면 경고에 언어 이름]
 #   → "<reload 0|1>\x1f<다음 턴 경고 줄들(\n 구분, 없으면 빈)>"
 # 판정만 한다 — 표식·경고 파일 쓰기는 효과부. 스위치가 꺼진 쪽은 무시된다.
 scv_drift_decide() {
-  local echo_r="${1:-skip}" viol="${2:-}" esw="${3:-on}" lsw="${4:-on}" us=$'\x1f' reload=0 warn="" nviol=0 line
+  local echo_r="${1:-skip}" viol="${2:-}" esw="${3:-on}" lsw="${4:-on}" lang="${5:-}" us=$'\x1f' reload=0 warn="" nviol=0 line name=""
   if [[ "$esw" == "on" ]]; then
     case "$echo_r" in
       missing)  reload=1; warn="[SCV 규약 지문] 직전 턴 기록에 이 세션의 규약 지문이 없다 — 규약이 컨텍스트에서 빠진 것으로 보고 이번 턴에 다시 싣는다." ;;
@@ -385,6 +393,9 @@ scv_drift_decide() {
     if (( nviol > 0 )); then
       reload=1; [[ -n "$warn" ]] && warn+=$'\n'
       warn+="[SCV 답 모양] 직전 답이 답 모양 계약을 벗어났다 (${viol//$'\n'/ · }) — 규약을 이번 턴에 다시 싣는다."
+      # 0.79.0+ — 언어가 어긋났으면 어느 언어로 쓸지 같은 줄에 적는다(전에는 언어 이름이 없어 고쳐지지 않았다, 2026-11-03 slay 세션).
+      case "$lang" in korean|ko) name="한국어" ;; ""|english|en) name="" ;; *) name="$lang" ;; esac
+      [[ -n "$name" && "$viol" == *lang-mismatch* ]] && warn+=" 답과 도구 사이 중간 보고를 모두 ${name}로 써라."
     fi
   fi
   printf '%s%s%s' "$reload" "$us" "$warn"

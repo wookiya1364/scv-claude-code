@@ -450,7 +450,7 @@ R="$(fresh_turn t28)"; TR="$WORK/t28.jsonl"
 t0=$(date +%s); o="$(stop_tr "$R" "$WORK/profile-full.env" "$TR" "$(printf '%s\n\n결론.' "$QUOTE")")"; t1=$(date +%s)
 [[ -z "$o" ]] && ! grep -q 'turn-boundary=not-found' "$R/scv/journal/.help-drift" 2>/dev/null \
   && ok "$(wc -l < "$TR" | tr -d ' ')줄 코덱스 모양: 끝 메시지의 인용으로 통과, 경계 없음 기록을 남기지 않는다 ($((t1 - t0))s)" || fail "T28 (a): [$o] / $(tail -1 "$R/scv/journal/.help-drift" 2>/dev/null)"
-_fns="$(sed -n '/^_scv_turn_stream() {/,/^}/p;/^_scv_turn_stream_wide() {/,/^}/p' "$STOP_HOOK")"
+_fns="$(sed -n '/^_scv_turn_stream() {/,/^}/p;/^_scv_turn_stream_wide() {/,/^}/p' "$CORE/scripts/lib/turn-stream.sh")"
 _wide="$(TRANSCRIPT="$TR" bash -c 'eval "$1"; _scv_turn_stream_wide' _ "$_fns")"
 [[ "$_wide" == "N" ]] && ok "첫 창(400줄)에서 '이 형식이 아님'(N)으로 끝난다 — 넓혀 찾지 않는다" || fail "T28 넓혀 찾기: [$(head -c 40 <<<"$_wide")]"
 R="$(fresh_turn t28b)"
