@@ -75,7 +75,7 @@ First, gather context:
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/promote-helper.sh" "${SCV_ARGS[@]}"
 ```
 
-Parse the helper output — the lines `MODE:`, `TODAY:`, `AUTHOR:`, `STANDARD_VERSION:`, `GRAPH_STATUS:`, `GRAPH_DIR:`, `GRAFT_STATUS:` (and, when present, `GRAFT_NOTICE:` — relay that line verbatim as the first line of your output; its wording lives once, in the graft library, 0.55.0), `RAW_FILE_COUNT:`, `RAW_TOPIC_CLUSTERS:`, `SUGGEST_SPLIT:`, `SPLIT_REASON:`, `RAW_STALE_COUNT:`, `RAW_OUTDATED_COUNT:` are the primary signals; section blocks (`=== scv/raw inventory ===` etc.) give you the content to work with.
+Parse the helper output — the lines `MODE:`, `TODAY:`, `AUTHOR:`, `STANDARD_VERSION:`, `GRAPH_STATUS:`, `GRAPH_DIR:`, `GRAFT_STATUS:` (and, when present, `GRAFT_NOTICE:` — relay that line verbatim as the first line of your output, right under the rewritten-request quote (`contracts/writing.md` 4); its wording lives once, in the graft library, 0.55.0), `RAW_FILE_COUNT:`, `RAW_TOPIC_CLUSTERS:`, `SUGGEST_SPLIT:`, `SPLIT_REASON:`, `RAW_STALE_COUNT:`, `RAW_OUTDATED_COUNT:` are the primary signals; section blocks (`=== scv/raw inventory ===` etc.) give you the content to work with.
 
 ### Source material — raw / conversations / both (v0.9.0+)
 
@@ -96,8 +96,8 @@ When the source includes a conversation file, also include the conversation's `s
 Skip this section only when `scv/scv_settings.json` sets `SCV_PLAIN_LANGUAGE=off`
 (absent or any other value = on). The per-turn hook carries the answer shape; its body is
 `contracts/writing.md` 1–4: a **bold topic** line, then bullets with the result first; a prose
-paragraph holds 1–2 sentences at most (`SCV_PLAIN_MAX_SENTENCES`); one example from the
-user's situation. No code values before the user asks — identifiers the user acts on
+paragraph holds 1–2 sentences at most (`SCV_PLAIN_MAX_SENTENCES`).
+No code values before the user asks — identifiers the user acts on
 stay exact, after the plain summary. Bad: a paragraph of paths. Good: **Topic** / - the result.
 This governs everything the user reads.
 

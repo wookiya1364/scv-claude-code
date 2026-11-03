@@ -49,8 +49,8 @@ Technical identifiers (file paths, frontmatter keys like `merge_policy`, skill i
 Skip this section only when `scv/scv_settings.json` sets `SCV_PLAIN_LANGUAGE=off`
 (absent or any other value = on). The per-turn hook carries the answer shape; its body is
 `contracts/writing.md` 1–4: a **bold topic** line, then bullets with the result first; a prose
-paragraph holds 1–2 sentences at most (`SCV_PLAIN_MAX_SENTENCES`); one example from the
-user's situation. No code values before the user asks — identifiers the user acts on
+paragraph holds 1–2 sentences at most (`SCV_PLAIN_MAX_SENTENCES`).
+No code values before the user asks — identifiers the user acts on
 stay exact, after the plain summary. Bad: a paragraph of paths. Good: **Topic** / - the result.
 This governs everything the user reads.
 
@@ -120,11 +120,13 @@ The above is **Step 1 — template re-sync**. After it finishes (or is skipped),
 
 ## Step 2 — Drift detection (v0.11.3+)
 
-After Step 1, ask the user whether to also run drift detection. Default: Yes.
+After Step 1, run drift detection — it edits no file (it may run a plan's TESTS), so it is a next
+step, not a decision (`contracts/choices.md` 8); skip it only when the user said so.
 
-> "Step 1 (template re-sync) complete. Also check active promote slugs for drift between code and PLAN.md / TESTS.md? (Files edited via direct commits, IDE refactors, etc. can leave docs outdated.)"
+It checks active promote slugs for drift between code and PLAN.md / TESTS.md (direct commits,
+IDE refactors and the like can leave docs outdated).
 
-If user picks Yes, run the drift detector:
+Run the drift detector:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/drift-detect.sh"

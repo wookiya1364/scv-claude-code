@@ -116,8 +116,8 @@ fingerprint of it and reload it when a recorded turn loses the fingerprint or
 an answer breaks the answer shape (`SCV_HELP_LOAD_ONCE`,
 `SCV_HELP_RELOAD_EVERY`).
 
-- **Plain language** — answers lead with a one- or two-sentence conclusion,
-  then one example, and show code values only when asked
+- **Plain language** — answers lead with a bold topic line, then short
+  bullets with the result first, and show code values only when asked
   (`SCV_PLAIN_LANGUAGE`, `SCV_PLAIN_MAX_SENTENCES`). The stop hook checks the
   answer's shape (`SCV_ANSWER_LINT`).
 - **Per-model prompting** — when a wrapper ships a model's official prompting

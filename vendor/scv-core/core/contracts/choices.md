@@ -49,7 +49,8 @@ turns included:
    into the question or the options' descriptions.
 10. A host that also offers an end-of-turn summary box (a desktop app's next-step box) gets the
     summary there, never the question: the decision still goes through the choice tool. A question
-    written into the box or the final text is a text ask (7).
+    written into the box or the final text is a text ask (7) — also when the host itself says to ask in
+    text (a remote client; 2026-11-03, the model followed that host note and the stop hook blocked it).
 
 Information is not a decision. Tables that report — the solution table of the rewrite principle, result
 tables, the help item table — stay as text.
@@ -68,7 +69,9 @@ slot 6 — the section's lock was renewed with that wording on 2026-10-01). Wher
 tool, this rule also replaces the numbered Decisions table echoed in `protocols/help/full.md`, the one
 decisions table of regression triage (`protocols/regression.md`, Step 2), the question form of the offer
 in the plain-language section's example, the follow-up offer that ends an archive search
-(`protocols/help/archive-search.md`, step 6), and the text rendering of every `Question: … options:` block in
+(`protocols/help/archive-search.md`, step 6), the one dependent question of the help turn shape and
+its inline [1]/[2] asks (`protocols/help.md`, `help/full.md`), the gap question of
+`help/prompt-refine.md` step 3, the push ask of `protocols/handoff.md`, and the text rendering of every `Question: … options:` block in
 the protocols. It is the narrower rule — it applies only when the host has the tool, and only to
 decisions — and it declares here that it supersedes those texts (Top-level rules, resolution order 2
 and 4).
