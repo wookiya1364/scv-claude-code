@@ -79,43 +79,9 @@ fi
 # "원본은 비동기로 적혀 늦을 수 있으니 이 값을 쓰라" 고 명시한다. (2) 그 값이 없는 호스트에서는 원본에서
 # 마지막 사람 프롬프트 이후의 어시스턴트 텍스트만 보고, 아직 안 적혔으면 짧게(4회 × 250ms) 다시 읽는다.
 # (3) 그래도 없으면 이번 턴 린트를 생략한다 — 낡은 답(한 턴 전)을 보느니 안 본다. 지문 검사는 그대로 돈다.
-# 원본 → 턴 스트림: 줄마다 "U"(사람이 쓴 프롬프트) 또는 "A\x1f<텍스트, 줄바꿈은 \x1e>". 자르기는 scv_turn_slice.
-# v0.64.0+ — (1) 호스트의 내부 메시지(내부 표시 isMeta — 스킬 불러오기 · 종료 훅 피드백 등)는 사람 프롬프트가 아니다. 그것을
-# U 로 세면 같은 턴에서 그보다 앞서 보인 답(다시 쓴 요청 인용 등)이 이번 턴에서 빠진다. (2) 자르기는 jq 한 번에 한다 — 마지막
-# U 뒤만, 앞쪽 A 400개 + 마지막 A 하나로 낸다(긴 턴에서도 뒤의 bash 처리가 작다). U 가 없으면 아무것도 내지 않는다.
-# (3) 도구가 만든 사용자 몫 글(도구 출처 표시 sourceToolUseID)도 사람 프롬프트가 아니다 — 내부 표시와 둘 중 하나만 있어도 뺀다
-# (호스트가 한쪽 이름을 바꿔도 다른 쪽이 남는다; 로컬 원본 25개에서 사람 프롬프트에 출처 표시가 붙은 일은 0건). (4) 창 안에
-# 사람 · 모델 줄이 하나도 없으면(이 형식이 아닌 원본 — 예: 코덱스 세션 기록) "N" 하나만 낸다: 넓혀 찾지 않고, 경계 기록도 남기지
-# 않는다(자르기는 빈 값 — 이 기능 전과 같은 판정).
-_scv_turn_stream() {  # [원본 끝에서 읽을 줄 수 — 기본 400]
-  tail -n "${1:-400}" "$TRANSCRIPT" 2>/dev/null \
-    | jq -Rrn '[inputs | fromjson? | if .type? == "user" then
-                  (if (.isMeta? == true) or (.sourceToolUseID? != null) then empty
-                   elif ((.message.content|type) == "string")
-                      or ((.message.content|type) == "array" and any(.message.content[]?; .type? == "text"))
-                   then "U" else empty end)
-                elif .type? == "assistant" then
-                  ("A\u001f" + ([.message.content[]? | select(.type? == "text") | .text] | join("\n") | gsub("\n"; "\u001e")))
-                else empty end] as $s
-               | ([range(0; $s | length) | select($s[.] == "U")] | last) as $i
-               | if ($s | length) == 0 then "N" elif $i == null then empty
-                 else ($s[($i + 1):]) as $t
-                   | "U", ($t[:400][]), (if ($t | length) > 400 then $t[-1] else empty end)
-                 end' 2>/dev/null || true
-}
-# v0.64.0+ — 창 안에 사람 프롬프트가 없으면(선택지 질문 · 도구 결과가 많은 긴 턴) 창을 넓혀 이번 사람 턴의 경계를 찾는다:
-# 400 → 4000 → 40000 줄. 끝내 못 찾으면 아무것도 내지 않는다(자르기는 빈 값 — 지금처럼 안전 쪽). 기록은 부른 쪽이 한 번 남긴다.
-# 창이 이 형식이 아니면("N") 그대로 돌려준다 — 넓혀도 찾을 것이 없다.
-_scv_turn_stream_wide() {
-  local n s="" total
-  total="$(wc -l < "$TRANSCRIPT" 2>/dev/null | tr -d ' ')"; [[ "$total" =~ ^[0-9]+$ ]] || total=0
-  for n in 400 4000 40000; do
-    s="$(_scv_turn_stream "$n")"
-    [[ -n "$s" ]] && { printf '%s' "$s"; return 0; }
-    (( total <= n )) && break
-  done
-  return 0
-}
+# 원본 → 턴 스트림 함수(_scv_turn_stream · _scv_turn_stream_wide)는 lib/turn-stream.sh 에 있다(0.79.0+ — 도구 뒤 언어 검사 훅과 함께 쓴다).
+# shellcheck disable=SC1090
+source "${SCV_CORE_ROOT:-$SCRIPT_DIR/../..}/scripts/lib/turn-stream.sh" 2>/dev/null || true
 _scv_core="${SCV_CORE_ROOT:-$SCRIPT_DIR/../..}"
 # ---------- session (v0.65.0+) -----------------------------------------------
 # 이번 턴 상태는 세션마다 따로 있다(model-prompting.sh 머리말). 자리와 "이 세션이 사람 메시지를 받았나" 는 그 명령이 정한다.
@@ -169,6 +135,12 @@ if [[ "$_scv_human" == 1 && -f "$_scv_hs" && -f "$_scv_hslib" ]]; then
       _scv_src="${_scv_pick%%$'\x1f'*}"; _scv_last="${_scv_pick#*$'\x1f'}"
     fi
     _scv_lang="$(printf '%s' "$(_scv_get SCV_LANG)" | tr -d '"[:space:]')"
+    # 0.79.0+ — 사용자가 이 턴에 다른 언어를 요청했거나 다른 언어로 썼으면 언어 검사를 하지 않는다(SCV.md Top-level rules 7조).
+    _scv_ll="${SCV_CORE_ROOT:-$SCRIPT_DIR/../..}/scripts/lib/lang-enforce.sh"
+    # shellcheck disable=SC1090
+    if [[ -n "$_scv_lang" && -f "$_scv_ll" ]] && source "$_scv_ll" 2>/dev/null && declare -F _scv_turn_prompt >/dev/null 2>&1; then
+      [[ "$(scv_lang_user_other "$(_scv_turn_prompt 400)")" == 1 ]] && _scv_lang=""
+    fi
     # 0.78.0+ — 언어 검사는 중간 보고까지 본다: 이번 턴 글 전체를 파일로 넘긴다(한국어 설정일 때만 원본을 더 읽는다).
     _scv_ltf=""
     if [[ "$_scv_lint" == "on" && ( "$_scv_lang" == korean || "$_scv_lang" == ko ) ]] && declare -F scv_turn_slice >/dev/null 2>&1; then
@@ -283,14 +255,32 @@ if [[ -n "$_scv_lastmsg" && -f "$_scv_cg" ]]; then
     [[ -n "$_scv_r_choice" ]] || _scv_r_choice="[SCV 선택지] 고를 것은 선택지 도구로 다시 물어라(contracts/choices.md)."
   fi
 fi
+# 0.79.0+ — 설정 언어 검사(계획 lang-enforce-079): 끝 메시지(최종 답)에 설정 언어가 아닌 줄이 있으면 한 턴에 한 번 막고 그 줄만
+# 고쳐 쓰게 한다. 중간 보고만 어긋났으면 막지 않는다 — 도구 뒤 훅이 그 자리에서 교정했고, 위 드리프트 검사가 다음 턴 경고를 남긴다.
+_scv_r_lang=""
+_scv_langlib="${SCV_CORE_ROOT:-$SCRIPT_DIR/../..}/scripts/lib/lang-enforce.sh"
+if [[ -n "$_scv_lastmsg" && "${_scv_lint:-on}" == on && -f "$_scv_langlib" ]] && declare -F scv_lint_lang_turn >/dev/null 2>&1 \
+   && declare -F settings_get >/dev/null 2>&1; then
+  # shellcheck disable=SC1090
+  if source "$_scv_langlib" 2>/dev/null; then
+    _scv_lg="$(settings_get SCV_LANG 2>/dev/null | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]' || true)"
+    _scv_ln="$(scv_lint_lang_turn "$_scv_win_end" "" "$_scv_lg" | sed -n 's/^lang-mismatch-lines=//p')"
+    # 사용자가 이 턴에 다른 언어를 요청했거나 다른 언어로 썼으면 막지 않는다(SCV.md Top-level rules 7조 — 사용자에게 양보).
+    [[ "$(scv_lang_user_other "${_scv_opener:-$(_scv_turn_prompt 400)}")" == 1 ]] && _scv_ln=0
+    _scv_d_lang="$_scv_active"
+    declare -F scv_gates_delivered >/dev/null 2>&1 && _scv_d_lang="$(scv_gates_delivered lang "$_scv_active" "$_scv_sess" "$_scv_tok" "$_scv_grec")"
+    [[ "$(scv_lang_stop_decide "${_scv_ln:-0}" "$_scv_d_lang")" == block ]] && _scv_r_lang="$(scv_lang_fix_note "$_scv_lg" "$_scv_ln" final)"
+  fi
+fi
 # 막은 검사들 → 막는 이유 하나 · 이번 턴 전달 기록(막을 때만 쓴다, 첫 멈춤에서는 같은 세션의 지난 기록을 지운다).
 # 순수부가 없으면 이 기능 전처럼 첫 이유 하나만.
 _scv_blocked=""
 [[ -n "$_scv_r_prompt" ]] && _scv_blocked="${_scv_blocked:+$_scv_blocked,}prompt"
 [[ -n "$_scv_r_principle" ]] && _scv_blocked="${_scv_blocked:+$_scv_blocked,}principle"
 [[ -n "$_scv_r_choice" ]] && _scv_blocked="${_scv_blocked:+$_scv_blocked,}choice"
+[[ -n "$_scv_r_lang" ]] && _scv_blocked="${_scv_blocked:+$_scv_blocked,}lang"
 if declare -F scv_gates_reason >/dev/null 2>&1 && declare -F scv_gates_record >/dev/null 2>&1 && declare -F scv_gates_drop >/dev/null 2>&1; then
-  _scv_block_reason="$(scv_gates_reason "$_scv_r_prompt" "$_scv_r_principle" "$_scv_r_choice")"
+  _scv_block_reason="$(scv_gates_reason "$_scv_r_prompt" "$_scv_r_principle" "$_scv_r_choice" "$_scv_r_lang")"
   _scv_gfile="$_scv_tdir/.help-turn-gates"
   _scv_newrec="$(scv_gates_record "$_scv_sess" "$_scv_tok" "$_scv_grec" "$_scv_active" "$_scv_blocked")"
   # 첫 멈춤은 같은 세션의 지난 기록을 먼저 지운다 — 막으면서 새 기록 쓰기에 실패해도 지난 턴 기록이 이번 것으로 남지 않게
@@ -317,7 +307,7 @@ if declare -F scv_gates_reason >/dev/null 2>&1 && declare -F scv_gates_record >/
     fi
   fi
 else
-  _scv_block_reason="${_scv_r_prompt:-${_scv_r_principle:-$_scv_r_choice}}"
+  _scv_block_reason="${_scv_r_prompt:-${_scv_r_principle:-${_scv_r_choice:-$_scv_r_lang}}}"
 fi
 _scv_emit_block() {
   [[ -n "${_scv_block_reason:-}" ]] || return 0

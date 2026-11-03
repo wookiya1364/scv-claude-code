@@ -53,6 +53,13 @@ tool = next(l.split("=", 1)[1].strip() for l in open("adapter/claude-code.env") 
 cmds = [x.get("command", "") for e in h.get("PostToolUse", []) if e.get("matcher") == tool for x in e.get("hooks", [])]
 assert any("on-choice-answer.sh" in c and "SCV_CORE_ROOT=" in c and "CLAUDE_PLUGIN_ROOT" in c for c in cmds), cmds
 PY
+# Core 0.79.0+: language correction after every tool (PostToolUse with no matcher runs on-lang-check.sh).
+python3 - <<'PY' || fail "hooks.json: PostToolUse with no matcher must run on-lang-check.sh"
+import json
+h = json.load(open("hooks/hooks.json"))["hooks"]
+cmds = [x.get("command", "") for e in h.get("PostToolUse", []) if "matcher" not in e for x in e.get("hooks", [])]
+assert any("on-lang-check.sh" in c and "SCV_CORE_ROOT=" in c and "CLAUDE_PLUGIN_ROOT" in c for c in cmds), cmds
+PY
 wrapper_version=$(tr -d '[:space:]' < VERSION)
 [[ "$(python3 -c 'import json; print(json.load(open(".claude-plugin/plugin.json"))["version"])')" == "$wrapper_version" ]] ||
   fail "Claude plugin manifest version does not match wrapper VERSION"

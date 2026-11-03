@@ -2,7 +2,7 @@
 # test-instruction-diet.sh — 매 턴 글 줄이기 · 충돌 3 정리 · 검사 3 추가(계획 20261102-wookiya1364-instruction-diet T1 · T1b · T3–T8).
 #
 # 매 턴 글 = 매 턴 훅 출력(진단 변동 없는 둘째 턴) + help.md 본문 + 원칙을 다시 싣지 않는 등록 출력. 0.76.0 같은 방식 14,823B,
-# 상한 10,500B(사용자 결정 2026-11-02).
+# 상한 10,800B(사용자 결정 2026-11-02 10,500B → 2026-11-04 10,800B: 0.79.0 언어 줄 309B, codex 사본 10,695B).
 set -euo pipefail
 
 CORE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -47,7 +47,7 @@ fi
 # T1 — 매 턴 글 9,000바이트 이하 · 도움말 합계 33,022 미만
 hook >/dev/null; h="$(hook | wc -c | tr -d ' ')"; r="$(reg | wc -c | tr -d ' ')"; b="$(wc -c < "$CORE/protocols/help.md" | tr -d ' ')"
 tot=$(( h + b + r ))
-(( tot <= 10500 )) && ok "T1 per-turn text ${tot}B ≤ 10500B (hook $h + help $b + register $r)" || bad "T1 per-turn text ${tot}B > 10500B (hook $h + help $b + register $r)"
+(( tot <= 10800 )) && ok "T1 per-turn text ${tot}B ≤ 10800B (hook $h + help $b + register $r)" || bad "T1 per-turn text ${tot}B > 10800B (hook $h + help $b + register $r)"
 sum=0; for f in "$CORE/protocols/help.md" "$CORE"/protocols/help/*.md; do sum=$(( sum + $(wc -c < "$f") )); done
 (( sum < 33022 )) && ok "T1 help total ${sum}B < 33022B" || bad "T1 help total ${sum}B"
 
