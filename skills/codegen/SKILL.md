@@ -45,8 +45,8 @@ auto-detect from the user's latest message → English. Technical identifiers
 Skip this section only when `scv/scv_settings.json` sets `SCV_PLAIN_LANGUAGE=off`
 (absent or any other value = on). The per-turn hook carries the answer shape; its body is
 `contracts/writing.md` 1–4: a **bold topic** line, then bullets with the result first; a prose
-paragraph holds 1–2 sentences at most (`SCV_PLAIN_MAX_SENTENCES`); one example from the
-user's situation. No code values before the user asks — identifiers the user acts on
+paragraph holds 1–2 sentences at most (`SCV_PLAIN_MAX_SENTENCES`).
+No code values before the user asks — identifiers the user acts on
 stay exact, after the plain summary. Bad: a paragraph of paths. Good: **Topic** / - the result.
 This governs everything the user reads.
 
@@ -160,11 +160,11 @@ Walk failing cases in the order the test runner reports them. For each case:
    - Picked case now passes + no regression on previously passing cases → **invariants self-check** (next sub-step) → next case.
    - Picked case still fails → record attempt count. Retry up to **3 attempts total per case**.
    - Any previously passing case now fails → **rollback the last change** (revert via `Edit`), then retry with a smaller diff.
-5a. **Invariants self-check** (if PLAN.md frontmatter has `invariants:`, v0.11.0+): re-read each invariant string and verify the iteration's diff does not violate any of them. This is an LLM self-audit — TESTS may not catch T5 logic-skip (silently omitting an unrelated invariant). If a violation is suspected, **rollback the change** and try a different approach. If unsure, surface by asking the user: "Diff appears to violate invariant `<X>` — rollback / proceed anyway / let me review?" Skip this sub-step if `invariants:` is empty or absent.
+5a. **Invariants self-check** (if PLAN.md frontmatter has `invariants:`, v0.11.0+): re-read each invariant string and verify the iteration's diff does not violate any of them. This is an LLM self-audit — TESTS may not catch T5 logic-skip (silently omitting an unrelated invariant). If a violation is suspected, **rollback the change** and try a different approach. If unsure, surface by asking the user: "Diff appears to violate invariant `<X>`" — options: rollback (recommended) / proceed anyway / let me review (`contracts/choices.md`) Skip this sub-step if `invariants:` is empty or absent.
 6. **Iteration budget exhausted (3 attempts)** → stop. Report to the user:
    - "Could not pass `<case>` after 3 attempts. Last error: `<message>`. Last diff: `<short summary>`."
    - Ask one concise question with options:
-     - [1] "Take over — pause codegen, I'll continue with `/scv:work`"
+     - [1] "Take over — pause codegen, I'll continue with `/scv:work`" (recommended)
      - [2] "Revise TESTS — the case may be unreachable as written"
      - [3] "Skip this case and continue with the rest — PLAN will NOT be archived"
 

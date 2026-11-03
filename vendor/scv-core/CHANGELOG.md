@@ -2,6 +2,25 @@
 
 All notable changes to SCV Core are documented here.
 
+## [0.78.0] - 2026-11-03
+
+### 지시 충돌 12곳 정리 — 0.77.0 전체 재검사
+
+- 옛 답 모양 문구("결론 1~2문장 → 예시 하나")를 안내 문서 틀 · README 3개 언어에서 굵은 주제 → 불릿으로. '예시 하나' 요구를 14개 규약의 쉬운 말 절에서 뺌(글쓰기 규약에 없는 요구).
+- 마무리 상자: 매 턴 선택 창 줄에 `Summary box: recap only.`(396B), `contracts/choices.md` 10항 — 호스트가 글로 물으라 해도 질문은 선택 창.
+- 코어 9곳: GRAFT 안내 줄은 다시 쓴 요청 인용 바로 아래 · 번호 목록은 다시 가리킬 것에만(work 보고 · report) · codegen 질문 추천 표시 · workspace 자유 답은 선택 규칙 · 고정 한국어 문구 · sync 맞춤 검사와 install-deps 재확인은 묻지 않고 실행 · help/full.md 안내 문구.
+- 옛 계획 `20260824-wookiya1364-regression-contract-repair-2` 를 대체(T3 이 '예시 하나'를 고정) — 시험 6개는 새 계획 T9 로 계승.
+- 시험: `test-instruction-conflicts.sh`.
+
+### 남은 문제 6개 정리
+
+- 등록: 프로젝트 밖(`scv/` 없음)에서 부르면 저장하지 않고 바로 거절 — 이번 턴을 못 찾아 종료 훅이 답 뒤에 막고 답이 두 번 나가던 일.
+- 종료 훅이 막을 때 이유 끝에 "앞 답은 이미 사용자 화면에 있다 — 고친 부분만" 한 줄.
+- 답 언어 검사: 마지막 답뿐 아니라 이번 턴 중간 보고까지 한 줄씩 본다(`lang-mismatch-lines`, 코드 · 표 · 인용 · 백틱 제외).
+- 매 턴 훅의 가이드 경로: 기록된 옛 설치본 경로를 지금 설치본 자리로(`scv_mp_guide_rebase`).
+- 비슷한 충돌 9곳: work 의 묻는 곳 목록 · 9e 안내를 질문 안으로 · regression 분석 제안과 다시 묻기 · handoff push 질문 · 'Other' 보기는 창의 자유 입력 · install-deps 섞인 문장 · guard.md 낡은 숫자와 channel 행 · host-profile 액션 수 · work 3문장 문단.
+- 시험: `test-remaining-fixes.sh`.
+
 ## [0.77.0] - 2026-11-02
 
 ### 지시 다이어트 — 매 턴 글 14.8KB → 10.1KB

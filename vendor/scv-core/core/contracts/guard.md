@@ -62,7 +62,7 @@ shell invocation and therefore never reaches an editor-tool rule at all.
 ## Receipt-minting actions
 
 Every action in `core/actions.json` mints. The set is declared here so adding a
-sixteenth action fails CI until someone records a guard decision for it.
+new action fails CI until someone records a guard decision for it.
 
 ```guard:mint
 help
@@ -148,6 +148,7 @@ write, or the guard blocks the action it exists to protect. Verified by hand on
 | mods-remove | — | adapter-owned; Core ships no write |
 | set-models | — | adapter-owned; Core ships no write |
 | update | — | adapter-owned; Core ships no write |
+| channel | — | adapter-owned; Core ships no write |
 
 `help` was the one real ordering hole: its language setting was written before
 any script ran, so on a mint-from-script host the first interaction in a fresh

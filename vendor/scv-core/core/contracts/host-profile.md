@@ -36,8 +36,8 @@ Optional keys:
 | `SCV_STEP_TOOL` | **0.75.0+.** Name of the host's tool that records a plan step's progress (same name shape as `SCV_CHOICE_TOOL`). When set and a plan under `scv/promote/` is `in_progress` or `testing`, the per-turn hook adds one line naming the tool and the plan; work and codegen report each Suggested path step through it — started, done, or blocked with a one-line reason (`protocols/work.md` "Step progress"). The line asks for the tool only when the session actually has it. Empty or absent: no line, and the hook output is byte-identical to before. |
 
 Unknown or duplicate keys, shell substitutions, command separators, and
-multiline values are rejected. The two adapter-owned actions stay outside the
-canonical payload because installation and model selection are runtime
+multiline values are rejected. The adapter-owned actions (`entrypoint: null`,
+`contracts/guard.md`) stay outside the canonical payload because they are runtime
 capabilities.
 
 Canonical protocols use `<scv-action-arguments>

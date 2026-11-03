@@ -34,8 +34,8 @@ Technical identifiers stay as-is: file paths, skill invocation names, frontmatte
 Skip this section only when `scv/scv_settings.json` sets `SCV_PLAIN_LANGUAGE=off`
 (absent or any other value = on). The per-turn hook carries the answer shape; its body is
 `contracts/writing.md` 1–4: a **bold topic** line, then bullets with the result first; a prose
-paragraph holds 1–2 sentences at most (`SCV_PLAIN_MAX_SENTENCES`); one example from the
-user's situation. No code values before the user asks — identifiers the user acts on
+paragraph holds 1–2 sentences at most (`SCV_PLAIN_MAX_SENTENCES`).
+No code values before the user asks — identifiers the user acts on
 stay exact, after the plain summary. Bad: a paragraph of paths. Good: **Topic** / - the result.
 This governs everything the user reads.
 
@@ -119,12 +119,12 @@ Verdicts (per row):
      caused the failure. Claude Code reruns this slug only, up to 2 times:
      bash ${CLAUDE_PLUGIN_ROOT}/scripts/regression.sh --only <slug>
      - Pass within 2 retries → recorded as 'flaky resolved on retry N' and continue.
-     - Still failing → put the slug back into the triage table as its only row."
+     - Still failing → ask this slug's verdict again, on its own (table row or choice-tool question)."
 ```
 
 Answer handling:
 
-- **[1] regression**: Don't modify any files. Offer once: "Want me to analyze the failed output tail with you?" (if yes, use `Read`/`Grep` to explore source, suggestions only). Log `[regression] <slug>` to triage log.
+- **[1] regression**: Don't modify any files. Offer once to analyze the failed output tail — through the choice tool, or as a statement without a question (`core/contracts/choices.md` 7) (if accepted, use `Read`/`Grep` to explore source, suggestions only). Log `[regression] <slug>` to triage log.
 - **[2] obsolete**: Modify files per this procedure:
   1. `bash ${CLAUDE_PLUGIN_ROOT}/scripts/obsolete-mark.sh <slug> manual` — changes only the three PLAN.md
      frontmatter fields (`status: obsolete`, `obsoleted_at`, `obsoleted_by: manual`) and refreshes the
@@ -151,7 +151,7 @@ Answer handling:
      first; a stale index kept an obsolete slug running — 0.54.0).
   6. Report one line to the user: "Marked `<slug>` as obsolete (PLAN.md frontmatter + DECISIONS.md entry + index refreshed)."
   7. Log `[obsolete] <slug>` to triage log.
-- **[3] flaky**: Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/regression.sh --only <slug> --quiet` up to 2 times. On pass, log `[flaky→pass on retry N] <slug>`. If both retries fail, put the slug back into the triage table as its only row.
+- **[3] flaky**: Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/regression.sh --only <slug> --quiet` up to 2 times. On pass, log `[flaky→pass on retry N] <slug>`. If both retries fail, ask this slug's verdict again, on its own (table row or choice-tool question).
 
 ## Step 3 — Final summary
 

@@ -341,6 +341,12 @@ case "$cmd" in
       [[ -f "$_wf" && ! -L "$_wf" ]] && head -c 4096 "$_wf" 2>/dev/null | grep -q '^\[SCV 가이드\]' && _warned=1
     done
     _rec=""; [[ -f "$LAST_FILE" && ! -L "$LAST_FILE" ]] && _rec="$(head -c 4096 "$LAST_FILE" 2>/dev/null)"
+    # 0.78.0+ — 기록의 경로를 지금 설치본 자리로(그 자리에 같은 이름의 원문이 다 있을 때만).
+    if [[ -n "$_rec" && -n "$GUIDES_DIR" && -d "$GUIDES_DIR" ]]; then
+      _reb="$(scv_mp_guide_rebase "$_rec" "$GUIDES_DIR" "$SCRIPT_DIR/model-prompting.sh")"; _okr=1
+      while IFS= read -r _gl; do [[ "$_gl" == "GUIDE_FILE: "* && ! -f "${_gl#GUIDE_FILE: }" ]] && _okr=0; done <<< "$_reb"
+      (( _okr )) && _rec="$_reb"
+    fi
     # v0.62.0+: 매 턴(모든 메시지) 새 표를 쓰고 1:1 비교 · 등록 블록을 싣는다 — 요구 항목 데이터가 있는 호스트에서만.
     if (( _haslist )); then
       _list=""; [[ -n "$_lm" ]] && _list="$(_checklist_for "$(_key_of "$_lm")")"
@@ -435,6 +441,12 @@ case "$cmd" in
       if [[ "$(_first_line "$REG_FILE")" != "$_first" ]]; then echo "REGISTER: failed — could not save the registration ($REG_FILE); tell the user"; exit 0; fi
       echo "REGISTERED: turn $_tok · model ${_rm:-?} · kept (scope unchanged after the answer)"
       _rewrite_out "$_red"
+      exit 0
+    fi
+    # 0.78.0+: 프로젝트 밖(scv/ 없음)에서 부르면 이번 턴 표를 못 찾아 '턴 ?' 으로 엉뚱한 곳에 저장되고, 종료 훅이 답 뒤에 막아
+    # 답이 두 번 나간다(2026-11-03 실측). 저장하지 않고 바로 알린다.
+    if [[ -z "${SCV_JOURNAL_DIR:-}" && ! -d scv ]]; then
+      echo "REGISTER: refused — no scv/ in $(pwd); run it from the project root so this turn is found"
       exit 0
     fi
     _list="$(_checklist_for "$KEY")"
