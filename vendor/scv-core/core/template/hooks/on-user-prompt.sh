@@ -45,6 +45,14 @@ _scv_read() {  # <KEY> — 라이브러리가 없으면 기본값으로 간다.
   settings_get "$1" 2>/dev/null || true
 }
 
+# 0.79.0+ — 설정 언어 규칙 한 줄을 맨 앞에(계획 lang-enforce-079): 긴 작업 중 중간 보고가 다른 언어로 흐르던 일(2026-11-03 slay
+# 세션, 영어 최대 35줄). 언어가 없거나 english 면 아무것도 싣지 않는다 — 이 구간을 지운 훅과 출력이 같다.
+_scv_langlib="${SCV_CORE_ROOT:-$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.." 2>/dev/null && pwd )}/scripts/lib/lang-enforce.sh"
+if [[ -f "$_scv_langlib" ]]; then
+  # shellcheck disable=SC1090
+  source "$_scv_langlib" 2>/dev/null && scv_lang_rule_line "$(_scv_read SCV_LANG | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]')" 2>/dev/null || true
+fi
+
 _scv_plain="$(_scv_read SCV_PLAIN_LANGUAGE | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]' || true)"
 if [[ "${_scv_plain:-on}" != "off" ]]; then
   # Sentence cap (v0.31.0+): .env SCV_PLAIN_MAX_SENTENCES=<n>, positive integer
