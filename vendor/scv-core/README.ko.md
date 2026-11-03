@@ -115,7 +115,7 @@ flowchart LR
 사라지거나 답이 답 모양을 벗어나면 규약을 다시 싣습니다(`SCV_HELP_LOAD_ONCE`,
 `SCV_HELP_RELOAD_EVERY`).
 
-- **쉬운 말** — 답은 한두 문장의 결론으로 시작하고, 예시 하나를 들고, 코드 값은
+- **쉬운 말** — 답은 굵은 주제 줄 다음 결과가 먼저 오는 짧은 불릿으로 쓰고, 코드 값은
   물어볼 때만 보입니다(`SCV_PLAIN_LANGUAGE`, `SCV_PLAIN_MAX_SENTENCES`).
   종료 훅이 답의 모양을 검사합니다(`SCV_ANSWER_LINT`).
 - **모델별 프롬프팅** — 래퍼가 어떤 모델의 공식 프롬프팅 가이드(원문 그대로의

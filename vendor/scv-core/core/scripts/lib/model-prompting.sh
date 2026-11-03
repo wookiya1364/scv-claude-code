@@ -395,6 +395,27 @@ scv_mp_warn_keep() {
 # 기록: 첫 줄 = 모델 id 또는 "none", 둘째 줄부터 = help 가 낸 GUIDE_FILE · GUIDE_MARK_CMD 줄.
 
 # @pure
+# 역할: 기록된 가이드 경로 · 표시 명령을 지금 설치본 자리로 바꿔 쓴다
+# 종류: 다듬기
+# 예: $'m\nGUIDE_FILE: /old/1.0/prompting/g.md\nGUIDE_MARK_CMD: bash "/old/1.0/scripts/model-prompting.sh" mark --model "m"' /new/prompting /new/scripts/model-prompting.sh → $'m\nGUIDE_FILE: /new/prompting/g.md\nGUIDE_MARK_CMD: bash "/new/scripts/model-prompting.sh" mark --model "m"'
+# 예: $'none' /new/prompting /new/s.sh → "none"
+# <기록 전문> <지금 가이드 폴더> <지금 model-prompting.sh 경로> → 같은 모양의 기록. 폴더나 경로가 비면 그 줄은 그대로 둔다.
+# 0.78.0+ — 설치본을 올린 뒤에도 기록에는 옛 버전 폴더 경로가 남아, 매 턴 훅이 옛 설치본의 가이드를 가리켰다(2026-11-03 실측 0.75.1).
+scv_mp_guide_rebase() {
+  local rec="${1:-}" dir="${2:-}" script="${3:-}" line out="" q='"' rest
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ -n "$dir" && "$line" == "GUIDE_FILE: "* ]]; then
+      line="GUIDE_FILE: $dir/${line##*/}"
+    elif [[ -n "$script" && "$line" == "GUIDE_MARK_CMD: bash $q"* ]]; then
+      rest="${line#GUIDE_MARK_CMD: bash $q}"; rest="${rest#*$q}"
+      line="GUIDE_MARK_CMD: bash $q$script$q$rest"
+    fi
+    out+="$line"$'\n'
+  done <<< "$rec"
+  printf '%s' "${out%$'\n'}"
+}
+
+# @pure
 # 역할: 새 컨텍스트 첫 턴에 실을 가이드 안내 블록을 만든다(싣지 않으면 빈 값)
 # 종류: 조립
 # 예: on 0 0 $'m-1\nGUIDE_FILE: g.md' → $'[SCV 가이드] 이 컨텍스트에서 아직 이 모델의 프롬프팅 가이드 원문을 읽지 않았다 — 답하기 전에 아래 원문을 끝까지 읽고 아래 명령을 실행하라(지난 모델 m-1 기준 — 지금 모델이 다르면 help 의 GUIDE 줄을 따르라).\n  GUIDE_FILE: g.md\n'

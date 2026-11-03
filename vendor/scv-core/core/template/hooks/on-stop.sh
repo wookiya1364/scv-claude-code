@@ -168,7 +168,17 @@ if [[ "$_scv_human" == 1 && -f "$_scv_hs" && -f "$_scv_hslib" ]]; then
       _scv_pick="$(scv_stop_pick_source "$_scv_host" "$_scv_turn")"
       _scv_src="${_scv_pick%%$'\x1f'*}"; _scv_last="${_scv_pick#*$'\x1f'}"
     fi
-    printf '%s' "$_scv_last" | bash "$_scv_hs" stop --echo "$_scv_echo" --lint "$_scv_lint" --cap "$_scv_cap" --lang "$(printf '%s' "$(_scv_get SCV_LANG)" | tr -d '"[:space:]')" --src "$_scv_src" --turn-dir "$_scv_tdir" >/dev/null 2>&1 || true
+    _scv_lang="$(printf '%s' "$(_scv_get SCV_LANG)" | tr -d '"[:space:]')"
+    # 0.78.0+ — 언어 검사는 중간 보고까지 본다: 이번 턴 글 전체를 파일로 넘긴다(한국어 설정일 때만 원본을 더 읽는다).
+    _scv_ltf=""
+    if [[ "$_scv_lint" == "on" && ( "$_scv_lang" == korean || "$_scv_lang" == ko ) ]] && declare -F scv_turn_slice >/dev/null 2>&1; then
+      [[ "${_scv_turn:-}" == *[![:space:]]* ]] || _scv_turn="$(scv_turn_slice "$(_scv_turn_stream_wide)" | head -c 65536)"
+      if [[ "$_scv_turn" == *[![:space:]]* ]]; then
+        _scv_ltf="$(mktemp "${TMPDIR:-/tmp}/scv-turn.XXXXXX" 2>/dev/null)" && printf '%s' "$_scv_turn" > "$_scv_ltf" 2>/dev/null || _scv_ltf=""
+      fi
+    fi
+    printf '%s' "$_scv_last" | bash "$_scv_hs" stop --echo "$_scv_echo" --lint "$_scv_lint" --cap "$_scv_cap" --lang "$_scv_lang" ${_scv_ltf:+--lang-text "$_scv_ltf"} --src "$_scv_src" --turn-dir "$_scv_tdir" >/dev/null 2>&1 || true
+    [[ -n "$_scv_ltf" ]] && rm -f "$_scv_ltf" 2>/dev/null
   fi
 fi
 # ---------- /drift check -----------------------------------------------------
@@ -311,6 +321,8 @@ else
 fi
 _scv_emit_block() {
   [[ -n "${_scv_block_reason:-}" ]] || return 0
+  # 0.78.0+: 막기 전에 보낸 답은 이미 사용자 화면에 있다 — 다시 쓴 답이 앞 답을 통째로 되풀이해 답이 두 번 보였다(2026-11-03).
+  _scv_block_reason+=$'\n'"[SCV] 앞 답은 이미 사용자 화면에 있다 — 고친 부분만 짧게 써라(앞 답을 되풀이하지 말 것)."
   jq -cn --arg r "$_scv_block_reason" '{decision:"block",reason:$r}' 2>/dev/null || true
 }
 trap '_scv_emit_block' EXIT

@@ -69,8 +69,8 @@ Parse the header (`MODE:`, `SCV_DIR:`, `TARGET_SLUG:`, `PLAN_FILE:`, `TESTS_FILE
 Skip this section only when `scv/scv_settings.json` sets `SCV_PLAIN_LANGUAGE=off`
 (absent or any other value = on). The per-turn hook carries the answer shape; its body is
 `contracts/writing.md` 1–4: a **bold topic** line, then bullets with the result first; a prose
-paragraph holds 1–2 sentences at most (`SCV_PLAIN_MAX_SENTENCES`); one example from the
-user's situation. No code values before the user asks — identifiers the user acts on
+paragraph holds 1–2 sentences at most (`SCV_PLAIN_MAX_SENTENCES`).
+No code values before the user asks — identifiers the user acts on
 stay exact, after the plain summary. Bad: a paragraph of paths. Good: **Topic** / - the result.
 This governs everything the user reads.
 
@@ -113,7 +113,8 @@ present (`graft` on PATH + `graft/`), and the helper appends `=== code candidate
 points, not as facts. `absent` / `no-graph` / `off` change nothing. SCV never installs, builds
 or hooks Graft; `/scv:install-deps --print` shows the optional one-liner. When the header also
 carries a `GRAFT_NOTICE:` line (Graft absent, and the project has files in a language Graft indexes —
-0.55.0), relay that line verbatim as the first line of your output; the wording lives once, in the
+0.55.0), relay that line verbatim as the first line of your output, right under the rewritten-request quote
+(`contracts/writing.md` 4); the wording lives once, in the
 graft library, and this protocol does not restate or extend it.
 
 ### Step 3 — Load PLAN.md (required)
@@ -230,7 +231,9 @@ When emitted, print this as a single info block (not a question — work proceed
 
 > ⚠ **SCV's standard E2E framework is Playwright.**
 >
-> This project shows signs of Cypress / Puppeteer / another tool. SCV guarantees automatic detection, auto video config, and PR auto-attach only for Playwright. Other tools still get PR attachment if their `.webm` / `.mp4` outputs land in `test-results/`, but auto video config (Step 5b) does not apply.
+> - This project shows signs of Cypress / Puppeteer / another tool.
+> - SCV guarantees automatic detection, auto video config, and PR auto-attach only for Playwright.
+> - Other tools still get PR attachment if their `.webm` / `.mp4` outputs land in `test-results/`, but auto video config (Step 5b) does not apply.
 >
 > Recommended migration to Playwright:
 > - Cypress → Playwright: https://playwright.dev/docs/migrating-from-cypress
@@ -244,7 +247,7 @@ When emitted, print this as a single info block (not a question — work proceed
 Legacy PLANs that have only `## Steps` are still fully valid: treat `## Steps` as the Suggested path and TESTS.md's `## Pass criteria` as the Exit criteria.
 
 <!-- SCV:GUIDANCE -->
-Once you hold PLAN.md's **Guardrails / Exit criteria** and TESTS.md's **verification means** (the `## How to run` commands), do not wait for — or ask for — step-by-step procedural instructions: **run to completion**. The Suggested path is a suggestion; Guardrails and Exit criteria are the contract. Work autonomously until the Exit criteria are met and TESTS pass, checking back with the user only at the decision points this protocol defines (split proposals, archive, PR) and the one first-run check of `contracts/show-real.md`. When you get stuck, **strengthen the verification means first** — add a failing repro, tighten an assertion, improve observability — instead of asking the user to micro-specify the procedure.
+Once you hold PLAN.md's **Guardrails / Exit criteria** and TESTS.md's **verification means** (the `## How to run` commands), do not wait for — or ask for — step-by-step procedural instructions: **run to completion**. The Suggested path is a suggestion; Guardrails and Exit criteria are the contract. Work autonomously until the Exit criteria are met and TESTS pass, checking back with the user only at the decision points this protocol defines (its `Question:` blocks — split proposals, archive, PR and the rest) and the one first-run check of `contracts/show-real.md`. When you get stuck, **strengthen the verification means first** — add a failing repro, tighten an assertion, improve observability — instead of asking the user to micro-specify the procedure.
 
 Relation to Ralph Loop: this paragraph is what owns `/scv:work`'s long-run behavior — no external loop harness is required for a plan to run to completion (an external loop remains an optional accelerant, not a dependency).
 <!-- /SCV:GUIDANCE -->
@@ -394,8 +397,8 @@ The wrapper runs the `## How to run` block unchanged (same output, same exit cod
 
 ### Step 8 — Report results to the user
 
-Summarize — shaped per `core/contracts/writing.md` (conclusion first, numbered items, an owner on
-every leftover):
+Summarize — shaped per `core/contracts/writing.md` (bold topic, result first, bullets; numbers only on
+what the user may point back to; an owner on every leftover):
 - Implementation: what changed (files, key decisions).
 - Test results: each scenario pass/fail + overall verdict.
 - Plan's `status:` now `testing` (or back to `in_progress` if failures).
@@ -762,17 +765,15 @@ If both:
 - `remaining_features_in_promote == 0` (all features of the epic are archived)
 - `existing_refactor == 0` (no refactor PLAN exists yet)
 
-→ One-line user notice + one concise question. Scaffold contract: folder
+→ One concise question that carries the notice (`contracts/choices.md` 9). Scaffold contract: folder
 `scv/promote/<TODAY>-<author>-<epic-slug>-refactor/` with PLAN.md + TESTS.md;
 PLAN.md frontmatter preset `kind: refactor`, `epic: <epic-slug>`,
 `status: planned` (spec: PROMOTE.md §8e).
 
 <!-- SCV:GUIDANCE -->
 ```
-"All features of epic <epic-slug> are archived.
- Per PROMOTE.md §8e, it's time to create the integration refactor PLAN.
-
- Question: "Create the refactor PLAN scaffold now?"
+Question: "All features of epic <epic-slug> are archived — per PROMOTE.md §8e,
+ create the integration refactor PLAN scaffold now?"
  options:
  [1] "Yes — create refactor PLAN (recommended)"
      description:

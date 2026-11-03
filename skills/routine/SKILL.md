@@ -51,8 +51,8 @@ Technical identifiers stay as-is: file paths, frontmatter keys (`name`, `cadence
 Skip this section only when `scv/scv_settings.json` sets `SCV_PLAIN_LANGUAGE=off`
 (absent or any other value = on). The per-turn hook carries the answer shape; its body is
 `contracts/writing.md` 1–4: a **bold topic** line, then bullets with the result first; a prose
-paragraph holds 1–2 sentences at most (`SCV_PLAIN_MAX_SENTENCES`); one example from the
-user's situation. No code values before the user asks — identifiers the user acts on
+paragraph holds 1–2 sentences at most (`SCV_PLAIN_MAX_SENTENCES`).
+No code values before the user asks — identifiers the user acts on
 stay exact, after the plain summary. Bad: a paragraph of paths. Good: **Topic** / - the result.
 This governs everything the user reads.
 

@@ -67,8 +67,9 @@ other document refers to "Top-level rules" instead of restating it.
   `SCV_DELEGATE_EFFORT` (default `off`; `on` sends deep questions to a
   background investigator when the host ships one — the session's effort is
   never changed).
-- **Answers lead plain.** First 1–2 sentences of what you get, then one
-  example, code values only when asked. Switch: `SCV_PLAIN_LANGUAGE=off`;
+- **Answers lead plain.** A bold topic line, then short bullets with the
+  result first, prose 1–2 sentences; code values only when asked.
+  Switch: `SCV_PLAIN_LANGUAGE=off`;
   sentence cap: `SCV_PLAIN_MAX_SENTENCES=<n>`.
 - Hosts without that hook: add this line to your project-root instruction file
   so casual conversation still finds SCV:

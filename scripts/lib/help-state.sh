@@ -251,6 +251,31 @@ scv_lint_lang_verdict() {
 }
 
 # @pure
+# 역할: 마지막 답과 이번 턴 글 전체에서, 한국어 설정인데 거의 영어인 줄이 몇 개인지 위반 줄로 낸다(중간 보고까지 본다)
+# 종류: 판정/answer
+# 예: "결과임" "Now running the size checks for real, then the hook test." korean → "lang-mismatch-lines=1"
+# 예: "결과임" "" korean → ""
+# <마지막 답> <턴 글> <설정 언어> → lang-mismatch-lines 줄 | 빈 값. 코드 블록 · 인용 · 표 줄 · 백틱 안은 보지 않고, 글자 40개 이상인 줄만
+# 본다. 줄마다 따로 보는 까닭: 긴 한국어 답 사이의 영어 한두 줄은 전체 비율로는 묻힌다(0.78.0+ — 2026-11-03 중간 보고가 세 번
+# 영어로 샜는데 마지막 답만 보는 검사가 놓쳤다).
+scv_lint_lang_turn() {
+  local last="${1:-}" turn="${2:-}" lang="${3:-}" line t pl infence=0 n=0 letters
+  [[ "$lang" == korean || "$lang" == ko ]] || return 0
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    t="${line#"${line%%[![:space:]]*}"}"
+    if [[ "$t" == '```'* ]]; then infence=$(( 1 - infence )); continue; fi
+    (( infence )) && continue
+    [[ "$t" == $'\x3e'* || "$t" == \|* ]] && continue
+    pl="$t"; while [[ "$pl" =~ ^(.*)\`[^\`]*\`(.*)$ ]]; do pl="${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"; done
+    letters="$(LC_ALL=C; printf '%s' "${pl//[^A-Za-z$'\xea'-$'\xed']/}")"
+    (( ${#letters} >= 40 )) || continue
+    [[ -n "$(scv_lint_lang_verdict "$lang" "$(scv_lint_hangul_ratio "$pl")" "${#letters}")" ]] && n=$((n + 1))
+  done <<< "$turn"$'\n'"$last"
+  (( n > 0 )) && printf 'lang-mismatch-lines=%s\n' "$n"
+  return 0
+}
+
+# @pure
 # 역할: 답 본문의 골격(다시 쓴 요청 위치 · 줄글 문단 길이 · 불릿 어미 · 첫 내용의 코드값 · 결정표 추천 칸)이 계약을 벗어난 줄들을 낸다
 # 종류: 판정/answer
 # 예: $'> **다시 쓴 요청**: x\n\n**주제**\n- 결과임\n- 풀이함\n' → ""

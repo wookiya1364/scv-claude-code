@@ -3818,7 +3818,7 @@ done
 # v0.31.0 — the rule is an answer shape, not style coaching: fixed anchors, the
 # section sits right after the language section, the old coaching body is gone,
 # and help's conversation loop carries the per-turn rhythm.
-for a in "SCV_PLAIN_LANGUAGE=off" "1–2 sentences" "one example" \
+for a in "SCV_PLAIN_LANGUAGE=off" "1–2 sentences" "bold topic" \
          "No code values before the user asks" "stay exact, after the plain summary" \
          "Bad:" "Good:" "SCV_PLAIN_MAX_SENTENCES"; do
   miss=$(printf '%s\n' "$PLAIN_TARGETS" | while read -r f; do grep -qF -- "$a" "$f" || echo "$f"; done)
@@ -3837,6 +3837,12 @@ else
   pass "plain-language: old coaching body replaced by the answer shape"
 fi
 assert_contains "$PROTOCOL_ROOT/help.md" "one question per turn"
+# 0.78.0+: the answer shape asks for no example — writing.md has none, so no protocol may require one.
+if grep -lF "one example from the" "$PROTOCOL_ROOT"/*.md >/dev/null 2>&1; then
+  fail "plain-language: a protocol still requires one example (writing.md has no such rule)"
+else
+  pass "plain-language: no protocol requires an example beyond writing.md"
+fi
 
 echo
 echo "=== [15q] v0.31.0 — plain-language switch: .env example, SCV.md template, version, routine ==="

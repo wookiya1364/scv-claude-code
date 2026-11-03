@@ -51,7 +51,7 @@ Then branch:
 #### Step A0 — Auto-hydrate on first run (v0.10.0+)
 
 Mode A continues in its branch file: the hydrate offer when the helper prints
-`This project isn't hydrated yet.` (read-only unless the user accepts), the legacy-index
+`This directory is not hydrated yet.` (read-only unless the user accepts), the legacy-index
 guard, `STATE_INDEX_CONFLICT`, and the re-presented diagnosis (Step A1, `/scv:codegen`
 mention, multi-repo workspace lines).
 Read `<plugin root>/protocols/help/hydrate.md` now and follow it.

@@ -22,8 +22,8 @@ skill invocations, paths) as-is.
 Skip this section only when `scv/scv_settings.json` sets `SCV_PLAIN_LANGUAGE=off`
 (absent or any other value = on). The per-turn hook carries the answer shape; its body is
 `contracts/writing.md` 1–4: a **bold topic** line, then bullets with the result first; a prose
-paragraph holds 1–2 sentences at most (`SCV_PLAIN_MAX_SENTENCES`); one example from the
-user's situation. No code values before the user asks — identifiers the user acts on
+paragraph holds 1–2 sentences at most (`SCV_PLAIN_MAX_SENTENCES`).
+No code values before the user asks — identifiers the user acts on
 stay exact, after the plain summary. Bad: a paragraph of paths. Good: **Topic** / - the result.
 This governs everything the user reads.
 
@@ -51,7 +51,7 @@ Ask the user for confirmation "이 레포를 워크스페이스에서 어떻게 
 - **그냥 단일로 둔다** — 변경 없음
 
 **합류 선택 시:**
-1. Ask (plain questions, one at a time):
+1. Ask per `contracts/choices.md` (free answers: offer one or two suggested values, e.g. the folder name as id):
    - 우산(root) scv repo의 **git URL 또는 로컬 경로**.
    - 이 레포의 **id** (기본값 = 폴더 이름) 와 **role** (예: frontend / backend / ai-agent).
    - (선택) workspace 이름.
@@ -59,7 +59,7 @@ Ask the user for confirmation "이 레포를 워크스페이스에서 어떻게 
    ```bash
    "${CLAUDE_PLUGIN_ROOT}/scripts/workspace-helper.sh" join --root "<URL>" --id "<id>" --role "<role>" --workspace "<ws>"
    ```
-3. Confirm: 이제 CHILD. `git pull` 후 `/scv:status`에 들어온 handoff가 보입니다.
+3. Confirm in the user's language: now CHILD — after `git pull`, incoming handoffs show in `/scv:status`.
 
 **우산 만들기 선택 시:**
 1. Run:

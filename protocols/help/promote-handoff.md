@@ -32,7 +32,7 @@ options:
 [3] "No — keep talking"
     description: "Continue the conversation. We'll re-check at the next natural pause."
 
-[4] (free-form) "Other"
+[4] (the tool's own free-text choice — not an option slot) "Other"
     description: "Examples: 'pause this for now, I'll come back later' / 'change the slug to <new>' / 'discard this conversation'."
 ```
 
