@@ -22,14 +22,14 @@ Ask one question (default: option [1] English):
   [3] "日本語 (Japanese)"
       description: "すべての SCV Claude Code skill 出力 (説明・プロンプト・要約) を日本語で応答します。"
   [4] "Other — type a language"
-      description: "Pick this for any other language (Spanish, French, German, etc.). After selecting, you will be prompted to type the language name."
+      description: "Any other language (Spanish, French, German, etc.). With a choice tool this is not an option slot: type the name in the tool's own free-text choice."
 ```
 
 After the user picks:
 - [1] English → store `SCV_LANG=english` in `scv/scv_settings.json`
 - [2] Korean → store `SCV_LANG=korean`
 - [3] Japanese → store `SCV_LANG=japanese`
-- [4] Other → ask a follow-up free-text question ("Which language? e.g., spanish, french, german") and store the lowercase value as `SCV_LANG=<value>`.
+- [4] Other / free text → store the typed name lowercase as `SCV_LANG=<value>`; ask a follow-up only when no name came with it.
 
 Write it with the Core script, which creates the settings file when absent and leaves every
 unrelated line byte for byte:

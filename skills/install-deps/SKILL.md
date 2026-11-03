@@ -26,8 +26,8 @@ Technical identifiers (tool names like `gh`, `glab`, `ffmpeg`, command names, fi
 Skip this section only when `scv/scv_settings.json` sets `SCV_PLAIN_LANGUAGE=off`
 (absent or any other value = on). The per-turn hook carries the answer shape; its body is
 `contracts/writing.md` 1–4: a **bold topic** line, then bullets with the result first; a prose
-paragraph holds 1–2 sentences at most (`SCV_PLAIN_MAX_SENTENCES`); one example from the
-user's situation. No code values before the user asks — identifiers the user acts on
+paragraph holds 1–2 sentences at most (`SCV_PLAIN_MAX_SENTENCES`).
+No code values before the user asks — identifiers the user acts on
 stay exact, after the plain summary. Bad: a paragraph of paths. Good: **Topic** / - the result.
 This governs everything the user reads.
 
@@ -66,8 +66,7 @@ Options:
     description:
     "Run `install-deps.sh --install` to actually install the missing system tools.
      - Linux / macOS: sudo password may be prompted for apt / dnf / pacman.
-     - Windows: winget will open its own confirmation dialog per package.
-       and place SKILL.md in the skill directory configured by your wrapper."
+     - Windows: winget will open its own confirmation dialog per package."
 
 [2] "Just print the install commands (I'll run them myself)"
     description:
@@ -90,7 +89,7 @@ Answer handling:
   ```bash
   "${CLAUDE_PLUGIN_ROOT}/scripts/install-deps.sh" --install
   ```
-  After it returns, summarize the result in the user's language: how many tools installed, any failures, whether `--check` should be re-run for verification (you can offer to do so but don't auto-run).
+  After it returns, summarize the result in the user's language: how many tools installed, any failures, then re-run `--check` yourself to verify (read-only — a next step, not a decision, `contracts/choices.md` 8).
 
 - **[2] Print only**: Tell the user the commands are already shown in Step 0's output, and remind them which OS-specific block applies. No further script invocation.
 
