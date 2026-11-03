@@ -43,7 +43,11 @@ Adapter-owned behavior:
   `vendor/scv-core/core/template/hooks/on-choice-answer.sh`: after the user
   answers, it records that the turn's registration predates the answer so the
   guard asks for a fresh registration (or `register --keep`) before the next
-  editor write. It prints nothing and never blocks
+  editor write. It prints nothing and never blocks. A second `PostToolUse`
+  registration (Core 0.79.0+, no matcher) binds
+  `vendor/scv-core/core/template/hooks/on-lang-check.sh`: with `SCV_LANG=korean`
+  it adds one correction line when text written since the last check drifted
+  into another language, and never blocks
 
 Core-owned behavior:
 
