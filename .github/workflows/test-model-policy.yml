@@ -26,7 +26,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # macOS on the Intel pool — see core-contract.yml (SCV_MACOS_RUNNER).
+        os: [ubuntu-latest, "${{ vars.SCV_MACOS_RUNNER || 'macos-26-intel' }}", windows-latest]
     defaults:
       run:
         shell: bash

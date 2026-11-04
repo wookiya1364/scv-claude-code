@@ -41,7 +41,7 @@ require(
 )
 require(
     "name: Contract (${{ matrix.os }})" in contract
-    and "os: [ubuntu-latest, macos-latest]" in contract
+    and "os: [ubuntu-latest, \"${{ vars.SCV_MACOS_RUNNER || 'macos-26-intel' }}\"]" in contract
     and "timeout-minutes: 6" in contract,
     "PR smoke retains Ubuntu and macOS portability checks",
 )
