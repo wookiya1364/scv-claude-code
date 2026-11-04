@@ -2,6 +2,13 @@
 
 All notable changes to SCV Core are documented here.
 
+## [0.81.3] - 2026-11-05
+
+### Fixed
+- 맥 CI가 실행기를 받지 못해 실패하던 문제 — GitHub의 arm64 맥 실행기 용량이 부족해(GitHub 안내) 맥 조각이 세 번 연속 실행기 없이 단계 0개로 취소됐다. 이제 GitHub이 'not acquired by Runner' 안내를 남긴 작업만 다시 돌린다: PR 은 새 워크플로 `rerun-not-acquired.yml` 이, promote 는 기다리기 단계(await-mergeable)가 — 최대 3번, 실제로 돌다가 실패한 작업이 섞이면 그대로 멈춘다. Intel 맥으로 옮기는 안은 재 보고 버렸다(2.3배 느림, 시간 한도 시험 2개 실패).
+- 시험 흔들림 — `echo "$값" | grep -q` 가 pipefail 아래에서 Broken pipe 로 실패하던 7개 시험 파일 22줄을 here-string 으로 바꿨다(2MB 글로 옛 꼴 20/20 실패, 새 꼴 0/20).
+- 시험 흔들림 — 큰 대화 기록 처리 시간 시험(T7)이 같은 코드로 맥 CI 에서 +0.61 · +1.55 · +2.07 · +3.1초로 흔들려 한도 3초를 넘었다. 이제 쪽마다 두 번 재서 작은 값으로 판정한다(잡음은 시간을 더하기만 한다). 한도 숫자는 그대로다.
+
 ## [0.81.2] - 2026-11-04
 
 ### Fixed
