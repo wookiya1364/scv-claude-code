@@ -250,3 +250,14 @@ answer is written.
   a person's message, inside a subagent, when `SCV_ALWAYS_ON=off` or `SCV_FORCE_HELP=off`, or on any failure.
 - A turn that uses no tool at all has no place to be stopped before its text; the Stop hook blocks that
   turn once (`help` in the once-per-turn record).
+
+## Rule D — every function declares pure or effect (v0.81.0+)
+
+In `gate-write` mode the guard rebuilds the target as it will be after the edit (a Write's content, an Edit or
+MultiEdit applied to the current file, a patch's added file) and asks `scripts/pure-declare.sh gate` whether the
+edit adds a named function that carries neither `@pure`/`@deterministic` nor `@effect`. If it does, the write is
+refused with the function names. A file whose old functions are undeclared can still be edited as long as the
+edit adds no new undeclared one. No opinion for a language it cannot read (sh, ts/js, py and go are read), for a
+test file or an excluded folder, when `SCV_PURE_DECLARE=off`, when the payload cannot be rebuilt (a patch that
+updates a file), or when `python3` is missing. It applies inside subagents too. `SCV_GUARD_RULE_D=off`
+disables this rule alone. Full rule: `contracts/purity.md`.
