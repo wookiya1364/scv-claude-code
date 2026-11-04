@@ -80,7 +80,7 @@ git -C "$ROOT" log --oneline -1 2>/dev/null | grep -q "handoff($HID)" \
 
 # list (from child) shows it, filtered by --to
 LIST="$( cd "$CHILD" && SCV_CACHE_DIR="$WORK/cache" bash "$HANDOFF" list --to be 2>/dev/null )"
-echo "$LIST" | grep -q "$HID|be|open|" && ok "handoff.sh list --to be shows it" || { fail "list missing entry"; echo "[$LIST]"; }
+grep -q "$HID|be|open|" <<<"$LIST" && ok "handoff.sh list --to be shows it" || { fail "list missing entry"; echo "[$LIST]"; }
 LIST_AI="$( cd "$CHILD" && SCV_CACHE_DIR="$WORK/cache" bash "$HANDOFF" list --to ai 2>/dev/null )"
 [[ -z "$LIST_AI" ]] && ok "list --to ai is empty (addressing filter works)" || fail "filter leaked: [$LIST_AI]"
 
@@ -89,7 +89,7 @@ SOLO="$WORK/solo"
 bash "$HYDRATE" init "$SOLO" >/dev/null 2>&1
 SOUT="$( cd "$SOLO" && bash "$HANDOFF" write --to be --slug x --title y 2>&1 )"; SRC=$?
 eq "SINGLE write exit 0" "0" "$SRC"
-echo "$SOUT" | grep -qi "single-repo" && ok "SINGLE prints skip notice" || fail "no single-repo notice: [$SOUT]"
+grep -qi "single-repo" <<<"$SOUT" && ok "SINGLE prints skip notice" || fail "no single-repo notice: [$SOUT]"
 
 # --- graceful degrade: root unreachable ---
 DCHILD="$WORK/degrade"
@@ -97,7 +97,7 @@ bash "$HYDRATE" init "$DCHILD" >/dev/null 2>&1
 bash "$SYNC" --project-dir "$DCHILD" --join "/no/such/root/path-xyz" --id be --role backend --workspace missing >/dev/null 2>&1
 DOUT="$( cd "$DCHILD" && SCV_CACHE_DIR="$WORK/cache" bash "$HANDOFF" write --to ai --slug z --title q 2>&1 )"; DRC=$?
 [[ "$DRC" -ne 0 ]] && ok "unreachable root → non-zero exit" || fail "should fail when root unreachable"
-echo "$DOUT" | grep -qi "cannot reach workspace root" && ok "degrade message shown" || fail "no degrade message: [$DOUT]"
+grep -qi "cannot reach workspace root" <<<"$DOUT" && ok "degrade message shown" || fail "no degrade message: [$DOUT]"
 
 echo ""
 echo "── result: $PASS passed, $FAIL failed ──"

@@ -91,7 +91,7 @@ jobs:
             # nothing is still running, and GitHub itself no longer calls the PR
             # BLOCKED. Only the last one knows what the required set is.
             echo "Waiting for #${number} to become mergeable..."
-            local waited=0 state=UNKNOWN failed=0 pending=0 ready=0 json=""
+            local waited=0 state=UNKNOWN failed=0 pending=0 ready=0 json="" reruns=0 never="" pair=""
             while [ "$waited" -lt 900 ]; do
               json="$(gh pr view "$number" --json mergeStateStatus,statusCheckRollup 2>/dev/null || true)"
               if [ -n "$json" ]; then
@@ -107,7 +107,32 @@ jobs:
                   | select((.status? // "COMPLETED") != "COMPLETED" or .state=="PENDING"
                         or .state=="EXPECTED")] | length')"
 
+                # A job GitHub never started is not a test result (0.81.3). When a hosted
+                # pool runs dry (arm64 macOS, 2026-11-04/05) the job ends CANCELLED with the
+                # annotation "The job was not acquired by Runner ...". If every failure is
+                # one of those, re-run them — at most three times — and keep waiting. Anything
+                # that ran and failed, or was cancelled for any other reason, still stops.
                 if [ "${failed:-0}" -gt 0 ]; then
+                  never=""
+                  for pair in $(printf '%s' "$json" | jq -r '.statusCheckRollup[]?
+                      | select(.conclusion=="CANCELLED") | (.detailsUrl // "")
+                      | capture("/actions/runs/(?<r>[0-9]+)/job/(?<j>[0-9]+)")? | "\(.r):\(.j)"'); do
+                    if gh api "repos/${GITHUB_REPOSITORY}/check-runs/${pair#*:}/annotations" \
+                         --jq '[.[]?.message // "" | select(test("not acquired by Runner"))] | length' 2>/dev/null \
+                         | grep -qx '[1-9][0-9]*'; then
+                      never="${never} ${pair%%:*}"
+                    fi
+                  done
+                  if [ "$(printf '%s\n' $never | grep -c .)" -eq "$failed" ] && [ "$reruns" -lt 3 ]; then
+                    reruns=$((reruns + 1))
+                    for pair in $(printf '%s\n' $never | sort -u); do
+                      echo "No runner ever picked up a job in run ${pair} — re-running it (${reruns}/3)."
+                      gh run rerun "$pair" --failed >/dev/null 2>&1 || true
+                    done
+                    waited=0
+                    sleep 30
+                    continue
+                  fi
                   echo "::error::Checks failed on #${number} (${head} → ${base}). The chain stops here; the PR stays open."
                   return 1
                 fi
