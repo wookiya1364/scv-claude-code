@@ -51,10 +51,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # macOS on the Intel pool (core 0.81.3): GitHub's arm64 macOS pool ran out of capacity on
-        # 2026-11-04/05 and left jobs "not acquired" — cancelled with zero steps, which promote
-        # reads as a failure. Set the repository variable SCV_MACOS_RUNNER to move back.
-        os: [ubuntu-latest, "${{ vars.SCV_MACOS_RUNNER || 'macos-26-intel' }}"]
+        os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v5
         with:
