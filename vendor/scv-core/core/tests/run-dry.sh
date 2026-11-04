@@ -2552,16 +2552,16 @@ bash $STANDARD_ROOT/scripts/help.sh 2>&1
 cd /; rm -rf "\$TMP"
 INNER_EOF
 )
-echo "$HELP_ADOPTION_OUT" | grep -q "INTAKE" \
+grep -q "INTAKE" <<<"$HELP_ADOPTION_OUT" \
   && fail "help.sh(hydrated): still mentions INTAKE" \
   || pass "help.sh(hydrated): no INTAKE mention (scenario 8)"
-echo "$HELP_ADOPTION_OUT" | grep -qi "draft" \
+grep -qi "draft" <<<"$HELP_ADOPTION_OUT" \
   && fail "help.sh(hydrated): still mentions the draft gate" \
   || pass "help.sh(hydrated): no draft-gate wording (scenario 8)"
-echo "$HELP_ADOPTION_OUT" | grep -q "Standard docs:" \
+grep -q "Standard docs:" <<<"$HELP_ADOPTION_OUT" \
   && fail "help.sh(hydrated): still prints the standard-doc status line" \
   || pass "help.sh(hydrated): standard-doc status line gone (scenario 8)"
-echo "$HELP_ADOPTION_OUT" | grep -q "Document status:" \
+grep -q "Document status:" <<<"$HELP_ADOPTION_OUT" \
   && fail "help.sh(hydrated): still prints the Document status block" \
   || pass "help.sh(hydrated): Document status block gone (scenario 8)"
 
@@ -2574,10 +2574,10 @@ bash $STANDARD_ROOT/scripts/status.sh 2>&1
 cd /; rm -rf "\$TMP"
 INNER_EOF
 )
-echo "$STATUS_GATE_OUT" | grep -q "INTAKE" \
+grep -q "INTAKE" <<<"$STATUS_GATE_OUT" \
   && fail "status.sh: still mentions INTAKE" \
   || pass "status.sh: no INTAKE mention (scenario 8)"
-echo "$STATUS_GATE_OUT" | grep -qi "draft" \
+grep -qi "draft" <<<"$STATUS_GATE_OUT" \
   && fail "status.sh: still mentions the draft gate" \
   || pass "status.sh: no draft-gate wording (scenario 8)"
 

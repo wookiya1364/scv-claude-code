@@ -38,17 +38,17 @@ bash "$SYNC" --project-dir "$CHILD" --join "$ROOT" --id be --role backend --work
 # 1. CHILD status shows section [7] + the incoming handoff
 OUT="$( cd "$CHILD" && bash "$STATUS" 2>/dev/null )"; RC=$?
 [[ "$RC" -eq 0 ]] && ok "status exit 0 (child)" || fail "status non-zero exit ($RC)"
-echo "$OUT" | grep -q "cross-repo handoffs" && ok "section [7] present (multi)" || fail "section [7] missing"
-echo "$OUT" | grep -q "incoming (1)" && ok "shows incoming count" || fail "incoming count missing"
-echo "$OUT" | grep -q "Implement POST /api/refunds" && ok "shows handoff title" || fail "handoff title missing"
-echo "$OUT" | grep -q "mode: CHILD" && ok "shows mode CHILD" || fail "mode line missing"
+grep -q "cross-repo handoffs" <<<"$OUT" && ok "section [7] present (multi)" || fail "section [7] missing"
+grep -q "incoming (1)" <<<"$OUT" && ok "shows incoming count" || fail "incoming count missing"
+grep -q "Implement POST /api/refunds" <<<"$OUT" && ok "shows handoff title" || fail "handoff title missing"
+grep -q "mode: CHILD" <<<"$OUT" && ok "shows mode CHILD" || fail "mode line missing"
 
 # 2. SINGLE repo: section [7] absent (byte-identical world)
 SOLO="$WORK/solo"
 bash "$HYDRATE" init "$SOLO" >/dev/null 2>&1
 SOUT="$( cd "$SOLO" && bash "$STATUS" 2>/dev/null )"; SRC=$?
 [[ "$SRC" -eq 0 ]] && ok "status exit 0 (single)" || fail "single status non-zero ($SRC)"
-echo "$SOUT" | grep -q "cross-repo handoffs" && fail "section [7] leaked into single mode" || ok "section [7] absent in single mode"
+grep -q "cross-repo handoffs" <<<"$SOUT" && fail "section [7] leaked into single mode" || ok "section [7] absent in single mode"
 
 # 3. unreachable root → notice, no crash
 DCHILD="$WORK/degr"
@@ -56,7 +56,7 @@ bash "$HYDRATE" init "$DCHILD" >/dev/null 2>&1
 bash "$SYNC" --project-dir "$DCHILD" --join "/no/such/root-xyz" --id be --role backend --workspace gone >/dev/null 2>&1
 DOUT="$( cd "$DCHILD" && bash "$STATUS" 2>/dev/null )"; DRC=$?
 [[ "$DRC" -eq 0 ]] && ok "status exit 0 (unreachable)" || fail "unreachable status non-zero ($DRC)"
-echo "$DOUT" | grep -q "not synced locally" && ok "shows unreachable notice" || fail "unreachable notice missing"
+grep -q "not synced locally" <<<"$DOUT" && ok "shows unreachable notice" || fail "unreachable notice missing"
 
 echo ""
 echo "── result: $PASS passed, $FAIL failed ──"

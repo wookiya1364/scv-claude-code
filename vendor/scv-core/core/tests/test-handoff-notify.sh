@@ -13,8 +13,8 @@ HANDOFF="$REPO_ROOT/scripts/handoff.sh"
 PASS=0; FAIL=0
 fail() { echo "  ✖ FAIL: $1"; FAIL=$((FAIL + 1)); }
 ok()   { echo "  ✓ $1"; PASS=$((PASS + 1)); }
-has()  { if echo "$2" | grep -q "$3"; then ok "$1"; else fail "$1 — missing [$3]"; fi; }
-hasnt(){ if echo "$2" | grep -q "$3"; then fail "$1 — unexpectedly has [$3]"; else ok "$1"; fi; }
+has()  { if grep -q "$3" <<<"$2"; then ok "$1"; else fail "$1 — missing [$3]"; fi; }
+hasnt(){ if grep -q "$3" <<<"$2"; then fail "$1 — unexpectedly has [$3]"; else ok "$1"; fi; }
 
 command -v jq >/dev/null 2>&1   || { echo "(skip: jq not available)"; exit 0; }
 command -v curl >/dev/null 2>&1 || { echo "(skip: curl not available)"; exit 0; }

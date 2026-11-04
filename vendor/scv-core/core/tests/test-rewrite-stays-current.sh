@@ -250,7 +250,13 @@ run_t7() {  # <대화 기록> → "처음 다음" (매 턴 훅 + help 두 번)
   [[ "$(help_guide "$R")" == "GUIDE: loaded model-a" ]] || echo "      (t7) wrong decision on $1"
   printf '%s %s' "$(secs "$t0" "$t1")" "$(secs "$t2" "$t3")"
 }
+# 쪽마다 두 번 재고 작은 값을 쓴다(0.81.3): 공유 맥 실행기의 잡음은 시간을 더하기만 한다 — 같은 코드가
+# 맥 CI 에서 처음 +0.61 · +1.55 · +2.07 · +3.1초로 흔들렸다(#445). 병적인 느려짐은 두 번 모두 나타나 그대로 잡힌다.
+lo() { python3 -c "import sys; print(min(float(x) for x in sys.argv[1:]))" "$@" 2>/dev/null || echo "$1"; }
 read -r s_first s_next <<<"$(run_t7 "$SMALL")"; read -r b_first b_next <<<"$(run_t7 "$BIG")"
+read -r s_first2 s_next2 <<<"$(run_t7 "$SMALL")"; read -r b_first2 b_next2 <<<"$(run_t7 "$BIG")"
+s_first="$(lo "$s_first" "$s_first2")"; s_next="$(lo "$s_next" "$s_next2")"
+b_first="$(lo "$b_first" "$b_first2")"; b_next="$(lo "$b_next" "$b_next2")"
 d_first="$(python3 -c "print(max(0.0, round($b_first - $s_first, 2)))" 2>/dev/null || echo 0)"; d_next="$(python3 -c "print(max(0.0, round($b_next - $s_next, 2)))" 2>/dev/null || echo 0)"
 echo "  · ${MB}MB 기록: 처음 +${d_first}s · 다음 턴 +${d_next}s (작은 기록 대비, 매 턴 훅 + help)"
 # 다음 턴 상한 1.0초(2026-10-28, 0.5 → 1.0): 맥 CI 러너는 이 시험을 혼자 돌려도 +0.64초를 냈다(#364 · #365,
