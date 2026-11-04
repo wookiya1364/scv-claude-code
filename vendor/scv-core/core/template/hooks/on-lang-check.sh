@@ -54,8 +54,6 @@ _scv_seen_file="$_scv_tdir/.help-lang-seen"
 _scv_seen=""
 [[ -f "$_scv_seen_file" && ! -L "$_scv_seen_file" ]] && _scv_seen="$(head -c 256 "$_scv_seen_file" 2>/dev/null | head -n 1)"
 
-# 사용자가 이 턴에 다른 언어를 요청했거나 다른 언어로 썼으면 교정하지 않는다(SCV.md Top-level rules 7조).
-[[ "$(scv_lang_user_other "$(_scv_turn_prompt 400)")" == 1 ]] && exit 0
 _scv_list="$(_scv_turn_texts 400 | tail -c 65536)"
 [[ -n "$_scv_list" ]] || exit 0
 _scv_new="$(scv_lang_new_text "$_scv_list" "$_scv_seen")"
@@ -67,6 +65,10 @@ fi
 [[ "$_scv_text" == *[![:space:]]* ]] || exit 0
 
 _scv_n="$(scv_lint_lang_turn "" "$_scv_text" "$_scv_lang" | sed -n 's/^lang-mismatch-lines=//p')"
+[[ "${_scv_n:-0}" =~ ^[1-9][0-9]*$ ]] || exit 0
+# 사용자가 이 턴에 다른 언어를 요청했거나 다른 언어로 썼으면 교정하지 않는다(SCV.md Top-level rules 7조).
+# 어긋난 줄이 있을 때만 찾는다 — 긴 턴에서 넓혀 찾는 비용은 이때만 든다(0.81.2+).
+[[ "$(scv_lang_user_other "$(_scv_turn_prompt_wide)")" == 1 ]] && exit 0
 _scv_note="$(scv_lang_fix_note "$_scv_lang" "${_scv_n:-0}" mid)"
 [[ -n "$_scv_note" ]] || exit 0
 jq -cn --arg c "$_scv_note" '{hookSpecificOutput:{hookEventName:"PostToolUse",additionalContext:$c}}' 2>/dev/null || true

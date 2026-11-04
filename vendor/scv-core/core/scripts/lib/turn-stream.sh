@@ -42,7 +42,8 @@ _scv_turn_stream_wide() {
 }
 
 # 0.79.0+ — 도구 뒤 언어 검사용: 마지막 사람 프롬프트 뒤 어시스턴트 글 블록마다 "uuid\x1f글(줄바꿈은 \x1e)" 한 줄.
-# 글이 없는 메시지(도구 호출만)는 빼고, 사람 프롬프트 경계는 _scv_turn_stream 과 같은 규칙으로 찾는다. 못 찾으면 빈 값.
+# 글이 없는 메시지(도구 호출만)는 빼고, 사람 프롬프트 경계는 _scv_turn_stream 과 같은 규칙으로 찾는다. 창 안에 사람 프롬프트가
+# 없으면(긴 턴 — 0.81.2+) 창 전체가 이번 턴이므로 창 안 글을 모두 낸다(전에는 빈 값이라 긴 턴에서 검사가 꺼졌다).
 _scv_turn_texts() {  # [원본 끝에서 읽을 줄 수 — 기본 400]
   tail -n "${1:-400}" "$TRANSCRIPT" 2>/dev/null \
     | jq -Rrn '[inputs | fromjson? | if .type? == "user" then
@@ -55,7 +56,7 @@ _scv_turn_texts() {  # [원본 끝에서 읽을 줄 수 — 기본 400]
                   | if ($x | length) == 0 then empty else ((.uuid // "?") + "\u001f" + ($x | gsub("\n"; "\u001e"))) end
                 else empty end] as $s
                | ([range(0; $s | length) | select($s[.] == "U")] | last) as $i
-               | if $i == null then empty else $s[($i + 1):][] end' 2>/dev/null || true
+               | if $i == null then $s[] else $s[($i + 1):][] end' 2>/dev/null || true
 }
 
 # 0.79.0+ — 이번 턴을 연 사람 글(마지막 사람 프롬프트의 글). 내부 메시지 · 도구 결과는 빼고, 못 찾으면 빈 값.
@@ -64,4 +65,17 @@ _scv_turn_prompt() {  # [원본 끝에서 읽을 줄 수 — 기본 400]
       | (.message.content) as $c
       | if ($c|type) == "string" then $c elif ($c|type) == "array" then ([$c[]? | select(.type? == "text") | .text] | join("\n")) else empty end
       | select(length > 0) | @json' 2>/dev/null | tail -n 1 | jq -r '. // empty' 2>/dev/null | head -c 4000 || true
+}
+# 사용자 메시지 찾기(넓혀 가며, 0.81.2+): 끝 400줄에 없으면 4000 · 40000줄까지 넓힌다 — 긴 턴에서 메시지가 밀려나도 찾는다.
+# @effect _scv_turn_prompt_wide
+# 이유: 원본(transcript) 파일을 읽는다
+_scv_turn_prompt_wide() {
+  local n p total
+  total="$(wc -l < "$TRANSCRIPT" 2>/dev/null | tr -d ' ')"; [[ "$total" =~ ^[0-9]+$ ]] || total=0
+  for n in 400 4000 40000; do
+    p="$(_scv_turn_prompt "$n")"
+    [[ -n "$p" ]] && { printf '%s' "$p"; return 0; }
+    (( total <= n )) && break
+  done
+  return 0
 }

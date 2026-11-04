@@ -138,8 +138,8 @@ if [[ "$_scv_human" == 1 && -f "$_scv_hs" && -f "$_scv_hslib" ]]; then
     # 0.79.0+ — 사용자가 이 턴에 다른 언어를 요청했거나 다른 언어로 썼으면 언어 검사를 하지 않는다(SCV.md Top-level rules 7조).
     _scv_ll="${SCV_CORE_ROOT:-$SCRIPT_DIR/../..}/scripts/lib/lang-enforce.sh"
     # shellcheck disable=SC1090
-    if [[ -n "$_scv_lang" && -f "$_scv_ll" ]] && source "$_scv_ll" 2>/dev/null && declare -F _scv_turn_prompt >/dev/null 2>&1; then
-      [[ "$(scv_lang_user_other "$(_scv_turn_prompt 400)")" == 1 ]] && _scv_lang=""
+    if [[ -n "$_scv_lang" && -f "$_scv_ll" ]] && source "$_scv_ll" 2>/dev/null && declare -F _scv_turn_prompt_wide >/dev/null 2>&1; then
+      [[ "$(scv_lang_user_other "$(_scv_turn_prompt_wide)")" == 1 ]] && _scv_lang=""
     fi
     # 0.78.0+ — 언어 검사는 중간 보고까지 본다: 이번 턴 글 전체를 파일로 넘긴다(한국어 설정일 때만 원본을 더 읽는다).
     _scv_ltf=""
@@ -266,7 +266,7 @@ if [[ -n "$_scv_lastmsg" && "${_scv_lint:-on}" == on && -f "$_scv_langlib" ]] &&
     _scv_lg="$(settings_get SCV_LANG 2>/dev/null | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]' || true)"
     _scv_ln="$(scv_lint_lang_turn "$_scv_win_end" "" "$_scv_lg" | sed -n 's/^lang-mismatch-lines=//p')"
     # 사용자가 이 턴에 다른 언어를 요청했거나 다른 언어로 썼으면 막지 않는다(SCV.md Top-level rules 7조 — 사용자에게 양보).
-    [[ "$(scv_lang_user_other "${_scv_opener:-$(_scv_turn_prompt 400)}")" == 1 ]] && _scv_ln=0
+    [[ "$(scv_lang_user_other "${_scv_opener:-$(_scv_turn_prompt_wide)}")" == 1 ]] && _scv_ln=0
     _scv_d_lang="$_scv_active"
     declare -F scv_gates_delivered >/dev/null 2>&1 && _scv_d_lang="$(scv_gates_delivered lang "$_scv_active" "$_scv_sess" "$_scv_tok" "$_scv_grec")"
     [[ "$(scv_lang_stop_decide "${_scv_ln:-0}" "$_scv_d_lang")" == block ]] && _scv_r_lang="$(scv_lang_fix_note "$_scv_lg" "$_scv_ln" final)"
