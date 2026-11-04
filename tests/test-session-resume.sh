@@ -219,7 +219,8 @@ m = set(ss[0].get("matcher", "").split("|"))
 assert m == {"compact", "clear", "resume"}, f"matcher: {m}"
 cmd = ss[0]["hooks"][0]["command"]
 assert "on-session-start.sh" in cmd and "CLAUDE_PLUGIN_ROOT=" in cmd, cmd
-for ev, n in (("UserPromptSubmit", 1), ("Stop", 1), ("PreToolUse", 3), ("UserPromptExpansion", 1)):
+# PreToolUse: Skill(mint) · Bash · 쓰기 + 0.80.0+ 전체 도구(gate-any, help 먼저)
+for ev, n in (("UserPromptSubmit", 1), ("Stop", 1), ("PreToolUse", 4), ("UserPromptExpansion", 1)):
     assert len(h.get(ev, [])) == n, f"{ev}: {len(h.get(ev, []))}"
 PY
   grep -q "on-session-start" "$CC/adapter/README.md" 2>/dev/null && ok "T12 래퍼 adapter/README.md 가 새 훅을 적는다" || fail "T12 adapter/README.md 에 언급 없음"

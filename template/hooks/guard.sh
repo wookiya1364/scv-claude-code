@@ -11,6 +11,8 @@
 #   SCV_GUARD_MODE=mint        an action is starting — record a receipt, never deny
 #   SCV_GUARD_MODE=gate-write  an editor-style write — may deny
 #   SCV_GUARD_MODE=gate-bash   a shell command — mints on an action script, else may deny
+#   SCV_GUARD_MODE=gate-any    any tool (0.80.0+) — refuses every tool until this person's turn
+#                              has called help (Rule H); never mints, never checks paths
 #
 # Optional environment, all supplied by the wrapper:
 #   SCV_GUARD           off        disable entirely (process env only — never a file,
@@ -21,6 +23,8 @@
 #                                  a shell call into any of them mints
 #   SCV_GUARD_EXEMPT    <paths>    colon-separated extra exempt paths (host config)
 #   SCV_GUARD_RULE_B    off        keep Rule A only
+#   SCV_HELP_FIRST_ALLOW <regex>   tool names Rule H lets through before help (host tools — the
+#                                  wrapper names them; core never does)
 #
 # Failure policy: open on two inputs, and only those two — an empty payload, and no
 # JSON reader on the machine. Both print one line to stderr and allow. The host
@@ -147,6 +151,28 @@ store_deny_reason() {
 
 ACTIONS_RE="${SCV_GUARD_ACTIONS:-help|status|promote|work|codegen|deck|update|regression|report|sync|install-deps|workspace|handoff|set-models|routine|dreams|mods-install|mods-remove|mods|channel}"
 
+# ---------- help mark (0.80.0+) ---------------------------------------------
+# Rule H needs to know that this person's turn has called help (or carried another SCV action).
+# The decision and the turn record live in model-prompting.sh (helped / help-gate); this file only
+# reports the moment an action starts. Best-effort: a failure here records nothing and denies nothing.
+_scv_mp_dir="${SCV_GUARD_SCRIPTS:-}"; _scv_mp_dir="${_scv_mp_dir%%:*}"
+[[ -n "$_scv_mp_dir" ]] || _scv_mp_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../scripts" 2>/dev/null && pwd)"
+_scv_mp_sid="$(field '.session_id')"
+_scv_mp_agent="$(field '.agent_id')"
+mp_run() {
+  [[ -f "$_scv_mp_dir/model-prompting.sh" && -d "$PROJECT_ROOT" ]] || return 0
+  local -a a=("$@" --agent "$_scv_mp_agent")
+  [[ -n "$_scv_mp_sid" ]] && a+=(--session "$_scv_mp_sid")
+  (cd "$PROJECT_ROOT" && bash "$_scv_mp_dir/model-prompting.sh" "${a[@]}" 2>/dev/null | head -c 2048) || true
+}
+help_mark() { mp_run helped >/dev/null; }
+# A shell command that runs an SCV action's entry script (help.sh, work.sh, promote-helper.sh, ...)
+# from an SCV install (a path with "scv" in it — a project's own help.sh does not count). The per-turn
+# registration and other helper scripts live beside them and must not count.
+is_action_script() {
+  printf '%s' "$1" | grep -qE "scv[^[:space:]]*/(${ACTIONS_RE})(-helper)?\.sh([^a-z-]|$)"
+}
+
 # ---------- mint mode: an action is starting --------------------------------
 if [[ "$MODE" == "mint" ]]; then
   reported="$(field '.tool_input.skill')"
@@ -156,6 +182,7 @@ if [[ "$MODE" == "mint" ]]; then
     # Hosts spell the id with their own prefix; match the id itself.
     if printf '%s' "$reported" | grep -qE "(^|[^a-z-])(${ACTIONS_RE})([^a-z-]|$)"; then
       mint "$reported"
+      help_mark
     fi
   fi
   allow
@@ -219,6 +246,29 @@ deny() {
 
 PLAN_FILES='PLAN.md TESTS.md FEATURE_ARCHITECTURE.md'
 
+# ---------- Rule H (0.80.0+): a person's turn calls help before any other tool ---
+# The per-turn hook asks for help first, and asking was not enough: in a long working session the
+# model went straight to the (enforced) registration and skipped help for more than ten turns.
+# gate-any runs on every tool. The help call itself passes and marks the turn: an SCV skill call,
+# or a shell command that runs an SCV action's entry script. Tools the wrapper names in
+# SCV_HELP_FIRST_ALLOW pass. Everything else is refused until the turn is marked — at the first
+# tool, before any answer is written, so nothing has to be redone.
+if [[ "$MODE" == "gate-any" ]]; then
+  _scv_skill="$(field '.tool_input.skill')"
+  if [[ -n "$_scv_skill" ]] && printf '%s' "$_scv_skill" | grep -qE "(^|[^a-z-])(${ACTIONS_RE})([^a-z-]|$)"; then
+    help_mark; allow
+  fi
+  _scv_cmd="$(field '.tool_input.command')"
+  if [[ -n "$_scv_cmd" ]] && is_action_script "$_scv_cmd"; then help_mark; allow; fi
+  _scv_tool="$(field '.tool_name')"
+  if [[ -n "${SCV_HELP_FIRST_ALLOW:-}" && -n "$_scv_tool" ]] && printf '%s' "$_scv_tool" | grep -qxE -- "${SCV_HELP_FIRST_ALLOW}"; then
+    allow
+  fi
+  _scv_hwhy="$(mp_run help-gate)"
+  [[ -n "${_scv_hwhy//[[:space:]]/}" ]] && deny "$_scv_hwhy"
+  allow
+fi
+
 # ---------- gate-bash: an action script mints; obvious writes are checked ----
 if [[ "$MODE" == "gate-bash" ]]; then
   cmd="$(field '.tool_input.command')"
@@ -244,6 +294,7 @@ if [[ "$MODE" == "gate-bash" ]]; then
       [[ "$_scv_dir" == /* ]] || continue
       if printf '%s' "$cmd" | grep -qF -- "$_scv_dir"; then
         mint "script"
+        is_action_script "$cmd" && help_mark
         allow
       fi
     done

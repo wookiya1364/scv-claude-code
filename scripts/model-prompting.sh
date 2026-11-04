@@ -160,6 +160,7 @@ WARN_FILE="$TDIR/.help-warn"           # 다음 턴 경고(매 턴 훅이 싣고
 ANS_FILE="$TDIR/.help-answered"        # v0.65.0+: 선택 창 답 — "<표>\x1f<그때 마지막 등록의 차례>"
 HUMAN_FILE="$TDIR/.help-human"         # v0.65.0+: 이 세션이 사람 메시지를 받았다(하위 세션에는 없다)
 TRANS_FILE="$TDIR/.help-transcript"    # v0.65.0+: 이 세션의 대화 기록 경로(가이드 다시 읽기 판단)
+HELPED_FILE="$TDIR/.help-called"     # 0.80.0+: 이번 턴에 help(또는 SCV 액션)를 부른 턴 표 — 도구 앞 검사가 본다
 SCAN_FILE="$TDIR/.help-guide-scan"    # v0.65.0+: 대화 기록을 어디까지 읽었나 — "<경로>\x1f<바이트>\x1f<표시된 모델 집합>"
 _fsize() { stat -c '%s' "$1" 2>/dev/null || stat -f '%z' "$1" 2>/dev/null || printf ''; }
 _guide_set() {  # <대화 기록> → 마지막 압축 경계 뒤에 읽음 표시한 모델 집합(공백 구분, 없으면 빈 값) 또는 "N"(판단 못 함)
@@ -476,6 +477,25 @@ case "$cmd" in
   kind)
     # v0.63.0+ — 스위치와 무관하게 판별만 한다. 입력은 표준 입력의 프롬프트(64KB 까지).
     scv_mp_prompt_kind "$(head -c 65536 2>/dev/null || true)" "${SCV_AUTO_PROMPT_TAGS:-}" "${SCV_AUTO_PROMPT_PREFIX:-}" "${SCV_AUTO_PROMPT_SUFFIX:-}"; echo
+    ;;
+  helped)
+    # 0.80.0+ — 이번 턴에 help(또는 사용자가 실은 SCV 액션)가 시작됐다(가드의 기록 단계가 부른다). 하위 에이전트는 적지 않는다.
+    [[ -z "$AGENT_ARG" ]] || exit 0
+    _tok="$(_first_line "$TOKEN_FILE")"; [[ -n "$_tok" ]] || exit 0
+    _put "$HELPED_FILE" "$_tok"
+    echo "HELPED: turn $_tok"
+    ;;
+  help-gate)
+    # 0.80.0+ — 도구 앞 검사: 사람이 쓴 턴에서 아직 help 를 부르지 않았으면 거절 이유를 낸다(아니면 아무것도 안 낸다).
+    # 하위 에이전트 · 매 턴 help 지시가 꺼진 프로젝트(SCV_ALWAYS_ON / SCV_FORCE_HELP off)는 판정하지 않는다.
+    [[ -z "$AGENT_ARG" ]] || exit 0
+    _hsw=on
+    [[ "$(scv_mp_switch "$(_setting SCV_ALWAYS_ON)")" == off || "$(scv_mp_switch "$(_setting SCV_FORCE_HELP)")" == off ]] && _hsw=off
+    _h=1; if (( SESSION_SET )) && [[ -n "$SKEY" && ! -f "$HUMAN_FILE" ]]; then _h=0; fi
+    _tok="$(_first_line "$TOKEN_FILE")"
+    [[ "$(scv_mp_help_needed "$_tok" "$(_first_line "$HELPED_FILE")" "$(_first_line "$AUTO_FILE")" "$_h" "$_hsw")" == 1 ]] || exit 0
+    _ref=""; declare -F scv_host_profile_load >/dev/null 2>&1 && { scv_host_profile_load 2>/dev/null; [[ -n "${SCV_ACTION_TEMPLATE:-}" ]] && _ref="$(scv_action_ref help)"; }
+    scv_mp_help_reason "$_ref"; echo
     ;;
   gate)
     [[ "$SWITCH" == "on" && -n "$(_checklist_for "")" ]] || exit 0
