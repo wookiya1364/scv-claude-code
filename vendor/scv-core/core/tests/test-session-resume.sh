@@ -55,7 +55,9 @@ conv() {  # <프로젝트> <파일명> <status> <본문> [<mtime YYYYMMDDhhmm>] 
 }
 run_hook() {  # <프로젝트> [<stdin>] — stdout 은 OUT 에, 종료 코드는 RC 에 (서브셸이 아니라 전역)
   local p="$1" in="${2:-{\"source\":\"compact\"\}}"
-  OUT="$( cd "$p" && printf "%s" "$in" | CLAUDE_PLUGIN_ROOT="$CORE" bash "$HOOK" 2>"$WORK/err" )"; RC=$?
+  # 0.81.0+ — 파이프 대신 직접 입력: 훅이 입력을 읽기 전에 끝나면(scv/ 없음) printf 가 파이프 끊김으로 실패해
+  # 결과가 흔들렸다(코어 0.80.0 릴리스 검증에서 T2 실패).
+  OUT="$( cd "$p" && CLAUDE_PLUGIN_ROOT="$CORE" bash "$HOOK" 2>"$WORK/err" <<<"$in" )"; RC=$?
   return 0
 }
 

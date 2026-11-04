@@ -25,6 +25,7 @@
 #   SCV_GUARD_RULE_B    off        keep Rule A only
 #   SCV_HELP_FIRST_ALLOW <regex>   tool names Rule H lets through before help (host tools — the
 #                                  wrapper names them; core never does)
+#   SCV_GUARD_RULE_D    off        skip the function-declaration check (Rule D, 0.81.0+)
 #
 # Failure policy: open on two inputs, and only those two — an empty payload, and no
 # JSON reader on the machine. Both print one line to stderr and allow. The host
@@ -329,6 +330,77 @@ if [[ "$MODE" == "gate-write" && "${SCV_GUARD_RULE_P:-on}" != "off" ]]; then
     _scv_mp_args+=(--code "$_scv_mp_code")
     _scv_mp_why="$(cd "$PROJECT_ROOT" && bash "$_scv_mp_dir/model-prompting.sh" "${_scv_mp_args[@]}" 2>/dev/null | head -c 2048 || true)"
     [[ -n "${_scv_mp_why//[[:space:]]/}" ]] && deny "$_scv_mp_why"
+  fi
+fi
+
+# ---------- Rule D (0.81.0+): every function declares pure or effect ---------
+# A function written without `@pure` (role · kind · example) or `@effect` (one-line reason) was invisible to
+# the catalog check, and a long session skipped the small ones. In gate-write mode the guard rebuilds the file
+# as it will be after this edit and asks scripts/pure-declare.sh whether the edit adds a function that declares
+# neither. The before/after build reads the payload only (Write content, Edit/MultiEdit replacements, a patch's
+# added file); anything it cannot rebuild gets no opinion. SCV_GUARD_RULE_D=off disables this rule alone.
+if [[ "$MODE" == "gate-write" && "${SCV_GUARD_RULE_D:-on}" != "off" ]] && command -v python3 >/dev/null 2>&1; then
+  _scv_pd="$_scv_mp_dir/pure-declare.sh"
+  if [[ -f "$_scv_pd" ]]; then   # 하위 에이전트가 쓰는 코드도 같다 — 누가 쓰든 함수는 선언을 갖는다
+    _scv_pdw="$(mktemp -d "${TMPDIR:-/tmp}/scv-pd.XXXXXX" 2>/dev/null)" || _scv_pdw=""
+    if [[ -n "$_scv_pdw" ]]; then
+      # Writes "<rel path>\t<before file or ->\t<after file>" per rebuildable target.
+      printf '%s' "$PAYLOAD" | python3 -c '
+import json, os, sys
+out, cwd, root = sys.argv[1], sys.argv[2], sys.argv[3]
+try:
+    p = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+ti = p.get("tool_input") or {}
+def absp(x): return x if os.path.isabs(x) else os.path.join(cwd, x)
+jobs = []
+fp = ti.get("file_path") or ti.get("path")
+if fp:
+    a = absp(fp)
+    old = open(a, encoding="utf-8", errors="replace").read() if os.path.isfile(a) else None
+    new = None
+    if isinstance(ti.get("content"), str):
+        new = ti["content"]
+    elif isinstance(ti.get("old_string"), str) and old is not None:
+        new = old.replace(ti["old_string"], ti.get("new_string", ""), -1 if ti.get("replace_all") else 1)
+    elif isinstance(ti.get("edits"), list) and old is not None:
+        new = old
+        for e in ti["edits"]:
+            if isinstance(e, dict) and isinstance(e.get("old_string"), str):
+                new = new.replace(e["old_string"], e.get("new_string", ""), -1 if e.get("replace_all") else 1)
+    if new is not None:
+        jobs.append((a, old, new))
+cmd = ti.get("command") or ti.get("input") or ""
+if isinstance(cmd, str) and "*** Add File: " in cmd:
+    cur, buf = None, []
+    for line in cmd.splitlines() + ["*** End"]:
+        if line.startswith("*** "):
+            if cur: jobs.append((absp(cur), None, "\n".join(buf) + "\n"))
+            cur, buf = (line[len("*** Add File: "):].strip() if line.startswith("*** Add File: ") else None), []
+        elif cur is not None and line.startswith("+"):
+            buf.append(line[1:])
+with open(os.path.join(out, "jobs.tsv"), "w") as j:
+    for i, (a, old, new) in enumerate(jobs):
+        if not a.startswith(root + "/"): continue
+        bf = "-"
+        if old is not None:
+            bf = os.path.join(out, "b%d" % i); open(bf, "w").write(old)
+        af = os.path.join(out, "a%d" % i); open(af, "w").write(new)
+        j.write("%s\t%s\t%s\n" % (os.path.relpath(a, root), bf, af))
+' "$_scv_pdw" "$CWD" "$PROJECT_ROOT" 2>/dev/null
+      _scv_pdwhy=""
+      if [[ -f "$_scv_pdw/jobs.tsv" ]]; then
+        while IFS=$'\t' read -r _rel _bf _af; do
+          [[ -n "$_rel" ]] || continue
+          _a=(gate --file "$_rel" --after "$_af"); [[ "$_bf" != "-" ]] && _a+=(--before "$_bf")
+          _w="$(cd "$PROJECT_ROOT" && bash "$_scv_pd" "${_a[@]}" 2>/dev/null | head -c 2048)"
+          [[ -n "$_w" ]] && { _scv_pdwhy="$_w"; break; }
+        done < "$_scv_pdw/jobs.tsv"
+      fi
+      rm -rf "$_scv_pdw" 2>/dev/null
+      [[ -n "$_scv_pdwhy" ]] && deny "$_scv_pdwhy"
+    fi
   fi
 fi
 
