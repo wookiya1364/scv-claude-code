@@ -30,7 +30,8 @@ concurrency:
 jobs:
   promote:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # Two PRs wait in one run (develop → stage, stage → main), each up to 30 minutes.
+    timeout-minutes: 90
     env:
       # scv-core stores SCV_WRAPPER_SYNC_TOKEN; the wrappers store
       # SCV_CORE_SYNC_TOKEN. One file works in all three by trying both.
@@ -92,7 +93,11 @@ jobs:
             # BLOCKED. Only the last one knows what the required set is.
             echo "Waiting for #${number} to become mergeable..."
             local waited=0 state=UNKNOWN failed=0 pending=0 ready=0 json="" reruns=0 never="" pair=""
-            while [ "$waited" -lt 900 ]; do
+            # 1800s, not 900s (2026-11-05): while GitHub's arm64 macOS pool is short, a mac job can
+            # queue for minutes before it runs — 2026-11-05 a codex promotion gave up one minute
+            # before its mac job finished (5 min queued + 8 min running). A failed check still
+            # stops at once; only "still running" waits longer.
+            while [ "$waited" -lt 1800 ]; do
               json="$(gh pr view "$number" --json mergeStateStatus,statusCheckRollup 2>/dev/null || true)"
               if [ -n "$json" ]; then
                 state="$(printf '%s' "$json" | jq -r '.mergeStateStatus // "UNKNOWN"')"
