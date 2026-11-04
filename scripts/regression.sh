@@ -381,6 +381,7 @@ memo_prerun_shared() {
   if [[ $has_loop -eq 1 ]]; then
     for f in core/tests/test-*.sh; do
       [[ -f "$f" ]] || continue
+      head -30 "$f" | grep -q '^# scv-test: aggregate' && continue   # 묶음은 조각이 대신 돈다
       key="bash $f"; core_keys+=("$key")
       [[ $'\n'"$(printf '%s\n' "${keys[@]}")"$'\n' == *$'\n'"$key"$'\n'* ]] || keys+=("$key")
     done

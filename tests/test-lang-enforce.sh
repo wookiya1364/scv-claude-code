@@ -97,6 +97,17 @@ o3="$(stop_hook "$R2" "$TR2" "$A" false)"
 [[ -z "$o" && "$o2" != *"[SCV 언어]"* && "$w" != *"한국어로 써라"* && "$o3" != *"[SCV 언어]"* ]] \
   && ok "T8 다른 언어 요청 · 다른 언어로 쓴 요청이면 교정 · 막기 · 경고 없음" || bad "T8 [$o] [$o2] [$w] [$o3]"
 
+# T9 — 긴 턴(0.81.2): 사용자 메시지가 원본 끝 400줄 밖이어도 새 글을 검사하고, 다른 언어 요청도 찾는다
+R="$(new_repo t9 korean)"; TR="$WORK/t9.jsonl"
+{ jl_user "만들어 줘"; for _i in $(seq 1 250); do jl_tool; done; jl_asst "$EN1" e1; jl_tool; } > "$TR"
+o="$(lang_hook "$R" "$TR")"
+c="$(jq -r '.hookSpecificOutput.additionalContext // empty' <<<"$o" 2>/dev/null)"
+R2="$(new_repo t9b korean)"; TR2="$WORK/t9b.jsonl"
+{ jl_user "이번 답은 영어로 써 줘"; for _i in $(seq 1 250); do jl_tool; done; jl_asst "$EN1" e2; jl_tool; jl_asst "$EN2"$'\n'"$EN3" e3; } > "$TR2"
+o2="$(lang_hook "$R2" "$TR2")"; o3="$(stop_hook "$R2" "$TR2" "$EN2"$'\n'"$EN3" false)"
+[[ "$c" == *"1줄이 한국어가 아니다"* && -z "$o2" && "$o3" != *"[SCV 언어]"* ]] \
+  && ok "T9 긴 턴: 400줄 밖 요청이어도 새 글 교정 · 다른 언어 요청은 그대로 존중" || bad "T9 [$o] [$o2] [$o3]"
+
 # 순수 함수 직접 확인
 [[ "$(scv_lang_stop_decide 2 0)" == block && "$(scv_lang_stop_decide 2 1)" == ok && -z "$(scv_lang_rule_line english)" ]] \
   && ok "판정 함수(막기 한 번 · english 무동작)" || bad "판정 함수"
