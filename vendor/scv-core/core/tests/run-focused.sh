@@ -6,6 +6,7 @@
 # 혼자 돌아야 하는 시험은 파일 앞 30줄 안에 다음 한 줄로 스스로 밝힌다:
 #
 #   # scv-test: serial
+#   # scv-test: aggregate   (조각을 차례로 부르는 묶음 — 목록에서 뺀다. 조각이 따로 돈다)
 #
 # 쓰는 법:
 #   bash core/tests/run-focused.sh [--jobs N] [--dir DIR]... [--also FILE]... [--shard I/N] [--timings FILE]
@@ -112,6 +113,8 @@ rf_list_tests() {
       F:*) printf '%s\n' "${arg#F:}" ;;
     esac
   done | LC_ALL=C sort -u | while IFS= read -r f; do
+    # 묶음(조각을 차례로 부르는 파일)은 건너뛴다 — 조각이 따로 돈다(2026-11-04 큰 시험 나누기).
+    head -n 30 "$f" | grep -Eq '^# scv-test: aggregate([[:space:]]|$)' && continue
     mark=""
     head -n 30 "$f" | grep -Eq '^# scv-test: serial([[:space:]]|$)' && mark="serial"
     printf '%s\t%s\n' "$f" "$mark"
