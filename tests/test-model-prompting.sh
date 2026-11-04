@@ -656,7 +656,10 @@ printf '# source: common.md\ngoal\tState the goal\tfixture quote a\nfinish\tStat
 printf '# source: model-a.md\nfinish\tState the done condition precisely\tfixture quote c\nsources\tName the sources to check\tfixture quote d\n' > "$WORK/guides-cl/checklist-model-a.tsv"
 { cat "$FIX/profile.env"; printf 'SCV_PROMPTING_GUIDES=%s\n' "$WORK/guides-cl"; } > "$WORK/profile-cl.env"
 mpc() { (cd "$1" && shift && SCV_HOST_PROFILE="$WORK/profile-cl.env" SCV_TODAY=2026-09-27 bash "$MP" "$@" 2>/dev/null); }
-hook_cl() { (cd "$1" && printf '{"prompt":"%s","session_id":"s1"}' "${2:-응}" | CLAUDE_PLUGIN_ROOT="$CORE" SCV_HOST_PROFILE="$WORK/profile-cl.env" bash "$CORE/template/hooks/on-user-prompt.sh" 2>/dev/null); }
+hook_cl() {  # 0.80.0+ — 이 시험의 사람 턴은 help 를 부른 턴으로 둔다(help 먼저 판정은 test-help-first.sh)
+  (cd "$1" && printf '{"prompt":"%s","session_id":"s1"}' "${2:-응}" | CLAUDE_PLUGIN_ROOT="$CORE" SCV_HOST_PROFILE="$WORK/profile-cl.env" bash "$CORE/template/hooks/on-user-prompt.sh" 2>/dev/null)
+  (cd "$1" && SCV_HOST_PROFILE="$WORK/profile-cl.env" bash "$MP" helped --session s1 >/dev/null 2>&1) || true
+}
 SUB_OK="$(printf 'goal | msg | fix the login bug\nfinish | ctx | conversation turn 2: the test passes\nsources | asked | which log file? (recommended: app.log)\nrewrite | - | Fix the login bug until the login test passes\n')"
 # (v0.63.0+) SCV 원칙 — 기대값은 원칙 파일에서 꺼낸다(문구를 검사에 다시 적지 않는다: Top-level rules 4조).
 PRIN="$CORE/contracts/rewrite-principle.md"
@@ -730,7 +733,7 @@ echo "T21. 매 턴 비교 · 등록 — 흐름 (표 → 목록 → 불완전 등
 c=0
 R="$(new_repo t21)"
 h1="$(hook_cl "$R" "응")"; tok1="$(head -1 "$(tf "$R" .help-turn)" 2>/dev/null)"
-[[ -n "$tok1" ]] && grep -q "^\[SCV 프롬프트\] 이 턴 메시지(짧아도)" <<<"$h1" && grep -q 'checklist --model' <<<"$h1" && ! grep -qF "$tok1" <<<"$h1" && c=$((c + 1)) || echo "      (1) short message still gets the block (token written, not printed)"
+[[ -n "$tok1" ]] && grep -q "^\[SCV 프롬프트\] help 를 부른 뒤, 이 턴 메시지(짧아도)" <<<"$h1" && grep -q 'checklist --model' <<<"$h1" && ! grep -qF "$tok1" <<<"$h1" && c=$((c + 1)) || echo "      (1) short message still gets the block (token written, not printed)"
 cl="$(mpc "$R" checklist --model vendor-model-a)"
 grep -qx 'finish | State the done condition precisely' <<<"$cl" && grep -qx 'sources | Name the sources to check' <<<"$cl" && grep -qx 'goal | State the goal' <<<"$cl" && c=$((c + 1)) || echo "      (2) checklist: $cl"
 ri="$(cd "$R" && printf 'goal | msg | x\nrewrite | - | y\n' | SCV_HOST_PROFILE="$WORK/profile-cl.env" bash "$MP" register --model vendor-model-a 2>/dev/null)"

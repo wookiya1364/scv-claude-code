@@ -229,3 +229,24 @@ registration's `scope` cell opens with a whole-turn no-change phrase (`변경 �
 equivalents; a cell naming an exception is never refused). A subagent's write follows these two checks of the
 session that delegated it, with a reason that hands the edit back to the lead. Writes inside the workflow tree
 (the records) are never refused for the scope.
+
+## Rule H — a person's turn calls help before any other tool (v0.80.0+)
+
+The per-turn hook asks for the help action first, and asking alone did not hold: in one long working
+session the model went straight to the enforced registration and skipped help for more than ten turns,
+so the conversation record stopped. Rule H moves the requirement to the first tool call, before any
+answer is written.
+
+- A new mode, `gate-any`, is registered by the wrapper on every tool the host can gate. It never mints and
+  never checks paths. It passes the help call itself — an SCV skill call, or a shell command that runs an
+  SCV action's entry script from an SCV install (`…scv…/help.sh`, `work.sh`, `promote-helper.sh`, …; a
+  project's own `help.sh` does not count) — and records that this turn called help. It passes the tool names
+  the wrapper lists in `SCV_HELP_FIRST_ALLOW` (host tools; core names none). Every other tool is refused
+  until the turn is marked, with a reason that names the help action.
+- `mint` mode (an SCV action starting) and `gate-bash` on an action entry script record the same mark, so
+  a turn that carries another SCV action the person typed is treated as having called help.
+- The decision and the record live in `scripts/model-prompting.sh` (`help-gate`, `helped`). No opinion —
+  the tool passes — when no turn token exists, on an automatic-input turn, in a session that never received
+  a person's message, inside a subagent, when `SCV_ALWAYS_ON=off` or `SCV_FORCE_HELP=off`, or on any failure.
+- A turn that uses no tool at all has no place to be stopped before its text; the Stop hook blocks that
+  turn once (`help` in the once-per-turn record).
