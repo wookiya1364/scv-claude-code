@@ -58,6 +58,8 @@ hook_p() {  # <저장소> <프로필> <프롬프트> [코어] → 매 턴 훅 �
   local core="${4:-$CORE}"
   (cd "$1" && jq -cn --arg p "$3" '{prompt:$p,session_id:"s1"}' \
      | CLAUDE_PLUGIN_ROOT="$core" SCV_HOST_PROFILE="$2" bash "$core/template/hooks/on-user-prompt.sh" 2>/dev/null)
+  # 0.80.0+ — 이 시험의 사람 턴은 help 를 부른 턴으로 둔다(help 먼저 판정은 test-help-first.sh 가 본다).
+  [[ -f "$core/scripts/model-prompting.sh" ]] && (cd "$1" && SCV_HOST_PROFILE="$2" bash "$core/scripts/model-prompting.sh" helped --session s1 >/dev/null 2>&1) || true
 }
 stop_p() {  # <저장소> <프로필> <마지막 답> <계속 중 true|false> [코어] → 종료 훅 stdout
   local r="$1" core="${5:-$CORE}" tr="$WORK/tr-$RANDOM$RANDOM.jsonl"
@@ -698,6 +700,7 @@ stop_s() {  # <저장소> <세션> <답> <계속 중 true|false> → 종료 훅 
 turn_s() {  # <저장소> <세션> — 그 세션의 사람 턴을 열고 등록한다
   (cd "$1" && jq -cn --arg s "$2" '{prompt:"로그인 고쳐",session_id:$s}' \
      | CLAUDE_PLUGIN_ROOT="$CORE" SCV_HOST_PROFILE="$WORK/profile-full.env" bash "$PROMPT_HOOK" >/dev/null 2>&1)
+  (cd "$1" && SCV_HOST_PROFILE="$WORK/profile-full.env" bash "$MP" helped --session "$2" >/dev/null 2>&1)   # 0.80.0+ help 를 부른 턴
   (cd "$1" && printf '%s\n' "$SUB_OK" | SCV_HOST_PROFILE="$WORK/profile-full.env" bash "$MP" register --model vendor-model-a --session "$2" >/dev/null 2>&1)
 }
 R="$(new_repo sg15)"; turn_s "$R" sess-a; turn_s "$R" sess-b
