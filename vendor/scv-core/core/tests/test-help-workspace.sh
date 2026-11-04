@@ -13,8 +13,8 @@ HELP="$REPO_ROOT/scripts/help.sh"
 PASS=0; FAIL=0
 fail() { echo "  ✖ FAIL: $1"; FAIL=$((FAIL + 1)); }
 ok()   { echo "  ✓ $1"; PASS=$((PASS + 1)); }
-has()  { if echo "$2" | grep -q "$3"; then ok "$1"; else fail "$1 — missing [$3]"; fi; }
-hasnt(){ if echo "$2" | grep -q "$3"; then fail "$1 — unexpectedly has [$3]"; else ok "$1"; fi; }
+has()  { if grep -q "$3" <<<"$2"; then ok "$1"; else fail "$1 — missing [$3]"; fi; }
+hasnt(){ if grep -q "$3" <<<"$2"; then fail "$1 — unexpectedly has [$3]"; else ok "$1"; fi; }
 
 WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
 export SCV_CACHE_DIR="$WORK/cache"

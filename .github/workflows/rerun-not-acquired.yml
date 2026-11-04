@@ -1,0 +1,69 @@
+name: Re-run jobs no runner picked up
+
+# A job GitHub never started is not a test result (0.81.3).
+#
+# On 2026-11-04/05 GitHub's shared arm64 macOS pool ran out of capacity. Three CI runs in a
+# row ended with every macOS shard cancelled, no runner, no steps, and the annotation
+# "The job was not acquired by Runner of type hosted even after multiple attempts". The PR
+# then sat red until someone re-ran it by hand.
+#
+# This workflow re-runs such a run's failed jobs — only when at least one of them carries
+# that annotation, at most three times, and never for a run a newer commit has replaced.
+# A job that ran and failed is re-run alongside (`--failed` takes the run's failed set) and
+# fails again on its own; nothing here turns a red test green. Moving the shards to the
+# Intel pool was measured and rejected: 2.3x slower, and two wall-clock tests failed there.
+#
+# workflow_run fires from the default branch's copy of this file, so it takes effect once
+# it reaches main. promote.yml's await-mergeable applies the same rule to promotion PRs (synced with scv-core).
+
+on:
+  workflow_run:
+    workflows: ["SCV Core contract", "Cross-OS — model policy script"]
+    types: [completed]
+
+permissions:
+  actions: write
+  checks: read
+  contents: read
+
+jobs:
+  rerun:
+    name: Re-run jobs no runner picked up
+    if: github.event.workflow_run.conclusion == 'failure' || github.event.workflow_run.conclusion == 'cancelled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Re-run when a job was never started
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          # >>> rerun-never-started — kept in sync with scv-core's copy, where tests/test-promote-wait.sh replays it.
+          set -uo pipefail
+          if [ "$ATTEMPT" -gt 3 ]; then
+            echo "Attempt $ATTEMPT — three re-runs were enough; leaving it for a person."
+            exit 0
+          fi
+          tip="$(gh api "repos/$REPO/branches/$HEAD_BRANCH" --jq .commit.sha 2>/dev/null || true)"
+          if [ "$tip" != "$HEAD_SHA" ]; then
+            echo "A newer commit replaced this run ($HEAD_BRANCH is at ${tip:-unknown}) — nothing to re-run."
+            exit 0
+          fi
+          never=0
+          for job in $(gh api "repos/$REPO/actions/runs/$RUN_ID/attempts/$ATTEMPT/jobs?per_page=100" \
+              --jq '.jobs[] | select(.conclusion == "cancelled" or .conclusion == "failure") | .id'); do
+            n="$(gh api "repos/$REPO/check-runs/$job/annotations" \
+                 --jq '[.[]?.message // "" | select(test("not acquired by Runner"))] | length' 2>/dev/null || echo 0)"
+            [ "${n:-0}" -gt 0 ] && never=$((never + 1))
+          done
+          if [ "$never" -eq 0 ]; then
+            echo "Every failed job ran — a real result, not re-running."
+            exit 0
+          fi
+          echo "$never job(s) never got a runner — re-running the failed jobs of run $RUN_ID (attempt $ATTEMPT)."
+          gh run rerun "$RUN_ID" --repo "$REPO" --failed
+          # <<< rerun-never-started
