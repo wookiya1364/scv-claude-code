@@ -67,9 +67,11 @@ scv_pd_line_function() {
 # 예: py $'def f(x):\n    return x' → "f"
 # 예: js "" → ""
 scv_pd_functions() {
-  local lang="${1:-}" text="${2:-}" line n out=""
+  local lang="${1:-}" text="${2:-}" line n out="" arrow="="$'\x3e'
   [[ -n "$lang" ]] || return 0
   while IFS= read -r line || [[ -n "$line" ]]; do
+    # 0.81.1+ — 함수 선언일 수 있는 줄만 판정한다(줄마다 판정을 부르면 340개 함수 저장소에서 25초 — 맥 CI 143초).
+    [[ "$line" == *"()"* || "$line" == *function* || "$line" == *"$arrow"* || "$line" == *"def "* || "$line" == func* ]] || continue
     n="$(scv_pd_line_function "$lang" "$line")"
     [[ -n "$n" ]] && out="${out:+$out$'\n'}$n"
   done <<< "$text"
@@ -98,7 +100,8 @@ scv_pd_declared() {
         continue ;;
       ''|'@'*) continue ;;
     esac
-    n="$(scv_pd_line_function "$lang" "$line")"
+    n=""
+    (( pending )) && n="$(scv_pd_line_function "$lang" "$line")"   # 0.81.1+ — 표식 바로 뒤 줄만 판정한다
     if (( pending )) && [[ -n "$n" ]]; then out="${out:+$out$'\n'}$n"; fi
     pending=0
   done <<< "$text"
