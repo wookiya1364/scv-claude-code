@@ -107,8 +107,8 @@ require(
 )
 require(
     workflows["promote.yml"].count("\n    runs-on:")
-    == workflows["promote.yml"].count("\n    timeout-minutes: 45"),
-    "the promotion orchestrator is still bounded (45 minutes)",
+    == workflows["promote.yml"].count("\n    timeout-minutes: 90"),
+    "the promotion orchestrator is still bounded (90 minutes: two PR waits of up to 30 each)",
 )
 require(
     "test-sync-core-atomicity.sh"
