@@ -1118,7 +1118,7 @@ scv_mp_principle_reason() {
 # @pure
 # 역할: 매 턴 훅이 싣는 "1:1 비교 · 등록" 지시 블록을 만든다(스위치 off · 토큰 없음이면 빈 값)
 # 종류: 조립
-# 예: on tok1 m-1 "" x.sh → $'[SCV 프롬프트] 이 턴 메시지(짧아도)를 모델 가이드 요구 항목과 1:1 비교 · 등록한 뒤 일하라 — 등록 전 파일 쓰기는 거절, 등록 · 인용 없는 종료는 차단. 선택 창 답 뒤 첫 편집 전에 다시 등록(범위 그대로면 register --keep).\n  항목마다 msg · ctx(출처) · na(이유) · asked(못 찾은 것 중 가장 영향 큰 하나만, 추천 답과 함께) → bash "x.sh" register --model "m-1" (stdin "id | 상태 | 값" 줄들 + "rewrite | - | 다시 쓴 요청"; 파일을 안 바꾸는 턴은 scope 값을 \'변경 없음 — …\' 으로 시작) → 답 맨 위에 \'> **다시 쓴 요청**: …\' 전문 인용(ctx · asked 항목 표시), 그 아래 굵은 주제 + 개조식 불릿(contracts/writing.md), 그것으로 일한다.\n  항목: bash "x.sh" checklist --model "{지금 모델 id}"\n'
+# 예: on tok1 m-1 "" x.sh → $'[SCV 프롬프트] help 를 부른 뒤, 이 턴 메시지(짧아도)를 모델 가이드 요구 항목과 1:1 비교 · 등록한 뒤 일하라 — 등록 전 파일 쓰기는 거절, 등록 · 인용 없는 종료는 차단. 선택 창 답 뒤 첫 편집 전에 다시 등록(범위 그대로면 register --keep).\n  항목마다 msg · ctx(출처) · na(이유) · asked(못 찾은 것 중 가장 영향 큰 하나만, 추천 답과 함께) → bash "x.sh" register --model "m-1" (stdin "id | 상태 | 값" 줄들 + "rewrite | - | 다시 쓴 요청"; 파일을 안 바꾸는 턴은 scope 값을 \'변경 없음 — …\' 으로 시작) → 답 맨 위에 \'> **다시 쓴 요청**: …\' 전문 인용(ctx · asked 항목 표시), 그 아래 굵은 주제 + 개조식 불릿(contracts/writing.md), 그것으로 일한다.\n  항목: bash "x.sh" checklist --model "{지금 모델 id}"\n'
 # 예: off tok1 → ""
 # <스위치> <토큰> <모델 id 또는 ""> <병합 목록 또는 ""> <스크립트 경로> [<세션 id>] → 매 턴 훅이 싣는 블록(스위치 off · 토큰 없음이면 빈 값).
 # 토큰은 싣지 않는다 — 같은 상태면 출력이 늘 같아야 한다(등록은 표 파일을 스스로 읽는다). 세션 id(v0.65.0+)는 등록 명령에 그대로
@@ -1128,7 +1128,7 @@ scv_mp_turn_block() {
   [[ "$sw" == "on" && -n "$tok" ]] || return 0
   local ph='{지금 모델 id}' mid   # 기본값을 따로 둔다 — "${x:-{…\}}" 의 \} 를 bash 3.2 는 글자 그대로 남긴다(5 는 지운다)
   mid="${model:-$ph}"; [[ -n "$sess" ]] && s=" --session \"$sess\""
-  printf '%s\n' "[SCV 프롬프트] 이 턴 메시지(짧아도)를 모델 가이드 요구 항목과 1:1 비교 · 등록한 뒤 일하라 — 등록 전 파일 쓰기는 거절, 등록 · 인용 없는 종료는 차단. 선택 창 답 뒤 첫 편집 전에 다시 등록(범위 그대로면 register --keep)."
+  printf '%s\n' "[SCV 프롬프트] help 를 부른 뒤, 이 턴 메시지(짧아도)를 모델 가이드 요구 항목과 1:1 비교 · 등록한 뒤 일하라 — 등록 전 파일 쓰기는 거절, 등록 · 인용 없는 종료는 차단. 선택 창 답 뒤 첫 편집 전에 다시 등록(범위 그대로면 register --keep)."
   printf '%s\n' "  항목마다 msg · ctx(출처) · na(이유) · asked(못 찾은 것 중 가장 영향 큰 하나만, 추천 답과 함께) → bash \"$cmd\" register --model \"$mid\"$s (stdin \"id | 상태 | 값\" 줄들 + \"rewrite | - | 다시 쓴 요청\"; 파일을 안 바꾸는 턴은 scope 값을 '변경 없음 — …' 으로 시작) → 답 맨 위에 '$q **다시 쓴 요청**: …' 전문 인용(ctx · asked 항목 표시), 그 아래 굵은 주제 + 개조식 불릿(contracts/writing.md), 그것으로 일한다."
   if [[ -n "$model" && -n "$list" ]]; then
     while IFS=$'\t' read -r id label || [[ -n "$id" ]]; do [[ -n "$id" ]] && items="$items$id($label) "; done <<< "$list"
@@ -1159,4 +1159,32 @@ scv_mp_register_normalize() {
     printf '%s\t%s\t%s\n' "$a" "$b" "$c"
   done <<< "$sub"
   return 0
+}
+
+# @pure
+# 역할: 이번 사람 턴에 help 를 아직 부르지 않아 도구를 막아야 하는지 1 또는 0 으로 정한다
+# 종류: 판정/gate
+# 예: tok1 "" "" 1 on → "1"
+# 예: tok1 tok1 "" 1 on → "0"
+# 예: tok1 "" tok1 1 on → "0"
+# 예: tok1 "" "" 0 on → "0"
+# 예: tok1 "" "" 1 off → "0"
+# 예: "" "" "" 1 on → "0"
+# <이번 턴 표> <help 부른 턴 표> <자동 입력 턴 표> <사람 세션 0|1> <매 턴 help 스위치 on|off> → 1 | 0 (0.80.0+, 계획 help-first-gate-080).
+# 표가 없거나 · 이미 이 턴에 불렀거나 · 자동 입력 턴이거나 · 사람 메시지를 받지 않은 세션이거나 · 스위치가 꺼졌으면 막지 않는다.
+scv_mp_help_needed() {
+  local tok="${1:-}" helped="${2:-}" auto="${3:-}" human="${4:-1}" sw="${5:-on}"
+  if [[ -z "$tok" || "$helped" == "$tok" || "$auto" == "$tok" || "$human" != 1 || "$sw" == off ]]; then printf '0'; else printf '1'; fi
+}
+
+# @pure
+# 역할: help 를 부르기 전 도구를 거절할 때 쓸 이유 한 줄을 만든다(부를 액션 이름 포함)
+# 종류: 조립
+# 예: /scv:help → "[SCV help 먼저] 이 턴은 아직 help 를 부르지 않았다 — 지금 /scv:help 를 이 턴 메시지 전문을 인자로 불러라. 그 전에는 다른 도구(등록 포함)가 거절된다."
+# 예: "" → "[SCV help 먼저] 이 턴은 아직 help 를 부르지 않았다 — 지금 SCV 의 help 를 이 턴 메시지 전문을 인자로 불러라. 그 전에는 다른 도구(등록 포함)가 거절된다."
+# <help 액션 이름(호스트 표기)> → 한 줄. 이름이 없으면 'SCV 의 help'.
+scv_mp_help_reason() {
+  local ref="${1:-}"
+  [[ -n "$ref" ]] || ref="SCV 의 help"
+  printf '%s' "[SCV help 먼저] 이 턴은 아직 help 를 부르지 않았다 — 지금 $ref 를 이 턴 메시지 전문을 인자로 불러라. 그 전에는 다른 도구(등록 포함)가 거절된다."
 }

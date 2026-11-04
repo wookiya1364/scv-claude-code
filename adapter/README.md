@@ -47,7 +47,11 @@ Adapter-owned behavior:
   registration (Core 0.79.0+, no matcher) binds
   `vendor/scv-core/core/template/hooks/on-lang-check.sh`: with `SCV_LANG=korean`
   it adds one correction line when text written since the last check drifted
-  into another language, and never blocks
+  into another language, and never blocks. A `PreToolUse` entry with no
+  matcher (Core 0.80.0+) runs `guard.sh` in `gate-any` mode: in a person's
+  turn every tool is refused until help has been called, except the help
+  call itself and `SCV_HELP_FIRST_ALLOW` (tool search, the task list, the
+  app's plan and wrap-up tools)
 
 Core-owned behavior:
 

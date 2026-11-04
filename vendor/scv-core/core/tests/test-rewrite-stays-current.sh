@@ -60,6 +60,8 @@ tf() { printf '%s/scv/journal/.help-turns/%s/%s' "$1" "${3:-s1}" "$2"; }   # <�
 hook() {  # <저장소> <세션> <프롬프트> [대화 기록] → 매 턴 훅 출력
   (cd "$1" && jq -cn --arg s "$2" --arg p "$3" --arg t "${4:-}" '{prompt:$p,session_id:$s} + (if $t == "" then {} else {transcript_path:$t} end)' \
      | bash "$PROMPT_HOOK" 2>/dev/null)
+  # 0.80.0+ — 이 시험의 사람 턴은 help 를 부른 턴으로 둔다(help 먼저 판정은 test-help-first.sh 가 본다).
+  (cd "$1" && bash "$MP" helped --session "$2" >/dev/null 2>&1) || true
 }
 sub_of() {  # [범위] [마침 칸 값] → 등록 제출
   printf 'goal | msg | fix the login bug\nfinish | %s\nscope | msg | %s\nsources | asked | which log? (recommended: app.log)\nrewrite | - | %s\n' \
@@ -344,6 +346,7 @@ stop_peer() {  # <저장소> <프로필> <답> → 사람 턴(답) 뒤에 다른
      | SCV_HOST_PROFILE="$2" bash "$STOP_HOOK" 2>/dev/null)
 }
 R="$(new_repo t9c)"; (cd "$R" && jq -cn '{prompt:"로그인 고쳐",session_id:"s1"}' | SCV_HOST_PROFILE="$WORK/profile-peer.env" bash "$PROMPT_HOOK" >/dev/null 2>&1)
+(cd "$R" && SCV_HOST_PROFILE="$WORK/profile-peer.env" bash "$MP" helped --session s1 >/dev/null 2>&1)   # 0.80.0+ help 를 부른 사람 턴
 (cd "$R" && sub_of | SCV_HOST_PROFILE="$WORK/profile-peer.env" bash "$MP" register --model vendor-model-a --session s1 >/dev/null 2>&1)
 TP0="$WORK/t9c-first.jsonl"; { jl_user "로그인 고쳐"; jl_asst "$GOOD"; } > "$TP0"
 (cd "$R" && jq -cn --arg p "$TP0" --arg a "$GOOD" '{session_id:"s1",transcript_path:$p,last_assistant_message:$a,stop_hook_active:false}' \
