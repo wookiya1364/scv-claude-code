@@ -362,6 +362,11 @@ displace:
   `bash ${CLAUDE_PLUGIN_ROOT}/scripts/pure-catalog.sh build --project`. Functions
   in different languages may share inputs and outputs on purpose (a TS front end
   and a Python back end); the catalog marks them as 다른 언어 짝, not duplicates.
+  **Every function declares one or the other (0.81.0+):** `@pure` (or `@deterministic`) with its
+  역할 · 종류 · 예, or `@effect` with one `이유:` line saying what it changes outside — small
+  file-internal helpers included. A write that adds a function declaring neither is refused
+  (`core/contracts/guard.md` Rule D), and `pure-catalog.sh check` fails when the count of
+  undeclared functions rises above the baseline.
 - Choose the simplest implementation that fully satisfies the current requirement.
   Build for what is asked, not for a future that has not been specified.
 - Keep components modular with one clear concern, and boundaries a reader can name.

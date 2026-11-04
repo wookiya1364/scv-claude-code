@@ -272,6 +272,9 @@ if [[ "$MODE" == "build" ]]; then
     _pc_file_text "$f" > "$CATALOG/$f"
   done < <(_pc_files_in_render)
   echo "OK  catalog: ${COUNT}개 함수 → $(_pc_files_in_render | wc -l | tr -d ' ')개 파일 ($CATALOG)"
+  # 0.81.0+ — 선언 없는 함수(@pure · @deterministic · @effect 어느 것도 없음)의 기준선: 줄면 내리고, 늘리지는 않는다.
+  _pd_args=(baseline update --baseline "$CATALOG/undeclared-baseline" --root "$ROOT"); [[ -n "$PROJECT" ]] && _pd_args+=(--project)
+  bash "$SCRIPT_DIR/pure-declare.sh" "${_pd_args[@]}" 2>/dev/null | sed 's/^/    /' || true
   exit 0
 fi
 
@@ -342,6 +345,12 @@ done < <(_pc_files_in_render)
   _pc_files_in_render | grep -qxF "$(basename "$old")" || STALE+=" $(basename "$old")"
 done
 [[ -z "$STALE" ]] || report "✖ 사전이 낡았다:$STALE — 다시 만들기: bash core/scripts/pure-catalog.sh build"
+
+# 0.81.0+ — 선언 없는 함수 수가 기준선보다 늘면 실패(사전 자리가 있을 때만 — 설치본에는 기준선이 없다).
+if [[ $NO_HOME -eq 0 && -f "$CATALOG/undeclared-baseline" ]]; then
+  _pd_args=(baseline check --baseline "$CATALOG/undeclared-baseline" --root "$ROOT"); [[ -n "$PROJECT" ]] && _pd_args+=(--project)
+  _pd_out="$(bash "$SCRIPT_DIR/pure-declare.sh" "${_pd_args[@]}" 2>&1)" || report "${_pd_out}"
+fi
 
 if [[ $FAILS -eq 0 ]]; then
   if [[ $N_TEXT -gt 0 ]]; then

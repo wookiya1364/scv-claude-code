@@ -394,7 +394,9 @@ memo_prerun_shared() {
     key="${keys[i]}"; file="${key#bash }"; file="${file%% *}"
     if [[ -f "$file" ]] && head -30 "$file" | grep -q '^# scv-test: serial'; then serial+=("$i"); continue; fi
     while (( $(jobs -rp | wc -l) >= jobs )); do wait -n; done
-    ( rc=0; run_scenario_clean "$key" >"$MEMO_DIR/$i.out" 2>&1 || rc=$?; echo "$rc" > "$MEMO_DIR/$i.rc" ) &
+    # 0.81.0+ — 겹쳐 도는 묶음 안은 하나씩(SCV_TEST_JOBS=1): 묶음마다 다시 코어 수만큼 돌면 동시에 100개 넘게 겹쳐
+    # 컴퓨터가 멈춘 듯 느려지고(부하 75 / 코어 11, 2026-11-04) 시간 한도 시험이 흔들렸다. 혼자 다시 도는 아래 단계는 그대로.
+    ( rc=0; SCV_TEST_JOBS=1 run_scenario_clean "$key" >"$MEMO_DIR/$i.out" 2>&1 || rc=$?; echo "$rc" > "$MEMO_DIR/$i.rc" ) &
   done
   wait
   # 동시에 돌다 실패한 시험은 다 끝난 뒤 혼자 한 번 더 — 시간 한도를 재는 시험이 다른 시험과 겹쳐 느려져
