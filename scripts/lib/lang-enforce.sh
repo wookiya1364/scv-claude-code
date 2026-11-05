@@ -4,7 +4,8 @@
 #
 #   scv_lang_rule_line <언어>                    → 매 턴 맨 앞에 실을 언어 규칙 한 줄 | 빈 값(언어 없음 · english)
 #   scv_lang_new_text <글 목록> <지난 id>          → "<마지막 id>\x1f<새 글>" — 지난 검사 뒤에 쓴 글만
-#   scv_lang_fix_note <언어> <줄 수> <mid|final> → 교정 문구 한 줄(언어 이름 포함)
+#   scv_lang_fix_note <언어> <줄 수> <mid|final> [<걸린 줄>] → 교정 문구 한 줄(언어 이름 · 걸린 줄 포함, 0.82.0)
+#   scv_lang_first_other <글> <언어>              → 설정 언어가 아닌 첫 줄(앞 60바이트) | 빈 값 (0.82.0)
 #   scv_lang_stop_decide <최종 답 줄 수> <이미 전달 0|1> → block | ok
 #   scv_lang_user_other <이번 턴 사용자 글>              → 1(사용자가 다른 언어를 요청하거나 다른 언어로 씀) | 0
 #   scv_lang_drop_machine <글>                    → 기계 글 블록(알림 · 시스템 안내 · 명령 기록)을 뺀 글 (0.81.5)
@@ -60,21 +61,48 @@ scv_lang_new_text() {
 }
 
 # @pure
-# 역할: 다른 언어 줄 수와 자리(중간 · 최종)를 받아 언어 이름을 넣은 교정 문구를 만든다
+# 역할: 다른 언어 줄 수와 자리(중간 · 최종), 걸린 줄 하나를 받아 언어 이름을 넣은 교정 문구를 만든다
 # 종류: 조립
 # 예: korean 3 mid → "[SCV 언어] 방금 쓴 글 중 3줄이 한국어가 아니다 — 다음 글부터 한국어로 써라(중간 보고 포함)."
 # 예: korean 2 final → "[SCV 언어] 최종 답 중 2줄이 한국어가 아니다 — 그 줄만 한국어로 고쳐 다시 써라."
+# 예: korean 1 mid "Next I'll run the tests." → "[SCV 언어] 방금 쓴 글 중 1줄이 한국어가 아니다(예: “Next I'll run the tests.”) — 다음 글부터 한국어로 써라(중간 보고 포함)."
 # 예: korean 0 mid → ""
-# <언어> <줄 수> <mid|final> → 한 줄 | 빈 값(줄 수 0 · 언어 없음).
+# <언어> <줄 수> <mid|final> [<걸린 줄>] → 한 줄 | 빈 값(줄 수 0 · 언어 없음).
+# 걸린 줄을 싣는 까닭(0.82.0): 줄 수만 말하면 모델이 '이미 한국어로 썼다'고 믿고 헛경고로 넘긴다 — 2026-11-05 한 세션에서
+# 중간 보고 영어 줄을 10번 넘게 잡았는데 한 번도 고쳐지지 않았다.
 scv_lang_fix_note() {
-  local lang="${1:-}" n="${2:-0}" where="${3:-mid}" name
+  local lang="${1:-}" n="${2:-0}" where="${3:-mid}" ex="${4:-}" name eg=""
   [[ "$n" =~ ^[0-9]+$ ]] && (( n > 0 )) || return 0
   case "$lang" in korean|ko) name="한국어" ;; ""|english|en) return 0 ;; *) name="$lang" ;; esac
+  [[ -n "$ex" ]] && eg="(예: “${ex}”)"
   if [[ "$where" == final ]]; then
-    printf '%s\n' "[SCV 언어] 최종 답 중 ${n}줄이 ${name}가 아니다 — 그 줄만 ${name}로 고쳐 다시 써라."
+    printf '%s\n' "[SCV 언어] 최종 답 중 ${n}줄이 ${name}가 아니다${eg} — 그 줄만 ${name}로 고쳐 다시 써라."
   else
-    printf '%s\n' "[SCV 언어] 방금 쓴 글 중 ${n}줄이 ${name}가 아니다 — 다음 글부터 ${name}로 써라(중간 보고 포함)."
+    printf '%s\n' "[SCV 언어] 방금 쓴 글 중 ${n}줄이 ${name}가 아니다${eg} — 다음 글부터 ${name}로 써라(중간 보고 포함)."
   fi
+}
+
+# @pure
+# 역할: 글에서 설정 언어가 아닌 첫 줄을 꺼내 앞 60바이트로 줄인다 — 교정 문구에 그대로 보여 주려고
+# 종류: 꺼내기
+# 예: $'결과를 봄\nNext I will run the tests now.' korean → "Next I will run the tests now."
+# 예: $'```\nconst value = computeSomething();\n```\n모두 통과함' korean → ""
+# 예: "모두 한국어로 씀" korean → ""
+# <글> <언어> → 줄 | 빈 값. 판정은 scv_lint_lang_turn 에 줄마다 맡긴다(같은 판정을 다시 만들지 않는다). 코드 블록 안은 건너뛴다.
+# 60바이트를 넘으면 자르고 '…'를 붙인다 — 끝에 걸친 한글 조각(바이트 일부)은 떼어 깨진 글자를 남기지 않는다.
+scv_lang_first_other() {
+  local text="${1:-}" lang="${2:-}" line t infence=0 cut
+  [[ -n "$text" ]] || return 0
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    t="${line#"${line%%[![:space:]]*}"}"
+    if [[ "$t" == '```'* ]]; then infence=$(( 1 - infence )); continue; fi
+    (( infence )) && continue
+    [[ -n "$(scv_lint_lang_turn "" "$t" "$lang")" ]] || continue
+    cut="$(LC_ALL=C; t2="$t"; if (( ${#t2} > 60 )); then t2="${t2:0:60}"
+      while [[ "$t2" == *[$'\x80'-$'\xff'] ]]; do t2="${t2%?}"; done; printf '%s…' "$t2"; else printf '%s' "$t2"; fi)"
+    printf '%s' "$cut"
+    return 0
+  done <<< "$text"
 }
 
 # @pure

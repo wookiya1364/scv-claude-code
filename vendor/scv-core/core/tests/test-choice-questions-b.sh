@@ -16,6 +16,8 @@
 # 픽스처는 중립 도구 이름(PickTool)만 쓴다 — 코어에는 호스트 도구 이름을 적지 않는다.
 # Run: bash core/tests/test-choice-questions.sh
 set -uo pipefail
+# (0.82.0+) 끝 보고 확인 범위 검사(SCV_FINISH_REPORT)는 이 시험의 대상이 아니다 — 꺼서 다른 검사만 본다(설정 읽기는 환경 변수를 먼저 본다).
+export SCV_FINISH_REPORT=off
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CORE=""
 for up in "$HERE/.." "$HERE/../.."; do

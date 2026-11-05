@@ -133,7 +133,7 @@ else
   fail "순서가 어긋났다 (지시=$n_dir 진단=$n_diag 위임=$n_del)"
 fi
 # (v0.66.0+) 블록마다 자기 스위치가 있다 — 실체 보여 주기 안내(SCV_SHOW_REAL)도 함께 꺼야 완전 침묵이다.
-new_proj t5e '{"SCV_PLAIN_LANGUAGE": "off", "SCV_ALWAYS_ON": "off", "SCV_DELEGATE_EFFORT": "off", "SCV_SHOW_REAL": "off"}'
+new_proj t5e '{"SCV_PLAIN_LANGUAGE": "off", "SCV_ALWAYS_ON": "off", "SCV_DELEGATE_EFFORT": "off", "SCV_SHOW_REAL": "off", "SCV_FINISH_REPORT": "off"}'
 [[ -z "$(run_hook "$P")" ]] && ok "블록 스위치 모두 off → 완전 침묵" || fail "블록 스위치 모두 off 인데 출력이 있다"
 
 echo "── [T6] 순수 함수는 순수하다 ──"
