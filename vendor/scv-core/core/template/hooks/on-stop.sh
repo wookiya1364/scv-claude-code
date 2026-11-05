@@ -269,7 +269,8 @@ if [[ -n "$_scv_lastmsg" && "${_scv_lint:-on}" == on && -f "$_scv_langlib" ]] &&
     [[ "$(scv_lang_user_other "${_scv_opener:-$(_scv_turn_prompt_wide)}")" == 1 ]] && _scv_ln=0
     _scv_d_lang="$_scv_active"
     declare -F scv_gates_delivered >/dev/null 2>&1 && _scv_d_lang="$(scv_gates_delivered lang "$_scv_active" "$_scv_sess" "$_scv_tok" "$_scv_grec")"
-    [[ "$(scv_lang_stop_decide "${_scv_ln:-0}" "$_scv_d_lang")" == block ]] && _scv_r_lang="$(scv_lang_fix_note "$_scv_lg" "$_scv_ln" final)"
+    [[ "$(scv_lang_stop_decide "${_scv_ln:-0}" "$_scv_d_lang")" == block ]] \
+      && _scv_r_lang="$(scv_lang_fix_note "$_scv_lg" "$_scv_ln" final "$(scv_lang_first_other "$_scv_win_end" "$_scv_lg")")"
   fi
 fi
 # 0.80.0+ — help 먼저(계획 help-first-gate-080): 도구 앞 검사(가드 gate-any)가 help 전의 도구를 막는다. 도구를 하나도 쓰지 않고
@@ -284,6 +285,39 @@ if [[ "$_scv_human" == 1 && "${_scv_open:-0}" != 1 && -f "$_scv_mp" ]]; then
     [[ "$_scv_r_help" == *[![:space:]]* ]] || _scv_r_help=""
   fi
 fi
+# 0.82.0+ — 끝 보고 확인 범위(계획 finish-report-evidence, 본문 contracts/finish-report.md): 이번 턴 도구 기록으로 근거 목록을 만들고,
+# 끝 답에 확인한 것 · 확인 못 한 것 · 제가 대신 정한 것(SCV 기록 · 질문만 쓴 턴은 '확인 범위' 한 줄)이 없거나, '없음'에 이유가 없거나,
+# '확인한 것'이 근거 목록에 없는 실행을 말하거나, 바꾼 시험의 실패를 못 봤는데 밝히지 않으면 한 턴에 한 번 막는다(다른 검사와 묶어서).
+# 근거 목록은 첫 멈춤에서 가림 필터를 거쳐 이 세션의 기록 자리(evidence.md)에 남긴다. 다른 세션이 보낸 메시지로 열린 턴 · 원본에서
+# 도구 호출을 못 찾는 원본(다른 호스트 모양)은 보지 않는다. 끄기: 설정 SCV_FINISH_REPORT=off — 이 구간 전과 같다.
+_scv_r_finish=""
+_scv_frlib="$_scv_core/scripts/lib/finish-report.sh"
+if [[ "$_scv_human" == 1 && "${_scv_open:-0}" != 1 && -n "$_scv_lastmsg" && -f "$_scv_frlib" && -f "${TRANSCRIPT:-}" ]] \
+   && declare -F settings_get >/dev/null 2>&1; then
+  _scv_fon="$(settings_get SCV_FINISH_REPORT 2>/dev/null | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]' || true)"
+  # shellcheck disable=SC1090
+  if [[ "${_scv_fon:-on}" != off ]] && source "$_scv_frlib" 2>/dev/null; then
+    _scv_fsz="$(wc -c < "$TRANSCRIPT" 2>/dev/null | tr -d '[:space:]')"; [[ "$_scv_fsz" =~ ^[0-9]+$ ]] || _scv_fsz=0
+    if (( _scv_fsz > 4194304 )); then _scv_fwin="$(tail -c 4194304 "$TRANSCRIPT" 2>/dev/null | sed 1d)"
+    else _scv_fwin="$(cat "$TRANSCRIPT" 2>/dev/null)"; fi
+    _scv_fled="$(scv_evidence_build "$(scv_turn_group "$_scv_fwin")")"
+    _scv_fneed="$(scv_finish_needed "$_scv_fled")"
+    if [[ "$_scv_fneed" != none ]]; then
+      _scv_flg="$(settings_get SCV_LANG 2>/dev/null | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]' || true)"
+      _scv_fchk="$(scv_finish_check "$(scv_finish_scan "$_scv_win_end" "$_scv_flg")" "$_scv_fled" "$(scv_evidence_test_first "$_scv_fled")" "$_scv_fneed")"
+      _scv_d_finish="$_scv_active"
+      declare -F scv_gates_delivered >/dev/null 2>&1 && _scv_d_finish="$(scv_gates_delivered finish "$_scv_active" "$_scv_sess" "$_scv_tok" "$_scv_grec")"
+      [[ -n "$_scv_fchk" && "$_scv_d_finish" != 1 ]] && _scv_r_finish="$(scv_finish_note "$_scv_fchk" "$_scv_flg")"
+      # 근거 목록 기록: 첫 멈춤에서만(막혀 이어진 멈춤은 같은 턴), 가림 필터를 거쳐, 링크가 아닌 자리에만.
+      _scv_fev="$_scv_tdir/evidence.md"; _scv_fred="$_scv_core/scripts/journal-append.sh"
+      if [[ "$_scv_active" != 1 && -f "$_scv_fred" && ! -L "$_scv_fev" ]] && [[ "$_scv_tdir" == "$_scv_jdir" || ( ! -L "$_scv_jdir/.help-turns" && ! -L "$_scv_tdir" ) ]] \
+         && mkdir -p "$_scv_tdir" 2>/dev/null; then
+        { printf '\n## %s\n\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"; scv_evidence_render "$_scv_fled" "$_scv_flg"; printf '\n'; } \
+          | bash "$_scv_fred" --redact-only >> "$_scv_fev" 2>/dev/null || true
+      fi
+    fi
+  fi
+fi
 # 막은 검사들 → 막는 이유 하나 · 이번 턴 전달 기록(막을 때만 쓴다, 첫 멈춤에서는 같은 세션의 지난 기록을 지운다).
 # 순수부가 없으면 이 기능 전처럼 첫 이유 하나만.
 _scv_blocked=""
@@ -292,8 +326,9 @@ _scv_blocked=""
 [[ -n "$_scv_r_choice" ]] && _scv_blocked="${_scv_blocked:+$_scv_blocked,}choice"
 [[ -n "$_scv_r_lang" ]] && _scv_blocked="${_scv_blocked:+$_scv_blocked,}lang"
 [[ -n "$_scv_r_help" ]] && _scv_blocked="${_scv_blocked:+$_scv_blocked,}help"
+[[ -n "$_scv_r_finish" ]] && _scv_blocked="${_scv_blocked:+$_scv_blocked,}finish"
 if declare -F scv_gates_reason >/dev/null 2>&1 && declare -F scv_gates_record >/dev/null 2>&1 && declare -F scv_gates_drop >/dev/null 2>&1; then
-  _scv_block_reason="$(scv_gates_reason "$_scv_r_help" "$_scv_r_prompt" "$_scv_r_principle" "$_scv_r_choice" "$_scv_r_lang")"
+  _scv_block_reason="$(scv_gates_reason "$_scv_r_help" "$_scv_r_prompt" "$_scv_r_principle" "$_scv_r_choice" "$_scv_r_lang" "$_scv_r_finish")"
   _scv_gfile="$_scv_tdir/.help-turn-gates"
   _scv_newrec="$(scv_gates_record "$_scv_sess" "$_scv_tok" "$_scv_grec" "$_scv_active" "$_scv_blocked")"
   # 첫 멈춤은 같은 세션의 지난 기록을 먼저 지운다 — 막으면서 새 기록 쓰기에 실패해도 지난 턴 기록이 이번 것으로 남지 않게
@@ -320,7 +355,7 @@ if declare -F scv_gates_reason >/dev/null 2>&1 && declare -F scv_gates_record >/
     fi
   fi
 else
-  _scv_block_reason="${_scv_r_help:-${_scv_r_prompt:-${_scv_r_principle:-${_scv_r_choice:-$_scv_r_lang}}}}"
+  _scv_block_reason="${_scv_r_help:-${_scv_r_prompt:-${_scv_r_principle:-${_scv_r_choice:-${_scv_r_lang:-$_scv_r_finish}}}}}"
 fi
 _scv_emit_block() {
   [[ -n "${_scv_block_reason:-}" ]] || return 0
