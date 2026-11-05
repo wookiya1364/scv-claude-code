@@ -2,6 +2,11 @@
 
 All notable changes to SCV Core are documented here.
 
+## [0.82.1] - 2026-11-05
+
+### Fixed
+- 매 턴 글 상한 시험(`test-instruction-diet` T1)을 10,800B → 11,000B 로 올렸다(사용자 결정). 0.82.0 의 확인 범위 안내 줄이 더해져 코덱스 래퍼 환경에서 10,821B 가 되어 코덱스 코어 동기화가 멈췄다. 기능 코드는 그대로다.
+
 ## [0.82.0] - 2026-11-05
 
 ### Added
