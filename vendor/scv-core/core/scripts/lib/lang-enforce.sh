@@ -7,6 +7,7 @@
 #   scv_lang_fix_note <언어> <줄 수> <mid|final> → 교정 문구 한 줄(언어 이름 포함)
 #   scv_lang_stop_decide <최종 답 줄 수> <이미 전달 0|1> → block | ok
 #   scv_lang_user_other <이번 턴 사용자 글>              → 1(사용자가 다른 언어를 요청하거나 다른 언어로 씀) | 0
+#   scv_lang_drop_machine <글>                    → 기계 글 블록(알림 · 시스템 안내 · 명령 기록)을 뺀 글 (0.81.5)
 #
 # 판정 자체(다른 언어 줄 세기)는 lib/help-state.sh 의 scv_lint_lang_turn 이 한다 — 여기서 다시 만들지 않는다.
 # 꺾쇠 글자는 쓰지 않는다 — 순수성 검사가 리다이렉션으로 본다.
@@ -90,6 +91,26 @@ scv_lang_stop_decide() {
 }
 
 # @pure
+# 역할: 사람이 쓰지 않은 기계 글 블록(작업 완료 알림 · 시스템 안내 · 명령 기록 · 이벤트)을 지운다 — 언어 판정이 사람 글만 보게
+# 종류: 다듬기
+# 예: "<task-notification><summary>Background command completed</summary></task-notification>" → ""
+# 예: "<system-reminder>## You are a session started from another session</system-reminder>잡몹 고치기" → "잡몹 고치기"
+# 예: "영어로 답해 줘" → "영어로 답해 줘"
+# <글> → 블록을 뺀 글. 닫는 꼬리표가 없으면(앞 4000바이트에서 잘림) 여는 꼬리표부터 끝까지 뺀다.
+# 계기(0.81.5): 알림 · 세션 넘김 안내(영어)가 이번 턴 사용자 글로 잡혀 '사용자가 영어로 썼다'가 되고, 언어 검사가 꺼졌다.
+scv_lang_drop_machine() {
+  local p="${1:-}" lt=$'\x3c' gt=$'\x3e' t pre rest
+  for t in task-notification system-reminder local-command-caveat local-command-stdout local-command-stderr \
+           command-name command-message command-args side-sessions-event ci-monitor-event artifact-view-context; do
+    while [[ "$p" == *"$lt$t"* ]]; do
+      pre="${p%%"$lt$t"*}"; rest="${p#*"$lt$t"}"
+      if [[ "$rest" == *"$lt/$t$gt"* ]]; then p="$pre${rest#*"$lt/$t$gt"}"; else p="$pre"; fi
+    done
+  done
+  printf '%s' "$p"
+}
+
+# @pure
 # 역할: 이번 턴 사용자 글이 다른 언어를 요청하거나 다른 언어로 쓰였는지 1 또는 0 으로 판정한다
 # 종류: 판정/gate
 # 예: "영어로 답해 줘" → "1"
@@ -100,7 +121,7 @@ scv_lang_stop_decide() {
 # 다른 언어로 쓴 글: 글자 15개 이상에 한글이 20% 미만. 언어 요청: '영어로' · '일본어로' · 'in English' 같은 말. 앞 4000바이트만 본다.
 scv_lang_user_other() {
   local p="${1:-}" h l
-  p="${p:0:4000}"
+  p="$(scv_lang_drop_machine "${p:0:4000}")"
   case "$p" in
     *영어로*|*일본어로*|*중국어로*|*"in English"*|*"in english"*|*"英語で"*) printf '1'; return 0 ;;
   esac
