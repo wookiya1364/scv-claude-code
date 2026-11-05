@@ -108,6 +108,29 @@ o2="$(lang_hook "$R2" "$TR2")"; o3="$(stop_hook "$R2" "$TR2" "$EN2"$'\n'"$EN3" f
 [[ "$c" == *"1줄이 한국어가 아니다"* && -z "$o2" && "$o3" != *"[SCV 언어]"* ]] \
   && ok "T9 긴 턴: 400줄 밖 요청이어도 새 글 교정 · 다른 언어 요청은 그대로 존중" || bad "T9 [$o] [$o2] [$o3]"
 
+# T10 — 기계 글은 사용자 글이 아니다(0.81.5): 작업 완료 알림 · 세션 넘김 안내(영어)로 열린 턴도 교정하고, 진짜 요청은 존중
+#   실제 세션(2026-11-05)에서 이 두 꼴의 영어 중간 보고가 교정 없이 지나갔다 — 알림 · 안내가 '사용자가 영어로 씀'으로 잡혔다.
+NOTE=$'<task-notification>\n<task-id>bkf91hq66</task-id>\n<status>completed</status>\n<summary>Background command "Run unit tests, typecheck, and related E2E in the background" completed (exit code 0)</summary>\n</task-notification>'
+HAND=$'<system-reminder>\n## You are a session started from another session\n\nYour first message is the task another session gave you. Do exactly that; list unrelated problems as follow-ups instead of fixing them.\n</system-reminder>\n\n잡몹 배수 마무리: 1. 아직 답을 못 받은 결정을 다시 묻기 2. 시험 기준 고치기'
+R="$(new_repo t10 korean)"; TR="$WORK/t10.jsonl"
+{ jl_user "만들어 줘"; jl_tool; jl_user "$NOTE"; jl_asst "$EN1" n1; jl_tool; } > "$TR"
+o="$(lang_hook "$R" "$TR")"; c="$(jq -r '.hookSpecificOutput.additionalContext // empty' <<<"$o" 2>/dev/null)"
+R2="$(new_repo t10b korean)"; TR2="$WORK/t10b.jsonl"
+{ jl_user "$HAND"; jl_asst "$EN2" h1; jl_tool; } > "$TR2"
+o2="$(lang_hook "$R2" "$TR2")"; c2="$(jq -r '.hookSpecificOutput.additionalContext // empty' <<<"$o2" 2>/dev/null)"
+R3="$(new_repo t10c korean)"; TR3="$WORK/t10c.jsonl"
+{ jl_user "$NOTE"; jl_asst "$EN3" f1; } > "$TR3"
+o3="$(stop_hook "$R3" "$TR3" "$EN3" false)"
+R4="$(new_repo t10d korean)"; TR4="$WORK/t10d.jsonl"
+{ jl_user "${HAND%%잡몹*}Please answer this one in English."; jl_asst "$EN1" r1; jl_tool; } > "$TR4"
+o4="$(lang_hook "$R4" "$TR4")"
+[[ "$c" == *"1줄이 한국어가 아니다"* && "$c2" == *"1줄이 한국어가 아니다"* && "$o3" == *"[SCV 언어]"* && -z "$o4" ]] \
+  && ok "T10 알림 · 넘김 안내로 열린 턴도 교정(도구 뒤 · 최종 답) · 안내 뒤 진짜 영어 요청은 존중" || bad "T10 [$o] [$o2] [$o3] [$o4]"
+lt=$'\x3c'
+[[ -z "$(scv_lang_drop_machine "$NOTE")" && "$(scv_lang_drop_machine "${lt}/system-reminder> 한국어 ${lt}system-reminder>cut")" == "${lt}/system-reminder> 한국어 " \
+   && "$(scv_lang_drop_machine "영어로 답해 줘")" == "영어로 답해 줘" && "$(scv_lang_user_other "$NOTE")" == 0 ]] \
+  && ok "T10 기계 글 지우기(알림 통째 · 닫힘 없는 꼬리 · 사람 글 그대로 · 순서 뒤집힌 꼬리표도 끝남)" || bad "T10 지우기"
+
 # 순수 함수 직접 확인
 [[ "$(scv_lang_stop_decide 2 0)" == block && "$(scv_lang_stop_decide 2 1)" == ok && -z "$(scv_lang_rule_line english)" ]] \
   && ok "판정 함수(막기 한 번 · english 무동작)" || bad "판정 함수"
