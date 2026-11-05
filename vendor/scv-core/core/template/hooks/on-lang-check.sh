@@ -69,7 +69,8 @@ _scv_n="$(scv_lint_lang_turn "" "$_scv_text" "$_scv_lang" | sed -n 's/^lang-mism
 # 사용자가 이 턴에 다른 언어를 요청했거나 다른 언어로 썼으면 교정하지 않는다(SCV.md Top-level rules 7조).
 # 어긋난 줄이 있을 때만 찾는다 — 긴 턴에서 넓혀 찾는 비용은 이때만 든다(0.81.2+).
 [[ "$(scv_lang_user_other "$(_scv_turn_prompt_wide)")" == 1 ]] && exit 0
-_scv_note="$(scv_lang_fix_note "$_scv_lang" "${_scv_n:-0}" mid)"
+# 걸린 줄 하나를 함께 싣는다(0.82.0+) — 줄 수만 말하면 모델이 헛경고로 여기고 넘긴다.
+_scv_note="$(scv_lang_fix_note "$_scv_lang" "${_scv_n:-0}" mid "$(scv_lang_first_other "$_scv_text" "$_scv_lang")")"
 [[ -n "$_scv_note" ]] || exit 0
 jq -cn --arg c "$_scv_note" '{hookSpecificOutput:{hookEventName:"PostToolUse",additionalContext:$c}}' 2>/dev/null || true
 exit 0

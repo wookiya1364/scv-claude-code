@@ -3,10 +3,14 @@
 #
 # 매 턴 언어 줄 · 도구 뒤 교정 · 같은 글 다시 교정 안 함 · 최종 답 막기(한 번만) · 통과해야 하는 경우 · 실패와 속도.
 set -euo pipefail
+# (0.82.0+) 끝 보고 확인 범위 검사(SCV_FINISH_REPORT)는 이 시험의 대상이 아니다 — 꺼서 다른 검사만 본다(설정 읽기는 환경 변수를 먼저 본다).
+export SCV_FINISH_REPORT=off
 
 CORE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROMPT_HOOK="$CORE/template/hooks/on-user-prompt.sh"; STOP_HOOK="$CORE/template/hooks/on-stop.sh"
 LANG_HOOK="$CORE/template/hooks/on-lang-check.sh"
+# shellcheck source=../scripts/lib/help-state.sh
+source "$CORE/scripts/lib/help-state.sh"   # scv_lint_lang_turn — scv_lang_first_other 가 줄마다 맡긴다(0.82.0)
 # shellcheck source=../scripts/lib/lang-enforce.sh
 source "$CORE/scripts/lib/lang-enforce.sh"
 fail=0
@@ -130,6 +134,24 @@ lt=$'\x3c'
 [[ -z "$(scv_lang_drop_machine "$NOTE")" && "$(scv_lang_drop_machine "${lt}/system-reminder> 한국어 ${lt}system-reminder>cut")" == "${lt}/system-reminder> 한국어 " \
    && "$(scv_lang_drop_machine "영어로 답해 줘")" == "영어로 답해 줘" && "$(scv_lang_user_other "$NOTE")" == 0 ]] \
   && ok "T10 기계 글 지우기(알림 통째 · 닫힘 없는 꼬리 · 사람 글 그대로 · 순서 뒤집힌 꼬리표도 끝남)" || bad "T10 지우기"
+
+# T11 — 교정 문구에 걸린 줄을 싣는다(0.82.0): 줄 수만 말하면 모델이 '이미 한국어로 썼다'고 믿고 넘긴다
+#   실제 세션(2026-11-05)에서 영어 중간 보고를 10번 넘게 잡았지만, 문구가 줄 수만 말해 한 번도 고쳐지지 않았다.
+R="$(new_repo t11 korean)"; TR="$WORK/t11.jsonl"
+{ jl_user "만들어 줘"; jl_asst "결과를 봄"$'\n'"$EN1" g1; jl_tool; } > "$TR"
+o="$(lang_hook "$R" "$TR")"; c="$(jq -r '.hookSpecificOutput.additionalContext // empty' <<<"$o" 2>/dev/null)"
+R2="$(new_repo t11b korean)"; TR2="$WORK/t11b.jsonl"; FIN="**결과**"$'\n'"- $EN2"
+{ jl_user "만들어 줘"; jl_asst "$FIN" g2; } > "$TR2"
+r="$(jq -r '.reason // empty' <<<"$(stop_hook "$R2" "$TR2" "$FIN" false)" 2>/dev/null)"
+L2="- $EN2"
+[[ "$c" == *"1줄이 한국어가 아니다(예: “${EN1:0:60}…”) — "* && "$r" == *"(예: “${L2:0:60}…”)"* ]] \
+  && ok "T11 걸린 줄을 교정 문구에 실음(도구 뒤 · 최종 답, 60바이트에서 자름)" || bad "T11 [$c] [$r]"
+A58="abcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefgh"
+[[ "$(scv_lang_first_other "${A58}한글 tail words here" korean)" == "${A58}…" \
+   && -z "$(scv_lang_first_other $'```\nconst value = computeSomething();\n```\n모두 통과함' korean)" \
+   && -z "$(scv_lang_first_other "모두 한국어로 씀" korean)" && -z "$(scv_lang_first_other "$EN1" english)" \
+   && "$(scv_lang_fix_note korean 1 mid "")" == "[SCV 언어] 방금 쓴 글 중 1줄이 한국어가 아니다 — 다음 글부터 한국어로 써라(중간 보고 포함)." ]] \
+  && ok "T11 걸린 줄 꺼내기(자를 때 한글 조각 뗌 · 코드 블록 건너뜀 · 한국어 · english 는 빈 값 · 예 없으면 옛 문구)" || bad "T11 꺼내기"
 
 # 순수 함수 직접 확인
 [[ "$(scv_lang_stop_decide 2 0)" == block && "$(scv_lang_stop_decide 2 1)" == ok && -z "$(scv_lang_rule_line english)" ]] \

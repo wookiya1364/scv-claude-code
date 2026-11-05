@@ -52,6 +52,13 @@ if [[ -f "$_scv_langlib" ]]; then
   # shellcheck disable=SC1090
   source "$_scv_langlib" 2>/dev/null && scv_lang_rule_line "$(_scv_read SCV_LANG | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]')" 2>/dev/null || true
 fi
+# 0.82.0+ — 끝 보고 확인 범위 안내 한 줄(계획 finish-report-evidence, 본문 contracts/finish-report.md). 종료 훅이 빠진 줄을 한 턴에
+# 한 번 막는다 — 미리 알려 막힘을 줄인다. 설정 SCV_FINISH_REPORT=off 면 싣지 않는다(이 구간을 지운 훅과 출력이 같다).
+_scv_frlib="$(dirname "$_scv_langlib")/finish-report.sh"
+if [[ -f "$_scv_frlib" && "$(_scv_read SCV_FINISH_REPORT | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]')" != off ]]; then
+  # shellcheck disable=SC1090
+  source "$_scv_frlib" 2>/dev/null && scv_finish_rule_line "$(_scv_read SCV_LANG | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]')" 2>/dev/null || true
+fi
 
 _scv_plain="$(_scv_read SCV_PLAIN_LANGUAGE | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]' || true)"
 if [[ "${_scv_plain:-on}" != "off" ]]; then

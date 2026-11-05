@@ -33,8 +33,10 @@ order (4) below is a reference, not its own precedence).
    second place only refers to the first. Source: the per-turn hook's routing comment
    (`core/template/hooks/on-user-prompt.sh`).
 5. **No completion without evidence** — say what was verified, what is estimated and what
-   is unverified, and never mix the three. Source: the help protocol, "Facts and estimates
-   never mix".
+   is unverified, and what you decided for the user, and never mix them. A turn that used
+   tools ends its final report with those lines, checked against the evidence list the stop
+   hook builds from this turn's tool calls. Source: `core/contracts/finish-report.md` (0.82.0+),
+   with the help protocol's "Facts and estimates never mix".
 6. **Pure functions in a pipeline** — every plan is designed and implemented as pure steps
    composed left to right, with side effects only at the ends. Source: the promote
    protocol's `## 순수함수 · 파이프라인` requirement, the work protocol's implementation
