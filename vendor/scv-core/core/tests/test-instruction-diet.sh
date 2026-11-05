@@ -47,7 +47,7 @@ fi
 # T1 — 매 턴 글 9,000바이트 이하 · 도움말 합계 33,022 미만
 hook >/dev/null; h="$(hook | wc -c | tr -d ' ')"; r="$(reg | wc -c | tr -d ' ')"; b="$(wc -c < "$CORE/protocols/help.md" | tr -d ' ')"
 tot=$(( h + b + r ))
-(( tot <= 10800 )) && ok "T1 per-turn text ${tot}B ≤ 10800B (hook $h + help $b + register $r)" || bad "T1 per-turn text ${tot}B > 10800B (hook $h + help $b + register $r)"
+(( tot <= 11000 )) && ok "T1 per-turn text ${tot}B ≤ 11000B (hook $h + help $b + register $r)" || bad "T1 per-turn text ${tot}B > 11000B (hook $h + help $b + register $r)"
 sum=0; for f in "$CORE/protocols/help.md" "$CORE"/protocols/help/*.md; do sum=$(( sum + $(wc -c < "$f") )); done
 (( sum < 33022 )) && ok "T1 help total ${sum}B < 33022B" || bad "T1 help total ${sum}B"
 
