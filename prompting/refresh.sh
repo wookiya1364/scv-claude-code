@@ -48,5 +48,7 @@ awk -F'\t' -v OFS='\t' -v today="$TODAY" -v dir="$DIR" '
   { cmd = "head -c 400 \"" dir "/" $3 "\" 2>/dev/null | grep -c \"^Fetched: " today "$\""; cmd | getline n; close(cmd)
     if (n > 0) $5 = today; print }
 ' "$INDEX" > "$ntmp" && mv -f "$ntmp" "$INDEX"
+# 원문이 바뀌었을 수 있으니 발췌본(excerpt-*.md)을 다시 뽑는다 — help 는 발췌본이 있으면 그것을 읽는다.
+bash "$DIR/excerpt.sh" || bad=$((bad + 1))
 echo "refresh: $ok fetched, $bad failed"
 (( bad == 0 ))
