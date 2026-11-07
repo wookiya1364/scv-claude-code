@@ -9,6 +9,7 @@
 # 로 읽히는 문장이 하나라도 생기면 모델은 점검표처럼 칸을 채우려 든다.
 
 set -uo pipefail
+export SCV_STOP_MODE=block   # 0.83.0+ — 이 시험은 막힘(block)을 본다. 기본(notice)은 test-stop-notice.sh
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CORE=""

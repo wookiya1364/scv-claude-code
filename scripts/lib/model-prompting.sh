@@ -151,6 +151,20 @@ scv_mp_safe_name() {
 }
 
 # @pure
+# 역할: 가이드 원문 이름과 그 발췌본이 있는지로, help 가 읽게 할 파일 이름을 고른다
+# 종류: 판정
+# 예: best-practices.md 1 → "excerpt-best-practices.md"
+# 예: best-practices.md 0 → "best-practices.md"
+# <원문 이름> <발췌본 "excerpt-<원문 이름>" 이 폴더에 평범한 파일로 있나 0|1> → 읽힐 이름.
+# v0.83.0+: 발췌본은 래퍼가 원문에서 기계적으로 뽑아 싣는 것(요구 항목 인용이 든 구역만, 원문 그대로) —
+# 압축 · 세션 시작마다 다시 읽는 양을 줄인다. 원문 사본은 그대로 두고 검사의 기준으로 남는다.
+scv_mp_read_name() {
+  local n="${1:-}" has="${2:-0}"
+  [[ -n "$n" ]] || return 0
+  if [[ "$has" == "1" ]]; then printf 'excerpt-%s' "$n"; else printf '%s' "$n"; fi
+}
+
+# @pure
 # 역할: 가져온 날짜부터 오늘까지 지난 일수를 센다(형식 오류면 빈 값)
 # 종류: 세기
 # 예: 2026-01-01 2026-01-11 → "10"

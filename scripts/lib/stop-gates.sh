@@ -96,3 +96,34 @@ scv_gates_reason() {
   done
   printf '%s' "$out"
 }
+
+# @pure
+# 역할: 설정 값으로 종료 검사가 어긋난 답을 어떻게 다룰지(막기 · 다음 턴 안내) 정한다
+# 종류: 판정
+# 예: "" → "notice"
+# 예: block → "block"
+# 예: "Block " → "block"
+# <설정 SCV_STOP_MODE 값> → block | notice. 0.83.0+ 기본은 notice: 막으면 호스트가 모델에게 다시 쓰게 하고, 다시 쓴 답이 인용 ·
+# 확인 범위를 되풀이해 같은 답이 두 번 보였다(실제 세션 186턴 중 78턴, 다시 쓴 답 114개 중 82개가 인용을 되풀이). notice 는
+# 막지 않고 어긋난 점을 다음 사람 턴 첫 안내로 넘긴다. block 이면 0.82 까지처럼 그 자리에서 막는다.
+scv_stop_mode() {
+  local v="${1:-}"
+  v="${v//[[:space:]]/}"
+  case "$v" in [Bb][Ll][Oo][Cc][Kk]) printf 'block' ;; *) printf 'notice' ;; esac
+}
+
+# @pure
+# 역할: 막는 이유들을 다음 턴 안내 줄들로 바꾼다
+# 종류: 변환
+# 예: $'[SCV 확인 범위] 줄이 빠졌다\n[SCV 선택지] 선택 창으로' → $'[SCV 직전 답] [SCV 확인 범위] 줄이 빠졌다\n[SCV 직전 답] [SCV 선택지] 선택 창으로\n[SCV 직전 답] 이번 답부터 지켜라 — 직전 답을 다시 쓰거나 고쳐 쓰지 말 것.'
+# 예: "" → ""
+# <막는 이유(줄마다 하나)> → 안내 줄들. 빈 줄은 뺀다. 이유가 없으면 빈 값.
+scv_stop_notice() {
+  local r="${1:-}" line out="" nl=$'\n' p="[SCV 직전 답] "
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ "$line" == *[![:space:]]* ]] || continue
+    out+="$p$line$nl"
+  done <<< "$r"
+  [[ -n "$out" ]] || return 0
+  printf '%s' "$out${p}이번 답부터 지켜라 — 직전 답을 다시 쓰거나 고쳐 쓰지 말 것."
+}
