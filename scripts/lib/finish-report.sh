@@ -169,10 +169,11 @@ scv_finish_needed() {
 # 예: $'**결과**\n- 확인한 것: 시험 실행 → 3개 통과\n- 확인 못 한 것: 없음 — 바꾼 갈래 모두 돌림\n- 제가 대신 정한 것: 이름' korean → $'verified\x1f시험 실행 → 3개 통과\nunverified\x1f없음 — 바꾼 갈래 모두 돌림\ndecided\x1f이름'
 # 예: $'- Verification scope: records only' english → $'scope\x1frecords only'
 # 예: "**이 답의 확인 범위**" korean → ""
+# 예: $'**확인한 것**\n- 시험 실행 → 통과\n- 화면 확인\n\n**확인 못 한 것**\n- 폰' korean → $'verified\x1f시험 실행 → 통과 / 화면 확인\nunverified\x1f폰'
 # <끝 답> <언어> → "칸\x1f내용" 줄들. 줄 머리의 불릿 · 굵게는 무시하고, 이름 뒤 쌍점이 있어야 칸이다. 바로 아래 들여 쓴 줄은 그 칸의
 # 내용에 ' / ' 로 잇는다. 코드 블록 안은 보지 않는다. korean 이 아닌 언어는 english 이름으로 찾는다.
 scv_finish_scan() {
-  local ans="${1:-}" lang="${2:-}" us=$'\x1f' nl=$'\n' line t slot="" cur="" out="" infence=0 lv lu ld ls body a b
+  local ans="${1:-}" lang="${2:-}" us=$'\x1f' nl=$'\n' line t slot="" cur="" out="" infence=0 lv lu ld ls body a b hd=0 h
   case "$lang" in
     korean|ko) lv="확인한 것"; lu="확인 못 한 것"; ld="제가 대신 정한 것"; ls="확인 범위" ;;
     *) lv="Verified"; lu="Not verified"; ld="Decided for you"; ls="Verification scope" ;;
@@ -185,8 +186,29 @@ scv_finish_scan() {
     if [[ -n "$slot" && "$line" == [[:space:]]* && -n "$t" ]]; then
       t="${t#- }"; t="${t#\* }"; cur+=" / ${t//\*\*/}"; continue
     fi
+    # 0.83.0+ — 제목형(쌍점 없는 '**확인한 것**' · '### 확인한 것' 한 줄) 아래 목록은 그 칸의 내용이다. 실제 세션에서 막힘 45번 중
+    # 31번이 이 모양을 '빠진 줄'로 본 오탐이었다. 제목 바로 뒤 빈 줄은 건너뛰고, 목록이 끝나면(빈 줄 · 다른 줄) 칸을 닫는다.
+    if (( hd )); then
+      if [[ -z "$t" && -z "$cur" ]]; then continue; fi
+      if [[ "$t" == "- "* || "$t" == "* "* ]]; then
+        h="${t#- }"; h="${h#\* }"; h="${h//\*\*/}"
+        # 목록 줄이 그 자체로 칸('확인한 것: …')이면 제목 아래 목록이 아니다 — 아래 일반 판정으로 넘긴다
+        case "$h" in
+          "${lv}:"*|"${lv}："*|"${lu}:"*|"${lu}："*|"${ld}:"*|"${ld}："*|"${ls}:"*|"${ls}："*|"확인하지 못한 것:"*|"대신 정한 것:"*) hd=0; [[ -n "$cur" ]] || slot="" ;;
+          *) if [[ -z "$cur" ]]; then cur="$h"; else cur+=" / $h"; fi; continue ;;
+        esac
+      fi
+      hd=0
+    fi
     if [[ -n "$slot" ]]; then out+="$slot$us$cur$nl"; slot=""; cur=""; fi
     t="${t#- }"; t="${t#\* }"; t="${t//\*\*/}"
+    # 제목형: 머리 '#' 를 떼고 이름만 남으면(쌍점 없음) 제목으로 본다
+    h="$t"; while [[ "$h" == "#"* ]]; do h="${h#\#}"; done; h="${h#"${h%%[![:space:]]*}"}"; h="${h%"${h##*[![:space:]]}"}"
+    case "$h" in
+      "$lu"|"확인하지 못한 것") slot=unverified; hd=1; cur=""; continue ;;
+      "$lv") slot=verified; hd=1; cur=""; continue ;;
+      "$ld"|"대신 정한 것") slot=decided; hd=1; cur=""; continue ;;
+    esac
     body=""
     # 변수 이름은 중괄호로 감싼다 — 바로 뒤의 전각 쌍점(：)을 이름의 일부로 읽는 셸이 있다.
     case "$t" in

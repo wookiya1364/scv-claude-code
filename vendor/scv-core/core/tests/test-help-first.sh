@@ -3,6 +3,7 @@
 #
 # help 전 도구 거절 · help 뒤 통과 · 다음 턴은 다시 · 다른 SCV 액션 · 통과 도구 목록 · 제외 · 도구 없는 턴 · 매 턴 지시.
 set -euo pipefail
+export SCV_STOP_MODE=block   # 0.83.0+ — 이 시험은 막힘(block)을 본다. 기본(notice)은 test-stop-notice.sh
 
 CORE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GUARD="$CORE/template/hooks/guard.sh"; PROMPT_HOOK="$CORE/template/hooks/on-user-prompt.sh"

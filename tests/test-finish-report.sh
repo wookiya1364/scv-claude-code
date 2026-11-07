@@ -4,6 +4,7 @@
 # 매 턴 안내 · 세 줄 없으면 한 번 막기 · 짧은 턴 한 줄 · 도구 없는 턴 · '없음'의 이유 · 근거 없는 확인 · 근거 목록 판정 · 실패 먼저 ·
 # 묶어 막기 · 끄기 · 영어 · 실제 기록 재현(사본이 있을 때만) · 속도 · 근거 목록 파일 · 다른 모양 원본.
 set -euo pipefail
+export SCV_STOP_MODE=block   # 0.83.0+ — 이 시험은 막힘(block)을 본다. 기본(notice)은 test-stop-notice.sh
 
 CORE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROMPT_HOOK="$CORE/template/hooks/on-user-prompt.sh"; STOP_HOOK="$CORE/template/hooks/on-stop.sh"

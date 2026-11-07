@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export SCV_STOP_MODE=block   # 0.83.0+ — 이 시험은 막힘(block)을 본다. 기본(notice)은 test-stop-notice.sh
 # test-rewrite-stays-current.sh — 다시 쓴 요청이 일 내내 맞게 (v0.65.0+).
 # scv-test: serial — 시간 한도를 잰다(다른 시험과 겹치면 흔들림). run-focused.sh 가 끝에 혼자 돌린다.
 #
