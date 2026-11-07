@@ -251,6 +251,15 @@ case "$cmd" in
       CPATH="$GUIDES_DIR/$CFILE"
       [[ -f "$CPATH" && ! -L "$CPATH" ]] || CPATH=""   # 공통 원문이 없으면 모델 원문만
     fi
+    # v0.83.0+: 원문 옆에 발췌본(excerpt-<원문>)이 평범한 파일로 있으면 그것을 읽게 한다 — 원문이 있을 때만, 링크는 무시.
+    if [[ -n "$MPATH" && -z "$MISSING" ]]; then
+      _h=0; [[ -f "$GUIDES_DIR/excerpt-$MFILE" && ! -L "$GUIDES_DIR/excerpt-$MFILE" ]] && _h=1
+      MPATH="$GUIDES_DIR/$(scv_mp_read_name "$MFILE" "$_h")"
+    fi
+    if [[ -n "$CPATH" ]]; then
+      _h=0; [[ -f "$GUIDES_DIR/excerpt-$CFILE" && ! -L "$GUIDES_DIR/excerpt-$CFILE" ]] && _h=1
+      CPATH="$GUIDES_DIR/$(scv_mp_read_name "$CFILE" "$_h")"
+    fi
     HAVE=0; [[ -n "$ROW" ]] && HAVE=1
     DEC="$(scv_mp_decision "$HAVE" "$RECORD" "$NONCE" "$ID")"
     # v0.65.0+ — 이 세션의 대화 기록이 있으면 그것으로 정한다: 마지막 압축 경계 뒤에 이 모델의 읽음 표시 명령이 있으면 loaded.
