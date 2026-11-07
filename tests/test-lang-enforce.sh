@@ -3,6 +3,7 @@
 #
 # 매 턴 언어 줄 · 도구 뒤 교정 · 같은 글 다시 교정 안 함 · 최종 답 막기(한 번만) · 통과해야 하는 경우 · 실패와 속도.
 set -euo pipefail
+export SCV_STOP_MODE=block   # 0.83.0+ — 이 시험은 막힘(block)을 본다. 기본(notice)은 test-stop-notice.sh
 # (0.82.0+) 끝 보고 확인 범위 검사(SCV_FINISH_REPORT)는 이 시험의 대상이 아니다 — 꺼서 다른 검사만 본다(설정 읽기는 환경 변수를 먼저 본다).
 export SCV_FINISH_REPORT=off
 

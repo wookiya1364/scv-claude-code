@@ -359,6 +359,18 @@ else
 fi
 _scv_emit_block() {
   [[ -n "${_scv_block_reason:-}" ]] || return 0
+  # 0.83.0+ — 기본은 막지 않는다(SCV_STOP_MODE=notice): 막으면 다시 쓴 답이 인용 · 확인 범위를 되풀이해 같은 답이 두 번 보였다
+  # (실제 세션 186턴 중 78턴). 어긋난 점은 이 세션의 다음 턴 안내(.help-warn)로 넘기고 끝낸다. block 이면 0.82 까지처럼 막는다.
+  local _m="" _n=""
+  declare -F settings_get >/dev/null 2>&1 && _m="$(settings_get SCV_STOP_MODE 2>/dev/null | tr -d '"' | tr -d "'" || true)"
+  if declare -F scv_stop_mode >/dev/null 2>&1 && [[ "$(scv_stop_mode "$_m")" != block ]]; then
+    _n="$(scv_stop_notice "$_scv_block_reason")"
+    if [[ -n "$_n" && ! -L "$_scv_tdir/.help-warn" ]] && { [[ "$_scv_tdir" == "$_scv_jdir" ]] || [[ ! -L "$_scv_jdir/.help-turns" && ! -L "$_scv_tdir" ]]; } \
+       && mkdir -p "$_scv_tdir" 2>/dev/null; then
+      printf '%s\n' "$_n" >> "$_scv_tdir/.help-warn" 2>/dev/null || true
+    fi
+    return 0
+  fi
   # 0.78.0+: 막기 전에 보낸 답은 이미 사용자 화면에 있다 — 다시 쓴 답이 앞 답을 통째로 되풀이해 답이 두 번 보였다(2026-11-03).
   _scv_block_reason+=$'\n'"[SCV] 앞 답은 이미 사용자 화면에 있다 — 고친 부분만 짧게 써라(앞 답을 되풀이하지 말 것)."
   jq -cn --arg r "$_scv_block_reason" '{decision:"block",reason:$r}' 2>/dev/null || true

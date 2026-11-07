@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export SCV_STOP_MODE=block   # 0.83.0+ — 이 시험은 막힘(block)을 본다. 기본(notice)은 test-stop-notice.sh
 # (b) — test-choice-questions.sh 를 나눈 조각 2/3 (CI 가장 느린 조각 줄이기). 묶어 돌리기: test-choice-questions.sh
 # test-choice-questions.sh — "결정은 고르는 선택지로" 검사 (v0.64.0+).
 #
