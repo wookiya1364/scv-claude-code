@@ -54,8 +54,12 @@ while IFS=$'\t' read -r mid key file url fetched || [[ -n "$mid" ]]; do
     [[ -z "$cid" || "$cid" == \#* ]] && continue
     [[ "$cid" =~ ^[a-z0-9-]+$ && -n "$clabel" && -n "$cquote" && -z "${extra:-}" ]] || { err "checklist-$key.tsv: bad line: $cid"; continue; }
     grep -qF -- "$cquote" "$DIR/$file" || err "checklist-$key.tsv: $cid quote is not verbatim in $file"
+    # 발췌본이 있으면 help 는 그것을 읽으므로, 인용이 발췌본에도 있어야 한다
+    [[ -f "$DIR/excerpt-$file" ]] && { grep -qF -- "$cquote" "$DIR/excerpt-$file" || err "checklist-$key.tsv: $cid quote is missing from excerpt-$file"; }
     nitem=$((nitem + 1))
   done < "$cl"
 done < "$INDEX"
+# 발췌본은 원문에서 기계적으로 뽑은 것이어야 한다(손으로 고친 발췌 금지)
+bash "$DIR/excerpt.sh" --check >/dev/null || err "excerpts are stale or broken (run excerpt.sh)"
 (( fail )) && exit 1
 echo "OK prompting guides: $nid model id(s), $nfile file(s), $nitem checklist item(s)$( (( ONLINE )) && echo ', bodies match the source')"
