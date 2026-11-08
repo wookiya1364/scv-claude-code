@@ -2,6 +2,11 @@
 
 All notable changes to SCV Core are documented here.
 
+## [0.84.1] - 2026-11-08
+
+### Fixed
+- 래퍼 설치본의 help 에 다시 쓴 요청 낱말 목록(STE)이 실리지 않던 문제 — 래퍼의 바깥 `scripts/` 에서 돌면 코어 루트가 플러그인 루트인데, 0.84.0 은 목록 파일을 그 아래에서만 찾았다(설치된 클로드 0.84.0 에서 확인). 원칙 글처럼 안쪽 벤더 사본까지 두 곳을 찾는다(`scv_mp_principle_candidates` 가 파일 이름을 받음). 회귀 시험 `test-rewrite-ste.sh` S7(래퍼 배치) — 고치기 전 코드에서 실패 확인.
+
 ## [0.84.0] - 2026-11-08
 
 ### Added
