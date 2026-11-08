@@ -790,8 +790,10 @@ download() {
     echo "ERROR: curl is required for release sync" >&2
     return 1
   }
+  # 릴리스가 공개된 뒤 파일이 붙기까지 15~25분 걸린다(2026-11 관측) — 그 사이 404 · 504 가 난다.
+  # 모든 오류를 1분 간격으로 다시 시도하고, 최대 SCV_SYNC_WAIT_SECONDS(기본 2700초 = 45분)까지 기다린다.
   curl --fail --location --silent --show-error \
-    --retry 3 --retry-delay 1 \
+    --retry 60 --retry-delay 60 --retry-all-errors --retry-max-time "${SCV_SYNC_WAIT_SECONDS:-2700}" \
     --output "$output" "$url"
 }
 
