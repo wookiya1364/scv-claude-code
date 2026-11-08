@@ -132,6 +132,35 @@ _any_human() {  # 사람 메시지 표시가 있는 세션 폴더가 하나라�
 #   (v0.65.0+) --session 이 없으면 먼저 호스트 프로필 SCV_SESSION_ENV 가 이름 붙인 환경 변수(모델의 셸 명령에 호스트가 담는 세션 id)를
 #     본다 — 그 세션 자리가 이미 있을 때만(한 저장소에 사람 세션이 여럿이어도 자기 자리로 간다). 판별 · 표시 같은 명령은 자리를 고르지 않는다.
 SKEY=""
+# 0.85.2+: 낱말 목록 싣기 — 매 턴 훅(prompt)과 help 가이드 안내(guide)가 같이 부른다. 같은 지문 안에서는 먼저 부른 쪽이 전문,
+# 나중 쪽은 한 줄. 매 턴 훅에 싣는 까닭: 모델이 help 출력을 grep 으로 걸러 읽어 목록이 버려졌다(slay 세션 0회, 2026-11-08).
+# @effect _ste_block
+_ste_block() {
+  # 0.84.0+: 다시 쓴 요청 낱말 목록(contracts/rewrite-ste.md) — SCV_LANG 구역이 있을 때만, 규약 지문마다 한 번 전문.
+  # 가이드 안내는 다시 쓰기 전에 돌므로 그 턴의 다시 쓰기부터 목록이 닿는다. 언어 구역이 없으면(영어 등) 아무것도 내지 않는다.
+  if [[ "$(scv_mp_switch "$(_setting SCV_REWRITE_STE)")" == "on" ]]; then
+    _ssec=""
+    # 0.84.1+: 원칙 글과 같은 후보 두 곳 — 래퍼의 바깥 scripts/ 에서는 코어 루트가 플러그인 루트라 안쪽 벤더 사본에 있다.
+    while IFS= read -r _sf; do
+      [[ -n "$_sf" && -f "$_sf" && ! -L "$_sf" ]] || continue
+      _ssec="$(scv_mp_principle_pick "$(head -c 65536 "$_sf" 2>/dev/null)" "$(scv_mp_principle_lang "$(_setting SCV_LANG)")" ste)"
+      break
+    done <<< "$(scv_mp_principle_candidates "$CORE_ROOT" rewrite-ste.md)"
+    if [[ -n "$_ssec" ]]; then
+      _sd="$TDIR"; [[ -n "$_sd" && -d "$_sd" ]] || _sd="$JOURNAL_DIR"
+      _sseen=""; _sp=""; [[ -n "$_sd" && -d "$_sd" ]] && _sp="$_sd/.ste-seen"
+      [[ -n "$_sp" && -f "$_sp" && ! -L "$_sp" ]] && _sseen="$(_first_line "$_sp")"
+      if [[ "$(scv_mp_principle_show "$_sseen" "$NONCE")" == "short" ]]; then
+        echo "STE: (이 세션에 이미 실음 — 다시 쓴 요청은 이 목록대로)"
+      else
+        [[ -n "$_sp" && -n "$NONCE" && ! -L "$_sp" ]] && printf '%s\n' "$NONCE" > "$_sp" 2>/dev/null
+        echo "STE:"
+        printf '%s\n' "$_ssec"
+      fi
+    fi
+  fi
+}
+
 case "$cmd" in
   kind|mark|status) ;;
   *)
@@ -295,29 +324,7 @@ case "$cmd" in
     else
       _drop "$TURN_FILE"
     fi
-    # 0.84.0+: 다시 쓴 요청 낱말 목록(contracts/rewrite-ste.md) — SCV_LANG 구역이 있을 때만, 규약 지문마다 한 번 전문.
-    # 가이드 안내는 다시 쓰기 전에 돌므로 그 턴의 다시 쓰기부터 목록이 닿는다. 언어 구역이 없으면(영어 등) 아무것도 내지 않는다.
-    if [[ "$(scv_mp_switch "$(_setting SCV_REWRITE_STE)")" == "on" ]]; then
-      _ssec=""
-      # 0.84.1+: 원칙 글과 같은 후보 두 곳 — 래퍼의 바깥 scripts/ 에서는 코어 루트가 플러그인 루트라 안쪽 벤더 사본에 있다.
-      while IFS= read -r _sf; do
-        [[ -n "$_sf" && -f "$_sf" && ! -L "$_sf" ]] || continue
-        _ssec="$(scv_mp_principle_pick "$(head -c 65536 "$_sf" 2>/dev/null)" "$(scv_mp_principle_lang "$(_setting SCV_LANG)")" ste)"
-        break
-      done <<< "$(scv_mp_principle_candidates "$CORE_ROOT" rewrite-ste.md)"
-      if [[ -n "$_ssec" ]]; then
-        _sd="$TDIR"; [[ -n "$_sd" && -d "$_sd" ]] || _sd="$JOURNAL_DIR"
-        _sseen=""; _sp=""; [[ -n "$_sd" && -d "$_sd" ]] && _sp="$_sd/.ste-seen"
-        [[ -n "$_sp" && -f "$_sp" && ! -L "$_sp" ]] && _sseen="$(_first_line "$_sp")"
-        if [[ "$(scv_mp_principle_show "$_sseen" "$NONCE")" == "short" ]]; then
-          echo "STE: (이 세션에 이미 실음 — 다시 쓴 요청은 이 목록대로)"
-        else
-          [[ -n "$_sp" && -n "$NONCE" && ! -L "$_sp" ]] && printf '%s\n' "$NONCE" > "$_sp" 2>/dev/null
-          echo "STE:"
-          printf '%s\n' "$_ssec"
-        fi
-      fi
-    fi
+    _ste_block
     ;;
   mark)
     # 색인에 있는 모델만 기록한다 — 모르는 모델을 "읽음" 으로 적으면 나중에 색인이 생겨도 load 가 안 뜬다.
@@ -386,6 +393,7 @@ case "$cmd" in
       scv_mp_turn_block "$SWITCH" "$_tok" "$_lm" "$_list" "$SCRIPT_DIR/model-prompting.sh" "$SKEY"
     fi
     scv_mp_first_turn_lines "$SWITCH" "$_read" "$_warned" "$_rec"
+    _ste_block
     ;;
   human)
     # v0.65.0+ — 사람 입력(매 턴 훅이 자동 입력 밖의 모든 입력에 부른다): 자동 턴 표시를 지우고(이 기능 전에는 훅이 직접 지웠다),
