@@ -618,14 +618,16 @@ scv_mp_prompt_kind() {
 # 역할: 코어 루트로 원칙 파일 후보 경로 두 개를 한 줄씩 낸다
 # 종류: 조립
 # 예: /core → $'/core/contracts/rewrite-principle.md\n/core/vendor/scv-core/core/contracts/rewrite-principle.md\n'
+# 예: /core rewrite-ste.md → $'/core/contracts/rewrite-ste.md\n/core/vendor/scv-core/core/contracts/rewrite-ste.md\n'
 # 예: "" → ""
-# <코어 루트> → 원칙 파일 후보(한 줄에 하나): 코어 루트 아래, 그다음 래퍼가 벤더링한 코어 아래 —
-# 투영된 플러그인 루트에서 도는 스크립트도 벤더 사본의 원칙 파일을 찾는다.
+# <코어 루트> [<계약 파일 이름, 기본 rewrite-principle.md>] → 후보(한 줄에 하나): 코어 루트 아래, 그다음 래퍼가 벤더링한
+# 코어 아래 — 투영된 플러그인 루트에서 도는 스크립트도 벤더 사본의 계약 파일을 찾는다. 0.84.1+: 낱말 목록(rewrite-ste.md)도
+# 이 후보로 찾는다 — 0.84.0 은 코어 루트만 보아 래퍼 설치본의 help 에 목록이 실리지 않았다.
 scv_mp_principle_candidates() {
-  local root="${1:-}"
+  local root="${1:-}" name="${2:-rewrite-principle.md}"
   [[ -n "$root" ]] || return 0
   root="${root%/}"
-  printf '%s\n' "$root/contracts/rewrite-principle.md" "$root/vendor/scv-core/core/contracts/rewrite-principle.md"
+  printf '%s\n' "$root/contracts/$name" "$root/vendor/scv-core/core/contracts/$name"
 }
 
 # @pure
