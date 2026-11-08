@@ -398,6 +398,28 @@ export function mdToDeck(raw, slug, sourceLabel, lang, lintRaw) {
     }
   if (pictures.length === 0) lint.push({ level: "warn", message: t("lintNoPicture") });
 
+  // Picture spots (0.85.0+): the check above only says "no picture at all". This one points AT the
+  // section a picture would carry — 3+ ordered steps, or 3+ arrows (→) in its text — when that
+  // section has no picture of its own. A suggestion only: the document is never changed here, the
+  // author (or the model, after the user picks) adds the mermaid block. At most 3, in reading order.
+  const MAX_SPOTS = 3;
+  const spots = [];
+  for (const s of slides) {
+    const blocks = s.blocks || [];
+    if (s.id === "cover" || blocks.some((b) => b.type === "mermaid" || b.type === "screen")) continue;
+    const steps = blocks
+      .filter((b) => b.type === "bullets" && b.ordered)
+      .reduce((m, b) => Math.max(m, (b.tree || []).length || (b.items || []).length), 0);
+    // Arrows count in prose only (paragraphs / lists) — a table's "In → Out" column or a code comment is already a
+    // structured shape, not a flow hidden in sentences.
+    const arrows = blocks
+      .filter((b) => b.type === "para" || b.type === "bullets")
+      .reduce((n, b) => n + (JSON.stringify(b).split("→").length - 1), 0);
+    if (steps >= 3) spots.push(t("lintPictureSpot", s.title, t("spotSteps", steps)));
+    else if (arrows >= 3) spots.push(t("lintPictureSpot", s.title, t("spotArrows", arrows)));
+  }
+  spots.slice(0, MAX_SPOTS).forEach((message) => lint.push({ level: "warn", message }));
+
   // Standing project rule: every plan states its steps as pure functions composed into
   // a pipeline. Checked here — in code — because a rule that lives only in the authoring
   // prose cannot be seen by anyone reading the finished document.
