@@ -7,6 +7,7 @@ Every message, however short (v0.62.0+). Hooks enforce steps 1, 4 and 5.
 2. Rewrite the request as the best prompt for this model: compare it 1:1 with its checklist
    (item: msg, ctx, na or asked). Name the guide rules applied; add no requirements — except
    the SCV principle `register` prints (`contracts/rewrite-principle.md`): answer by it.
+   When help printed `STE:`, write the rewrite by that word list (`contracts/rewrite-ste.md`, 0.84.0+).
 3. Fill items from the conversation, the repository, or the plan; name it. Ask only the
    single most consequential gap, Socratic, with your recommended answer.
    Never ask how to implement.
