@@ -170,6 +170,11 @@ If the helper errors (missing Node/pnpm), relay it and suggest `/scv:install-dep
    one, and re-run. A doc with no diagrams needs no fix. `--slides`, `--mermaid none`
    and `--no-static` opt out of the bake, so nothing is expected there.
 3. If `LINT` > 0, surface the warnings plainly. These are the sections a professional 기획서 usually has but this doc lacks (비목표 / 성공지표 / 인수기준 / 예외처리, etc.).
+   `Picture spot: "<section>" — …` lines (0.85.0+) name sections whose steps or arrows a diagram
+   would carry faster than the text (3+ ordered steps, or 3+ arrows in prose; at most 3). Ask the
+   user which spots to draw (the choice tool, recommended first: all of them). For each picked spot,
+   add one ```mermaid flowchart to that section of the source markdown, built only from that section's
+   own steps and names — no step, label or link the section does not state — then re-run.
 4. **Offer** (by asking the user, default: just report) to help draft the missing sections **into the source markdown** — then the user re-runs `/scv:deck`. Never write invented specifics; propose structure + `<TODO>` placeholders and let the user fill real values.
 
 ## Never
