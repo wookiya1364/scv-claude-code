@@ -49,13 +49,13 @@ new_proj() {  # <이름> [설정 JSON]
 }
 
 run_prompt() {  # <프로젝트> → 프롬프트 훅 stdout
-  ( cd "$1" && printf '{"prompt":"안녕","session_id":"%s"}' "$SESSION" \
-    | CLAUDE_PLUGIN_ROOT="$CORE" SCV_GUARD_STATE="$STATE" bash "$PROMPT_HOOK" 2>/dev/null )
+  ( cd "$1" &&
+    CLAUDE_PLUGIN_ROOT="$CORE" SCV_GUARD_STATE="$STATE" bash "$PROMPT_HOOK" <<<"$(printf '{"prompt":"안녕","session_id":"%s"}' "$SESSION")" 2>/dev/null )
 }
 
 run_stop() {  # <프로젝트> [이벤트] → 종료 훅 stdout
-  ( cd "$1" && printf '{"hook_event_name":"%s","session_id":"%s"}' "${2:-Stop}" "$SESSION" \
-    | CLAUDE_PLUGIN_ROOT="$CORE" SCV_GUARD_STATE="$STATE" bash "$STOP_HOOK" 2>/dev/null )
+  ( cd "$1" &&
+    CLAUDE_PLUGIN_ROOT="$CORE" SCV_GUARD_STATE="$STATE" bash "$STOP_HOOK" <<<"$(printf '{"hook_event_name":"%s","session_id":"%s"}' "${2:-Stop}" "$SESSION")" 2>/dev/null )
 }
 
 is_block() { grep -q '"decision"[[:space:]]*:[[:space:]]*"block"' <<<"${1:-}"; }
@@ -143,11 +143,11 @@ for _ in 1 2 3 4 5; do is_block "$(run_stop "$P")" && blocked=$((blocked+1)); do
 
 echo "── [T12] scv 폴더가 없으면 아무 출력도 없다 ──"
 mkdir -p "$WORK/t12"; STATE="$WORK/state-t12"
-OUT="$( cd "$WORK/t12" && printf '{"prompt":"x","session_id":"%s"}' "$SESSION" \
-  | CLAUDE_PLUGIN_ROOT="$CORE" bash "$PROMPT_HOOK" 2>/dev/null )"; rc=$?
+OUT="$( cd "$WORK/t12" &&
+  CLAUDE_PLUGIN_ROOT="$CORE" bash "$PROMPT_HOOK" <<<"$(printf '{"prompt":"x","session_id":"%s"}' "$SESSION")" 2>/dev/null )"; rc=$?
 [[ $rc -eq 0 && -z "$OUT" ]] && ok "프롬프트 훅 무출력·exit 0" || fail "침묵 위반 (rc=$rc)"
-OUT="$( cd "$WORK/t12" && printf '{"hook_event_name":"Stop","session_id":"%s"}' "$SESSION" \
-  | CLAUDE_PLUGIN_ROOT="$CORE" bash "$STOP_HOOK" 2>/dev/null )"; rc=$?
+OUT="$( cd "$WORK/t12" &&
+  CLAUDE_PLUGIN_ROOT="$CORE" bash "$STOP_HOOK" <<<"$(printf '{"hook_event_name":"Stop","session_id":"%s"}' "$SESSION")" 2>/dev/null )"; rc=$?
 [[ $rc -eq 0 && -z "$OUT" ]] && ok "종료 훅 무출력·exit 0" || fail "침묵 위반 (rc=$rc)"
 
 echo "── [T13] 점검을 못 돌려도 지시는 나간다 ──"
@@ -155,8 +155,8 @@ new_proj t13
 FAKE="$WORK/fakecore"; mkdir -p "$FAKE/scripts/lib"
 cp "$FORCE_LIB" "$FAKE/scripts/lib/force-help.sh"
 cp "$SETTINGS_LIB" "$FAKE/scripts/lib/settings.sh" 2>/dev/null || true
-OUT="$( cd "$P" && printf '{"prompt":"x","session_id":"%s"}' "$SESSION" \
-  | CLAUDE_PLUGIN_ROOT="$FAKE" bash "$PROMPT_HOOK" 2>/dev/null )"; rc=$?
+OUT="$( cd "$P" &&
+  CLAUDE_PLUGIN_ROOT="$FAKE" bash "$PROMPT_HOOK" <<<"$(printf '{"prompt":"x","session_id":"%s"}' "$SESSION")" 2>/dev/null )"; rc=$?
 [[ $rc -eq 0 ]] && ok "종료 코드 0" || fail "rc=$rc"
 grep -q "SCV: 이 턴의 첫 행동" <<<"$OUT" && ok "지시는 나온다" || fail "점검 실패가 지시까지 막았다"
 
