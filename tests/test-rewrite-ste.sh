@@ -2,7 +2,7 @@
 # test-rewrite-ste.sh — 0.84.0 다시 쓴 요청 낱말 목록(contracts/rewrite-ste.md): korean 이면 help 가이드 안내 끝에
 # 규약 지문마다 한 번 전문을 싣고, 다른 언어 · off 이면 싣지 않는다.
 # 계획: scv/archive/20261108-wookiya1364-rewrite-ste-list/TESTS.md
-# S1 korean 첫 안내에 전문 · S2 같은 지문 두 번째는 한 줄 · S3 english 없음 · S4 off 없음 · S5 절차 문서 연결 · S6 구역 고르기 순수부.
+# S1 korean 첫 안내에 전문 · S2 같은 지문 두 번째는 한 줄 · S3 english 없음 · S4 off 없음 · S5 절차 문서 연결 · S6 구역 고르기 순수부 · S7 래퍼 배치.
 set -uo pipefail
 
 CORE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -51,5 +51,14 @@ out="$(bash -c 'source "$1"
     "$(scv_mp_principle_pick $'"'"'<!-- principle:korean -->\nP'"'"' korean)" "$(scv_mp_principle_pick $'"'"'<!-- principle:korean -->\nP'"'"' korean ste)"' _ "$LIB")"
 [[ "$out" == "KO|P|" ]] && ok "S6 구역 고르기(종류 ste · 기본 principle)" || bad "S6 [$out]"
 
+# S7 — 래퍼 설치본 배치(0.84.1): 바깥 scripts/ 에서 돌면 코어 루트가 플러그인 루트다. 목록 파일은 안쪽 벤더 사본에만 있다.
+# 0.84.0 은 코어 루트만 보아 이 배치에서 목록이 실리지 않았다(설치된 클로드 0.84.0 에서 확인).
+PL="$WORK/plug"; mkdir -p "$PL/vendor/scv-core/core"
+cp -R "$CORE/scripts" "$PL/scripts"; cp -R "$CORE/contracts" "$PL/vendor/scv-core/core/contracts"
+R="$(new_repo plug '{"SCV_LANG":"korean"}')"
+o="$(cd "$R" && SCV_HOST_PROFILE="$WORK/profile.env" SCV_TODAY=2026-09-27 bash "$PL/scripts/model-prompting.sh" guide --model vendor-model-a 2>/dev/null)"
+[[ ! -e "$PL/contracts" ]] && grep -qx 'STE:' <<<"$o" && grep -q '^R15 ' <<<"$o" \
+  && ok "S7 래퍼 배치(바깥 scripts/)에서도 목록 전문" || bad "S7 [$(head -3 <<<"$o")]"
+
 if (( fail )); then echo "── test-rewrite-ste: FAIL"; exit 1; fi
-echo "── test-rewrite-ste: 6 passed"
+echo "── test-rewrite-ste: 7 passed"

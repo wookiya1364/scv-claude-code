@@ -298,8 +298,13 @@ case "$cmd" in
     # 0.84.0+: 다시 쓴 요청 낱말 목록(contracts/rewrite-ste.md) — SCV_LANG 구역이 있을 때만, 규약 지문마다 한 번 전문.
     # 가이드 안내는 다시 쓰기 전에 돌므로 그 턴의 다시 쓰기부터 목록이 닿는다. 언어 구역이 없으면(영어 등) 아무것도 내지 않는다.
     if [[ "$(scv_mp_switch "$(_setting SCV_REWRITE_STE)")" == "on" ]]; then
-      _sf="$CORE_ROOT/contracts/rewrite-ste.md"; _ssec=""
-      [[ -f "$_sf" && ! -L "$_sf" ]] && _ssec="$(scv_mp_principle_pick "$(head -c 65536 "$_sf" 2>/dev/null)" "$(scv_mp_principle_lang "$(_setting SCV_LANG)")" ste)"
+      _ssec=""
+      # 0.84.1+: 원칙 글과 같은 후보 두 곳 — 래퍼의 바깥 scripts/ 에서는 코어 루트가 플러그인 루트라 안쪽 벤더 사본에 있다.
+      while IFS= read -r _sf; do
+        [[ -n "$_sf" && -f "$_sf" && ! -L "$_sf" ]] || continue
+        _ssec="$(scv_mp_principle_pick "$(head -c 65536 "$_sf" 2>/dev/null)" "$(scv_mp_principle_lang "$(_setting SCV_LANG)")" ste)"
+        break
+      done <<< "$(scv_mp_principle_candidates "$CORE_ROOT" rewrite-ste.md)"
       if [[ -n "$_ssec" ]]; then
         _sd="$TDIR"; [[ -n "$_sd" && -d "$_sd" ]] || _sd="$JOURNAL_DIR"
         _sseen=""; _sp=""; [[ -n "$_sd" && -d "$_sd" ]] && _sp="$_sd/.ste-seen"
