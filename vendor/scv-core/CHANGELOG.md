@@ -2,6 +2,11 @@
 
 All notable changes to SCV Core are documented here.
 
+## [0.85.1] - 2026-11-08
+
+### Fixed
+- 흔들리던 시험 `test-force-help.sh` T12(scv 폴더가 없으면 무출력) — 훅이 입력을 읽기 전에 끝나면 입력을 넘기던 `printf` 가 Broken pipe 로 실패해 종료 코드 1 로 잡혔다(2026-11-08 코덱스 CI 에서 두 번, 재실행으로만 통과). 이 파일의 printf 파이프 5곳을 here-string 으로 바꿈(0.81.0 의 같은 종류 수정과 같은 방식). 훅 코드는 그대로.
+
 ## [0.85.0] - 2026-11-08
 
 ### Added
