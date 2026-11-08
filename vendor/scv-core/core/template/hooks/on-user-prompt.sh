@@ -250,8 +250,8 @@ elif [[ "${_scv_always:-on}" != "off" ]] && declare -F scv_force_routing >/dev/n
   if [[ -f "$CORE_HOME/scripts/model-prompting.sh" && -n "$INPUT" ]] && command -v jq >/dev/null 2>&1 \
      && [[ "$(printf '%s' "$INPUT" | jq -r 'try (.prompt | type == "string" and length > 0) catch false' 2>/dev/null)" == "true" ]]; then
     _scv_psid="$(printf '%s' "$INPUT" | jq -r 'try (.session_id // empty)' 2>/dev/null || true)"
-    # 상한 4KB(v0.65.0+, 이전 2KB): 요구 항목이 많은 래퍼의 등록 블록(약 1.6KB) 뒤에 첫 턴 가이드 안내(경로 · 명령)가 잘리지 않게.
-    _scv_guide_first="$(bash "$CORE_HOME/scripts/model-prompting.sh" prompt --session "$_scv_psid" --transcript "$_scv_tr0" 2>/dev/null | head -c 4096 || true)"
+    # 상한 8KB(0.85.2+, 이전 4KB · 2KB): 등록 블록(약 1.6KB) · 첫 턴 가이드 안내 뒤에 낱말 목록 전문(약 2.7KB, 지문마다 한 번)이 잘리지 않게.
+    _scv_guide_first="$(bash "$CORE_HOME/scripts/model-prompting.sh" prompt --session "$_scv_psid" --transcript "$_scv_tr0" 2>/dev/null | head -c 8192 || true)"
   fi
   # v0.65.0+ — 세션 자리를 쓰는 턴이면 공용 자리에 남은 경고(세션 id 를 모르던 종료가 남긴 것 · 업그레이드 전의 것)도 함께 싣는다 —
   # 주인이 없는 경고라 이 기능 전처럼 다음 사람 턴이 받는다.

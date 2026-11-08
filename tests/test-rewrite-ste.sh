@@ -2,7 +2,7 @@
 # test-rewrite-ste.sh — 0.84.0 다시 쓴 요청 낱말 목록(contracts/rewrite-ste.md): korean 이면 help 가이드 안내 끝에
 # 규약 지문마다 한 번 전문을 싣고, 다른 언어 · off 이면 싣지 않는다.
 # 계획: scv/archive/20261108-wookiya1364-rewrite-ste-list/TESTS.md
-# S1 korean 첫 안내에 전문 · S2 같은 지문 두 번째는 한 줄 · S3 english 없음 · S4 off 없음 · S5 절차 문서 연결 · S6 구역 고르기 순수부 · S7 래퍼 배치.
+# S1 korean 첫 안내에 전문 · S2 같은 지문 두 번째는 한 줄 · S3 english 없음 · S4 off 없음 · S5 절차 문서 연결 · S6 구역 고르기 순수부 · S7 래퍼 배치 · S8 매 턴 훅.
 set -uo pipefail
 
 CORE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -60,5 +60,17 @@ o="$(cd "$R" && SCV_HOST_PROFILE="$WORK/profile.env" SCV_TODAY=2026-09-27 bash "
 [[ ! -e "$PL/contracts" ]] && grep -qx 'STE:' <<<"$o" && grep -q '^R15 ' <<<"$o" \
   && ok "S7 래퍼 배치(바깥 scripts/)에서도 목록 전문" || bad "S7 [$(head -3 <<<"$o")]"
 
+# S8 — 매 턴 훅(prompt, 0.85.2): 모델이 help 출력을 걸러 읽어도 목록이 닿게 매 턴 안내에 싣는다.
+# 같은 지문에서 훅이 먼저 전문을 실으면 help 가이드 안내는 한 줄, 다음 턴 훅도 한 줄. 훅의 상한(8KB) 안에 끝까지 들어간다.
+R="$(new_repo hook '{"SCV_LANG":"korean"}')"
+p1="$(cd "$R" && SCV_HOST_PROFILE="$WORK/profile.env" SCV_TODAY=2026-09-27 bash "$CORE/scripts/model-prompting.sh" prompt --session s1 2>/dev/null)"
+g1="$(help_wc "$R")"
+p2="$(cd "$R" && SCV_HOST_PROFILE="$WORK/profile.env" SCV_TODAY=2026-09-27 bash "$CORE/scripts/model-prompting.sh" prompt --session s1 2>/dev/null)"
+grep -qx 'STE:' <<<"$p1" && grep -q '^R15 ' <<<"$p1" && (( $(printf '%s' "$p1" | wc -c) <= 8192 )) \
+  && grep -q '^STE: (이 세션에 이미 실음' <<<"$g1" && ! grep -q '^R1 ' <<<"$g1" \
+  && grep -q '^STE: (이 세션에 이미 실음' <<<"$p2" && ! grep -q '^R1 ' <<<"$p2" \
+  && grep -q 'head -c 8192' "$CORE/template/hooks/on-user-prompt.sh" \
+  && ok "S8 매 턴 훅에 전문 한 번, 그 뒤 help · 훅은 한 줄" || bad "S8 [$(grep -A1 '^STE' <<<"$p1$g1$p2" | head -6)]"
+
 if (( fail )); then echo "── test-rewrite-ste: FAIL"; exit 1; fi
-echo "── test-rewrite-ste: 7 passed"
+echo "── test-rewrite-ste: 8 passed"
