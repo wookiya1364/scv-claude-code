@@ -651,10 +651,13 @@ scv_mp_principle_lang() {
 # 종류: 꺼내기
 # 예: $'<!-- principle:english -->\nEN text\n<!-- principle:korean -->\nKO text' korean → "KO text"
 # 예: $'<!-- principle:english -->\nEN text' korean → ""
-# <원칙 파일 본문> <구역 이름> → 그 구역(표식 줄 + 전문, 끝 줄바꿈 없음). 없으면 빈 값.
+# 예: $'<!-- ste:korean -->\nKO list' korean ste → "KO list"
+# <원칙 파일 본문> <구역 이름> [<구역 종류, 기본 principle>] → 그 구역(표식 줄 + 전문, 끝 줄바꿈 없음). 없으면 빈 값.
+# 0.84.0+: 종류 ste 는 contracts/rewrite-ste.md 의 다시 쓴 요청 낱말 목록 구역이다.
 scv_mp_principle_pick() {
   # 꺾쇠는 글자 코드로 적는다 — 순수성 검사가 < > 를 파일 리다이렉션으로 본다(scv_mp_answer_shows_rewrite 와 같은 방식).
-  local body="${1:-}" want="${2:-}" line name on=0 out="" open=$'\x3c'"!-- principle:" close=" --"$'\x3e'
+  local body="${1:-}" want="${2:-}" kind="${3:-principle}" line name on=0 out="" open close
+  open=$'\x3c'"!-- $kind:"; close=" --"$'\x3e'
   [[ -n "$want" ]] || return 0
   while IFS= read -r line || [[ -n "$line" ]]; do
     if [[ "$line" == "$open"*"$close" ]]; then
