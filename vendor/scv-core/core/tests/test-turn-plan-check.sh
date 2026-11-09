@@ -171,6 +171,20 @@ else bad "T18 $out / $v2"; fi
 reset; bash "$PL" progress p1 --step 1 --state doing --note 시작함 >/dev/null; bash "$PL" progress p1 --step 2 --state blocked --note '키 없음' >/dev/null
 if plan | grep -q '1단계 시작: 시작함' && plan | grep -q '2단계 막힘: 키 없음'; then ok "T19 진행 줄 시작 · 막힘"; else bad "T19"; fi
 
+
+# T20 — 호스트 프로필 검사가 대시보드 켜짐 두 키를 받고, 짝이 없거나 상대 경로면 거절 (0.87.1 — 0.87.0 래퍼 릴리스가 여기서 막혔다)
+VH="$CORE/../tools/validate-host-profile.sh"; FX="$CORE/../tests/fixtures/codex.env"
+if [[ -f "$VH" && -f "$FX" ]]; then
+  grep -v '^SCV_STEP_TOOL' "$FX" > "$WORK/base.env"; printf 'SCV_STEP_TOOL=tool_step\n' >> "$WORK/base.env"
+  { cat "$WORK/base.env"; printf 'SCV_STEP_TOOL_ON_FILE=~/.host/settings.json\nSCV_STEP_TOOL_ON_MARK="dash": true\n'; } > "$WORK/p1.env"
+  { cat "$WORK/base.env"; printf 'SCV_STEP_TOOL_ON_FILE=rel/settings.json\nSCV_STEP_TOOL_ON_MARK=x\n'; } > "$WORK/p2.env"
+  { cat "$WORK/base.env"; printf 'SCV_STEP_TOOL_ON_FILE=~/.host/settings.json\n'; } > "$WORK/p3.env"
+  a=0; bash "$VH" --profile "$WORK/p1.env" >/dev/null 2>&1 || a=$?
+  b=0; bash "$VH" --profile "$WORK/p2.env" >/dev/null 2>&1 || b=$?
+  c=0; bash "$VH" --profile "$WORK/p3.env" >/dev/null 2>&1 || c=$?
+  [[ $a == 0 && $b != 0 && $c != 0 ]] && ok "T20 프로필 검사: 두 키 통과 · 상대 경로 거절 · 짝 없음 거절" || bad "T20 $a $b $c"
+else ok "T20 건너뜀 (프로필 검사 도구 없음 — 래퍼 안)"; fi
+
 # T15 — 끄기 · 기존 plan-link 시험
 reset; export SCV_TURN_PLAN_CHECK=off; start; ed; v="$(verdict)"; unset SCV_TURN_PLAN_CHECK
 rc=0; bash "$CORE/tests/test-plan-link.sh" >/dev/null 2>&1 || rc=$?
