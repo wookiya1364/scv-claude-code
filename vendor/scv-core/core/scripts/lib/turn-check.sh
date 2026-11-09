@@ -79,6 +79,46 @@ scv_tc_filter() {
 }
 
 # @pure
+# 역할: 도구 입력에 어떤 칸이 있는지로 이 도구가 파일을 쓰는지 가른다 — 명령 글이 있으면 shell, 경로와 쓸 내용이 있으면 write, 그 밖(읽기 · 찾기)은 read
+# 종류: 판정
+# 예: "ls" "" "" → "shell"
+# 예: "" "/a/b.ts" "yes" → "write"
+# 예: "" "/a/b.ts" "" → "read"
+# 세 인자: 명령 글 · 파일 경로 · 쓸 내용이 있는지(비지 않으면 있음). 도구 이름은 보지 않는다(호스트마다 다름).
+scv_tc_tool_kind() {
+  local cmd="${1:-}" path="${2:-}" body="${3:-}"
+  if [[ -n "$cmd" ]]; then printf 'shell'
+  elif [[ -n "$path" && -n "$body" ]]; then printf 'write'
+  else printf 'read'; fi
+}
+
+# @pure
+# 역할: 저장소 맨 위 경로와 그 안의 상대 경로 줄들을 이어 절대 경로 줄들로 바꾼다
+# 종류: 변환
+# 예: "/r" $'a.ts\nsrc/b.ts' → $'/r/a.ts\n/r/src/b.ts'
+# 예: "/r" "" → ""
+scv_tc_abs_paths() {
+  local root="${1%/}" paths="${2:-}" p out=""
+  while IFS= read -r p; do
+    [[ -n "$p" ]] && out="$out$root/$p"$'\n'
+  done <<< "$paths"
+  printf '%s' "${out%$'\n'}"
+}
+
+# @pure
+# 역할: 경로 줄들 중 '이 세션이 쓴 파일' 목록에 있는 것만 남긴다 — 다른 세션이 같은 폴더에서 고친 파일을 뺀다
+# 종류: 고르기
+# 예: $'/r/a\n/r/b' $'/r/b\n/x/c' → "/r/b"
+# 예: "/r/a" "" → ""
+scv_tc_mine_only() {
+  local paths="${1:-}" mine=$'\n'"${2:-}"$'\n' p out=""
+  while IFS= read -r p; do
+    [[ -n "$p" && "$mine" == *$'\n'"$p"$'\n'* ]] && out="$out$p"$'\n'
+  done <<< "$paths"
+  printf '%s' "${out%$'\n'}"
+}
+
+# @pure
 # 역할: 계획 글에서 새로 생긴 줄들 중 구조 줄(이력 머리: 추가 · 보류 · 연결 · 재개 · 다시 하기 · 진행 · 예외)의 수를 센다
 # 종류: 세기
 # 예: $'- **2026-11-09 진행** — 6단계: x\n  - 요청: y (요청 ab12cd34)\n- **2026-11-09 10:00 선택** — 답: z' → "1"
