@@ -7,8 +7,8 @@
   "source_commit": "d3f672b6e487d66ca4b7e36a42bc0e5feb07340f",
   "source_manifest_sha256": "abd1483829de71505b3d9c8e236edadc0d000ec78989e8a2eef103130c6898ea",
   "source_payload_sha256": "ee3d0c58e57e64a5e4ec5fc1e853fde7b2ae5caaf94dc5aee5b1547abc0b1a75",
-  "manifest_sha256": "ffe389aee225155341a659a586f1a74bae232f36f781befaff97474c664d30db",
-  "payload_sha256": "3fa0c2ee87e2b8e81393e3e367bc52417a0e07cbf49840d1106602fa1fb258f2",
+  "manifest_sha256": "c68c303c06118c6743563c051b8da0b17536245c90cc6c182f1cac23ce4d740b",
+  "payload_sha256": "2c109e2eb1cd80c65cd3991e552eabbd9d4eb71c23ff1aaf02ad988ef0ea48a6",
   "artifact_sha256": "23fb7008fc50e06ebf1049f7a7521b5d066eed5caaceeace4761d7772ea540cc",
   "vendored_at": "2026-11-09T16:47:08+09:00"
 }
