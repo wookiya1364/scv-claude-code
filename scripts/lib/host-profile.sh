@@ -48,6 +48,11 @@ SCV_DECKUI_DIR=""
 # 0.75.0+ 선택 키: 계획 단계가 바뀔 때(시작 · 끝 · 막힘) 알리는 호스트 도구 이름. 있으면 구현 중인 계획이 있는 턴에
 # 매 턴 훅이 한 줄로 알린다(scripts/step-report.sh). 비면 아무 일 없다.
 SCV_STEP_TOOL=""
+# 0.87.0+ 선택 키: 단계 보고 도구를 주는 모드(대시보드)가 켜졌는지 알 수 있는 호스트 설정 파일(~ 허용)과 그 안의 켜짐 표시 글.
+# 둘 다 있고 파일에 표시가 있으면, 구현 중인 계획에서 파일을 바꾼 턴은 SCV_STEP_TOOL 호출이 있어야 끝난다(scripts/turn-check.sh).
+# 비면 강제하지 않는다 — 진행은 계획 파일의 진행 줄로만 남고, 대시보드는 그 줄로 단계를 센다.
+SCV_STEP_TOOL_ON_FILE=""
+SCV_STEP_TOOL_ON_MARK=""
 
 _scv_profile_assign() {
   local key="$1" value="$2"
@@ -74,6 +79,8 @@ _scv_profile_assign() {
     SCV_CHOICE_REJECTED_PREFIX) SCV_CHOICE_REJECTED_PREFIX="$value" ;;
     SCV_DECKUI_DIR) SCV_DECKUI_DIR="$value" ;;
     SCV_STEP_TOOL) SCV_STEP_TOOL="$value" ;;
+    SCV_STEP_TOOL_ON_FILE) SCV_STEP_TOOL_ON_FILE="$value" ;;
+    SCV_STEP_TOOL_ON_MARK) SCV_STEP_TOOL_ON_MARK="$value" ;;
   esac
 }
 
