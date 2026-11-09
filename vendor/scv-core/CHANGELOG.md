@@ -2,6 +2,23 @@
 
 All notable changes to SCV Core are documented here.
 
+## [0.87.2] - 2026-11-09
+
+### Fixed
+- 프로필 만들기(`tools/materialize-profile.sh`)가 `SCV_STEP_TOOL_ON_FILE` · `SCV_STEP_TOOL_ON_MARK` 를 옮기지 않아, 래퍼의 사본 프로필이 원본과 달라졌다(claude 0.87.1 반영이 "vendored host profile differs" 로 실패). 두 키를 옮긴다. 키 목록이 있는 곳을 모두 찾아(검사 · 만들기 · 읽기) 셋 다 맞췄다. 시험 T20b.
+
+## [0.87.1] - 2026-11-09
+
+### Fixed
+- 호스트 프로필 검사(`tools/validate-host-profile.sh`)가 0.87.0 의 새 키 `SCV_STEP_TOOL_ON_FILE` · `SCV_STEP_TOOL_ON_MARK` 를 모르는 키로 막아, 래퍼가 대시보드 켜짐 표시를 넣지 못했다(claude 0.87.0 릴리스 PR 의 계약 검사 실패). 두 키를 받고, 짝이 없거나 상대 경로면 거절한다. 계약 문서 `core/contracts/host-profile.md` 에 두 키를 적었다. 시험 T20.
+
+## [0.87.0] - 2026-11-09
+
+### Added
+- 턴 끝 계획 기록 검사 — `turn-check.sh`(순수부 `lib/turn-check.sh`). 파일(코드 · `scv/` 밖 문서)을 바꾼 턴은 계획 기록이 있어야 끝난다: 턴 시작 훅이 작업 공간 사진(git 은 바뀐 파일 해시 + HEAD, git 아닌 폴더는 파일 목록 · 시각 · 크기, `SCV_WORKSPACE_REPOS` 저장소, 그 턴에 도구가 경로로 건드린 저장소)을 찍고, 도구 앞 훅이 성공해야 줄이 생기는 `plan-link.sh` 기록 명령에만 영수증을 남기고, 턴 끝 훅이 사진 차이 · 영수증 · 이번 턴 요청 번호가 든 구조 줄을 견줘 막는다(`SCV_STOP_MODE` 와 따로, `SCV_TURN_PLAN_CHECK=on` 기본). 2번 막히면 통과시키고 '기록 없음'을 계획 · 저널에 남긴다. 2026-11-09 실측: 파일 목록 검사는 slay 계획 밖 11턴 중 0턴(셸 쓰기 1102 대 도구 102), 이 방식은 slay 11/11 · 강의 41/41 · 공고 6/6, 턴당 0.2초 안쪽.
+- `plan-link.sh progress <계획> --step N --note …`(계획 안 일의 진행 한 줄) · `exempt --kind release|sync --why …`(계획 없이 해도 되는 정한 예외). 턴이 켜져 있으면 모든 기록 줄에 "요청: <사용자 원문 앞부분> (요청 <번호>)" 가 붙는다 — 엉터리 내용도 무엇을 요청받았는지는 보인다.
+- 선택 답(AskUserQuestion) 을 훅이 진행 중 계획의 `## 변경 이력` 에 바로 적는다(질문 · 답). 시험 `test-turn-plan-check.sh` 14개.
+
 ## [0.86.0] - 2026-11-09
 
 ### Added

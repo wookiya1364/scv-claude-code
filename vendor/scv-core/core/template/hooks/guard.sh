@@ -167,6 +167,30 @@ mp_run() {
   (cd "$PROJECT_ROOT" && bash "$_scv_mp_dir/model-prompting.sh" "${a[@]}" 2>/dev/null | head -c 2048) || true
 }
 help_mark() { mp_run helped >/dev/null; }
+
+# ---------- turn plan check (0.87.0+) ----------------------------------------
+# 턴 끝 계획 기록 검사(scripts/turn-check.sh)의 도구 앞 몫: (1) 명령이 계획 기록 명령이면 이번 턴 영수증을 남긴다,
+# (2) 이 도구가 경로로 처음 건드리는 저장소는 돌기 전에 사진을 찍는다. 막지 않는다 — 어떤 실패도 그냥 넘어간다.
+_scv_tc_sh="$_scv_mp_dir/turn-check.sh"
+if [[ -f "$_scv_tc_sh" && "$SESSION" != nosession && -d "$PROJECT_ROOT" ]]; then
+  _scv_tc_cmd="$(field '.tool_input.command')"
+  _scv_tc_paths=()
+  for _scv_tc_k in '.tool_input.file_path' '.tool_input.path' '.tool_input.notebook_path'; do
+    _scv_tc_p="$(field "$_scv_tc_k")"; [[ -n "$_scv_tc_p" ]] && _scv_tc_paths+=("$_scv_tc_p")
+  done
+  if [[ -n "$_scv_tc_cmd" ]]; then
+    while IFS= read -r _scv_tc_p; do [[ -n "$_scv_tc_p" ]] && _scv_tc_paths+=("$_scv_tc_p"); done < <(
+      printf '%s\n' "$_scv_tc_cmd" | grep -oE '(^|[;&|[:space:]])(cd|-C)[[:space:]]+"?/[^"[:space:];&|]+' 2>/dev/null \
+        | sed -E 's/^.*(cd|-C)[[:space:]]+"?//' | head -n 10)
+    (cd "$PROJECT_ROOT" && printf '%s' "$_scv_tc_cmd" | bash "$_scv_tc_sh" receipt --session "$SESSION" >/dev/null 2>&1) || true
+  fi
+  _scv_tc_tool="$(field '.tool_name')"
+  [[ -n "$_scv_tc_tool" ]] && { (cd "$PROJECT_ROOT" && bash "$_scv_tc_sh" step --session "$SESSION" --tool "$_scv_tc_tool" >/dev/null 2>&1) || true; }
+  if [[ ${#_scv_tc_paths[@]} -gt 0 ]]; then
+    (cd "$PROJECT_ROOT" && bash "$_scv_tc_sh" touch --session "$SESSION" "${_scv_tc_paths[@]}" >/dev/null 2>&1) || true
+  fi
+fi
+# ---------- /turn plan check ---------------------------------------------------
 # A shell command that runs an SCV action's entry script (help.sh, work.sh, promote-helper.sh, ...)
 # from an SCV install (a path with "scv" in it — a project's own help.sh does not count). The per-turn
 # registration and other helper scripts live beside them and must not count.
