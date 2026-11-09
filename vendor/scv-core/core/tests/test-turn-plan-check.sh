@@ -36,7 +36,10 @@ verdict() { bash "$TC" end --session s1 | sed -n 's/^TURN_PLAN: //p'; }
 tid() { cat scv/journal/.turn-plan/id 2>/dev/null; }
 # 호스트 흉내: 도구 앞 훅처럼 영수증을 남기고 명령을 돌린다
 H() { printf '%s' "$1" | bash "$TC" receipt --session s1; eval "$1" >/dev/null 2>&1; }
-ed() { printf 'x\n' >> src/a.ts; }
+# 호스트 흉내: 쓰기 도구는 도구 앞 훅이 파일 이름을 알린 뒤 쓴다, 셸은 돌기 전 모습을 알린다
+W() { bash "$TC" touch --session s1 --kind write "$1"; }
+SH() { bash "$TC" touch --session s1 --kind shell; }
+ed() { W src/a.ts; printf 'x\n' >> src/a.ts; }
 plan() { cat scv/promote/p1/PLAN.md; }
 
 # T1 — 셸로 코드 수정, 계획 기록 없음 → 막힘 · 막는 말 한 줄에 명령
@@ -86,7 +89,7 @@ reset; start; printf 'x\n' >> scv/promote/p1/PLAN.md; vF="$(verdict)"
 [[ "$vD $vD2 $vE $vF" == "pass block block pass" ]] && ok "T6 D pass · D2 block · E block · F pass" || bad "T6 $vD $vD2 $vE $vF"
 
 # T7 — scv/ 밖 문서도 바뀐 것, 계획 없으면 계획을 만들라는 말
-reset; rm -rf scv/promote/p1; start; printf 'y\n' >> README.md
+reset; rm -rf scv/promote/p1; start; W README.md; printf 'y\n' >> README.md
 out="$(bash "$TC" end --session s1)"
 grep -qx 'TURN_PLAN: block' <<<"$out" && grep -q '진행 중 계획이 없다' <<<"$out" && ok "T7 README.md → block (no-plan)" || bad "T7 $out"
 
@@ -95,7 +98,7 @@ G="$WORK/nogit"; mkdir -p "$G/scv/journal" "$G/d"
 ( cd "$G/d" && i=0; while (( i < 1000 )); do printf '%s' "$i" > "f$i.txt"; i=$((i + 1)); done )
 cd "$G"
 t0="$(now_ms)"; printf 'x' | bash "$TC" start --session s1; t1="$(now_ms)"
-printf 'z' >> d/f1.txt
+W d/f1.txt; printf 'z' >> d/f1.txt
 v="$(verdict)"; ms=$((t1 - t0))
 cd "$R"
 [[ "$v" == block && $ms -lt 300 ]] && ok "T8 git 아님 → block, 사진 ${ms}ms" || bad "T8 v=$v ms=$ms"
@@ -103,15 +106,15 @@ cd "$R"
 # T9 — 작업 공간의 다른 저장소를 명령 글에 안 보이게 고침 → 그 저장소에서 막힘
 B="$WORK/B"; mkdir -p "$B"; ( cd "$B" && git init -q . && git config user.email t@t && git config user.name t && printf 'b\n' > f.ts && git add -A && git commit -qm i )
 reset; export SCV_WORKSPACE_REPOS="$B"; start
-printf 'echo hack >> %s/f.ts\n' "$B" > "$WORK/sneaky.sh"; bash "$WORK/sneaky.sh"
+printf 'echo hack >> %s/f.ts\n' "$B" > "$WORK/sneaky.sh"; SH; bash "$WORK/sneaky.sh"
 out="$(bash "$TC" end --session s1)"; unset SCV_WORKSPACE_REPOS
 if grep -qx 'TURN_PLAN: block' <<<"$out" && grep -q 'TURN_PLAN_FILES: B:f.ts' <<<"$out"; then ok "T9 다른 저장소 B:f.ts → block"
 else bad "T9 $out"; fi
 
 # T10 — 릴리스 예외 통과 · 정하지 않은 종류는 거절 + 막힘
-reset; rm -rf scv/promote/p1; start; printf '1.0\n' > VERSION
+reset; rm -rf scv/promote/p1; start; W VERSION; printf '1.0\n' > VERSION
 H "bash $PL exempt --kind release --why '래퍼 0.86.0'"; vR="$(verdict)"
-reset; rm -rf scv/promote/p1; start; printf '1.0\n' > VERSION
+reset; rm -rf scv/promote/p1; start; W VERSION; printf '1.0\n' > VERSION
 rc=0; bash "$PL" exempt --kind misc --why x >/dev/null 2>&1 || rc=$?
 printf 'bash %s exempt --kind misc --why x' "$PL" | bash "$TC" receipt --session s1; vM="$(verdict)"
 [[ "$vR" == pass && $rc == 2 && "$vM" == block ]] && ok "T10 release pass · misc 거절(2) + block" || bad "T10 vR=$vR rc=$rc vM=$vM"
@@ -192,6 +195,52 @@ if [[ -f "$VH" && -f "$FX" ]]; then
     else bad "T20b materialize d=$d"; fi
   fi
 else ok "T20 건너뜀 (프로필 검사 도구 없음 — 래퍼 안)"; fi
+
+# ---- 계획 20261109-wookiya1364-turn-check-own-files: 이 세션이 고친 파일만 센다 ----
+# 2026-11-09 실측: 이 세션은 slay 를 읽기만 했는데 slay 세션이 고친 파일로 두 번 막혔다.
+
+# T21 — 남이 고친 파일만 있으면 통과 (이 세션은 읽기만)
+reset; rm -rf scv/promote/p1; start
+bash "$TC" touch --session s1 --kind read src/a.ts
+printf 'other session\n' >> src/a.ts
+v="$(verdict)"
+[[ "$v" == pass ]] && ok "T21 남이 고친 파일만 → pass" || bad "T21 v=$v"
+
+# T22 — 편집 도구로 고친 파일은 막힘, 그 파일 이름이 나옴
+reset; rm -rf scv/promote/p1; start; W src/a.ts; printf 'mine\n' >> src/a.ts
+out="$(bash "$TC" end --session s1)"
+grep -qx 'TURN_PLAN: block' <<<"$out" && grep -q 'TURN_PLAN_FILES: src/a.ts' <<<"$out" && ok "T22 편집 도구 → block, src/a.ts" || bad "T22 $out"
+
+# T23 — 셸로 고친 파일은 막힘, 셸 앞에 남이 고친 파일은 빠짐
+reset; rm -rf scv/promote/p1; start
+printf 'other\n' >> README.md            # 다른 세션
+SH; printf 'mine\n' >> src/a.ts           # 이 세션의 셸 명령
+out="$(bash "$TC" end --session s1)"
+files="$(sed -n 's/^TURN_PLAN_FILES: //p' <<<"$out")"
+if grep -qx 'TURN_PLAN: block' <<<"$out" && [[ "$files" == *src/a.ts* && "$files" != *README.md* ]]; then ok "T23 셸 → block, src/a.ts 만 (README.md 빠짐)"
+else bad "T23 $out"; fi
+
+# T24 — 읽기만 한 다른 저장소는 상태에 남지 않음 (도구 앞 훅에 읽기 입력을 그대로 넣음)
+reset; start
+printf '{"cwd":"%s","session_id":"s1","tool_name":"Read","tool_input":{"file_path":"%s/f.ts"}}' "$R" "$B" \
+  | SCV_GUARD_STATE="$WORK/gstate" bash "$CORE/template/hooks/guard.sh" >/dev/null 2>&1
+printf '{"cwd":"%s","session_id":"s1","tool_name":"Edit","tool_input":{"file_path":"%s/src/a.ts","old_string":"a","new_string":"b"}}' "$R" "$R" \
+  | SCV_GUARD_STATE="$WORK/gstate" bash "$CORE/template/hooks/guard.sh" >/dev/null 2>&1
+nr="$(grep -c . scv/journal/.turn-plan/roots)"
+if [[ $nr == 1 ]] && ! grep -q "$B" scv/journal/.turn-plan/roots && grep -q '/src/a.ts$' scv/journal/.turn-plan/mine; then ok "T24 훅: 읽기 → 저장소 안 셈, 편집 → 내 파일에 src/a.ts"
+else bad "T24 roots=$(tr '\n' ' ' < scv/journal/.turn-plan/roots) mine=$(cat scv/journal/.turn-plan/mine 2>/dev/null)"; fi
+
+# T25 — 셸로 커밋한 파일도 내 몫
+reset; rm -rf scv/promote/p1; start; SH; printf 'c\n' >> src/a.ts; git commit -qam c
+out="$(bash "$TC" end --session s1)"; git reset -q --hard HEAD~1
+grep -qx 'TURN_PLAN: block' <<<"$out" && grep -q 'src/a.ts' <<<"$out" && ok "T25 셸로 커밋 → block, src/a.ts" || bad "T25 $out"
+
+# T26 — 순수 함수
+# shellcheck source=../scripts/lib/turn-check.sh
+source "$CORE/scripts/lib/turn-check.sh"
+k="$(scv_tc_tool_kind ls '' '') $(scv_tc_tool_kind '' /a yes) $(scv_tc_tool_kind '' /a '')"
+a="$(scv_tc_abs_paths /r $'a.ts\nsrc/b.ts')"; m="$(scv_tc_mine_only $'/r/a\n/r/b' $'/r/b\n/x/c')"
+[[ "$k" == "shell write read" && "$a" == $'/r/a.ts\n/r/src/b.ts' && "$m" == /r/b ]] && ok "T26 순수 함수 세 개" || bad "T26 k=$k a=$a m=$m"
 
 # T15 — 끄기 · 기존 plan-link 시험
 reset; export SCV_TURN_PLAN_CHECK=off; start; ed; v="$(verdict)"; unset SCV_TURN_PLAN_CHECK

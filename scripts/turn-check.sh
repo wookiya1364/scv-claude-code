@@ -3,7 +3,7 @@
 # 무언가를 고친 턴은 계획에 기록이 남아야 끝난다(scv_settings.json SCV_TURN_PLAN_CHECK=on, 기본 켬).
 #
 #   turn-check.sh start   --dir <턴 폴더> | --session <세션>            (표준 입력: 이번 턴 사용자 원문)
-#   turn-check.sh touch   --dir <턴 폴더> <경로>…    (도구 앞: 처음 건드리는 저장소를 더 찍음)
+#   turn-check.sh touch   --dir <턴 폴더> [--kind write|shell|read] <경로>…  (도구 앞: 쓴 파일 · 셸 앞 모습을 적음)
 #   turn-check.sh receipt --dir <턴 폴더>            (표준 입력: 도구가 돌릴 명령 글)
 #   turn-check.sh end     --dir <턴 폴더>            → TURN_PLAN: pass|block|pass-unrecorded|off · TURN_PLAN_REASON: …
 #   turn-check.sh choice  --question <질문> --answer <답>
@@ -11,9 +11,11 @@
 #   turn-check.sh info                               → TURN_ID: … · TURN_REQ: … (plan-link 이 읽음)
 #
 # 호스트 설정 경로(SCV_GUARD_EXEMPT — 래퍼가 도구 앞 훅에 넘김)는 바뀐 파일에서 뺀다.
-# 작업 공간 = 이 프로젝트 + SCV_WORKSPACE_REPOS(절대 경로를 : 로 이음) + 그 턴에 도구가 경로로 건드린 저장소.
+# 작업 공간 = 이 프로젝트 + SCV_WORKSPACE_REPOS(절대 경로를 : 로 이음) + 그 턴에 쓰기 도구 · 셸 명령이 건드린 저장소.
+# 세는 파일 = 바뀐 파일 중 이 세션이 쓴 것(mine): 쓰기 도구에 적힌 파일 + 셸 명령 앞과 다음 도구 앞(또는 턴 끝) 모습의 차이.
+# 읽기 도구는 세지 않는다. 계획 20261109-wookiya1364-turn-check-own-files.
 # git 저장소는 바뀐 파일 해시 + HEAD, git 아닌 폴더는 파일 목록 · 수정 시각 · 크기로 찍는다.
-# 같은 폴더에서 동시에 도는 두 세션은 구분하지 못한다(계획의 한계). 어떤 실패도 세션을 막지 않는다 — 판단할 수 없으면 pass.
+# 셸 명령의 비교 구간에 다른 세션이 같은 폴더를 고치면 그 파일은 섞인다(계획의 한계). 어떤 실패도 세션을 막지 않는다 — 판단할 수 없으면 pass.
 # 순수부: lib/turn-check.sh. 계획 20261109-wookiya1364-turn-plan-check.
 set -uo pipefail
 
@@ -142,6 +144,44 @@ orphan_return() {
   done
 }
 
+# @effect real_path
+# 이유: 파일 시스템을 읽어 경로의 실제 폴더(링크 풂)를 찾는다 — 아직 없는 파일은 폴더만 풀고, 폴더도 없으면 그대로
+real_path() {
+  local p="$1" d
+  [[ "$p" == /* ]] || p="$PROJECT/$p"
+  d="$(cd "$(dirname "$p")" 2>/dev/null && pwd -P)" || { printf '%s' "$p"; return 0; }
+  printf '%s/%s' "$d" "$(basename "$p")"
+}
+
+# @effect pend_snap
+# 이유: 셸 명령이 돌기 전 저장소 모습을 '대기 사진'으로 찍어 상태 폴더에 쓴다 — 다음 도구 앞이나 턴 끝에 정산한다
+pend_snap() {
+  local root="$1" k; k="$(key_of "$root")"
+  snap_root "$root" > "$S/pend.$k" 2>/dev/null || : > "$S/pend.$k"
+  head_of "$root" > "$S/phead.$k"
+  grep -qxF "$root" "$S/pend-roots" 2>/dev/null || printf '%s\n' "$root" >> "$S/pend-roots"
+}
+
+# @effect settle
+# 이유: 대기 사진과 지금 모습을 견줘 앞 셸 명령이 바꾼 파일을 '내 파일'(mine)에 적고 대기 사진을 지운다
+settle() {
+  local root k d h0 h1
+  [[ -s "$S/pend-roots" ]] || return 0
+  while IFS= read -r root; do
+    [[ -n "$root" ]] || continue
+    k="$(key_of "$root")"
+    if ! grep -q '^@too-many' "$S/pend.$k" 2>/dev/null; then
+      d="$(scv_tc_diff "$(cat "$S/pend.$k" 2>/dev/null)" "$(snap_root "$root")")"
+      h0="$(cat "$S/phead.$k" 2>/dev/null)"; h1="$(head_of "$root")"
+      [[ -n "$h0" && "$h0" != "$h1" ]] && d="$d"$'\n'"$(git -C "$root" diff --name-only "$h0" "$h1" 2>/dev/null)"
+      d="$(scv_tc_abs_paths "$root" "$d")"
+      [[ -n "$d" ]] && printf '%s\n' "$d" >> "$S/mine"
+    fi
+    rm -f "$S/pend.$k" "$S/phead.$k"
+  done < "$S/pend-roots"
+  rm -f "$S/pend-roots"
+}
+
 # @effect state_dir
 # 이유: 턴 폴더 안 상태 폴더 경로를 정하고 만든다 — 링크면 쓰지 않는다
 state_dir() {
@@ -167,7 +207,7 @@ trap 'rm -f "$TMPF"' EXIT
 
 [[ $# -ge 1 ]] || usage
 CMD="$1"; shift
-DIR=""; SID=""; Q=""; A=""; TOOL=""; PATHS=()
+DIR=""; SID=""; Q=""; A=""; TOOL=""; KIND="write"; PATHS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dir) DIR="${2:-}"; shift 2 ;;
@@ -175,6 +215,7 @@ while [[ $# -gt 0 ]]; do
     --question) Q="${2:-}"; shift 2 ;;
     --answer) A="${2:-}"; shift 2 ;;
     --tool) TOOL="${2:-}"; shift 2 ;;
+    --kind) KIND="${2:-write}"; shift 2 ;;
     *) PATHS+=("$1"); shift ;;
   esac
 done
@@ -188,7 +229,7 @@ case "$CMD" in
   start)
     enabled || exit 0
     state_dir "$DIR" || exit 0
-    rm -f "$S"/snap.* "$S"/head.* "$S/roots" "$S/receipts" "$S/blocks" "$S/exempt" "$S/steps" 2>/dev/null
+    rm -f "$S"/snap.* "$S"/head.* "$S"/pend.* "$S"/phead.* "$S/pend-roots" "$S/mine" "$S/roots" "$S/receipts" "$S/blocks" "$S/exempt" "$S/steps" 2>/dev/null
     # 원문은 저장 전에 비밀 가리개(journal-append.sh --redact-only)를 거친다 — 계획 줄에도 이 글이 붙는다.
     REQ="$(head -c 4000 2>/dev/null | bash "$SCRIPT_DIR/journal-append.sh" --redact-only 2>/dev/null || true)"
     printf '%s' "$REQ" > "$S/req"
@@ -208,9 +249,28 @@ case "$CMD" in
     state_dir "$DIR" || exit 0
     [[ -f "$S/id" ]] || exit 0
     [[ -n "${SCV_GUARD_EXEMPT:-}" ]] && printf '%s' "$SCV_GUARD_EXEMPT" > "$S/host-exempt"
-    for p in ${PATHS[@]+"${PATHS[@]}"}; do
-      r="$(root_of "$p")"; [[ -n "$r" ]] && take_snap "$r"
-    done
+    # 앞 셸 명령이 바꾼 파일부터 정산한다 — 읽기 도구여도 정산은 한다(셸 명령이 끝난 뒤의 첫 도구).
+    settle
+    case "$KIND" in
+      write)
+        # 쓰기 도구: 적힌 파일만 '내 파일'. 저장소는 쓰기 전에 시작 사진을 찍는다.
+        for p in ${PATHS[@]+"${PATHS[@]}"}; do
+          a="$(real_path "$p")"; r="$(root_of "$a")"
+          [[ -z "$r" && "$a" == "$PROJECT"/* ]] && r="$PROJECT"
+          [[ -n "$r" ]] && take_snap "$r"
+          printf '%s\n' "$a" >> "$S/mine"
+        done ;;
+      shell)
+        # 셸 명령: 이 프로젝트 · 이미 찍은 저장소(작업 공간 포함) · cd · -C 대상 저장소를 대기 사진으로 찍는다
+        # — 명령 글에 경로가 안 보여도 작업 공간 저장소의 변경을 잡는다.
+        R="$PROJECT"$'\n'
+        while IFS= read -r r; do [[ -n "$r" && $'\n'"$R" != *$'\n'"$r"$'\n'* ]] && R="$R$r"$'\n'; done < "$S/roots"
+        for p in ${PATHS[@]+"${PATHS[@]}"}; do
+          r="$(root_of "$p")"; [[ -n "$r" && $'\n'"$R" != *$'\n'"$r"$'\n'* ]] && R="$R$r"$'\n'
+        done
+        while IFS= read -r r; do [[ -n "$r" ]] && { take_snap "$r"; pend_snap "$r"; }; done <<< "$R" ;;
+      *) : ;;  # 읽기 · 찾기: 폴더도 파일도 세지 않는다
+    esac
     exit 0
     ;;
 
@@ -247,6 +307,8 @@ case "$CMD" in
     state_dir "$DIR" || { echo "TURN_PLAN: pass"; exit 0; }
     [[ -f "$S/id" ]] || { echo "TURN_PLAN: pass"; exit 0; }
     ID="$(cat "$S/id")"
+    settle
+    MINE="$(cat "$S/mine" 2>/dev/null)"
     CHANGED=""
     while IFS= read -r root; do
       [[ -n "$root" ]] || continue
@@ -258,6 +320,9 @@ case "$CMD" in
       h0="$(cat "$S/head.$k" 2>/dev/null)"; h1="$(head_of "$root")"
       [[ -n "$h0" && "$h0" != "$h1" ]] && d="$d"$'\n'"$(git -C "$root" diff --name-only "$h0" "$h1" 2>/dev/null)"
       d="$(scv_tc_filter "$d" "$(cat "$S/host-exempt" 2>/dev/null)")"
+      # 이 세션이 쓴 파일만 — 다른 세션이 같은 폴더에서 고친 파일은 뺀다.
+      d="$(scv_tc_mine_only "$(scv_tc_abs_paths "$root" "$d")" "$MINE")"
+      d="$(printf '%s' "$d" | sed "s#^${root%/}/##")"
       [[ -n "$d" ]] || continue
       pre=""; [[ "$root" == "$PROJECT" ]] || pre="$(basename "$root"):"
       while IFS= read -r f; do [[ -n "$f" ]] && CHANGED="$CHANGED$pre$f"$'\n'; done <<< "$d"
