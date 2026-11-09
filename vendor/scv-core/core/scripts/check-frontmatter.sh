@@ -37,7 +37,7 @@ PLAN_KEYS=(title slug author created_at status tags)
 # have nothing in common. PLAN states are PROMOTE.md §9; N/A stays valid for
 # workflow docs because scv/REPORTING.md seeds that way.
 STANDARD_DOC_STATUS="draft active deprecated N/A"
-PLAN_STATUS="planned in_progress testing done obsolete"
+PLAN_STATUS="planned in_progress paused testing done obsolete"
 VALID_POLICY="overwrite preserve merge-on-markers"
 # PLAN.md frontmatter `kind` (optional; defaults to feature when absent).
 # See PROMOTE.md §8d/§8e for epic/refactor flow, §8c for retirement.
