@@ -10,6 +10,7 @@
 #   plan-link.sh check-after <B> --changed <파일> [--changed <파일> …]
 #   plan-link.sh resume <B> [--changed <파일> …] [--accept-overlap]
 #   plan-link.sh progress <A> --step <N> [--state doing|done|blocked] --note "<한 일>" [--accept-conflict]
+#                                                                  (0.87.4+ 상태 기본은 doing — 단계가 끝났을 때만 done)
 #                                                                  (0.87.0+ 계획 안 일의 진행 한 줄 — 대시보드가 이 줄로 단계를 센다)
 #   append · progress 는 0.87.0+ 부터 적으려는 글이 계획의 Non-Goals 와 겹치면 종료 코드 3 (사용자에게 물은 뒤 --accept-conflict)
 #   plan-link.sh exempt --kind release|sync --why "<이유>"         (0.87.0+ 계획 없이 해도 되는 정한 예외)
@@ -124,6 +125,7 @@ case "$CMD" in
       ENTRY="**$DAY 추가** — ${AFTER}단계 뒤에 새 단계"$'\n'"새 단계: ${STEP%% — *}"$'\n'"이유: $WHY"
     fi
     NA="$(scv_plan_insert_step "$TA" "$AFTER" "$STEP"; printf x)"; NA="${NA%x}"
+    [[ -n "$REDO" ]] || { NA="$(scv_plan_shift_progress "$NA" "$AFTER"; printf x)"; NA="${NA%x}"; }
     NA="$(scv_plan_history_add "$NA" "$ENTRY"; printf x)"; NA="${NA%x}"
     write_plan "$FA" "$TA" "$NA"
     echo "APPENDED: $A (${ENTRY%%$'\n'*})"
@@ -202,7 +204,7 @@ case "$CMD" in
     ;;
 
   progress)
-    A="$1"; shift; STEPN=""; NOTE=""; PSTATE=done; ACCEPT=0
+    A="$1"; shift; STEPN=""; NOTE=""; PSTATE=doing; ACCEPT=0
     while [[ $# -gt 0 ]]; do
       case "$1" in
         --step) STEPN="${2:-}"; shift 2 ;;

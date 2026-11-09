@@ -166,14 +166,15 @@ scv_tc_req_tag() {
 }
 
 # @pure
-# 역할: 계획 안 일의 진행 한 줄(이력 항목)을 만든다 — 머리 줄(단계 · 시작/끝/막힘) + 요청 꼬리. 대시보드가 이 줄로 단계 상태를 센다
+# 역할: 계획 안 일의 진행 한 줄(이력 항목)을 만든다 — 머리 줄(단계 · 시작/끝/막힘) + 요청 꼬리. 대시보드가 이 줄로 단계 상태를 센다. 상태를 안 주면 시작(0.87.4 — 끝은 직접 말할 때만)
 # 종류: 조립
 # 예: "2026-11-09" 6 done "2인 적 배수" "요청: x (요청 ab12cd34)" → $'**2026-11-09 진행** — 6단계 끝: 2인 적 배수\n요청: x (요청 ab12cd34)'
 # 예: "2026-11-09" 1 doing "준비" "" → "**2026-11-09 진행** — 1단계 시작: 준비"
+# 예: "2026-11-09" 1 "" "측정 중" "" → "**2026-11-09 진행** — 1단계 시작: 측정 중"
 # 예: "2026-11-09" 2 blocked "키 없음" "" → "**2026-11-09 진행** — 2단계 막힘: 키 없음"
 scv_tc_progress_entry() {
-  local day="${1:-}" step="${2:-}" state="${3:-done}" note="${4:-}" tag="${5:-}" word=끝
-  case "$state" in doing) word=시작 ;; blocked) word=막힘 ;; esac
+  local day="${1:-}" step="${2:-}" state="${3:-doing}" note="${4:-}" tag="${5:-}" word=시작
+  case "$state" in done) word=끝 ;; blocked) word=막힘 ;; esac
   printf '**%s 진행** — %s단계 %s: %s' "$day" "$step" "$word" "$note"
   [[ -z "$tag" ]] || printf '\n%s' "$tag"
 }
@@ -299,14 +300,14 @@ scv_tc_judge() {
 # @pure
 # 역할: 막을 때 모델에게 줄 말을 만든다 — 무엇이 빠졌는지와 할 일 한 줄(명령 꼴 그대로)
 # 종류: 조립
-# 예: "in-plan" "a" 3 "/p/plan-link.sh" → $'[SCV 계획 기록] 이번 턴에 파일 3개가 바뀌었는데 계획 기록이 없다 — 계획 안 일이면: bash /p/plan-link.sh progress a --step 번호 --state done --note "한 일"\n계획 밖 일이면: bash /p/plan-link.sh append a --after 번호 --step "단계" --why "이유"'
+# 예: "in-plan" "a" 3 "/p/plan-link.sh" → $'[SCV 계획 기록] 이번 턴에 파일 3개가 바뀌었는데 계획 기록이 없다 — 계획 안 일이면: bash /p/plan-link.sh progress a --step 번호 --state doing --note "한 일" (단계가 끝났을 때만 --state done)\n계획 밖 일이면: bash /p/plan-link.sh append a --after 번호 --step "단계" --why "이유"'
 # 예: "no-plan" "" 1 "/p/plan-link.sh" → $'[SCV 계획 기록] 이번 턴에 파일 1개가 바뀌었는데 진행 중 계획이 없다 — 계획을 만들어라(promote). 릴리스 · 동기화만 예외: bash /p/plan-link.sh exempt --kind release --why "이유"'
 # 예: "step" "tool_x" 2 "/p/plan-link.sh" → "[SCV 단계 보고] 대시보드가 켜져 있다 — 이번 턴에 한 단계를 tool_x 로 알려라(시작 · 끝 · 막힘)."
 # 예: "return" "b" 2 "/p/plan-link.sh" → "[SCV 되돌아가기] 계획 b 가 끝났는데 그것 때문에 보류한 계획이 아직 보류다 — bash /p/plan-link.sh resume b"
 scv_tc_block_msg() {
   local kind="${1:-}" slug="${2:-}" n="${3:-0}" pl="${4:-plan-link.sh}"
   case "$kind" in
-    in-plan) printf '[SCV 계획 기록] 이번 턴에 파일 %s개가 바뀌었는데 계획 기록이 없다 — 계획 안 일이면: bash %s progress %s --step 번호 --state done --note "한 일"\n계획 밖 일이면: bash %s append %s --after 번호 --step "단계" --why "이유"' "$n" "$pl" "$slug" "$pl" "$slug" ;;
+    in-plan) printf '[SCV 계획 기록] 이번 턴에 파일 %s개가 바뀌었는데 계획 기록이 없다 — 계획 안 일이면: bash %s progress %s --step 번호 --state doing --note "한 일" (단계가 끝났을 때만 --state done)\n계획 밖 일이면: bash %s append %s --after 번호 --step "단계" --why "이유"' "$n" "$pl" "$slug" "$pl" "$slug" ;;
     step) printf '[SCV 단계 보고] 대시보드가 켜져 있다 — 이번 턴에 한 단계를 %s 로 알려라(시작 · 끝 · 막힘).' "$slug" ;;
     return) printf '[SCV 되돌아가기] 계획 %s 가 끝났는데 그것 때문에 보류한 계획이 아직 보류다 — bash %s resume %s' "$slug" "$pl" "$slug" ;;
     *) printf '[SCV 계획 기록] 이번 턴에 파일 %s개가 바뀌었는데 진행 중 계획이 없다 — 계획을 만들어라(promote). 릴리스 · 동기화만 예외: bash %s exempt --kind release --why "이유"' "$n" "$pl" ;;
