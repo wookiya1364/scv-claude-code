@@ -58,7 +58,7 @@ else bad "T2 v=$v"; plan | tail -5 >&2; fi
 
 # T3 — 계획 안 일 + progress 한 줄 → 통과
 reset; start; ed
-H "bash $PL progress p1 --step 2 --note '2인 적 배수'"
+H "bash $PL progress p1 --step 2 --state done --note '2인 적 배수'"
 v="$(verdict)"
 if [[ "$v" == pass ]] && [[ "$(plan | grep -c '^- \*\*2026-11-09 진행\*\* — 2단계 끝: 2인 적 배수$')" == 1 ]]; then ok "T3 progress → pass, 진행 줄 1개"
 else bad "T3 v=$v"; fi
@@ -241,6 +241,37 @@ source "$CORE/scripts/lib/turn-check.sh"
 k="$(scv_tc_tool_kind ls '' '') $(scv_tc_tool_kind '' /a yes) $(scv_tc_tool_kind '' /a '')"
 a="$(scv_tc_abs_paths /r $'a.ts\nsrc/b.ts')"; m="$(scv_tc_mine_only $'/r/a\n/r/b' $'/r/b\n/x/c')"
 [[ "$k" == "shell write read" && "$a" == $'/r/a.ts\n/r/src/b.ts' && "$m" == /r/b ]] && ok "T26 순수 함수 세 개" || bad "T26 k=$k a=$a m=$m"
+
+# T27 — --state 없는 progress 는 '시작' (끝은 직접 말할 때만, 0.87.4)
+reset; bash "$PL" progress p1 --step 2 --note '측정 중' >/dev/null
+if plan | grep -q '2단계 시작: 측정 중$' && ! plan | grep -q '2단계 끝'; then ok "T27 상태 없는 progress → 시작"; else bad "T27 $(plan | grep 단계)"; fi
+
+# T28 — --state done 은 그대로 '끝'
+reset; bash "$PL" progress p1 --step 2 --state done --note '다 함' >/dev/null
+plan | grep -q '2단계 끝: 다 함$' && ok "T28 --state done → 끝" || bad "T28 $(plan | grep 단계)"
+
+# T29 — 막힘 안내문이 끝 · 진행을 나눠 보여 줌
+# shellcheck source=../scripts/lib/turn-check.sh
+source "$CORE/scripts/lib/turn-check.sh"
+m="$(scv_tc_block_msg in-plan a 3 /p/plan-link.sh)"
+if [[ "$m" == *"--state doing"* && "$m" == *"--state done"* && "$m" == *"끝났을 때만"* ]]; then ok "T29 안내문 doing · done 구분"; else bad "T29 $m"; fi
+
+# T30 — 단계를 끼우면 뒤 진행 줄 번호가 밀림, 다른 이력 줄은 그대로
+reset
+printf -- '---\ntitle: t\nslug: p1\nstatus: in_progress\n---\n\n## Suggested path\n\n1. 하나\n2. 둘\n3. 셋\n\n## 변경 이력\n\n- **2026-11-09 진행** — 1단계 끝: a\n\n- **2026-11-09 진행** — 2단계 끝: b\n  - 요청: x (요청 ab)\n\n- **2026-11-09 추가** — 1단계 뒤에 새 단계\n  - 새 단계: 옛것\n\n- **2026-11-09 진행** — 3단계 시작: c\n\n## Links\n' > scv/promote/p1/PLAN.md
+bash "$PL" append p1 --after 1 --step '새것 — n' --why x >/dev/null
+if plan | grep -q '1단계 끝: a$' && plan | grep -q '3단계 끝: b$' && plan | grep -q '4단계 시작: c$' \
+   && plan | grep -q '추가\*\* — 1단계 뒤에 새 단계$' && plan | grep -q '^2\. 새것 — n$' && ! plan | grep -q '2단계 끝: b'; then
+  ok "T30 끼우기 → 뒤 진행 줄 번호 +1, 추가 줄 그대로"
+else bad "T30 $(plan | grep -E '단계|^[0-9]\.')"; fi
+
+# T31 — 순수 함수 scv_plan_shift_progress
+# shellcheck source=../scripts/lib/plan-link.sh
+source "$CORE/scripts/lib/plan-link.sh"
+s1="$(scv_plan_shift_progress $'## 변경 이력\n\n- **d 진행** — 3a단계 막힘: k\n- **d 진행** — 2단계 끝: j' 2)"
+s2="$(scv_plan_shift_progress $'# a\n본문 3단계' 1)"
+if [[ "$s1" == $'## 변경 이력\n\n- **d 진행** — 4a단계 막힘: k\n- **d 진행** — 2단계 끝: j' && "$s2" == $'# a\n본문 3단계' ]]; then ok "T31 순수 함수 번호 밀기"
+else bad "T31 s1=$s1 s2=$s2"; fi
 
 # T15 — 끄기 · 기존 plan-link 시험
 reset; export SCV_TURN_PLAN_CHECK=off; start; ed; v="$(verdict)"; unset SCV_TURN_PLAN_CHECK
