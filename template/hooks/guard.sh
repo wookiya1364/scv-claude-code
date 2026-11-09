@@ -170,9 +170,10 @@ help_mark() { mp_run helped >/dev/null; }
 
 # ---------- turn plan check (0.87.0+) ----------------------------------------
 # 턴 끝 계획 기록 검사(scripts/turn-check.sh)의 도구 앞 몫: (1) 명령이 계획 기록 명령이면 이번 턴 영수증을 남긴다,
-# (2) 이 도구가 경로로 처음 건드리는 저장소는 돌기 전에 사진을 찍는다. 막지 않는다 — 어떤 실패도 그냥 넘어간다.
+# (2) 쓰기 도구는 적힌 파일을, 셸 명령은 돌기 전 모습을 적어 이 세션이 쓴 파일만 세게 한다. 막지 않는다 — 어떤 실패도 그냥 넘어간다.
 _scv_tc_sh="$_scv_mp_dir/turn-check.sh"
-if [[ -f "$_scv_tc_sh" && "$SESSION" != nosession && -d "$PROJECT_ROOT" ]]; then
+if [[ -f "$_scv_tc_sh" && "$SESSION" != nosession && -d "$PROJECT_ROOT" ]] \
+   && { declare -F scv_tc_tool_kind >/dev/null 2>&1 || source "$_scv_mp_dir/lib/turn-check.sh" 2>/dev/null; }; then
   _scv_tc_cmd="$(field '.tool_input.command')"
   _scv_tc_paths=()
   for _scv_tc_k in '.tool_input.file_path' '.tool_input.path' '.tool_input.notebook_path'; do
@@ -186,9 +187,15 @@ if [[ -f "$_scv_tc_sh" && "$SESSION" != nosession && -d "$PROJECT_ROOT" ]]; then
   fi
   _scv_tc_tool="$(field '.tool_name')"
   [[ -n "$_scv_tc_tool" ]] && { (cd "$PROJECT_ROOT" && bash "$_scv_tc_sh" step --session "$SESSION" --tool "$_scv_tc_tool" >/dev/null 2>&1) || true; }
-  if [[ ${#_scv_tc_paths[@]} -gt 0 ]]; then
-    (cd "$PROJECT_ROOT" && bash "$_scv_tc_sh" touch --session "$SESSION" "${_scv_tc_paths[@]}" >/dev/null 2>&1) || true
-  fi
+  # 도구 종류는 입력 칸 모양으로 정한다(도구 이름은 호스트마다 다름): 명령 글 → 셸, 경로 + 쓸 내용 → 쓰기, 그 밖 → 읽기.
+  # 읽기 도구는 폴더도 파일도 세지 않지만, 앞 셸 명령의 정산을 위해 touch 는 늘 부른다.
+  _scv_tc_body=""
+  for _scv_tc_k in '.tool_input.content' '.tool_input.old_string' '.tool_input.new_string' '.tool_input.edits' '.tool_input.new_source'; do
+    [[ -n "$(field "$_scv_tc_k")" ]] && { _scv_tc_body=1; break; }
+  done
+  _scv_tc_p1=""; [[ ${#_scv_tc_paths[@]} -gt 0 ]] && _scv_tc_p1="${_scv_tc_paths[0]}"
+  _scv_tc_kind="$(scv_tc_tool_kind "$_scv_tc_cmd" "$_scv_tc_p1" "$_scv_tc_body")"
+  (cd "$PROJECT_ROOT" && bash "$_scv_tc_sh" touch --session "$SESSION" --kind "$_scv_tc_kind" ${_scv_tc_paths[@]+"${_scv_tc_paths[@]}"} >/dev/null 2>&1) || true
 fi
 # ---------- /turn plan check ---------------------------------------------------
 # A shell command that runs an SCV action's entry script (help.sh, work.sh, promote-helper.sh, ...)
