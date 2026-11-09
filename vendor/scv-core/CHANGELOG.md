@@ -2,6 +2,11 @@
 
 All notable changes to SCV Core are documented here.
 
+## [0.87.1] - 2026-11-09
+
+### Fixed
+- 호스트 프로필 검사(`tools/validate-host-profile.sh`)가 0.87.0 의 새 키 `SCV_STEP_TOOL_ON_FILE` · `SCV_STEP_TOOL_ON_MARK` 를 모르는 키로 막아, 래퍼가 대시보드 켜짐 표시를 넣지 못했다(claude 0.87.0 릴리스 PR 의 계약 검사 실패). 두 키를 받고, 짝이 없거나 상대 경로면 거절한다. 계약 문서 `core/contracts/host-profile.md` 에 두 키를 적었다. 시험 T20.
+
 ## [0.87.0] - 2026-11-09
 
 ### Added

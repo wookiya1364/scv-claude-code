@@ -38,6 +38,8 @@ SCV_JUDGE_COMMAND=""
 SCV_CHOICE_REJECTED_PREFIX=""
 SCV_DECKUI_DIR=""
 SCV_STEP_TOOL=""
+SCV_STEP_TOOL_ON_FILE=""
+SCV_STEP_TOOL_ON_MARK=""
 line_no=0
 while IFS= read -r line || [[ -n "$line" ]]; do
   line_no=$((line_no + 1))
@@ -57,7 +59,8 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     SCV_ARGUMENT_STYLE|SCV_STATE_INDEX|SCV_LEGACY_STATE_INDEXES|SCV_ROOT_ENV|\
     SCV_GRAPH_SKILL_PATHS|SCV_UPDATE_OWNER|SCV_MODEL_POLICY_OWNER|\
     SCV_PROMPTING_GUIDES|SCV_AUTO_PROMPT_TAGS|SCV_CHOICE_TOOL|SCV_CHOICE_OFF_WHEN|\
-    SCV_SESSION_ENV|SCV_AUTO_PROMPT_PREFIX|SCV_AUTO_PROMPT_SUFFIX|SCV_JUDGE_COMMAND|SCV_CHOICE_REJECTED_PREFIX|SCV_DECKUI_DIR|SCV_STEP_TOOL) ;;
+    SCV_SESSION_ENV|SCV_AUTO_PROMPT_PREFIX|SCV_AUTO_PROMPT_SUFFIX|SCV_JUDGE_COMMAND|SCV_CHOICE_REJECTED_PREFIX|SCV_DECKUI_DIR|SCV_STEP_TOOL|\
+    SCV_STEP_TOOL_ON_FILE|SCV_STEP_TOOL_ON_MARK) ;;
     *) echo "profile:$line_no: unknown key: $key" >&2; exit 1 ;;
   esac
   case "|$seen_keys|" in
@@ -119,6 +122,16 @@ fi
 if [[ -n "$SCV_STEP_TOOL" ]]; then
   [[ "$SCV_STEP_TOOL" =~ ^[A-Za-z][A-Za-z0-9_-]{0,63}$ ]] \
     || { echo "profile: invalid SCV_STEP_TOOL (one tool name: a letter, then letters, digits, _ or -)" >&2; exit 1; }
+fi
+
+# 선택 키 (0.87.1+): 대시보드(단계 보고 도구) 켜짐을 알리는 호스트 설정 파일과 그 안의 표시 글 — 둘 다 있거나 둘 다 비어야 한다.
+# 파일은 절대 경로 또는 ~/ 로 시작, 표시 글은 한 줄 256자까지. 쓰는 곳: scripts/turn-check.sh(구현 중 고친 턴은 단계 보고가 있어야 끝남).
+if [[ -n "$SCV_STEP_TOOL_ON_FILE$SCV_STEP_TOOL_ON_MARK" ]]; then
+  [[ -n "$SCV_STEP_TOOL_ON_FILE" && -n "$SCV_STEP_TOOL_ON_MARK" ]] \
+    || { echo "profile: SCV_STEP_TOOL_ON_FILE and SCV_STEP_TOOL_ON_MARK go together" >&2; exit 1; }
+  [[ "$SCV_STEP_TOOL_ON_FILE" == /* || "$SCV_STEP_TOOL_ON_FILE" == "~/"* ]] \
+    || { echo "profile: invalid SCV_STEP_TOOL_ON_FILE (absolute path or ~/…)" >&2; exit 1; }
+  (( ${#SCV_STEP_TOOL_ON_MARK} <= 256 )) || { echo "profile: SCV_STEP_TOOL_ON_MARK is longer than 256" >&2; exit 1; }
 fi
 
 # 선택 키 (0.64.0+): 선택지 도구가 없는 실행을 알리는 환경 조건 — "환경 변수 이름=값" 하나(이름은 셸 변수 이름, 값은 글자 · 숫자 ·
