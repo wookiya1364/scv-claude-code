@@ -203,6 +203,17 @@ if [[ "$_scv_kind" != "auto" ]]; then
     if [[ -f "$_scv_af" && ! -L "$_scv_af" ]]; then rm -f "$_scv_af" 2>/dev/null || true; fi
   fi
 fi
+# ---------- turn plan check (0.87.0+) ---------------------------------------
+# 사람 턴의 시작에 작업 공간 사진을 찍는다 — 턴 끝 훅이 이 사진과 견줘 '고쳤는데 계획 기록이 없는 턴'을 막는다.
+# 규칙 · 설정은 scripts/turn-check.sh 머리말(SCV_TURN_PLAN_CHECK=off 면 아무것도 하지 않음). 어떤 실패도 막지 않는다.
+_scv_tc_sh="$CORE_HOME/scripts/turn-check.sh"
+if [[ "$_scv_kind" != "auto" && -f "$_scv_tc_sh" ]] && command -v jq >/dev/null 2>&1; then
+  _scv_tcp="$(printf '%s' "$INPUT" | jq -r 'try (if (.prompt | type) == "string" then .prompt else "" end) catch ""' 2>/dev/null | head -c 4000 || true)"
+  if [[ "$_scv_tcp" == *[![:space:]]* ]]; then
+    printf '%s' "$_scv_tcp" | bash "$_scv_tc_sh" start --dir "$_scv_tdir" >/dev/null 2>&1 || true
+  fi
+fi
+# ---------- /turn plan check -------------------------------------------------
 # ---------- dreams (v0.69.0+) ------------------------------------------------
 # 드림(규칙 전문 protocols/dreams.md) — 사람 턴에서만: (1) 아직 안 알린 보고서가 있으면 요약 한 줄을 싣고 알린 것으로 표시한다,
 # (2) 지난 드림 날짜가 오늘이 아니면 드림을 배경으로 띄우고 바로 돌아온다. 설정 SCV_DREAMS=off 면 아무것도 하지 않는다 — 이 구간을

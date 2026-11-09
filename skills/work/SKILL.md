@@ -408,6 +408,13 @@ makes the plan look stalled with no reason. Decide first, then record with `plan
 - Which of the two it was goes into `--why`, so the user can correct a wrong call later.
 
 Every call adds one entry to PLAN.md's `## 변경 이력` (headline first, details as sub-bullets).
+
+**The turn-end check (0.87.0+, `SCV_TURN_PLAN_CHECK=on` by default)** enforces this: a turn that changed
+files (code, or docs outside `scv/`) cannot end until a plan record carries this turn's request — the
+stop hook says which command to run. Work inside the plan is one line:
+`plan-link.sh progress <slug> --step <N> --note "<what was done>"`. A release or a Core sync with no
+plan is `plan-link.sh exempt --kind release|sync --why "<one line>"`. Choice answers are written to
+`## 변경 이력` by the hook itself.
 Step 9c-2 brings A back when B is archived.
 
 ### Step 7 — Run TESTS

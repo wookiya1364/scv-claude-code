@@ -100,6 +100,21 @@ if [[ -f "$_scv_mp" ]]; then
 fi
 # 하위 에이전트 안의 멈춤(훅 입력의 에이전트 id)도 하위 세션이다 — 지금 래퍼는 그 사건을 걸지 않지만, 걸려도 리드의 검사를 하지 않게.
 [[ -n "$(printf '%s' "$INPUT" | jq -r 'try (.agent_id // empty)' 2>/dev/null)" ]] && _scv_human=0
+# ---------- turn plan check (0.87.0+) ---------------------------------------
+# 이번 턴에 파일을 바꿨는데 계획 기록(plan-link progress · append · pause · exempt)이 없으면 막는다 — SCV_STOP_MODE 와 따로,
+# SCV_TURN_PLAN_CHECK=on(기본)이면 늘 막는다(사용자 결정 2026-11-09). 2번 막히면 turn-check.sh 가 통과시키고 '기록 없음'을 남긴다.
+# 사람 턴만 본다. 판단할 수 없으면(스크립트 · jq 없음) 막지 않는다.
+_scv_tc_sh="$_scv_core/scripts/turn-check.sh"
+if [[ "$_scv_human" == 1 && -f "$_scv_tc_sh" ]]; then
+  _scv_tco="$(bash "$_scv_tc_sh" end --dir "$_scv_tdir" 2>/dev/null || true)"
+  if grep -qx 'TURN_PLAN: block' <<<"$_scv_tco"; then
+    _scv_tcr="$(sed -n 's/^TURN_PLAN_REASON: //p' <<<"$_scv_tco" | head -n 1)"
+    _scv_tcf="$(sed -n 's/^TURN_PLAN_FILES: //p' <<<"$_scv_tco" | head -n 1)"
+    jq -cn --arg r "$_scv_tcr"$'\n'"바뀐 파일: $_scv_tcf"$'\n'"[SCV] 앞 답은 이미 사용자 화면에 있다 — 기록 명령만 실행하고 한 줄로 끝내라." '{decision:"block",reason:$r}' 2>/dev/null || true
+    exit 0
+  fi
+fi
+# ---------- /turn plan check -------------------------------------------------
 _scv_sarg=(); [[ -n "$_scv_sess" ]] && _scv_sarg=(--session "$_scv_sess")
 # ---------- /session ---------------------------------------------------------
 _scv_hs="$_scv_core/scripts/help-state.sh"
