@@ -240,7 +240,7 @@ title: User authentication flow refactor
 slug: 20260420-sspark-user-auth-refactor
 author: sspark
 created_at: 2026-04-20
-status: planned          # planned | in_progress | testing | done
+status: planned          # planned | in_progress | paused | testing | done
 tags: [auth, security]
 raw_sources:
   - scv/raw/2026-04-18-auth-review/notes.md
@@ -334,6 +334,14 @@ a better path when it finds one. (Legacy PLANs titled `## Steps` remain valid �
 
 - ...
 
+## 변경 이력
+
+<!-- Written by plan-link.sh (action:work Step 6b · 9c-2) — one entry per event, headline first:
+- **2026-11-09 보류** — 먼저 할 계획: 로그 정리
+  - 다시 시작: 2단계부터
+  - 이유: 로그 요구는 다른 목표
+Kinds: 추가 · 다시 하기 · 보류 · 연결 · 재개. Read from a phone, this section alone tells why a plan stopped and where it resumed. -->
+
 ## Links
 
 - Raw originals: `scv/raw/...` (consumed by readpath.json)
@@ -348,8 +356,11 @@ a better path when it finds one. (Legacy PLANs titled `## Steps` remain valid �
 | `slug` | ✓ | Must match folder name exactly |
 | `author` | ✓ | Author (`git config user.name` based) |
 | `created_at` | ✓ | ISO date |
-| `status` | ✓ | `planned` / `in_progress` / `testing` / `done` |
+| `status` | ✓ | `planned` / `in_progress` / `paused` / `testing` / `done` (`obsolete`: §8b). `paused` = waiting for another plan to finish — see `paused_by` |
 | `tags` | ✓ | Keyword array (search/filter) |
+| `paused_by` | — | (0.86.0+) Set with `status: paused`: the slug of the plan this one waits for. Written by `plan-link.sh pause`, removed by `plan-link.sh resume` (`action:work` Step 6b · 9c-2) |
+| `resume_at` | — | (0.86.0+) Set with `status: paused`: the `## Suggested path` step number this plan resumes from |
+| `return_to` | — | (0.86.0+) On a plan made for a request outside another plan: the slug to go back to when this one is archived (`action:work` Step 9c-2) |
 | `raw_sources` | — | Array of related raw file paths (for traceability) |
 | `refs` | — | Array of external references (Jira / Linear / Confluence / PR, etc.). See spec below |
 | `supersedes` | — | Array of **past slugs** this plan retires (supersedes). `action:regression` permanently skips those archived TESTS. See §8b |

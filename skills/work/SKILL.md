@@ -387,6 +387,29 @@ Update `PLAN.md` frontmatter `status:` as you progress:
 - `planned` → `in_progress` when you start implementation
 - `in_progress` → `testing` when code is complete and you're about to run TESTS
 
+### Step 6b — A requirement outside the plan (0.86.0+)
+
+While a plan is `in_progress` or `testing`, the user may ask for something its PLAN.md does not
+cover — mid-way, or while answering a choice. Never build it as a separate small fix that leaves
+no trace: from a phone, PLAN.md is the only thing the user can read, and an unrecorded detour
+makes the plan look stalled with no reason. Decide first, then record with `plan-link.sh`
+(the script edits the files and checks for conflicts; the judgment stays yours):
+
+- **Same goal** (the request serves this plan's Goals) — add it to this plan:
+  `bash ${CLAUDE_PLUGIN_ROOT}/scripts/plan-link.sh append <slug> --after <N> --step "<step — tail>" --why "<one line>"`.
+  Put it after the step it depends on. A finished step (`[x]`) is never rewritten: when its
+  requirement changed, `--redo <N>` adds a "다시 하기" step at the end. Add the matching TESTS.md
+  scenario in the same edit.
+- **Different goal** — make a new plan B (`/scv:promote`), then pause this plan A and link B back:
+  `plan-link.sh pause <A> --by <B> --resume-at <N> --why "<one line>"`. `<N>` is the step A
+  resumes from. The script first checks B's Goals against A's Non-Goals and A's unfinished steps;
+  on a conflict or overlap it changes nothing and exits 3 — ask the user which side changes
+  (`contracts/choices.md`), then re-run with `--accept-conflict`. Then implement B.
+- Which of the two it was goes into `--why`, so the user can correct a wrong call later.
+
+Every call adds one entry to PLAN.md's `## 변경 이력` (headline first, details as sub-bullets).
+Step 9c-2 brings A back when B is archived.
+
 ### Step 7 — Run TESTS
 
 Execute the command(s) from the TESTS.md run section via the `Bash` tool — through the evidence-recording wrapper (v0.35.0+), so the files this run produces are credited to this plan:
@@ -631,6 +654,25 @@ Propagated obsolete marking:
   — <C-slug>    (user chose Skip)
   ? <D-slug>    (user chose Review — not marked)
 ```
+
+### Step 9c-2 — Return to the paused plan (0.86.0+)
+
+Condition: archive actually happened in Step 9b, and the archived PLAN.md has `return_to:`.
+Without the field, skip this step.
+
+1. Check what B changed against A's unfinished steps — the files of this branch plus any
+   uncommitted ones:
+   `plan-link.sh check-after <B-slug> --changed <file> [--changed <file> …]`
+   (list them with `git diff --name-only <base>...HEAD` and `git diff --name-only HEAD`).
+2. Exit 3 prints `겹침 · A <n>단계 · <file>` lines and changes nothing. Show them and ask
+   (`contracts/choices.md`): adjust A's affected steps first — through `plan-link.sh append`,
+   so the change is recorded — or go back as is. Then run step 3 with `--accept-overlap`.
+3. `plan-link.sh resume <B-slug> [--changed …]` — A goes back to `in_progress`, its
+   `paused_by` / `resume_at` are removed, and a "재개" entry names B and the step to resume from.
+   Tell the user in one line: which plan resumes, and from which step.
+
+Nested detours (A paused by B, B paused by C) unwind one layer per archive: archiving C resumes
+B only, archiving B resumes A.
 
 ### Step 9d — PR auto-creation (optional, v0.3+)
 

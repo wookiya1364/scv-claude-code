@@ -25,10 +25,11 @@ rc=0; out="$(cd "$T" && git init -q && bash "$CORE/scripts/work.sh" 20260101-a-x
 n="$(printf '%s\n' "$out" | grep -c '^TESTS_VAGUE:' || true)"
 [[ "$n" == 1 && "$rc" == 0 ]] && ok "T1 work header warns once, exit 0" || bad "T1 work header: TESTS_VAGUE=$n rc=$rc"
 
-# T4 — 개요 확인이 폴더 승인이다, 묻는 지점 수는 바꾸기 전과 같다 (promote 11 · work 10)
+# T4 — 개요 확인이 폴더 승인이다, 묻는 지점 수는 바꾸기 전과 같다 (promote 11 · work 11)
+# work 10 → 11: 0.86.0 Step 6b — 계획 밖 요구가 기존 계획과 충돌할 때만 묻는다(계획 plan-pause-and-return).
 asks() { grep -cE '^Question:|^ *Question:|[Aa]sk (once|the user|one)' "$1" || true; }
 p="$(asks "$CORE/protocols/promote.md")"; w="$(asks "$CORE/protocols/work.md")"
-[[ "$p" == 11 && "$w" == 10 ]] && ok "T4 ask points unchanged (promote $p · work $w)" || bad "T4 ask points: promote $p (want 11) · work $w (want 10)"
+[[ "$p" == 11 && "$w" == 11 ]] && ok "T4 ask points unchanged (promote $p · work $w)" || bad "T4 ask points: promote $p (want 11) · work $w (want 11)"
 grep -q '^### Step 4.5 — Outline first: this is the per-folder approval' "$CORE/protocols/promote.md" \
   && grep -q '^### Step 5 — Write scaffolds (only after the Step 4.5 approval per folder)' "$CORE/protocols/promote.md" \
   && ok "T4 outline step precedes writing and is the approval" || bad "T4 outline step missing or not linked from Step 5"

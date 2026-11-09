@@ -2,6 +2,11 @@
 
 All notable changes to SCV Core are documented here.
 
+## [0.86.0] - 2026-11-09
+
+### Added
+- 계획 밖 요구를 계획 파일에 남기기 — `plan-link.sh`. 같은 목표면 기존 계획에 단계를 넣고(`append`, 끝난 단계는 `--redo` 로 "다시 하기" 단계), 다른 목표면 기존 계획을 `status: paused`(`paused_by` · `resume_at`)로 두고 새 계획에 `return_to` 를 적는다(`pause`). 새 계획을 보관하면 work Step 9c-2 가 원래 계획으로 되돌린다(`resume`). 앞쪽(새 계획 Goals ↔ 기존 Non-Goals · 남은 단계) · 뒤쪽(바뀐 파일 ↔ 남은 단계) 충돌이 있으면 아무것도 바꾸지 않고 종료 코드 3 — 사용자에게 물은 뒤 다시 실행. 모든 변경은 PLAN.md `## 변경 이력` 에 두괄식 한 사건씩 남아, 대시보드를 못 보는 곳(모바일)에서도 계획 파일 하나로 왜 멈췄고 어디서 다시 시작했는지 보인다. 상태 값 `paused` 추가(frontmatter 검사). 시험 `test-plan-link.sh` 9개.
+
 ## [0.85.2] - 2026-11-08
 
 ### Fixed
