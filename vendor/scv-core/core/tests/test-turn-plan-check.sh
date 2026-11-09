@@ -183,6 +183,14 @@ if [[ -f "$VH" && -f "$FX" ]]; then
   b=0; bash "$VH" --profile "$WORK/p2.env" >/dev/null 2>&1 || b=$?
   c=0; bash "$VH" --profile "$WORK/p3.env" >/dev/null 2>&1 || c=$?
   [[ $a == 0 && $b != 0 && $c != 0 ]] && ok "T20 프로필 검사: 두 키 통과 · 상대 경로 거절 · 짝 없음 거절" || bad "T20 $a $b $c"
+  MP="$CORE/../tools/materialize-profile.sh"
+  if [[ -f "$MP" ]]; then
+    mkdir -p "$WORK/mcore"; cp -R "$CORE/." "$WORK/mcore/"
+    d=0; bash "$MP" --root "$WORK/mcore" --profile "$WORK/p1.env" >/dev/null 2>&1 || d=$?
+    if [[ $d == 0 ]] && grep -qx 'SCV_STEP_TOOL_ON_FILE=~/.host/settings.json' "$WORK/mcore/host-profile.env" \
+       && grep -qx 'SCV_STEP_TOOL_ON_MARK="dash": true' "$WORK/mcore/host-profile.env"; then ok "T20b 프로필 만들기가 두 키를 옮김 (0.87.2)"
+    else bad "T20b materialize d=$d"; fi
+  fi
 else ok "T20 건너뜀 (프로필 검사 도구 없음 — 래퍼 안)"; fi
 
 # T15 — 끄기 · 기존 plan-link 시험
