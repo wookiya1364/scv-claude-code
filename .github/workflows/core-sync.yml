@@ -23,7 +23,8 @@ permissions:
 jobs:
   propose:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    # 코어 릴리스 파일을 최대 45분 기다린다(scripts/sync-core.sh download) — 그 위에 여유 15분.
+    timeout-minutes: 60
     env:
       GH_TOKEN: ${{ secrets.SCV_CORE_SYNC_TOKEN || github.token }}
     steps:
