@@ -2,6 +2,11 @@
 
 All notable changes to SCV Core are documented here.
 
+## [0.87.2] - 2026-11-09
+
+### Fixed
+- 프로필 만들기(`tools/materialize-profile.sh`)가 `SCV_STEP_TOOL_ON_FILE` · `SCV_STEP_TOOL_ON_MARK` 를 옮기지 않아, 래퍼의 사본 프로필이 원본과 달라졌다(claude 0.87.1 반영이 "vendored host profile differs" 로 실패). 두 키를 옮긴다. 키 목록이 있는 곳을 모두 찾아(검사 · 만들기 · 읽기) 셋 다 맞췄다. 시험 T20b.
+
 ## [0.87.1] - 2026-11-09
 
 ### Fixed
