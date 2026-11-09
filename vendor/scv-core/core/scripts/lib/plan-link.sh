@@ -203,6 +203,26 @@ scv_plan_insert_step() {
 }
 
 # @pure
+# 역할: 단계를 after 번 뒤에 끼운 뒤, 변경 이력의 진행 줄("- **날짜 진행** — M단계 …")에서 M 이 after 보다 크면 M+1 로 민다 — 옛 진행 기록이 새 단계에 붙지 않게(0.87.4). 진행 줄이 아닌 줄은 그대로
+# 종류: 변환
+# 예: $'- **d 진행** — 3a단계 막힘: k\n- **d 진행** — 2단계 끝: j' 2 → $'- **d 진행** — 4a단계 막힘: k\n- **d 진행** — 2단계 끝: j'
+# 예: $'- **d 추가** — 1단계 뒤에 새 단계' 0 → $'- **d 추가** — 1단계 뒤에 새 단계'
+# 예: $'# a\n본문 3단계' 1 → $'# a\n본문 3단계'
+scv_plan_shift_progress() {
+  local text="${1:-}" after="${2:-0}" line out="" first=1 head num tail
+  local re='^(- \*\*[^*]* 진행\*\* — )([0-9]+)([a-z]?단계 .*)$'
+  while IFS= read -r line; do
+    if [[ "$line" =~ $re ]]; then
+      head="${BASH_REMATCH[1]}"; num="${BASH_REMATCH[2]}"; tail="${BASH_REMATCH[3]}"
+      (( num > after )) && line="$head$((num + 1))$tail"
+    fi
+    if (( first )); then out="$line"; first=0; else out="$out"$'\n'"$line"; fi
+  done <<< "${text%$'\n'}"
+  [[ "$text" == *$'\n' ]] && out="$out"$'\n'
+  printf '%s' "$out"
+}
+
+# @pure
 # 역할: 끝난 단계 n 의 요건이 바뀌었을 때 맨 끝에 붙일 "다시 하기" 단계 글을 만든다 — 원래 단계의 " — " 뒤 꼬리는 그대로 둔다
 # 종류: 조립
 # 예: $'## Suggested path\n1. [x] 검사 추가 — `checkA`\n2. b' 1 → $'다시 하기: 검사 추가 — `checkA`'
