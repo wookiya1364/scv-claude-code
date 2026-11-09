@@ -40,4 +40,23 @@ if [[ -n "$_scv_sid" ]]; then
 else
   bash "$_scv_mp" answered >/dev/null 2>&1 || true
 fi
+
+# ---------- turn plan check (0.87.0+) ----------------------------------------
+# 선택 답을 진행 중 계획의 `## 변경 이력` 에 바로 적는다(질문 · 답) — 폰에서도 계획 파일과 대시보드로 결정이 보이게.
+# 답은 tool_response.answers({질문: 답}) 에서, 없으면 글 모양 '"질문"="답"' 에서 꺼낸다. SCV_TURN_PLAN_CHECK=off 면 적지 않는다.
+_scv_tc_sh="${SCV_CORE_ROOT:-$SCRIPT_DIR/../..}/scripts/turn-check.sh"
+if [[ -f "$_scv_tc_sh" ]]; then
+  _scv_qa="$(printf '%s' "$INPUT" | jq -r '
+      try (
+        (.tool_response | if type == "object" then (.answers // {}) else {} end | to_entries[] | [.key, (.value | tostring)])
+      ) catch empty | @tsv' 2>/dev/null || true)"
+  if [[ -z "$_scv_qa" ]]; then
+    _scv_qa="$(printf '%s' "$INPUT" | jq -r 'try (.tool_response | if type == "string" then . elif type == "array" then (map(.text? // "") | join("")) else "" end) catch ""' 2>/dev/null \
+      | sed -n 's/.*"\(.*\)"="\([^"]*\)".*/\1	\2/p' | head -n 4 || true)"
+  fi
+  while IFS=$'\t' read -r _scv_q _scv_a; do
+    [[ -n "$_scv_q$_scv_a" ]] || continue
+    bash "$_scv_tc_sh" choice --question "$_scv_q" --answer "$_scv_a" >/dev/null 2>&1 || true
+  done <<< "$_scv_qa"
+fi
 exit 0
