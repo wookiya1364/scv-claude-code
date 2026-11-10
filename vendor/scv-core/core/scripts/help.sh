@@ -18,12 +18,17 @@ WANT_INDEX=0
 CONV_ARG=""
 # v0.59.0+: --model <id> (또는 --model=<id>) — 답하는 모델이 자기 모델 id 를 넘긴다. 헤더 끝에
 # GUIDE 줄들(이 모델의 프롬프팅 가이드 원문을 읽어야 하나)이 붙는다. 없으면 출력은 이전과 바이트 단위로 같다.
-MODEL_ID=""; HAS_MODEL=0; _want_model=0
+# 0.89.0+: --effort <값> (또는 --effort=<값>) — 답하는 모델이 자기 세션의 effort 를 알면 함께 넘긴다(권장 effort 요청의
+# 지금 값 — 호스트가 값을 주면 그것이 먼저다). 없으면 출력은 이전과 바이트 단위로 같다.
+MODEL_ID=""; HAS_MODEL=0; _want_model=0; EFFORT_VAL=""; _want_effort=0
 for a in "$@"; do
   if [[ $_want_model -eq 1 ]]; then MODEL_ID="$a"; HAS_MODEL=1; _want_model=0; continue; fi
+  if [[ $_want_effort -eq 1 ]]; then EFFORT_VAL="$a"; _want_effort=0; continue; fi
   case "$a" in
     --model) _want_model=1; HAS_MODEL=1; continue ;;
     --model=*) MODEL_ID="${a#--model=}"; HAS_MODEL=1; continue ;;
+    --effort) _want_effort=1; continue ;;
+    --effort=*) EFFORT_VAL="${a#--effort=}"; continue ;;
   esac
   case "$a" in
     --verbose|-v) VERBOSE=1 ;;
@@ -189,7 +194,11 @@ if [[ $HEADER_ONLY -eq 1 ]]; then
   fi
   # v0.59.0+ — GUIDE: load|loaded|none (+ GUIDE_FILE / GUIDE_STALE / GUIDE_MISSING). 판단은 lib/model-prompting.sh.
   if [[ $HAS_MODEL -eq 1 ]]; then
-    bash "$SCRIPT_DIR/model-prompting.sh" guide --model "$MODEL_ID" 2>/dev/null || echo "GUIDE: none"
+    if [[ -n "$EFFORT_VAL" ]]; then
+      bash "$SCRIPT_DIR/model-prompting.sh" guide --model "$MODEL_ID" --effort "$EFFORT_VAL" 2>/dev/null || echo "GUIDE: none"
+    else
+      bash "$SCRIPT_DIR/model-prompting.sh" guide --model "$MODEL_ID" 2>/dev/null || echo "GUIDE: none"
+    fi
   fi
   exit 0
 fi
