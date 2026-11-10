@@ -144,12 +144,13 @@ scv_graph_plan_records() {
     esac
   done <<<"$recs"
   local f
-  for f in "${files[@]}"; do
+  # bash 3.2 는 set -u 에서 빈 배열을 펼치면 "unbound variable" 로 죽는다 — 빈 값으로 펼친다.
+  for f in ${files[@]+"${files[@]}"}; do
     [[ -n "$f" ]] || continue
-    [[ " ${uniq[*]} " == *" $f "* ]] && continue
+    [[ " ${uniq[*]-} " == *" $f "* ]] && continue
     uniq+=("$f")
   done
-  printf '%s%s%s%s%s%s%s' "$slug" "$us" "$epic" "$us" "$title" "$us" "${uniq[*]}"
+  printf '%s%s%s%s%s%s%s' "$slug" "$us" "$epic" "$us" "$title" "$us" "${uniq[*]-}"
 }
 
 # @pure

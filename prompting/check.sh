@@ -43,7 +43,24 @@ while IFS=$'\t' read -r mid key file url fetched || [[ -n "$mid" ]]; do
 done < "$INDEX"
 # 코어 0.88.0+ — 요구 항목 목록(checklist-<키>.tsv)은 없다: 다시 쓰는 법은 원문만 정한다. 남아 있으면 지우라고 알린다.
 for _cl in "$DIR"/checklist-*.tsv; do [[ -e "$_cl" ]] && err "leftover requirement list: $(basename "$_cl") (core 0.88.0 no longer reads it — delete it)"; done
+# 코어 0.89.0+ — 권장 effort 표(EFFORT.tsv, 있을 때만): 모델 id 가 색인에 있고, 값이 다섯 낱말 중 하나이며, 근거 문장이
+# 출처 파일(이 폴더의 가이드 사본)에 글자 그대로 있는지. 표의 값과 문장이 공식 가이드에서 왔다는 증거다.
+neff=0
+if [[ -f "$DIR/EFFORT.tsv" ]]; then
+  eseen=" "
+  while IFS=$'\t' read -r emid erec econd equote esrc eextra || [[ -n "$emid" ]]; do
+    [[ -z "$emid" || "$emid" == \#* ]] && continue
+    [[ -n "$erec" && -n "$econd" && -n "$equote" && -n "$esrc" && -z "${eextra:-}" ]] || { err "EFFORT.tsv: bad row: $emid"; continue; }
+    [[ "$ids" == *" $emid "* ]] || err "EFFORT.tsv: $emid is not a model id in INDEX.tsv"
+    [[ "$eseen" == *" $emid "* ]] && err "EFFORT.tsv: duplicate model id: $emid"; eseen+="$emid "
+    case "$erec" in low|medium|high|xhigh|max) ;; *) err "EFFORT.tsv: $emid: '$erec' is not an effort level" ;; esac
+    [[ "$esrc" == */* || "$esrc" == .* ]] && { err "EFFORT.tsv: $emid: source must be a plain file name in this folder"; continue; }
+    [[ "$files" == *" $esrc "* && -f "$DIR/$esrc" ]] || { err "EFFORT.tsv: $emid: source $esrc is not a guide in INDEX.tsv"; continue; }
+    grep -qF -- "$equote" "$DIR/$esrc" || err "EFFORT.tsv: $emid: the sentence is not verbatim in $esrc"
+    neff=$((neff + 1))
+  done < "$DIR/EFFORT.tsv"
+fi
 # 발췌본은 원문에서 기계적으로 뽑은 것이어야 한다(손으로 고친 발췌 금지)
 bash "$DIR/excerpt.sh" --check >/dev/null || err "excerpts are stale or broken (run excerpt.sh)"
 (( fail )) && exit 1
-echo "OK prompting guides: $nid model id(s), $nfile file(s)$( (( ONLINE )) && echo ', bodies match the source')"
+echo "OK prompting guides: $nid model id(s), $nfile file(s)$( (( neff > 0 )) && echo ", $neff effort row(s)")$( (( ONLINE )) && echo ', bodies match the source')"

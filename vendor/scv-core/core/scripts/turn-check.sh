@@ -14,6 +14,7 @@
 # 작업 공간 = 이 프로젝트 + SCV_WORKSPACE_REPOS(절대 경로를 : 로 이음) + 그 턴에 쓰기 도구 · 셸 명령이 건드린 저장소.
 # 세는 파일 = 바뀐 파일 중 이 세션이 쓴 것(mine): 쓰기 도구에 적힌 파일 + 셸 명령 앞과 다음 도구 앞(또는 턴 끝) 모습의 차이.
 # 읽기 도구는 세지 않는다. 계획 20261109-wookiya1364-turn-check-own-files.
+# SCV 폴더(scv/)나 그 바로 아래 폴더를 다른 저장소로 연결(symlink)해 둔 프로젝트는, 연결이 가리키는 실제 폴더 안의 파일도 '일'로 세지 않는다(0.88.2+).
 # git 저장소는 바뀐 파일 해시 + HEAD, git 아닌 폴더는 파일 목록 · 수정 시각 · 크기로 찍는다.
 # 셸 명령의 비교 구간에 다른 세션이 같은 폴더를 고치면 그 파일은 섞인다(계획의 한계). 어떤 실패도 세션을 막지 않는다 — 판단할 수 없으면 pass.
 # 순수부: lib/turn-check.sh. 계획 20261109-wookiya1364-turn-plan-check.
@@ -82,6 +83,18 @@ snap_root() {
     (( n > MAX_FILES )) && { printf '@too-many\t%s\n' "$n"; return 0; }
     ( cd "$root" && find . \( -name node_modules -o -name .git -o -name scv -o -name .venv -o -name dist -o -name build \) -prune -o -type f -print0 2>/dev/null | stat_lines | sed 's#^\./##' )
   fi | LC_ALL=C sort
+}
+
+# @effect record_roots
+# 이유: SCV 폴더와 그 바로 아래 폴더 중 연결(symlink)인 것이 가리키는 실제 경로를 읽는다 — 기록 폴더를 다른 저장소에 둔 프로젝트용
+record_roots() {
+  local base d r
+  base="$(dirname "$PROMOTE")"
+  for d in "$base" "$base"/*; do
+    [[ -L "$d" && -d "$d" ]] || continue
+    r="$(cd "$d" 2>/dev/null && pwd -P)" && [[ -n "$r" ]] && printf '%s\n' "$r"
+  done
+  return 0
 }
 
 # @effect head_of
@@ -309,6 +322,7 @@ case "$CMD" in
     ID="$(cat "$S/id")"
     settle
     MINE="$(cat "$S/mine" 2>/dev/null)"
+    RREC="$(record_roots)"
     CHANGED=""
     while IFS= read -r root; do
       [[ -n "$root" ]] || continue
@@ -319,7 +333,10 @@ case "$CMD" in
       d="$(scv_tc_diff "$start_snap" "$end_snap")"
       h0="$(cat "$S/head.$k" 2>/dev/null)"; h1="$(head_of "$root")"
       [[ -n "$h0" && "$h0" != "$h1" ]] && d="$d"$'\n'"$(git -C "$root" diff --name-only "$h0" "$h1" 2>/dev/null)"
-      d="$(scv_tc_filter "$d" "$(cat "$S/host-exempt" 2>/dev/null)")"
+      # 호스트 설정 경로와, 다른 저장소로 연결된 기록 폴더 안의 것을 뺀다.
+      xg="$(cat "$S/host-exempt" 2>/dev/null)"; rg="$(scv_tc_record_globs "$root" "$RREC")"
+      [[ -n "$rg" ]] && xg="${xg:+$xg:}$rg"
+      d="$(scv_tc_filter "$d" "$xg")"
       # 이 세션이 쓴 파일만 — 다른 세션이 같은 폴더에서 고친 파일은 뺀다.
       d="$(scv_tc_mine_only "$(scv_tc_abs_paths "$root" "$d")" "$MINE")"
       d="$(printf '%s' "$d" | sed "s#^${root%/}/##")"
