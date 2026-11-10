@@ -1,18 +1,18 @@
 <!--
 Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices.md
-Fetched: 2026-09-27
+Fetched: 2026-11-11
 Copyright: Anthropic PBC. Verbatim copy of the official documentation, kept offline for SCV help. Do not edit; run prompting/refresh.sh to update.
 Excerpt: only the sections named in the excerpt list, each copied verbatim from this source.
 -->
 ### Be clear and direct
 
-Claude responds well to clear, explicit instructions. Being specific about your desired output can help enhance results. If you want "above and beyond" behavior, explicitly request it rather than relying on the model to infer this from vague prompts.
+Claude responds well to clear, explicit instructions. Being specific about the output you want can help enhance results. If you want Claude to do more than the task strictly requires, explicitly request it rather than relying on the model to infer this from vague prompts.
 
 Think of Claude as a brilliant but new employee who lacks context on your norms and workflows. The more precisely you explain what you want, the better the result.
 
-**Golden rule:** Show your prompt to a colleague with minimal context on the task and ask them to follow it. If they'd be confused, Claude will be too.
+**Key test:** Show your prompt to a colleague with minimal context on the task and ask them to follow it. If they’d be confused, Claude will be too.
 
-* Be specific about the desired output format and constraints.
+* Be specific about the output format and constraints you want.
 * Provide instructions as sequential steps using numbered lists or bullet points when the order or completeness of steps matters.
 
 <Accordion title="Example: Creating an analytics dashboard" defaultOpen>
@@ -31,7 +31,7 @@ Think of Claude as a brilliant but new employee who lacks context on your norms 
 
 ### Add context to improve performance
 
-Providing context or motivation behind your instructions, such as explaining to Claude why such behavior is important, can help Claude better understand your goals and deliver more targeted responses.
+Providing context or motivation behind your instructions, such as explaining to Claude why such behavior is important, can give Claude more information about your goals and help it deliver more targeted responses.
 
 <Accordion title="Example: Formatting preferences" defaultOpen>
   **Less effective:**
@@ -47,11 +47,11 @@ Providing context or motivation behind your instructions, such as explaining to 
   ```
 </Accordion>
 
-Claude is smart enough to generalize from the explanation.
+Claude can generalize from the explanation.
 
 ### Tool usage
 
-Claude's latest models are trained for precise instruction following and benefit from explicit direction to use specific tools. If you say "can you suggest some changes," Claude will sometimes provide suggestions rather than implementing them, even if making changes might be what you intended. To learn how to define tools and troubleshoot tool triggering, see [Tool use with Claude](https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview).
+Claude’s latest models are trained for precise instruction following and benefit from explicit direction to use specific tools. If you say “can you suggest some changes,” Claude will sometimes provide suggestions rather than implementing them, even if making changes might be what you intended. To learn how to define tools and troubleshoot tool triggering, see [Tool use with Claude](https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview).
 
 For Claude to take action, be more explicit:
 
@@ -86,7 +86,7 @@ call (e.g., file edit or read) is intended or not, and act accordingly.
 </default_to_action>
 ```
 
-On the other hand, if you want the model to be more hesitant by default, less prone to jumping straight into implementations, and only take action if requested, you can steer this behavior with a prompt like the following:
+On the other hand, if you want the model to be more hesitant by default, less prone to starting implementations immediately, and only take action if requested, you can steer this behavior with a prompt such as the following:
 
 ```text Sample prompt for conservative action wrap
 <do_not_act_before_instructions>
@@ -97,11 +97,11 @@ edits, modifications, or implementations when the user explicitly requests them.
 </do_not_act_before_instructions>
 ```
 
-Claude Opus 4.5 and Claude Opus 4.6 are also more responsive to the system prompt than previous models. If your prompts were designed to reduce undertriggering on tools or skills, these models may now overtrigger. The fix is to dial back any aggressive language. Where you might have said "CRITICAL: You MUST use this tool when...", you can use more normal prompting like "Use this tool when...".
+Claude Opus 4.5 and Claude Opus 4.6 are also more responsive to the system prompt than previous models. If your prompts were designed to reduce undertriggering on tools or skills, these models might now overtrigger. The fix is to soften any aggressive language. Where you might have said “CRITICAL: You MUST use this tool when...,” you can use more normal prompting such as “Use this tool when...” instead.
 
 ### Balancing autonomy and safety
 
-Without guidance, Claude Opus 4.6 may take actions that are difficult to reverse or affect shared systems, such as deleting files, force-pushing, or posting to external services. If you want Claude Opus 4.6 to confirm before taking potentially risky actions, add guidance to your prompt:
+Without guidance, Claude Opus 4.6 might take actions that are difficult to reverse or affect shared systems, such as deleting files, force-pushing, or posting to external services. If you want Claude Opus 4.6 to confirm before taking potentially risky actions, add guidance to your prompt:
 
 ```text Sample prompt wrap
 Consider the reversibility and potential impact of your actions. You are encouraged to
@@ -122,7 +122,7 @@ in-progress work.
 
 ### Research and information gathering
 
-Claude's latest models can find and synthesize information from multiple sources effectively. For optimal research results:
+Claude’s latest models can find and synthesize information from multiple sources effectively. For optimal research results:
 
 1. **Provide clear success criteria:** Define what constitutes a successful answer to your research question.
 
@@ -142,7 +142,7 @@ This structured approach helps Claude work through large corpora methodically an
 
 ### Overeagerness
 
-Claude Opus 4.5 and Claude Opus 4.6 have a tendency to overengineer by creating extra files, adding unnecessary abstractions, or building in flexibility that wasn't requested. If you're seeing this undesired behavior, add specific guidance to keep solutions minimal.
+Claude Opus 4.5 and Claude Opus 4.6 have a tendency to overengineer by creating extra files, adding unnecessary abstractions, or building in flexibility that wasn’t requested. If you’re seeing this undesired behavior, add specific guidance to keep solutions minimal.
 
 For example:
 
