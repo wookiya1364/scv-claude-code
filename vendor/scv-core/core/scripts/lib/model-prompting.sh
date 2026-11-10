@@ -1157,3 +1157,96 @@ scv_mp_help_reason() {
   [[ -n "$ref" ]] || ref="SCV 의 help"
   printf '%s' "[SCV help 먼저] 이 턴은 아직 help 를 부르지 않았다 — 지금 $ref 를 이 턴 메시지 전문을 인자로 불러라. 그 전에는 다른 도구(등록 포함)가 거절된다."
 }
+
+# ---------------------------------------------------------------- 권장 effort 요청 (0.89.0+)
+# 모델의 공식 가이드가 권하는 effort 와 이 세션의 effort 가 다르면 한 번 묻게 한다. 표(EFFORT.tsv)는 래퍼가 가이드 폴더에 싣는다:
+# <모델 id><TAB><권장 값><TAB><조건 또는 -><TAB><근거 문장(공식 문서 그대로)><TAB><출처 파일>. 표가 없으면 아무 일도 없다.
+# 계획 20261111-wookiya1364-recommended-effort-ask.
+
+# @pure
+# 역할: effort 값 낱말이 맞는지 가려, 맞으면 소문자로 낸다(아니면 빈 값)
+# 종류: 판정
+# 예: "High" → "high"
+# 예: "banana" → ""
+# 예: "" → ""
+scv_mp_effort_word() {
+  local v
+  v="$(scv_mp_normalize_id "${1:-}")"; v="${v//\"/}"; v="${v//[[:space:]]/}"
+  case "$v" in low|medium|high|xhigh|max) printf '%s' "$v" ;; *) printf '' ;; esac
+}
+
+# @pure
+# 역할: 권장 effort 표에서 이 모델의 줄을 골라 "권장<TAB>조건<TAB>근거<TAB>출처" 로 낸다(줄이 없거나 값 낱말이 틀리면 빈 값)
+# 종류: 고르기
+# 예: $'# c\nm-a\thigh\t-\tStart at high.\ta.md' "m-a" → $'high\t-\tStart at high.\ta.md'
+# 예: $'m-a\thigh\t-\tStart at high.\ta.md' "m-b" → ""
+# 예: $'m-a\tfast\t-\tx\ta.md' "m-a" → ""
+scv_mp_effort_row() {
+  local table="${1:-}" id="${2:-}" mid rec cond quote src rest
+  [[ -n "$id" ]] || return 0
+  while IFS=$'\t' read -r mid rec cond quote src rest || [[ -n "$mid" ]]; do
+    [[ -z "$mid" || "$mid" == \#* || "$mid" == @* ]] && continue
+    [[ "$mid" == "$id" ]] || continue
+    rec="$(scv_mp_effort_word "$rec")"
+    [[ -n "$rec" && -n "$quote" ]] || return 0
+    printf '%s\t%s\t%s\t%s' "$rec" "${cond:--}" "$quote" "${src:-}"
+    return 0
+  done <<< "$table"
+  return 0
+}
+
+# @pure
+# 역할: 세션 기록에서 뽑은 줄들("키":"값" 꼴)에서 마지막 값을 꺼내 effort 낱말이면 낸다(없으면 빈 값)
+# 종류: 고르기
+# 예: $'"k":"low"\n"k":"high"' "k" → "high"
+# 예: '"k":"banana"' "k" → ""
+# 예: '"a":"low"' "k" → ""
+# 예: '"k":"low"' "" → ""
+scv_mp_effort_from_log() {
+  local text="${1:-}" key="${2:-}" pat rest
+  [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || return 0
+  pat="\"$key\":\""
+  [[ "$text" == *"$pat"* ]] || return 0
+  rest="${text##*"$pat"}"
+  scv_mp_effort_word "${rest%%\"*}"
+}
+
+# @pure
+# 역할: effort 를 물을지 정한다 — off(꺼짐) · unknown(값이나 표를 모름) · same(권장과 같음) · asked(이 조건으로 이미 물음) · ask
+# 종류: 판정
+# 예: on high $'medium\t-\tq\ts' "" m → "ask"
+# 예: on high $'medium\t-\tq\ts' "m|high|medium" m → "asked"
+# 예: on medium $'medium\t-\tq\ts' "" m → "same"
+# 예: on "" $'medium\t-\tq\ts' "" m → "unknown"
+# 예: on high "" "" m → "unknown"
+# 예: off high $'medium\t-\tq\ts' "" m → "off"
+# <스위치> <지금 값> <권장 줄> <지난번 물은 조건> <모델 id>. 조건 = "모델|지금 값|권장 값".
+scv_mp_effort_verdict() {
+  local sw="${1:-}" now="${2:-}" row="${3:-}" last="${4:-}" id="${5:-}" rec
+  [[ "$(scv_mp_switch "$sw")" == "on" ]] || { printf 'off'; return 0; }
+  now="$(scv_mp_effort_word "$now")"; rec="${row%%$'\t'*}"
+  [[ -n "$now" && -n "$row" && -n "$id" ]] || { printf 'unknown'; return 0; }
+  [[ "$now" == "$rec" ]] && { printf 'same'; return 0; }
+  [[ "$last" == "$id|$now|$rec" ]] && { printf 'asked'; return 0; }
+  printf 'ask'
+}
+
+# @pure
+# 역할: effort 를 한 번 물으라는 안내 줄을 만든다(판정이 ask 가 아니면 빈 값) — 바꾸는 것은 사용자
+# 종류: 조립
+# 예: same m high $'medium\t-\tq\ts' choice → ""
+# 예: ask m high "" choice → ""
+# <판정> <모델 id> <지금 값> <권장 줄> <확인 통로 choice|text>. 근거 문장은 표의 글자 그대로 싣는다.
+scv_mp_effort_block() {
+  local v="${1:-}" id="${2:-}" now="${3:-}" row="${4:-}" ch="${5:-text}" rec cond quote src how
+  [[ "$v" == "ask" && -n "$row" ]] || return 0
+  IFS=$'\t' read -r rec cond quote src <<< "$row"
+  case "$ch" in
+    choice) how="선택 창으로 한 번 물어라 — 첫 보기(추천) '$rec 로 바꿈', 둘째 '$now 그대로'" ;;
+    *) how="글 질문 한 번으로 물어라 — '$rec 로 바꿀까요, $now 그대로 둘까요?'" ;;
+  esac
+  printf '[SCV effort] 이 세션의 effort 는 %s 인데, 이 모델(%s)의 공식 프롬프팅 가이드가 권하는 값은 %s 이다. 이번 답의 끝에서 %s. 바꾸는 것은 사용자다 — 값을 직접 바꾸지 말고, 사용자가 바꾸기를 고르면 바꾸는 법만 알려라. 같은 조건에서는 다시 묻지 않는다.\n' "$now" "$id" "$rec" "$how"
+  printf '근거(%s): "%s"' "${src:-공식 가이드}" "$quote"
+  [[ -n "$cond" && "$cond" != "-" ]] && printf '\n조건: %s' "$cond"
+  return 0
+}

@@ -2,6 +2,27 @@
 
 All notable changes to SCV Core are documented here.
 
+## [0.89.0] - 2026-11-11
+
+### Added
+- 권장 effort 요청: 래퍼가 가이드 폴더에 모델별 권장 effort 표(`EFFORT.tsv` — 모델 id · 권장 값 · 조건 · 공식 가이드의 문장 · 출처 파일)를 싣고 이 세션의 effort 가 지금 모델의 권장 값과 다르면, 매 턴 훅이 `[SCV effort]` 줄을 한 번 싣는다 — 지금 값 · 권장 값 · 근거 문장 · 조건과 함께 "선택 창으로 한 번 물어라". 바꾸는 것은 사용자이고, SCV 도 모델도 값을 바꾸지 않는다. 같은 조건(모델 · 지금 값 · 권장 값)은 그 프로젝트에서 한 번만 묻고(새 세션도 다시 묻지 않는다), 조건이 달라지면 한 번 더 묻는다.
+- 지금 값은 호스트의 세션 기록에서 읽는다: 호스트 프로필의 새 선택 키 `SCV_EFFORT_LOG_KEY` 가 이름 붙인 키의 마지막 값. 지난 턴의 값이라 세션의 첫 턴에는 묻지 않는다. 호스트가 값을 주지 않으면 도움말이 받은 값(`help.sh --effort <값>`)을 쓰고, 그것도 없으면 묻지 않는다. 값을 모르거나 · 표가 없거나 · 표에 없는 모델이거나 · 사람이 없는 실행이면 조용하다.
+- 설정 `SCV_EFFORT_RECOMMEND`(on 기본 | off). 표가 없는 호스트에서는 동작이 그대로다.
+- 새 순수 함수 `scv_mp_effort_word` · `scv_mp_effort_row` · `scv_mp_effort_from_log` · `scv_mp_effort_verdict` · `scv_mp_effort_block`. 계획 `20261111-wookiya1364-recommended-effort-ask`.
+## [0.88.3] - 2026-11-11
+
+### Fixed
+- 맥 기본 bash(3.2)에서 SCV 그래프가 죽던 것: 계획이 가리키는 파일이 하나도 없을 때 `lib/graph.sh` 가 빈 배열을 펼치다 "unbound variable" 로 끝났다(bash 4 이상에서는 괜찮았다). 빈 값으로 펼치게 고쳤다.
+- bash 3.2 에서 실패하던 시험 셋을 고쳤다. `core/tests/test-graph.sh` 는 위 고침으로, `tests/test-guard-consistency.sh` 는 bash 4 전용 `mapfile` 을 읽기 반복으로, `tests/test-promote-wait.sh` 는 명령 치환 안에 적은 JSON 이 bash 3.2 에서 중괄호 펼치기로 깨지던 것을 변수로 먼저 만들어 고쳤다. 시험이 보는 내용과 통과 수(52 · 7 · 25)는 그대로다. 계획 `20261111-wookiya1364-bash32-tests-three`.
+
+## [0.88.2] - 2026-11-11
+
+### Fixed
+- 턴 끝 계획 기록 검사가 기록 파일만 바꾼 턴을 막던 것: SCV 폴더(`scv/`)나 그 바로 아래 폴더(`scv/raw` · `scv/journal` 따위)를 다른 저장소로 연결(symlink)해 둔 프로젝트에서, 그 안 파일이 연결된 저장소의 경로로 세어져 "파일 N개가 바뀌었는데 계획 기록이 없다"로 막혔다. 연결이 가리키는 실제 폴더 안의 파일은 이제 '일'로 세지 않는다. 그 저장소의 다른 폴더와 코드 파일은 그대로 센다.
+- `plan-link.sh progress` · `append` 가 적으려는 글을 계획의 '하지 않음'(Non-Goals) 항목과 낱말 하나만 같아도 종료 코드 3 으로 거절하던 것: 항목 낱말의 절반 이상이 글에 있을 때만 거절한다. 항목 낱말이 하나뿐이면 그 하나로 거절한다("환불 기능" ↔ "환불 버튼 추가"는 그대로 멈춘다). 낱말을 글자로 나누도록 `plan-link.sh` 가 UTF-8 지역 설정을 고른다.
+- `readpath.sh consume` 이 원자료 폴더(`scv/raw`) 자체가 연결일 때 거절하고 `unused` · `scan` 이 그 안 파일을 못 보던 것: 원자료 폴더 뿌리의 연결은 따라간다. 뿌리 아래 폴더(`stale/` 포함)가 연결이면 `consume` 은 지금처럼 거절한다.
+- 새 순수 함수 `scv_tc_record_globs` · `scv_tc_overlap_count`. 버전 0.88.1 은 건너뛴다(래퍼만의 릴리스에 쓰였다). 계획 `20261111-wookiya1364-false-rejects-three`.
+
 ## [0.88.0] - 2026-11-10
 
 ### Changed

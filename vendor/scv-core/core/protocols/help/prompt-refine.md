@@ -22,3 +22,6 @@ Every message, however short (v0.62.0+). Hooks enforce steps 1, 4 and 5.
    registered — "no code values" does not reach inside it.
 6. The SCV principle (`contracts/rewrite-principle.md`) is about the answer, not the rewrite:
    the per-turn hook carries it (`PRINCIPLE:`); answer by it (0.88.0+).
+7. Effort (0.89.0+): when the hook carries an `[SCV effort]` line, ask it once at the end of the
+   answer as the line says — the user changes the value, never you. When your instructions
+   state your effort level, pass `--effort <level>` to help beside `--model`.

@@ -23,6 +23,9 @@ fi
 # Lifecycle rule: a doc directly under scv/raw/ (outside stale/) has never
 # been consumed by a promote. `consume` moves docs into scv/raw/stale/
 # (content unchanged) and records provenance; docs are never deleted.
+# The raw root (RAW_DIR) itself may be a symlink — a project that keeps its
+# records in another repository; `unused`/`scan`/`consume` read through it.
+# Symlinks BELOW the root are still refused by `consume` (0.88.2+).
 #
 # Filenames: paths containing double quotes, backslashes, tabs, or newlines
 # cannot be represented in the narrow no-jq state schema — `scan`/`diff` skip
@@ -151,13 +154,31 @@ is_unsafe_name() {
   [[ "$p" == *'"'* || "$p" == *'\'* || "$p" == *$'\t'* || "$p" == *$'\n'* ]]
 }
 
-# Fail-closed: refuse when any existing component of the path is a symlink
-# (a symlinked subdir under raw/ or stale/ would redirect the move outside
-# the tree). Non-existent components cannot be symlinks and are fine.
+# @pure
+# 역할: 경로에서 원자료 폴더 뿌리까지를 떼어 낸다 — 뿌리 아래 마디만 연결 검사를 하려고
+# 종류: 변환
+# 예: "scv/raw/sub/a.md" "scv/raw" → "sub/a.md"
+# 예: "scv/raw" "scv/raw" → ""
+# 예: "x/y" "scv/raw" → "x/y"
+below_raw_root() {
+  local p="$1" r="${2%/}"
+  if [[ "$p" == "$r" ]]; then printf ''
+  elif [[ "$p" == "$r"/* ]]; then printf '%s' "${p#"$r"/}"
+  else printf '%s' "$p"; fi
+}
+
+# Fail-closed: refuse when any existing component BELOW the raw root is a
+# symlink (a symlinked subdir under raw/ or stale/ would redirect the move
+# outside the tree). The raw root itself may be a symlink — keeping records in
+# another repository is the project's own deliberate setup (0.88.2).
+# Non-existent components cannot be symlinks and are fine.
 assert_no_symlink_components() {
-  local path="$1" label="$2" cur="" part
+  local path="$1" label="$2" cur="" part rest
   local -a parts=()
-  IFS=/ read -ra parts <<< "$path"
+  rest="$(below_raw_root "$path" "$RAW_DIR")"
+  [[ "$path" == "${RAW_DIR%/}" || "$path" == "${RAW_DIR%/}"/* ]] && cur="${RAW_DIR%/}"
+  [[ -n "$rest" ]] || return 0
+  IFS=/ read -ra parts <<< "$rest"
   for part in "${parts[@]}"; do
     [[ -z "$part" ]] && continue
     cur="${cur:+$cur/}$part"
@@ -186,7 +207,7 @@ scan_tsv() {
     # malformed row.
     [[ -z "$s" || -z "$m" ]] && continue
     printf '%s\t%s\t%s\n' "$f" "$s" "$m"
-  done < <(find "$dir" -type f 2>/dev/null | LC_ALL=C sort)
+  done < <(find -H "$dir" -type f 2>/dev/null | LC_ALL=C sort)
 }
 
 # TSV on stdin → JSON on stdout (files-only preview; `scan` output)
@@ -500,7 +521,7 @@ cmd_unused() {
     [[ "${f##*/}" == ".gitkeep" ]] && continue
     [[ "$f" == "$RAW_DIR/stale/"* ]] && continue
     printf '%s\n' "$f"
-  done < <(find "$RAW_DIR" -type f 2>/dev/null | LC_ALL=C sort)
+  done < <(find -H "$RAW_DIR" -type f 2>/dev/null | LC_ALL=C sort)
 }
 
 cmd_refs() {
@@ -520,7 +541,7 @@ cmd_lifecycle_counts() {
   unused=$(cmd_unused | grep -c . || true)
   stale=0
   if [[ -d "$RAW_DIR/stale" ]]; then
-    stale=$(find "$RAW_DIR/stale" -type f ! -name .gitkeep 2>/dev/null | grep -c . || true)
+    stale=$(find -H "$RAW_DIR/stale" -type f ! -name .gitkeep 2>/dev/null | grep -c . || true)
   fi
   printf 'unused=%d stale=%d\n' "$unused" "$stale"
 }

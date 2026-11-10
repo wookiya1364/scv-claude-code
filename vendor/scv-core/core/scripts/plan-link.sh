@@ -13,6 +13,7 @@
 #                                                                  (0.87.4+ 상태 기본은 doing — 단계가 끝났을 때만 done)
 #                                                                  (0.87.0+ 계획 안 일의 진행 한 줄 — 대시보드가 이 줄로 단계를 센다)
 #   append · progress 는 0.87.0+ 부터 적으려는 글이 계획의 Non-Goals 와 겹치면 종료 코드 3 (사용자에게 물은 뒤 --accept-conflict)
+#   겹침 = 그 Non-Goals 항목 낱말의 절반 이상이 적으려는 글에 있음(0.88.2+ — 낱말 하나만 같은 글은 통과)
 #   plan-link.sh exempt --kind release|sync --why "<이유>"         (0.87.0+ 계획 없이 해도 되는 정한 예외)
 #
 # 턴 끝 계획 기록 검사(turn-check.sh)가 켜진 턴이면 기록 줄마다 "요청: <원문 앞부분> (요청 <번호>)" 가 붙는다.
@@ -30,6 +31,20 @@ source "$SCRIPT_DIR/lib/plan-link.sh"
 source "$SCRIPT_DIR/lib/scvroot.sh"
 # shellcheck source=lib/turn-check.sh
 source "$SCRIPT_DIR/lib/turn-check.sh"
+
+# @effect utf8_locale
+# 이유: 지역 설정을 읽고 바꾼다 — 낱말을 바이트가 아니라 글자로 나누려고(조사 떼기 · 2자 미만 빼기). UTF-8 이 아니면 쓸 수 있는 것을 고른다
+utf8_locale() {
+  local x='가' l keep="${LC_ALL-}" had="${LC_ALL+y}"
+  (( ${#x} == 1 )) && return 0
+  for l in C.UTF-8 en_US.UTF-8 ko_KR.UTF-8; do
+    { LC_ALL="$l"; } 2>/dev/null
+    (( ${#x} == 1 )) && { export LC_ALL; return 0; }
+  done
+  if [[ -n "$had" ]]; then { LC_ALL="$keep"; } 2>/dev/null; else unset LC_ALL; fi
+  return 0
+}
+utf8_locale
 
 # @effect usage
 # 이유: 사용법을 표준 오류에 쓰고 끝낸다
