@@ -9,4 +9,7 @@ claude-opus-5-5	opus-5-5	opus-5-5.md	https://platform.claude.com/docs/en/build-w
 claude-opus-5	opus-5	opus-5.md	https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5.md	2026-09-27
 claude-opus-4-8	opus-4-8	opus-4-8.md	https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-4-8.md	2026-09-27
 claude-sonnet-5	sonnet-5	sonnet-5.md	https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-sonnet-5.md	2026-09-27
+claude-fable-5-2	fable-5-2	fable-5-2.md	https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-2.md	2026-11-10
+claude-sonnet-5-5	sonnet-5-5	sonnet-5-5.md	https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-sonnet-5-5.md	2026-11-10
+claude-haiku-5-5	haiku-5-5	haiku-5-5.md	https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-haiku-5-5.md	2026-11-10
 *	best-practices	best-practices.md	https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices.md	2026-09-27
