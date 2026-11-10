@@ -1,0 +1,12 @@
+# SCV recommended effort per model — the value and the sentence come from the official prompting guide copied in this folder.
+# Format (tab-separated): <model id> <recommended: low|medium|high|xhigh|max> <condition or -> <the guide's sentence, verbatim> <source file>.
+# SCV asks once when the session's effort differs from the recommended value; the user changes it (core 0.89.0+). check.sh verifies every sentence against its source file.
+claude-fable-5	high	-	Use `high` as the default for most tasks, with `xhigh` for the most capability-sensitive workloads and `medium` or `low` for routine work.	fable-5.md
+claude-fable-5-1	high	-	Start at the default [effort](https://platform.claude.com/docs/en/build-with-claude/effort) level, `high`, then test the other levels (`low`, `medium`, `xhigh`, and `max`) against your own evals.	fable-5-1.md
+claude-fable-5-2	high	-	Start at `high`, the default on the Claude API.	fable-5-2.md
+claude-opus-4-8	xhigh	코딩 · 에이전트 일은 xhigh, 그 밖의 일은 high 이상	Start with the `xhigh` effort level for coding and agentic use cases, and use a minimum of `high` effort for most intelligence-sensitive use cases.	opus-4-8.md
+claude-opus-5	high	-	Start with the default (`high`) and adjust based on your evals	opus-5.md
+claude-opus-5-5	medium	-	Start at `medium`, the default on Claude Opus 5.5	opus-5-5.md
+claude-sonnet-5	high	-	On Claude Sonnet 5, effort defaults to `high`, the same as on Claude Sonnet 4.6.	sonnet-5.md
+claude-sonnet-5-5	high	잘 정의된 에이전트 코딩 · 여러 단계 도구 쓰기는 medium 에서 시작, 더 어렵거나 긴 일은 high	Start at `high`, the default on the Claude API, unless your workload is agentic or latency-sensitive. For agentic coding and multistep tool use, start at `medium` for well-specified tasks and move to `high` for harder or longer ones.	sonnet-5-5.md
+claude-haiku-5-5	medium	-	`medium` is the default. Start here for most work, including agentic coding.	haiku-5-5.md
