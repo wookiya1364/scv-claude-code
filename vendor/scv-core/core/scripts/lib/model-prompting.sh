@@ -446,10 +446,10 @@ scv_mp_first_turn_lines() {
   return 0
 }
 
-# ---------------------------------------------------------------- 매 턴 1:1 비교 · 등록 (v0.62.0+)
-# 모든 사용자 메시지(길이와 무관)를 그 모델 버전의 요구 항목 목록과 1:1 비교해 등록하게 하고, 등록 전 파일 쓰기와 등록 · 인용
-# 없는 종료를 막는다. 목록은 래퍼 데이터: 가이드 폴더의 checklist-<키>.tsv — "<id>\t<label>\t<원문 인용>" (# 줄은 주석).
-# 제출(등록) 형식: 줄마다 "<id>\t<msg|ctx|asked|na>\t<값>", 그리고 "rewrite\t-\t<다시 쓴 요청>" 한 줄. na = 이번 요청에 해당 없음(값에 이유).
+# ---------------------------------------------------------------- 매 턴 다시 쓰기 · 등록 (v0.62.0+, 0.88.0 에 항목 표 없앰)
+# 모든 사용자 메시지(길이와 무관)를 그 모델의 프롬프팅 가이드대로 다시 써 등록하게 하고, 등록 전 파일 쓰기와 등록 · 인용
+# 없는 종료를 막는다. 0.88.0+: 요구 항목 표(checklist-<키>.tsv)와의 1:1 비교는 없다 — 다시 쓰는 법은 가이드만 정한다.
+# 제출(등록) 형식: "scope\t-\t<이 턴에 바꿀 대상>" 한 줄과 "rewrite\t-\t<다시 쓴 요청>" 한 줄. 그 밖의 줄(옛 항목 줄)은 무시한다.
 
 # @pure
 # 역할: 색인에서 공통(*) 행의 키를 꺼낸다
@@ -485,60 +485,39 @@ scv_mp_guides_candidates() {
 }
 
 # @pure
-# 역할: 공통 목록과 모델 목록을 "id\tlabel" 줄로 합친다(같은 id 는 모델 쪽 label 이 이긴다)
-# 종류: 조립
-# 예: $'a\tA\nb\tB' $'b\tB2\nc\tC' → $'a\tA\nb\tB2\nc\tC\n'
-# 예: $'# c\nBad\tX' '' → ""
-# <공통 목록 tsv> <모델 목록 tsv> → 병합된 "id\tlabel" 줄들. 주석 · 빈 줄 · 형식이 깨진 줄(id · label 없음)은 버린다.
-# 순서: 공통 순서대로, 같은 id 는 모델 쪽 label 이 이긴다, 그 뒤 모델에만 있는 항목. id 는 소문자 · 숫자 · - 만.
-scv_mp_checklist_merge() {
-  local common="${1:-}" model="${2:-}" id label rest out="" mids="" mlabels="" line
-  # 맥 기본 bash 3.2 는 UTF-8 지역 설정에서 [a-z] 범위가 대문자까지 맞춘다 — 글자를 하나하나 적는다
-  _ok_id() { [[ -n "$1" ]] || return 1; local t="${1//[abcdefghijklmnopqrstuvwxyz0123456789-]/}"; [[ -z "$t" ]]; }
-  while IFS=$'\t' read -r id label rest || [[ -n "$id" ]]; do
-    [[ -z "$id" || "$id" == \#* || -z "$label" ]] && continue; _ok_id "$id" || continue
-    mids="$mids|$id|"; mlabels="$mlabels$id"$'\t'"$label"$'\n'
-  done <<< "$model"
-  while IFS=$'\t' read -r id label rest || [[ -n "$id" ]]; do
-    [[ -z "$id" || "$id" == \#* || -z "$label" ]] && continue; _ok_id "$id" || continue
-    [[ "$out" == *$'\n'"$id"$'\t'* || "$out" == "$id"$'\t'* ]] && continue
-    if [[ "$mids" == *"|$id|"* ]]; then
-      line="$(printf '%s' "$mlabels" | while IFS=$'\t' read -r a b; do [[ "$a" == "$id" ]] && { printf '%s' "$b"; break; }; done)"
-      out="$out$id"$'\t'"$line"$'\n'
-    else
-      out="$out$id"$'\t'"$label"$'\n'
-    fi
-  done <<< "$common"
-  while IFS=$'\t' read -r id label || [[ -n "$id" ]]; do
-    [[ -z "$id" ]] && continue
-    [[ "$out" == *$'\n'"$id"$'\t'* || "$out" == "$id"$'\t'* ]] && continue
-    out="$out$id"$'\t'"$label"$'\n'
-  done <<< "$mlabels"
-  printf '%s' "$out"
+# 역할: 색인에 가이드 행(모델 행이나 공통 행)이 하나라도 있는지 1|0 으로 정한다
+# 종류: 판정
+# 예: $'# c\n@holder\tX\n*\tcommon\tc.md\tu\t2026-01-01' → "1"
+# 예: $'# c\n@holder\tX' → "0"
+# <색인 텍스트> → 1(가이드 행이 있다 — 이 호스트는 다시 쓰기 · 등록 장치를 쓴다) | 0. 주석 · 빈 줄 · @ 줄은 세지 않는다.
+# 0.88.0+: 장치를 켜는 근거가 요구 항목 표 파일에서 가이드 색인으로 바뀌었다(표 파일은 더 없다).
+scv_mp_has_guides() {
+  local index="${1:-}" mid key file rest
+  while IFS=$'\t' read -r mid key file rest || [[ -n "$mid" ]]; do
+    [[ -z "$mid" || "$mid" == \#* || "$mid" == @* ]] && continue
+    [[ -n "$key" && -n "$file" ]] && { printf '1'; return 0; }
+  done <<< "$index"
+  printf '0'
 }
 
 # @pure
-# 역할: 병합 목록과 제출 텍스트를 견줘 빠진 · 잘못된 항목 줄들을 낸다(통과면 빈 값)
+# 역할: 제출 텍스트에 다시 쓴 요청과 범위가 있는지 보고 빠진 줄들을 낸다(통과면 빈 값)
 # 종류: 판정/gate
-# 예: $'a\tA' $'a\tmsg\tv\nrewrite\t-\tr' → ""
-# 예: $'a\tA' '' → $'missing a\nmissing rewrite\n'
-# <병합 목록> <제출 텍스트> → 문제 줄들(없으면 빈 값 = 통과): "missing <id>" · "bad-status <id>" · "empty <id>" · "missing rewrite".
+# 예: $'scope\tmsg\tv\nrewrite\t-\tr' → ""
+# 예: $'a\tmsg\tv\nscope\t-\tv\nrewrite\t-\tr' → ""
+# 예: '' → $'missing scope\nmissing rewrite\n'
+# <제출 텍스트> → 문제 줄들(없으면 빈 값 = 통과): "missing scope" · "missing rewrite". 값이 공백뿐이면 없는 것으로 본다.
+# 0.88.0+: 요구 항목 표와 견주지 않는다 — scope · rewrite 밖의 줄(옛 모양의 항목 줄)은 상태 칸이 무엇이든 무시한다.
 scv_mp_register_problems() {
-  local list="${1:-}" sub="${2:-}" id label st val seen="" rw=0 out=""
+  local sub="${1:-}" id st val rw=0 sc=0 out=""
   while IFS=$'\t' read -r id st val || [[ -n "$id" ]]; do
     [[ -z "$id" || "$id" == \#* ]] && continue
-    if [[ "$id" == "rewrite" ]]; then [[ "$val" == *[![:space:]]* ]] && rw=1; continue; fi
-    case "$st" in
-      msg|ctx|asked|na) [[ "$val" == *[![:space:]]* ]] && seen="$seen|$id|" || out="${out}empty $id"$'\n' ;;
-      *) out="${out}bad-status $id"$'\n' ;;
+    case "$id" in
+      rewrite) [[ "$val" == *[![:space:]]* ]] && rw=1 ;;
+      scope) [[ "$val" == *[![:space:]]* ]] && sc=1 ;;
     esac
   done <<< "$sub"
-  while IFS=$'\t' read -r id label || [[ -n "$id" ]]; do
-    [[ -z "$id" ]] && continue
-    [[ "$seen" == *"|$id|"* ]] && continue
-    [[ "$out" == *" $id"$'\n'* ]] && continue
-    out="${out}missing $id"$'\n'
-  done <<< "$list"
+  (( sc )) || out="${out}missing scope"$'\n'
   (( rw )) || out="${out}missing rewrite"$'\n'
   printf '%s' "$out"
 }
@@ -688,19 +667,6 @@ scv_mp_principle_section() {
 }
 
 # @pure
-# 역할: 구역 첫 줄 "tag: " 뒤의 표식을 꺼낸다
-# 종류: 꺼내기
-# 예: $'tag: [P]\nbody' → "[P]"
-# 예: body → ""
-# <구역> → 표식(첫 줄 "tag: " 뒤). 표식 줄이 없으면 빈 값.
-scv_mp_principle_tag() {
-  local first="${1:-}"
-  first="${first%%$'\n'*}"
-  case "$first" in "tag: "?*) printf '%s' "${first#tag: }" ;; esac
-  return 0
-}
-
-# @pure
 # 역할: 구역에서 표식 줄과 통로별 해로운 변경 줄을 뺀 원칙 전문을 낸다
 # 종류: 다듬기
 # 예: $'tag: [P]\nbody\nharm-text: x' → "body"
@@ -735,17 +701,6 @@ scv_mp_harm_line() {
     case "$line" in "harm-$ch: "?*) printf '%s' "${line#"harm-$ch: "}"; return 0 ;; esac
   done <<< "$sec"
   return 0
-}
-
-# @pure
-# 역할: 다시 쓴 요청 뒤에 표식을 붙인 REWRITE 줄 값을 만든다(off · 표식 없음이면 요청 그대로)
-# 종류: 조립
-# 예: "요청" on "[P]" → "요청 [P]"
-# 예: "요청" off "[P]" → "요청"
-# <다시 쓴 요청> <스위치 on|off> <표식> → REWRITE 줄 값. off · 표식 없음 · 요청 없음이면 요청 그대로(이 기능 전과 같다).
-scv_mp_rewrite_tagged() {
-  local rw="${1:-}" sw="${2:-on}" tag="${3:-}"
-  if [[ "$sw" == "on" && -n "$tag" && -n "$rw" ]]; then printf '%s %s' "$rw" "$tag"; else printf '%s' "$rw"; fi
 }
 
 # @pure
@@ -979,7 +934,7 @@ scv_mp_stop_reason() {
   local reg="${1:-0}" shown="${2:-}" top="${3:-}" tok="${4:-}" cmd="${5:-model-prompting.sh}" model="${6:-}" sess="${7:-}" s="" m q=$'\x3e'
   m="${model:-$'\x3c'지금 모델 id$'\x3e'}"; [[ -n "$sess" ]] && s=" --session \"$sess\""
   if [[ "$reg" != "1" ]]; then
-    printf '%s' "이번 턴($tok)의 요청을 모델 가이드 요구 항목과 비교 · 등록하지 않았다 — bash \"$cmd\" checklist --model \"$m\" 로 항목을 받아 비교하고, bash \"$cmd\" register --model \"$m\"$s 로 등록한 뒤, 답 맨 위에 다시 쓴 요청 전문을 인용으로 보이고 그것으로 답하라."
+    printf '%s' "이번 턴($tok)의 요청을 다시 써 등록하지 않았다 — 이 모델의 프롬프팅 가이드대로 다시 쓰고, bash \"$cmd\" register --model \"$m\"$s 로 등록한 뒤(stdin: scope | - | 바꿀 대상, rewrite | - | 다시 쓴 요청), 답 맨 위에 다시 쓴 요청 전문을 인용으로 보이고 그것으로 답하라."
   elif [[ "$shown" == "0" ]]; then
     printf '%s' "이번 턴에 등록한 다시 쓴 요청을 답에 보이지 않았다 — 답 맨 위에 '$q **다시 쓴 요청**: …'(REWRITE 줄 그대로)을 인용으로 보여라."
   else
@@ -999,7 +954,7 @@ scv_mp_gate_reason() {
   m="${model:-$'\x3c'지금 모델 id$'\x3e'}"; [[ -n "$sess" ]] && s=" --session \"$sess\""   # 꺾쇠는 글자 코드로(순수성 검사)
   case "$v" in
     unregistered)
-      printf '%s' "SCV 프롬프트: 이번 턴($tok)의 요청을 아직 모델 가이드 요구 항목과 비교 · 등록하지 않아 파일 쓰기를 거절한다. 먼저 bash \"$cmd\" checklist --model \"$m\" 로 항목을 받아 비교하고, bash \"$cmd\" register --model \"$m\"$s 로 등록한 뒤(stdin: id | msg|ctx|asked|na | 값, 끝에 rewrite | - | 다시 쓴 요청) 다시 시도하라." ;;
+      printf '%s' "SCV 프롬프트: 이번 턴($tok)의 요청을 아직 다시 써 등록하지 않아 파일 쓰기를 거절한다. 먼저 이 모델의 프롬프팅 가이드대로 다시 쓰고, bash \"$cmd\" register --model \"$m\"$s 로 등록한 뒤(stdin: scope | - | 바꿀 대상, rewrite | - | 다시 쓴 요청) 다시 시도하라." ;;
     answered)
       printf '%s' "SCV 프롬프트: 마지막 등록 뒤에 선택 창 답이 왔다 — 편집 전에 다시 등록하라. 범위가 바뀌었으면 bash \"$cmd\" register --model \"$m\"$s (전체 다시), 그대로면 bash \"$cmd\" register --keep$s (한 줄). 그다음 다시 시도하라." ;;
     forbidden)
@@ -1135,26 +1090,21 @@ scv_mp_principle_reason() {
 }
 
 # @pure
-# 역할: 매 턴 훅이 싣는 "1:1 비교 · 등록" 지시 블록을 만든다(스위치 off · 토큰 없음이면 빈 값)
+# 역할: 매 턴 훅이 싣는 "가이드대로 다시 쓰기 · 등록" 지시 블록을 만든다(스위치 off · 토큰 없음이면 빈 값)
 # 종류: 조립
-# 예: on tok1 m-1 "" x.sh → $'[SCV 프롬프트] help 를 부른 뒤, 이 턴 메시지(짧아도)를 모델 가이드 요구 항목과 1:1 비교 · 등록한 뒤 일하라 — 등록 전 파일 쓰기는 거절, 등록 · 인용 없는 종료는 차단. 선택 창 답 뒤 첫 편집 전에 다시 등록(범위 그대로면 register --keep).\n  항목마다 msg · ctx(출처) · na(이유) · asked(못 찾은 것 중 가장 영향 큰 하나만, 추천 답과 함께) → bash "x.sh" register --model "m-1" (stdin "id | 상태 | 값" 줄들 + "rewrite | - | 다시 쓴 요청"; 파일을 안 바꾸는 턴은 scope 값을 \'변경 없음 — …\' 으로 시작) → 답 맨 위에 \'> **다시 쓴 요청**: …\' 전문 인용(ctx · asked 항목 표시), 그 아래 굵은 주제 + 개조식 불릿(contracts/writing.md), 그것으로 일한다.\n  항목: bash "x.sh" checklist --model "{지금 모델 id}"\n'
+# 예: on tok1 m-1 x.sh → $'[SCV 프롬프트] help 를 부른 뒤, 이 턴 메시지(짧아도)를 이 모델의 프롬프팅 가이드대로 다시 써 등록한 뒤 일하라 — 등록 전 파일 쓰기는 거절, 등록 · 인용 없는 종료는 차단. 선택 창 답 뒤 첫 편집 전에 다시 등록(범위 그대로면 register --keep).\n  요청에 없는 요구는 보태지 않는다. 빠진 것은 대화 · 저장소에서 채우고 출처를 밝힌다 → bash "x.sh" register --model "m-1" (stdin 두 줄: "scope | - | 이 턴에 바꿀 대상" + "rewrite | - | 다시 쓴 요청"; 파일을 안 바꾸는 턴은 scope 값을 \'변경 없음 — …\' 으로 시작) → 답 맨 위에 \'> **다시 쓴 요청**: …\' 전문 인용, 그 아래 굵은 주제 + 개조식 불릿(contracts/writing.md), 그것으로 일한다.\n'
 # 예: off tok1 → ""
-# <스위치> <토큰> <모델 id 또는 ""> <병합 목록 또는 ""> <스크립트 경로> [<세션 id>] → 매 턴 훅이 싣는 블록(스위치 off · 토큰 없음이면 빈 값).
+# <스위치> <토큰> <모델 id 또는 ""> <스크립트 경로> [<세션 id>] → 매 턴 훅이 싣는 블록(스위치 off · 토큰 없음이면 빈 값).
 # 토큰은 싣지 않는다 — 같은 상태면 출력이 늘 같아야 한다(등록은 표 파일을 스스로 읽는다). 세션 id(v0.65.0+)는 등록 명령에 그대로
 # 싣는다 — 한 저장소의 여러 세션 중 이 세션 자리에 등록되게(같은 세션이면 늘 같다).
+# 0.88.0+: 요구 항목을 나열하지 않는다 — 다시 쓰는 법은 그 모델의 가이드가 정하고, 등록은 범위와 다시 쓴 요청 두 줄이다.
 scv_mp_turn_block() {
-  local sw="${1:-on}" tok="${2:-}" model="${3:-}" list="${4:-}" cmd="${5:-model-prompting.sh}" sess="${6:-}" id label items="" q=$'\x3e' s=""
+  local sw="${1:-on}" tok="${2:-}" model="${3:-}" cmd="${4:-model-prompting.sh}" sess="${5:-}" q=$'\x3e' s=""
   [[ "$sw" == "on" && -n "$tok" ]] || return 0
   local ph='{지금 모델 id}' mid   # 기본값을 따로 둔다 — "${x:-{…\}}" 의 \} 를 bash 3.2 는 글자 그대로 남긴다(5 는 지운다)
   mid="${model:-$ph}"; [[ -n "$sess" ]] && s=" --session \"$sess\""
-  printf '%s\n' "[SCV 프롬프트] help 를 부른 뒤, 이 턴 메시지(짧아도)를 모델 가이드 요구 항목과 1:1 비교 · 등록한 뒤 일하라 — 등록 전 파일 쓰기는 거절, 등록 · 인용 없는 종료는 차단. 선택 창 답 뒤 첫 편집 전에 다시 등록(범위 그대로면 register --keep)."
-  printf '%s\n' "  항목마다 msg · ctx(출처) · na(이유) · asked(못 찾은 것 중 가장 영향 큰 하나만, 추천 답과 함께) → bash \"$cmd\" register --model \"$mid\"$s (stdin \"id | 상태 | 값\" 줄들 + \"rewrite | - | 다시 쓴 요청\"; 파일을 안 바꾸는 턴은 scope 값을 '변경 없음 — …' 으로 시작) → 답 맨 위에 '$q **다시 쓴 요청**: …' 전문 인용(ctx · asked 항목 표시), 그 아래 굵은 주제 + 개조식 불릿(contracts/writing.md), 그것으로 일한다."
-  if [[ -n "$model" && -n "$list" ]]; then
-    while IFS=$'\t' read -r id label || [[ -n "$id" ]]; do [[ -n "$id" ]] && items="$items$id($label) "; done <<< "$list"
-    printf '%s\n' "  항목 [$model — 다르면 checklist --model]: ${items% }"
-  else
-    printf '%s\n' "  항목: bash \"$cmd\" checklist --model \"{지금 모델 id}\""
-  fi
+  printf '%s\n' "[SCV 프롬프트] help 를 부른 뒤, 이 턴 메시지(짧아도)를 이 모델의 프롬프팅 가이드대로 다시 써 등록한 뒤 일하라 — 등록 전 파일 쓰기는 거절, 등록 · 인용 없는 종료는 차단. 선택 창 답 뒤 첫 편집 전에 다시 등록(범위 그대로면 register --keep)."
+  printf '%s\n' "  요청에 없는 요구는 보태지 않는다. 빠진 것은 대화 · 저장소에서 채우고 출처를 밝힌다 → bash \"$cmd\" register --model \"$mid\"$s (stdin 두 줄: \"scope | - | 이 턴에 바꿀 대상\" + \"rewrite | - | 다시 쓴 요청\"; 파일을 안 바꾸는 턴은 scope 값을 '변경 없음 — …' 으로 시작) → 답 맨 위에 '$q **다시 쓴 요청**: …' 전문 인용, 그 아래 굵은 주제 + 개조식 불릿(contracts/writing.md), 그것으로 일한다."
   return 0
 }
 

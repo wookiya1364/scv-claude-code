@@ -336,10 +336,10 @@ if [[ "$MODE" == "gate-bash" ]]; then
 fi
 
 # ---------- Rule P (v0.62.0+): this turn's request must be registered first ---
-# Model-prompting: every user message is compared 1:1 with the answering model's
-# guide requirement list and registered before any editor-style write. The
+# Model-prompting: every user message is rewritten by the answering model's
+# guide and registered (scope + rewrite) before any editor-style write. The
 # decision lives in model-prompting.sh gate (it prints a reason, or nothing);
-# no requirement data, no turn token, switch off, or any failure → no opinion.
+# no prompting guides, no turn token, switch off, or any failure → no opinion.
 # v0.65.0+: the decision also sees whose write this is and what it touches — the
 # session id (each session judges by its own registration), the subagent id (a
 # subagent received no person's message: no opinion), and whether any target is a
