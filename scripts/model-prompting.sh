@@ -8,7 +8,7 @@ declare -F settings_preload >/dev/null 2>&1 && { settings_preload 2>/dev/null ||
 #   model-prompting.sh status [--model <id>] 사람이 본다: 가이드 폴더 · 색인 행 수 · 읽음 기록 · (모델이 있으면) 결정
 #   model-prompting.sh prompt              (v0.61.0+) 매 턴 훅이 부른다: 이 컨텍스트에서 아직 원문을 안 읽었으면, help 가
 #                                            마지막으로 본 모델의 원문 경로 · 표시 명령 블록을 낸다(아니면 아무것도)
-#   model-prompting.sh checklist --model <id> (v0.62.0+) 이 모델의 요구 항목 목록(공통 + 모델) — 매 턴 1:1 비교의 기준
+#   model-prompting.sh checklist --model <id> (0.88.0+) 요구 항목 표는 없다 — 옛 호출이 깨지지 않게 등록 모양만 알린다
 #   model-prompting.sh register --model <id> < 제출  (v0.62.0+) 이번 턴 비교 결과를 등록 — 항목이 모두 채워졌을 때만.
 #                                            (v0.63.0+) 출력의 REWRITE 끝에 SCV 원칙 표식, 그 아래 PRINCIPLE: 전문 —
 #                                            contracts/rewrite-principle.md 의 SCV_LANG 구역, 설정 SCV_REWRITE_PRINCIPLE(on|off)
@@ -132,33 +132,36 @@ _any_human() {  # 사람 메시지 표시가 있는 세션 폴더가 하나라�
 #   (v0.65.0+) --session 이 없으면 먼저 호스트 프로필 SCV_SESSION_ENV 가 이름 붙인 환경 변수(모델의 셸 명령에 호스트가 담는 세션 id)를
 #     본다 — 그 세션 자리가 이미 있을 때만(한 저장소에 사람 세션이 여럿이어도 자기 자리로 간다). 판별 · 표시 같은 명령은 자리를 고르지 않는다.
 SKEY=""
-# 0.85.2+: 낱말 목록 싣기 — 매 턴 훅(prompt)과 help 가이드 안내(guide)가 같이 부른다. 같은 지문 안에서는 먼저 부른 쪽이 전문,
-# 나중 쪽은 한 줄. 매 턴 훅에 싣는 까닭: 모델이 help 출력을 grep 으로 걸러 읽어 목록이 버려졌다(slay 세션 0회, 2026-11-08).
-# @effect _ste_block
-_ste_block() {
-  # 0.84.0+: 다시 쓴 요청 낱말 목록(contracts/rewrite-ste.md) — SCV_LANG 구역이 있을 때만, 규약 지문마다 한 번 전문.
-  # 가이드 안내는 다시 쓰기 전에 돌므로 그 턴의 다시 쓰기부터 목록이 닿는다. 언어 구역이 없으면(영어 등) 아무것도 내지 않는다.
-  if [[ "$(scv_mp_switch "$(_setting SCV_REWRITE_STE)")" == "on" ]]; then
-    _ssec=""
-    # 0.84.1+: 원칙 글과 같은 후보 두 곳 — 래퍼의 바깥 scripts/ 에서는 코어 루트가 플러그인 루트라 안쪽 벤더 사본에 있다.
-    while IFS= read -r _sf; do
-      [[ -n "$_sf" && -f "$_sf" && ! -L "$_sf" ]] || continue
-      _ssec="$(scv_mp_principle_pick "$(head -c 65536 "$_sf" 2>/dev/null)" "$(scv_mp_principle_lang "$(_setting SCV_LANG)")" ste)"
-      break
-    done <<< "$(scv_mp_principle_candidates "$CORE_ROOT" rewrite-ste.md)"
-    if [[ -n "$_ssec" ]]; then
-      _sd="$TDIR"; [[ -n "$_sd" && -d "$_sd" ]] || _sd="$JOURNAL_DIR"
-      _sseen=""; _sp=""; [[ -n "$_sd" && -d "$_sd" ]] && _sp="$_sd/.ste-seen"
-      [[ -n "$_sp" && -f "$_sp" && ! -L "$_sp" ]] && _sseen="$(_first_line "$_sp")"
-      if [[ "$(scv_mp_principle_show "$_sseen" "$NONCE")" == "short" ]]; then
-        echo "STE: (이 세션에 이미 실음 — 다시 쓴 요청은 이 목록대로)"
-      else
-        [[ -n "$_sp" && -n "$NONCE" && ! -L "$_sp" ]] && printf '%s\n' "$NONCE" > "$_sp" 2>/dev/null
-        echo "STE:"
-        printf '%s\n' "$_ssec"
-      fi
-    fi
+# 0.88.0+: SCV 원칙 싣기 — 매 턴 훅(prompt)이 부른다. 다시 쓴 요청 끝의 표식과 등록 출력의 전문을 여기로 옮겼다: 원칙은 답(output)에
+# 대한 규칙이라 답 모양 안내와 같은 자리에 싣는다. 같은 규약 지문 안에서는 처음 한 번 전문, 그 뒤는 한 줄(지문이 비면 전문).
+_harm_channel() {  # → choice | text | none. 읽기(호스트 프로필 · 환경)는 choice-gate.sh 가, 판단은 순수 함수가 한다.
+  local t="" u=0
+  if [[ -f "$SCRIPT_DIR/choice-gate.sh" ]]; then
+    t="$(bash "$SCRIPT_DIR/choice-gate.sh" tool 2>/dev/null || true)"
+    u="$(bash "$SCRIPT_DIR/choice-gate.sh" unattended 2>/dev/null || true)"
   fi
+  if declare -F scv_show_real_channel >/dev/null 2>&1; then scv_show_real_channel "$t" "$u" human; else printf 'text'; fi
+}
+# @effect _principle_block
+# 이유: 이 세션의 원칙 실음 표시 파일(.principle-seen)을 쓴다
+_principle_block() {
+  local psec pf="" pseen="" hl
+  [[ "$(scv_mp_switch "$(_setting SCV_REWRITE_PRINCIPLE)")" == "on" ]] || return 0
+  psec="$(scv_mp_principle_section "$(_principle_body)" "$(_setting SCV_LANG)")"
+  [[ -n "$psec" ]] || return 0
+  [[ -n "$TDIR" && -d "$TDIR" ]] && pf="$TDIR/.principle-seen"
+  [[ -n "$pf" && -f "$pf" && ! -L "$pf" ]] && pseen="$(_first_line "$pf")"
+  if [[ "$(scv_mp_principle_show "$pseen" "$NONCE")" == "short" ]]; then
+    echo "PRINCIPLE: (이 세션에 이미 실음 — 규칙 그대로, 규약을 다시 읽을 때 전문을 다시 싣는다)"
+    return 0
+  fi
+  [[ -n "$pf" && -n "$NONCE" && ! -L "$pf" ]] && printf '%s\n' "$NONCE" > "$pf" 2>/dev/null
+  echo "PRINCIPLE:"
+  printf '%s\n' "$(scv_mp_principle_text "$psec")"
+  # (2026-10-08+) 해로운 변경 줄 — 이번 실행의 확인 통로에 맞는 한 줄. 통로 판단은 실체 보여 주기와 같다(입구: choice-gate.sh).
+  hl="$(scv_mp_harm_line "$psec" "$(_harm_channel)")"
+  [[ -n "$hl" ]] && printf '%s\n' "$hl"
+  return 0
 }
 
 case "$cmd" in
@@ -255,15 +258,11 @@ MFILE_RAW="$MFILE"; MFILE="$(scv_mp_safe_name "$MFILE")"
 COMMON="$(scv_mp_common "$INDEX")"; CFILE=""; CDATE=""
 [[ -n "$COMMON" ]] && IFS=$'\t' read -r CFILE CDATE <<< "$COMMON"
 CFILE="$(scv_mp_safe_name "$CFILE")"
-_cl_file() { local k; k="$(scv_mp_safe_name "checklist-${1:-}.tsv")"; [[ -n "${1:-}" && -n "$k" && -f "$GUIDES_DIR/$k" && ! -L "$GUIDES_DIR/$k" ]] && head -c 16384 "$GUIDES_DIR/$k" 2>/dev/null; }
-_checklist_for() {  # <모델 키 또는 ""> → 병합 목록 (공통 목록이 없으면 빈 값 — 이 호스트에 요구 항목 데이터가 없다)
-  local common; common="$(_cl_file "$(scv_mp_common_key "$INDEX")")"
-  [[ "$common" == *[![:space:]]* ]] || return 0
-  scv_mp_checklist_merge "$common" "$(_cl_file "${1:-}")"
+_on() {  # 0.88.0+ — 다시 쓰기 · 등록 장치가 켜졌나: 스위치가 on 이고 이 호스트가 가이드 색인을 싣는다(예전 근거는 요구 항목 표 파일)
+  [[ "$SWITCH" == "on" && "$(scv_mp_has_guides "$INDEX")" == "1" ]]
 }
 _token_new() { local n; n="$(head -c 4 /dev/urandom 2>/dev/null | od -An -tx1 2>/dev/null | tr -d ' \n')"; [[ "$n" =~ ^[0-9a-f]{8}$ ]] || n="$(printf '%04x%04x' "$RANDOM" "$RANDOM")"; printf '%s' "$n"; }
 _last_model() { local m; m="$(_first_line "$LAST_FILE")"; m="${m//[[:space:]]/}"; [[ "$m" == "none" ]] && m=""; printf '%s' "$m"; }
-_key_of() { local r; r="$(scv_mp_lookup "$(scv_mp_normalize_id "${1:-}")" "$INDEX")"; printf '%s' "${r%%$'\t'*}"; }
 
 case "$cmd" in
   guide)
@@ -289,8 +288,14 @@ case "$cmd" in
       _h=0; [[ -f "$GUIDES_DIR/excerpt-$CFILE" && ! -L "$GUIDES_DIR/excerpt-$CFILE" ]] && _h=1
       CPATH="$GUIDES_DIR/$(scv_mp_read_name "$CFILE" "$_h")"
     fi
-    HAVE=0; [[ -n "$ROW" ]] && HAVE=1
-    DEC="$(scv_mp_decision "$HAVE" "$RECORD" "$NONCE" "$ID")"
+    # 0.88.0+ — 색인에 이 모델의 행이 없어도 공통 원문이 있으면 그것만 읽게 한다(요구 항목 표가 없어져, 가이드 없는 모델이
+    # 다시 쓸 근거가 공통 원문뿐이다). 읽음 기록에는 "<id>@common" 으로 남긴다 — 나중에 이 모델의 행이 생기면 다시 읽게.
+    COMMON_ONLY=0; RID="$ID"
+    if [[ -z "$ROW" && "$SWITCH" == "on" && -n "$ID" && -n "$CPATH" ]]; then
+      COMMON_ONLY=1; RID="$ID@common"; KEY="$(scv_mp_common_key "$INDEX")"; MDATE="$CDATE"
+    fi
+    HAVE=0; [[ -n "$ROW" || "$COMMON_ONLY" == "1" ]] && HAVE=1
+    DEC="$(scv_mp_decision "$HAVE" "$RECORD" "$NONCE" "$RID")"
     # v0.65.0+ — 이 세션의 대화 기록이 있으면 그것으로 정한다: 마지막 압축 경계 뒤에 이 모델의 읽음 표시 명령이 있으면 loaded.
     # 재접속 · 이어받기 · 턴 수 · 규약 다시 읽기(지문이 바뀜)만으로는 다시 읽게 하지 않는다. 기록을 못 읽으면 위 판단 그대로.
     if [[ "$DEC" == "load" || "$DEC" == "loaded" ]]; then
@@ -305,16 +310,17 @@ case "$cmd" in
     # v0.60.1+: load 이면 턴 기록 둘째 줄부터 지금 낸 GUIDE_FILE · GUIDE_MARK_CMD 줄을 그대로 담는다 — 멈춤 훅은 다른 실행
     # 위치(벤더 코어)에서 돌아 경로를 다시 계산하면 틀릴 수 있으니, 경고에는 help 가 실제로 낸 값을 싣는다.
     _detail=""; _all=""
-    if [[ ( "$DEC" == "load" || "$DEC" == "loaded" ) && -z "$MISSING" && -n "$MPATH" ]]; then
+    if [[ ( "$DEC" == "load" || "$DEC" == "loaded" ) && -z "$MISSING" && -n "$MPATH$CPATH" ]]; then
       _cmd="$(printf 'GUIDE_MARK_CMD: bash "%s" mark --model "%s"' "$SCRIPT_DIR/model-prompting.sh" "$ID")"
-      _all="GUIDE_FILE: $MPATH"; [[ -n "$CPATH" ]] && _all="$_all"$'\n'"GUIDE_FILE: $CPATH"
+      _all=""; [[ -n "$MPATH" ]] && _all="GUIDE_FILE: $MPATH"
+      [[ -n "$CPATH" ]] && _all="${_all:+$_all$'\n'}GUIDE_FILE: $CPATH"
       _all="$_all"$'\n'"$_cmd"
       if [[ "$DEC" == "load" ]]; then printf '%s\n' "$_cmd"; _detail="$_all"; fi
     fi
     # v0.61.0+: 마지막으로 본 모델 — 새 컨텍스트의 첫 턴에 매 턴 훅이 싣는다(prompt). 가이드가 없는 모델이면 none.
     if [[ -n "$_all" ]]; then
       _put "$LAST_FILE" "$ID"$'\n'"$_all"
-    elif [[ -z "$ROW" && -n "$ID" && "$SWITCH" == "on" ]]; then
+    elif [[ -z "$ROW" && "$COMMON_ONLY" != "1" && -n "$ID" && "$SWITCH" == "on" ]]; then
       _put "$LAST_FILE" "none"
     fi
     if [[ "$DEC" == "load" || "$DEC" == "loaded" ]] && [[ -z "$MISSING" ]]; then
@@ -324,10 +330,13 @@ case "$cmd" in
     else
       _drop "$TURN_FILE"
     fi
-    _ste_block
     ;;
   mark)
     # 색인에 있는 모델만 기록한다 — 모르는 모델을 "읽음" 으로 적으면 나중에 색인이 생겨도 load 가 안 뜬다.
+    # 0.88.0+ — 행이 없는 모델도 공통 원문이 있으면 "<id>@common" 으로 기록한다(행이 생기면 id 가 달라 다시 읽는다).
+    if [[ -z "$ROW" && "$SWITCH" == "on" && -n "$ID" && -n "$CFILE" && -f "$GUIDES_DIR/$CFILE" && ! -L "$GUIDES_DIR/$CFILE" ]]; then
+      ID="$ID@common"; KEY="$(scv_mp_common_key "$INDEX")"; ROW="common"
+    fi
     [[ -n "$ROW" ]] || { echo "GUIDE_MARK: skipped (no guide for this model)"; exit 0; }
     mkdir -p "$JOURNAL_DIR" 2>/dev/null || exit 0
     [[ -L "$READ_FILE" ]] && exit 0
@@ -363,7 +372,7 @@ case "$cmd" in
     # 훅은 표식 갱신(세션 비교)보다 먼저 부른다 — 세션이 바뀌었으면 갱신이 지문을 비울 것이니 안 읽음으로 본다.
     # v0.65.0+ — 이번 턴 표를 먼저 쓴다: 대화 기록 읽기가 아무리 오래 걸려도(훅 시간 초과) 새 턴은 열린다(독립 검토).
     _tok=""; _haslist=0
-    if [[ "$SWITCH" == "on" && -n "$(_checklist_for "")" ]]; then _haslist=1; _tok="$(_token_new)"; _put "$TOKEN_FILE" "$_tok"; fi
+    if _on; then _haslist=1; _tok="$(_token_new)"; _put "$TOKEN_FILE" "$_tok"; fi
     _rn="${RECORD%%$'\x1f'*}"; _read=0; [[ -n "$_rn" && "$_rn" == "$NONCE" ]] && _read=1
     [[ -n "$SESSION_ARG" && "$SESSION_ARG" != "$STATE_SESSION" ]] && _read=0
     _lm="$(_last_model)"
@@ -387,13 +396,12 @@ case "$cmd" in
       while IFS= read -r _gl; do [[ "$_gl" == "GUIDE_FILE: "* && ! -f "${_gl#GUIDE_FILE: }" ]] && _okr=0; done <<< "$_reb"
       (( _okr )) && _rec="$_reb"
     fi
-    # v0.62.0+: 매 턴(모든 메시지) 새 표를 쓰고 1:1 비교 · 등록 블록을 싣는다 — 요구 항목 데이터가 있는 호스트에서만.
+    # v0.62.0+: 매 턴(모든 메시지) 새 표를 쓰고 다시 쓰기 · 등록 블록을 싣는다 — 가이드 색인이 있는 호스트에서만.
     if (( _haslist )); then
-      _list=""; [[ -n "$_lm" ]] && _list="$(_checklist_for "$(_key_of "$_lm")")"
-      scv_mp_turn_block "$SWITCH" "$_tok" "$_lm" "$_list" "$SCRIPT_DIR/model-prompting.sh" "$SKEY"
+      scv_mp_turn_block "$SWITCH" "$_tok" "$_lm" "$SCRIPT_DIR/model-prompting.sh" "$SKEY"
     fi
     scv_mp_first_turn_lines "$SWITCH" "$_read" "$_warned" "$_rec"
-    _ste_block
+    (( _haslist )) && _principle_block
     ;;
   human)
     # v0.65.0+ — 사람 입력(매 턴 훅이 자동 입력 밖의 모든 입력에 부른다): 자동 턴 표시를 지우고(이 기능 전에는 훅이 직접 지웠다),
@@ -419,7 +427,7 @@ case "$cmd" in
   answered)
     # v0.65.0+ — 선택 창 답(래퍼의 답 신호 훅이 부른다). 이번 턴 표와 "그때 마지막 등록의 차례"를 적는다 — 쓰기 검사는 그 차례가
     # 지금 등록의 차례와 같으면(답 뒤에 다시 등록하지 않았으면) 편집을 거절한다. 하위 에이전트 · 표 없음 · 기능 꺼짐이면 아무것도 안 한다.
-    [[ "$SWITCH" == "on" && -n "$(_checklist_for "")" && -z "$AGENT_ARG" ]] || exit 0
+    _on && [[ -z "$AGENT_ARG" ]] || exit 0
     _tok="$(_first_line "$TOKEN_FILE")"; [[ -n "$_tok" ]] || exit 0
     _rt="$(_first_line "$REG_FILE")"; _seq=""
     [[ "${_rt%%$'\x1f'*}" == "$_tok" ]] && _seq="$(scv_mp_reg_seq "$_rt")"
@@ -427,52 +435,23 @@ case "$cmd" in
     echo "ANSWERED: turn $_tok"
     ;;
   checklist)
-    _list="$(_checklist_for "$KEY")"
-    [[ -n "$_list" ]] || { echo "CHECKLIST: none (this host ships no requirement list)"; exit 0; }
-    echo "CHECKLIST: ${KEY:-common} (model ${ID:-?})"
-    printf '%s\n' "$_list" | while IFS=$'\t' read -r _i _l; do [[ -n "$_i" ]] && printf '%s | %s\n' "$_i" "$_l"; done
+    # 0.88.0+ — 요구 항목 표는 없다. 옛 안내문을 받은 세션이 불러도 깨지지 않게 지금 등록 모양만 알린다.
+    _on || { echo "CHECKLIST: none (this host ships no prompting guides)"; exit 0; }
+    echo "CHECKLIST: none (0.88.0+ — no requirement list; rewrite the request by this model's prompting guide)"
     _ss=""; [[ -n "$SKEY" ]] && _ss=" --session \"$SKEY\""
-    echo "REGISTER: bash \"$SCRIPT_DIR/model-prompting.sh\" register --model \"${ID:-<id>}\"$_ss — stdin: id | msg|ctx|asked|na | value, then rewrite | - | <rewritten request>"
+    echo "REGISTER: bash \"$SCRIPT_DIR/model-prompting.sh\" register --model \"${ID:-<id>}\"$_ss — stdin: scope | - | <what this turn changes>, then rewrite | - | <rewritten request>"
     ;;
   register)
-    _rewrite_out() {  # <저장된 제출> — REWRITE 줄(원칙 표식) · PRINCIPLE 전문. (v0.63.0+) 원칙은 저장된 제출에 넣지 않고 출력에만 붙인다.
-      local psw psec
-      psw="$(scv_mp_switch "$(_setting SCV_REWRITE_PRINCIPLE)")"
-      psec=""; [[ "$psw" == "on" ]] && psec="$(scv_mp_principle_section "$(_principle_body)" "$(_setting SCV_LANG)")"
-      echo "REWRITE: $(scv_mp_rewrite_tagged "$(scv_mp_register_rewrite "$1")" "$psw" "$(scv_mp_principle_tag "$psec")")"
-      local pf="" pseen=""
-      [[ -n "$TDIR" && -d "$TDIR" ]] && pf="$TDIR/.principle-seen"
-      [[ -n "$pf" && -f "$pf" && ! -L "$pf" ]] && pseen="$(_first_line "$pf")"
-      if [[ -n "$psec" && "$(scv_mp_principle_show "$pseen" "$NONCE")" == "short" ]]; then
-        echo "PRINCIPLE: (이 세션에 이미 실음 — 규칙 그대로, 규약을 다시 읽을 때 전문을 다시 싣는다)"
-        return 0
-      fi
-      if [[ -n "$psec" ]]; then
-        [[ -n "$pf" && -n "$NONCE" && ! -L "$pf" ]] && printf '%s\n' "$NONCE" > "$pf" 2>/dev/null
-        echo "PRINCIPLE:"
-        printf '%s\n' "$(scv_mp_principle_text "$psec")"
-        # (2026-10-08+) 해로운 변경 줄 — 이번 실행의 확인 통로에 맞는 한 줄. 통로 판단은 실체 보여 주기와 같다(입구: choice-gate.sh).
-        local hl
-        hl="$(scv_mp_harm_line "$psec" "$(_harm_channel)")"
-        [[ -n "$hl" ]] && printf '%s\n' "$hl"
-      fi
-      return 0
-    }
-    _harm_channel() {  # → choice | text | none. 읽기(호스트 프로필 · 환경)는 choice-gate.sh 가, 판단은 순수 함수가 한다.
-      local t="" u=0
-      if [[ -f "$SCRIPT_DIR/choice-gate.sh" ]]; then
-        t="$(bash "$SCRIPT_DIR/choice-gate.sh" tool 2>/dev/null || true)"
-        u="$(bash "$SCRIPT_DIR/choice-gate.sh" unattended 2>/dev/null || true)"
-      fi
-      if declare -F scv_show_real_channel >/dev/null 2>&1; then scv_show_real_channel "$t" "$u" human; else printf 'text'; fi
+    _rewrite_out() {  # <저장된 제출> — REWRITE 줄. 0.88.0+: 원칙 표식을 붙이지 않고 원칙 전문도 싣지 않는다(매 턴 훅이 싣는다).
+      echo "REWRITE: $(scv_mp_register_rewrite "$1")"
     }
     if (( KEEP_ARG )); then
       # v0.65.0+ — 선택 창 답 뒤 범위가 그대로일 때의 한 줄 등록: 이번 턴 등록이 있고 그 뒤에 답이 왔을 때만. 제출(범위 칸 포함)은
       # 그대로 두고 차례만 새로 — 인용 판정의 기준도 직전 다시 쓴 요청 그대로다. 답이 없으면 불완전 등록으로 거절한다.
-      [[ "$SWITCH" == "on" && -n "$(_checklist_for "")" ]] || { echo "REGISTER: skipped (no requirement list)"; exit 0; }
+      _on || { echo "REGISTER: skipped (this host ships no prompting guides)"; exit 0; }
       _tok="$(_first_line "$TOKEN_FILE")"; _rt="$(_first_line "$REG_FILE")"
       if [[ -z "$_tok" || "$(scv_mp_write_gate "$_tok" "$_rt" "$(_first_line "$ANS_FILE")" 0 0)" != "answered" ]]; then
-        echo "REGISTER: incomplete — --keep is only for a choice answer after this turn's registration; register the full submission (stdin: id | msg|ctx|asked|na | value, then rewrite | - | <rewritten request>)"
+        echo "REGISTER: incomplete — --keep is only for a choice answer after this turn's registration; register the full submission (stdin: scope | - | <what this turn changes>, then rewrite | - | <rewritten request>)"
         exit 0
       fi
       _rm="${_rt#*$'\x1f'}"; _rm="${_rm%%$'\x1f'*}"
@@ -490,17 +469,15 @@ case "$cmd" in
       echo "REGISTER: refused — no scv/ in $(pwd); run it from the project root so this turn is found"
       exit 0
     fi
-    _list="$(_checklist_for "$KEY")"
-    [[ -n "$_list" ]] || { echo "REGISTER: skipped (no requirement list)"; exit 0; }
+    _on || { echo "REGISTER: skipped (this host ships no prompting guides)"; exit 0; }
     [[ -n "$ID" ]] || { echo "REGISTER: refused — pass --model <your exact model id>"; exit 0; }
     _sub="$(head -c 16384 2>/dev/null || true)"
     _sub="$(scv_mp_register_normalize "$_sub")"
-    _prob="$(scv_mp_register_problems "$_list" "$_sub")"
+    _prob="$(scv_mp_register_problems "$_sub")"
     if [[ -n "$_prob" ]]; then
       echo "REGISTER: incomplete — fix and run again:"
       printf '%s\n' "$_prob" | sed 's/^/  /'
-      echo "CHECKLIST (${KEY:-common}):"
-      printf '%s\n' "$_list" | while IFS=$'\t' read -r _i _l; do [[ -n "$_i" ]] && printf '  %s | %s\n' "$_i" "$_l"; done
+      echo "FORMAT: scope | - | <what this turn changes; start with '변경 없음 — …' when no file changes>, then rewrite | - | <rewritten request>"
       exit 0
     fi
     _tok="$(_first_line "$TOKEN_FILE")"
@@ -510,8 +487,7 @@ case "$cmd" in
     _put "$REG_FILE" "$_first"$'\n'"$_red"
     # 저장을 다시 읽어 확인한다 — 못 남겼는데 "등록됨" 이라 하면 모델이 거절과 등록 사이를 맴돈다(독립 검토).
     if [[ "$(_first_line "$REG_FILE")" != "$_first" ]]; then echo "REGISTER: failed — could not save the registration ($REG_FILE); tell the user"; exit 0; fi
-    _n="$(printf '%s\n' "$_list" | grep -c . || true)"
-    echo "REGISTERED: turn ${_tok:-?} · model $ID · $_n item(s)"
+    echo "REGISTERED: turn ${_tok:-?} · model $ID"
     _rewrite_out "$_red"
     ;;
   kind)
@@ -538,7 +514,7 @@ case "$cmd" in
     scv_mp_help_reason "$_ref"; echo
     ;;
   gate)
-    [[ "$SWITCH" == "on" && -n "$(_checklist_for "")" ]] || exit 0
+    _on || exit 0
     _tok="$(_first_line "$TOKEN_FILE")"; [[ -n "$_tok" ]] || exit 0
     # v0.63.0+ — 자동 입력 턴(표시 = 지금 표)은 등록할 사람의 요청이 없으니 거절하지 않는다(직전 사람 턴이 등록 없이 끝났어도).
     [[ "$(_first_line "$AUTO_FILE")" == "$_tok" ]] && exit 0
@@ -561,13 +537,13 @@ case "$cmd" in
     scv_mp_gate_reason "$_v" "$_tok" "$SCRIPT_DIR/model-prompting.sh" "$_lm" "$SKEY" "$_hit"; echo
     ;;
   principle-gate)
-    # v0.64.0+ — 답의 끝 메시지에 문제 표 · '생길 수 있는 문제' 칸이 있으면 막는다. 원칙이 실리는 곳(요구 항목 데이터가 있고
+    # v0.64.0+ — 답의 끝 메시지에 문제 표 · '생길 수 있는 문제' 칸이 있으면 막는다. 원칙이 실리는 곳(가이드 색인이 있고
     # 원칙 스위치가 켜짐)에서만 판정하고, 아니면 ok — 이 기능 전과 같다. 자동 알림 턴도 본다(턴 종류와 무관).
     # v0.65.0+ — 답 전체를 본다: '|' 나 '```' 가 든 줄만 먼저 고른다 — 판정이 보는 줄(표 줄 · 코드 블록 경계)을 모두 담는 더 넓은
     # 거름이라 결과는 같고(줄 앞 공백의 종류와 무관), 64KB 를 넘는 답의 한가운데 표도 잡는다(고른 줄은 128KB 까지).
     ANSWER="$(LC_ALL=C grep -E '[|]|```' 2>/dev/null | head -c 131072 || true)"
     _psw="$(scv_mp_switch "$(_setting SCV_REWRITE_PRINCIPLE)")"
-    [[ "$SWITCH" == "on" && -n "$(_checklist_for "")" ]] || _psw="off"
+    _on || _psw="off"
     _hit=0; [[ "$ANSWER" == *[![:space:]]* ]] && _hit="$(scv_mp_answer_has_problem_table "$ANSWER")"
     _pg="$(scv_mp_principle_gate "$_hit" "$_psw" "$ACTIVE_ARG")"
     echo "PRINCIPLE_GATE: $_pg"
@@ -579,8 +555,8 @@ case "$cmd" in
     ;;
   stop)
     ANSWER="$(head -c 65536 2>/dev/null || true)"
-    # v0.62.0+ — 매 턴 등록 판정: 이번 턴 표가 있고(매 턴 훅이 씀) 요구 항목 데이터가 있을 때만. ok | block | warn.
-    if [[ "$SWITCH" == "on" && -n "$(_checklist_for "")" ]]; then
+    # v0.62.0+ — 매 턴 등록 판정: 이번 턴 표가 있고(매 턴 훅이 씀) 가이드 색인이 있을 때만. ok | block | warn.
+    if _on; then
       _tok="$(_first_line "$TOKEN_FILE")"
       # v0.63.0+ — 자동 입력 턴(표시 = 지금 표)은 사람의 요청이 없으니 등록 · 인용을 판정하지 않는다.
       if [[ -n "$_tok" && "$(_first_line "$AUTO_FILE")" == "$_tok" ]]; then echo "STOP_GATE: auto"; _tok=""; fi

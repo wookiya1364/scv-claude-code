@@ -181,8 +181,13 @@ mkdir -p "$WORK/empty-guides"
 { cat "$FIX/profile.env"; printf 'SCV_PROMPTING_GUIDES=%s\n' "$WORK/empty-guides"; } > "$WORK/profile-noindex.env"
 ob="$(cd "$R" && SCV_HOST_PROFILE="$WORK/profile-noindex.env" bash "$HELP" --with-context --model vendor-model-a 2>/dev/null)"
 grep -qx 'GUIDE: none' <<<"$ob" && c=$((c + 1)) || echo "      (b) $ob"
+# (c) 0.88.0+ — 색인에 행이 없는 모델은 공통 원문만 읽는다(공통 행이 없는 색인이면 none)
 oc="$(help_wc "$R" --model other-model)"
-grep -qx 'GUIDE: none' <<<"$oc" && c=$((c + 1)) || echo "      (c) $oc"
+grep -v '^\*' "$WORK/guides/INDEX.tsv" > "$WORK/empty-guides/INDEX.tsv.tmp"; mkdir -p "$WORK/nocommon-guides"; mv "$WORK/empty-guides/INDEX.tsv.tmp" "$WORK/nocommon-guides/INDEX.tsv"; cp "$WORK/guides/"*.md "$WORK/nocommon-guides/"
+{ cat "$FIX/profile.env"; printf 'SCV_PROMPTING_GUIDES=%s\n' "$WORK/nocommon-guides"; } > "$WORK/profile-nocommon.env"
+oc2="$(cd "$R" && SCV_HOST_PROFILE="$WORK/profile-nocommon.env" bash "$HELP" --with-context --model other-model 2>/dev/null)"
+grep -qx 'GUIDE: load common' <<<"$oc" && grep -qx "GUIDE_FILE: $WORK/guides/common.md" <<<"$oc" && [[ "$(grep -c '^GUIDE_FILE: ' <<<"$oc")" == 1 ]] \
+  && grep -qx 'GUIDE: none' <<<"$oc2" && c=$((c + 1)) || echo "      (c) $oc / $oc2"
 od="$(help_wc "$R")"; od2="$(help_wc "$R" --model '')"
 { ! grep -q '^GUIDE' <<<"$od"; } && grep -qx 'GUIDE: none' <<<"$od2" && c=$((c + 1)) || echo "      (d) [$od] [$od2]"
 oe="$(help_wc "$R" --model vendor-model-gone)"
@@ -497,7 +502,7 @@ echo "T14. 조용해야 할 때 — 판정할 것이 없으면 읽지도 쓰지�
 c=0
 R="$(new_repo t14)"
 printf 'earlier warning\n' > "$R/scv/journal/.help-warn"
-help_wc "$R" --model other-model >/dev/null
+(cd "$R" && SCV_HOST_PROFILE="$WORK/profile-nocommon.env" bash "$HELP" --with-context --model other-model >/dev/null 2>&1)
 [[ ! -f "$R/scv/journal/.help-guide-turn" ]] && c=$((c + 1)) || echo "      (a) none left a turn record"
 printf '{\n  "SCV_MODEL_PROMPTING": "off"\n}\n' > "$R/scv/scv_settings.json"
 help_wc "$R" --model vendor-model-a >/dev/null
@@ -634,9 +639,12 @@ grep -q '^\[SCV 가이드\] 이 컨텍스트에서 아직' <<<"$h" && grep -qx "
 cmd="$(grep -m1 '^  GUIDE_MARK_CMD: ' <<<"$h" | sed 's/^  GUIDE_MARK_CMD: //')"
 (cd "$R" && bash "$HSTATE" mark >/dev/null 2>&1 && SCV_HOST_PROFILE="$WORK/profile.env" eval "$cmd" >/dev/null 2>&1)
 h2="$(hook_first "$R" s2)"; ! grep -q 'SCV 가이드' <<<"$h2" && c=$((c + 1)) || echo "      (b) block repeated after read"
-# (c) 가이드가 없는 모델을 본 뒤 → none → 새 세션에도 블록 없음
-R="$(new_repo t19c)"; help_wc "$R" --model other-model >/dev/null; new_session "$R" s2
-[[ "$(head -1 "$R/scv/journal/.help-guide-last" 2>/dev/null)" == "none" ]] && ! grep -q 'SCV 가이드' <<<"$(hook_first "$R" s2)" && c=$((c + 1)) || echo "      (c) none record or block"
+# (c) 가이드가 없는 모델을 본 뒤: 공통 행도 없으면 none → 새 세션에도 블록 없음. 공통 행이 있으면(0.88.0+) 공통 원문만 싣는다.
+R="$(new_repo t19c)"; (cd "$R" && SCV_HOST_PROFILE="$WORK/profile-nocommon.env" bash "$HELP" --with-context --model other-model >/dev/null 2>&1); new_session "$R" s2
+hc="$(cd "$R" && printf '{"prompt":"q","session_id":"s2"}' | CLAUDE_PLUGIN_ROOT="$CORE" SCV_HOST_PROFILE="$WORK/profile-nocommon.env" bash "$CORE/template/hooks/on-user-prompt.sh" 2>/dev/null)"
+R2="$(new_repo t19c2)"; help_wc "$R2" --model other-model >/dev/null; new_session "$R2" s2; hc2="$(hook_first "$R2" s2)"
+[[ "$(head -1 "$R/scv/journal/.help-guide-last" 2>/dev/null)" == "none" ]] && ! grep -q 'SCV 가이드' <<<"$hc" \
+  && grep -qx "  GUIDE_FILE: $WORK/guides/common.md" <<<"$hc2" && [[ "$(grep -c '^  GUIDE_FILE: ' <<<"$hc2")" == 1 ]] && c=$((c + 1)) || echo "      (c) none record or block"
 # (d) 가이드 경고가 예약돼 있으면 경고 한 번만(블록 중복 없음)
 R="$(new_repo t19d)"; (cd "$R" && git init -q . 2>/dev/null); help_wc "$R" --model vendor-model-a >/dev/null
 stop_hook "$R" "$QANS"; new_session "$R" s2; h="$(hook_first "$R" s2)"
@@ -650,41 +658,39 @@ printf '{\n  "SCV_MODEL_PROMPTING": "off"\n}\n' > "$R/scv/scv_settings.json"
 ! grep -q 'SCV 가이드' <<<"$(hook_first "$R" s2)" && c=$((c + 1)) || echo "      (f) switch off"
 if [[ $c -eq 6 ]]; then ok "OK [T19] 6/6 first-turn block"; else fail "[T19] $c/6"; fi
 
-# ---------------------------------------------------------------- 매 턴 비교 · 등록 (v0.62.0+)
-# 요구 항목 목록이 있는 가이드 폴더 사본 — 기존 검사에 영향이 없도록 따로 둔다.
+# ---------------------------------------------------------------- 매 턴 다시 쓰기 · 등록 (v0.62.0+, 0.88.0 에 요구 항목 표 없앰)
+# 가이드 폴더 사본 — 기존 검사에 영향이 없도록 따로 둔다. 요구 항목 표 파일은 만들지 않는다(장치는 가이드 색인만으로 켜진다).
 cp -R "$FIX/guides" "$WORK/guides-cl"
-printf '# source: common.md\ngoal\tState the goal\tfixture quote a\nfinish\tState the done condition\tfixture quote b\n' > "$WORK/guides-cl/checklist-common.tsv"
-printf '# source: model-a.md\nfinish\tState the done condition precisely\tfixture quote c\nsources\tName the sources to check\tfixture quote d\n' > "$WORK/guides-cl/checklist-model-a.tsv"
 { cat "$FIX/profile.env"; printf 'SCV_PROMPTING_GUIDES=%s\n' "$WORK/guides-cl"; } > "$WORK/profile-cl.env"
 mpc() { (cd "$1" && shift && SCV_HOST_PROFILE="$WORK/profile-cl.env" SCV_TODAY=2026-09-27 bash "$MP" "$@" 2>/dev/null); }
 hook_cl() {  # 0.80.0+ — 이 시험의 사람 턴은 help 를 부른 턴으로 둔다(help 먼저 판정은 test-help-first.sh)
   (cd "$1" && printf '{"prompt":"%s","session_id":"s1"}' "${2:-응}" | CLAUDE_PLUGIN_ROOT="$CORE" SCV_HOST_PROFILE="$WORK/profile-cl.env" bash "$CORE/template/hooks/on-user-prompt.sh" 2>/dev/null)
   (cd "$1" && SCV_HOST_PROFILE="$WORK/profile-cl.env" bash "$MP" helped --session s1 >/dev/null 2>&1) || true
 }
-SUB_OK="$(printf 'goal | msg | fix the login bug\nfinish | ctx | conversation turn 2: the test passes\nsources | asked | which log file? (recommended: app.log)\nrewrite | - | Fix the login bug until the login test passes\n')"
+SUB_OK="$(printf 'scope | - | src/login.js\nrewrite | - | Fix the login bug until the login test passes\n')"
+# 옛 모양(0.87 까지의 요구 항목 줄이 든 제출) — 0.88.0+ 도 받아 준다(항목 줄은 무시).
+SUB_OLD="$(printf 'goal | msg | fix the login bug\nscope | msg | src/login.js\nfinish | ctx | conversation turn 2: the test passes\nsources | asked | which log file? (recommended: app.log)\nrewrite | - | Fix the login bug until the login test passes\n')"
 # (v0.63.0+) SCV 원칙 — 기대값은 원칙 파일에서 꺼낸다(문구를 검사에 다시 적지 않는다: Top-level rules 4조).
 PRIN="$CORE/contracts/rewrite-principle.md"
 psec()  { bash -c 'source "$1"; scv_mp_principle_section "$(cat "$2")" "$3"' _ "$LIB" "$PRIN" "$1"; }
-ptag()  { bash -c 'source "$1"; scv_mp_principle_tag "$2"' _ "$LIB" "$1"; }
 ptext() { bash -c 'source "$1"; scv_mp_principle_text "$2"' _ "$LIB" "$1"; }
 pharm() { bash -c 'source "$1"; scv_mp_harm_line "$2" "$3"' _ "$LIB" "$1" "$2"; }   # (2026-10-08+) 통로별 해로운 변경 줄
 
 echo
-echo "T20. 매 턴 비교 · 등록 — 순수부"
+echo "T20. 매 턴 다시 쓰기 · 등록 — 순수부"
 N=0; BAD=0
 T20OUT="$(bash -c '
   source "'"$LIB"'"
   e() { printf "%s\n" "$1=$(printf "%s" "$2" | tr "\t\n" "~|")"; }
-  C="$(printf "# c\ngoal\tG\tq\nfinish\tF\tq\nBad Id\tx\tq\nnolabel\n")"
-  M="$(printf "finish\tF2\tq\nsources\tS\tq\n")"
-  e m1 "$(scv_mp_checklist_merge "$C" "$M")"
-  e m2 "$(scv_mp_checklist_merge "$C" "")"
-  e m3 "$(scv_mp_checklist_merge "" "$M")"
-  L="$(scv_mp_checklist_merge "$C" "$M")"
+  e h1 "$(scv_mp_has_guides "$(printf "# c\n@holder\tX\n*\tcommon\tc.md\tu\t2026-01-01\n")")"
+  e h2 "$(scv_mp_has_guides "$(printf "m-1\tk1\tf1.md\tu\t2026-01-01\n")")"
+  e h3 "$(scv_mp_has_guides "$(printf "# c\n@holder\tX\n\n")")"
+  e h4 "$(scv_mp_has_guides "")"
   e n1 "$(scv_mp_register_normalize "$(printf "goal | msg | a | b\n  finish\tctx\tturn 2  \n\n")")"
-  e p1 "$(scv_mp_register_problems "$L" "$(printf "goal\tmsg\ta\nfinish\tctx\tb\nsources\tasked\tc\nrewrite\t-\tR\n")")"
-  e p2 "$(scv_mp_register_problems "$L" "$(printf "goal\tmsg\ta\nrewrite\t-\tR\n")")"
-  e p3 "$(scv_mp_register_problems "$L" "$(printf "goal\tyes\ta\nfinish\tctx\t \nsources\tasked\tc\n")")"
+  e p1 "$(scv_mp_register_problems "$(printf "scope\t-\ta\nrewrite\t-\tR\n")")"
+  e p2 "$(scv_mp_register_problems "$(printf "goal\tmsg\ta\nrewrite\t-\tR\n")")"
+  e p3 "$(scv_mp_register_problems "$(printf "scope\tmsg\t \ngoal\tyes\ta\n")")"
+  e p4 "$(scv_mp_register_problems "$(printf "goal\tyes\ta\nscope\tmsg\ts\nfinish\tctx\t \nrewrite\t-\tR\n")")"
   e r1 "$(scv_mp_register_rewrite "$(printf "goal\tmsg\ta\nrewrite\t-\tDo X until Y\n")")"
   e s1 "$(scv_mp_answer_shows_rewrite "$(printf "lead\n\n> **Rewritten request**: Do X\n")" "Do X")"
   e s2 "$(scv_mp_answer_shows_rewrite "$(printf "lead\n\n> Do X until Y fully\n")" "Do X until Y")"
@@ -695,20 +701,24 @@ T20OUT="$(bash -c '
   e c2 "$(scv_mp_guides_candidates /p/v/c /abs/g)"
   e c3 "$(scv_mp_guides_candidates /p/v/c "")"
   e k1 "$(scv_mp_common_key "$(printf "a\tka\tf\n*\tcommon\tc.md\n")")"
-  e b1 "$(scv_mp_turn_block off t m "$L" /s/mp.sh)"
-  e b2 "$(scv_mp_turn_block on "" m "$L" /s/mp.sh)"
-  B3="$(scv_mp_turn_block on t7 vendor-x "$L" /s/mp.sh)"; e b3n "$(printf "%s\n" "$B3" | grep -c .)"
-  e b3i "$(printf "%s\n" "$B3" | grep "항목 \[vendor-x")"
-  B4="$(scv_mp_turn_block on t7 "" "" /s/mp.sh)"; e b4 "$(printf "%s\n" "$B4" | grep -c "checklist --model")"
+  e b1 "$(scv_mp_turn_block off t m /s/mp.sh)"
+  e b2 "$(scv_mp_turn_block on "" m /s/mp.sh)"
+  B3="$(scv_mp_turn_block on t7 vendor-x /s/mp.sh s9)"; e b3n "$(printf "%s\n" "$B3" | grep -c .)"
+  e b3r "$(printf "%s\n" "$B3" | grep -c "register --model \"vendor-x\" --session \"s9\"")"
+  e b3x "$(printf "%s\n" "$B3" | grep -c -E "항목|msg · ctx|1:1|checklist")"
+  e b3t "$(printf "%s\n" "$B3" | grep -c "t7")"
+  B4="$(scv_mp_turn_block on t7 "" /s/mp.sh)"; e b4 "$(printf "%s\n" "$B4" | grep -c "register --model \"{지금 모델 id}\"")"
 ')"
 g() { printf '%s\n' "$T20OUT" | grep -m1 "^$1=" | sed "s/^$1=//"; }
-eqc "merge: common order, model label wins, model extra appended" "goal~G|finish~F2|sources~S" "$(g m1)"
-eqc "merge: common only (bad lines dropped)" "goal~G|finish~F" "$(g m2)"
-eqc "merge: model only" "finish~F2|sources~S" "$(g m3)"
+eqc "has guides: common row" "1" "$(g h1)"
+eqc "has guides: model row" "1" "$(g h2)"
+eqc "has guides: comments and @ lines only" "0" "$(g h3)"
+eqc "has guides: empty index" "0" "$(g h4)"
 eqc "normalize: pipes and tabs, trims, drops blanks" "goal~msg~a | b|finish~ctx~turn 2" "$(g n1)"
-eqc "problems: complete" "" "$(g p1)"
-eqc "problems: missing items" "missing finish|missing sources" "$(g p2)"
-eqc "problems: bad status, empty, no rewrite" "bad-status goal|empty finish|missing rewrite" "$(g p3)"
+eqc "problems: scope + rewrite is complete" "" "$(g p1)"
+eqc "problems: no scope" "missing scope" "$(g p2)"
+eqc "problems: blank scope, no rewrite" "missing scope|missing rewrite" "$(g p3)"
+eqc "problems: old item lines are ignored whatever their status" "" "$(g p4)"
 eqc "rewrite extracted" "Do X until Y" "$(g r1)"
 eqc "shown: label in quote" "1" "$(g s1)"
 eqc "shown: rewrite text in quote" "1" "$(g s2)"
@@ -724,28 +734,40 @@ eqc "candidates empty" "" "$(g c3)"
 eqc "common key" "common" "$(g k1)"
 eqc "block: switch off" "" "$(g b1)"
 eqc "block: no token" "" "$(g b2)"
-eqc "block: known model has 3 lines" "3" "$(g b3n)"
-eqc "block: item line" "  항목 [vendor-x — 다르면 checklist --model]: goal(G) finish(F2) sources(S)" "$(g b3i)"
-eqc "block: unknown model points to checklist" "1" "$(g b4)"
+eqc "block: two lines" "2" "$(g b3n)"
+eqc "block: register command carries the model and the session" "1" "$(g b3r)"
+eqc "block: no requirement-list wording" "0" "$(g b3x)"
+eqc "block: token is not printed" "0" "$(g b3t)"
+eqc "block: unknown model gets the placeholder" "1" "$(g b4)"
 if [[ $BAD -eq 0 ]]; then ok "OK [T20] $N/$N"; else fail "[T20] $((N - BAD))/$N"; fi
 
 echo
-echo "T21. 매 턴 비교 · 등록 — 흐름 (표 → 목록 → 불완전 등록 → 완전 등록 → 다음 턴 새 표)"
+echo "T21. 매 턴 다시 쓰기 · 등록 — 흐름 (표 → 옛 명령 → 불완전 등록 → 완전 등록 · 옛 모양 → 다음 턴 새 표)"
 c=0
 R="$(new_repo t21)"
 h1="$(hook_cl "$R" "응")"; tok1="$(head -1 "$(tf "$R" .help-turn)" 2>/dev/null)"
-[[ -n "$tok1" ]] && grep -q "^\[SCV 프롬프트\] help 를 부른 뒤, 이 턴 메시지(짧아도)" <<<"$h1" && grep -q 'checklist --model' <<<"$h1" && ! grep -qF "$tok1" <<<"$h1" && c=$((c + 1)) || echo "      (1) short message still gets the block (token written, not printed)"
+# (1) 0.88.0+ — 블록에 요구 항목 문구가 없다(등록 명령과 인용 안내는 남는다)
+[[ -n "$tok1" ]] && grep -q "^\[SCV 프롬프트\] help 를 부른 뒤, 이 턴 메시지(짧아도)" <<<"$h1" && grep -q 'register --model' <<<"$h1" \
+  && ! grep -q -E 'checklist|msg · ctx|1:1|항목 \[' <<<"$h1" && ! grep -qF "$tok1" <<<"$h1" && c=$((c + 1)) || echo "      (1) short message still gets the block (token written, not printed, no item wording)"
+# (2) 옛 안내문을 받은 세션이 checklist 를 불러도 깨지지 않는다 — 항목은 없고 등록 모양을 알린다
 cl="$(mpc "$R" checklist --model vendor-model-a)"
-grep -qx 'finish | State the done condition precisely' <<<"$cl" && grep -qx 'sources | Name the sources to check' <<<"$cl" && grep -qx 'goal | State the goal' <<<"$cl" && c=$((c + 1)) || echo "      (2) checklist: $cl"
+grep -q '^CHECKLIST: none' <<<"$cl" && grep -q '^REGISTER: .*scope | - | ' <<<"$cl" && [[ "$(grep -c ' | ' <<<"$(grep -v '^REGISTER: ' <<<"$cl")")" == 0 ]] && c=$((c + 1)) || echo "      (2) checklist: $cl"
+# (3) 다시 쓴 요청만(범위 없음) · 범위만(다시 쓴 요청 없음) → 불완전, 저장하지 않는다
 ri="$(cd "$R" && printf 'goal | msg | x\nrewrite | - | y\n' | SCV_HOST_PROFILE="$WORK/profile-cl.env" bash "$MP" register --model vendor-model-a 2>/dev/null)"
-grep -q '^REGISTER: incomplete' <<<"$ri" && grep -q 'missing finish' <<<"$ri" && grep -q 'missing sources' <<<"$ri" && [[ ! -f "$(tf "$R" .help-rewrite)" ]] && c=$((c + 1)) || echo "      (3) incomplete: $ri"
+ri2="$(cd "$R" && printf 'scope | - | x\n' | SCV_HOST_PROFILE="$WORK/profile-cl.env" bash "$MP" register --model vendor-model-a 2>/dev/null)"
+grep -q '^REGISTER: incomplete' <<<"$ri" && grep -q 'missing scope' <<<"$ri" && ! grep -q 'missing rewrite' <<<"$ri" \
+  && grep -q 'missing rewrite' <<<"$ri2" && ! grep -q 'missing scope' <<<"$ri2" && [[ ! -f "$(tf "$R" .help-rewrite)" ]] && c=$((c + 1)) || echo "      (3) incomplete: $ri / $ri2"
 rc="$(cd "$R" && printf '%s\n' "$SUB_OK" | SCV_HOST_PROFILE="$WORK/profile-cl.env" bash "$MP" register --model vendor-model-a 2>/dev/null)"
-# v0.63.0: 원칙 스위치 기본 on — REWRITE 줄 끝에 원칙 표식이 붙는다(설정 없음 → english 구역). 끄면 그대로인지는 T26.
-grep -q "^REGISTERED: turn $tok1 · model vendor-model-a · 3 item(s)" <<<"$rc" && grep -qxF "REWRITE: Fix the login bug until the login test passes $(ptag "$(psec english)")" <<<"$rc" && c=$((c + 1)) || echo "      (4) complete: $rc"
+# (4) 0.88.0+ — 두 줄로 등록된다. REWRITE 줄은 넣은 글 그대로(원칙 표식 없음), 등록 출력에 원칙 전문도 없다.
+grep -qx "REGISTERED: turn $tok1 · model vendor-model-a" <<<"$rc" && grep -qxF "REWRITE: Fix the login bug until the login test passes" <<<"$rc" \
+  && [[ "$(grep -c . <<<"$rc")" == 2 ]] && c=$((c + 1)) || echo "      (4) complete: $rc"
 [[ -z "$(mpc "$R" gate)" ]] && c=$((c + 1)) || echo "      (5) gate after register"
+# (5b) 옛 모양(요구 항목 줄이 든 제출)도 등록된다
+ro="$(cd "$R" && printf '%s\n' "$SUB_OLD" | SCV_HOST_PROFILE="$WORK/profile-cl.env" bash "$MP" register --model vendor-model-a 2>/dev/null)"
+grep -qx "REGISTERED: turn $tok1 · model vendor-model-a" <<<"$ro" && [[ -z "$(mpc "$R" gate)" ]] && c=$((c + 1)) || echo "      (5b) old-shape submission: $ro"
 hook_cl "$R" "다음" >/dev/null; tok2="$(head -1 "$(tf "$R" .help-turn)")"
 [[ "$tok2" != "$tok1" && -n "$(mpc "$R" gate)" ]] && c=$((c + 1)) || echo "      (6) new turn needs a new registration"
-if [[ $c -eq 6 ]]; then ok "OK [T21] 6/6 register flow"; else fail "[T21] $c/6"; fi
+if [[ $c -eq 7 ]]; then ok "OK [T21] 7/7 register flow"; else fail "[T21] $c/7"; fi
 
 echo
 echo "T22. 보장 두 겹 — 등록 전 파일 쓰기 거절 · 등록 · 인용 없는 종료 차단(같은 턴 한 번)"
@@ -775,7 +797,7 @@ if command -v jq >/dev/null 2>&1; then
   [[ "$(jq -r .decision <<<"$o" 2>/dev/null)" == block ]] && grep -q '인용' <<<"$o" && c=$((c + 1)) || echo "      (4) registered but not shown should block: $o"
   hook_cl "$R" "다음 턴" >/dev/null   # 새 표 — 등록 없음
   o="$(stop_cl "$R" "answer" false)"
-  [[ "$(jq -r .decision <<<"$o" 2>/dev/null)" == block ]] && grep -q 'checklist --model' <<<"$o" && c=$((c + 1)) || echo "      (5) unregistered should block: $o"
+  [[ "$(jq -r .decision <<<"$o" 2>/dev/null)" == block ]] && grep -q 'register --model' <<<"$o" && ! grep -q 'checklist' <<<"$o" && c=$((c + 1)) || echo "      (5) unregistered should block: $o"
   rm -f "$(tf "$R" .help-warn)"
   o="$(stop_cl "$R" "answer" true)"
   [[ -z "$o" ]] && grep -q '^\[SCV 가이드\] 직전 턴:' "$(tf "$R" .help-warn)" 2>/dev/null && c=$((c + 1)) || echo "      (6) already continuing: must not block, must warn next turn: [$o]"
@@ -790,14 +812,15 @@ PL="$WORK/plugin"; mkdir -p "$PL/vendor/scv-core/core"; cp -R "$CORE/scripts" "$
 cp -R "$WORK/guides-cl" "$PL/prompting"
 { cat "$FIX/profile.env"; printf 'SCV_PROMPTING_GUIDES=prompting\n'; } > "$WORK/profile-rel.env"
 R="$(new_repo t23)"
-o="$(cd "$R" && SCV_HOST_PROFILE="$WORK/profile-rel.env" bash "$PL/vendor/scv-core/core/scripts/model-prompting.sh" checklist --model vendor-model-a 2>/dev/null)"
-if grep -qx 'sources | Name the sources to check' <<<"$o"; then ok "OK [T23] vendored layout finds the wrapper guides"; else fail "[T23] $o"; fi
+o="$(cd "$R" && SCV_HOST_PROFILE="$WORK/profile-rel.env" bash "$PL/vendor/scv-core/core/scripts/model-prompting.sh" guide --model vendor-model-a 2>/dev/null)"
+o2="$(cd "$R" && SCV_HOST_PROFILE="$WORK/profile-rel.env" bash "$PL/vendor/scv-core/core/scripts/model-prompting.sh" checklist --model vendor-model-a 2>/dev/null)"
+if grep -q '^GUIDE_FILE: .*/prompting/model-a.md$' <<<"$o" && grep -q '^REGISTER: ' <<<"$o2"; then ok "OK [T23] vendored layout finds the wrapper guides"; else fail "[T23] $o / $o2"; fi
 
 # ---------------------------------------------------------------- 다시 쓴 요청의 SCV 원칙 (v0.63.0+)
 reg_cl() { (cd "$1" && printf '%s\n' "$SUB_OK" | SCV_HOST_PROFILE="$WORK/profile-cl.env" bash "${2:-$MP}" register --model vendor-model-a 2>/dev/null); }
 
 echo
-echo "T24. SCV 원칙 — 순수부 (구역 고르기 · 표식 · 전문 · 붙이기 · 후보 · 언어 이름)"
+echo "T24. SCV 원칙 — 순수부 (구역 고르기 · 전문 · 후보 · 언어 이름)"
 N=0; BAD=0
 T24OUT="$(bash -c '
   source "$1"
@@ -811,16 +834,9 @@ T24OUT="$(bash -c '
   e s6 "$(scv_mp_principle_section "" korean)"
   e s7 "$(scv_mp_principle_section "$(printf "<!-- principle:korean -->\ntag: [K]\nK1\n")" japanese)"
   e s8 "$(scv_mp_principle_section "$B" x)"
-  e t1 "$(scv_mp_principle_tag "$(printf "tag: [K]\nK1\n")")"
-  e t2 "$(scv_mp_principle_tag "$(printf "K1\nK2")")"
-  e t3 "$(scv_mp_principle_tag "tag: ")"
   e x1 "$(scv_mp_principle_text "$(printf "tag: [K]\nK1\nK2")")"
   e x2 "$(scv_mp_principle_text "$(printf "X1\nX2")")"
   e x3 "$(scv_mp_principle_text "tag: [K]")"
-  e w1 "$(scv_mp_rewrite_tagged "Do X" on "[T]")"
-  e w2 "$(scv_mp_rewrite_tagged "Do X" off "[T]")"
-  e w3 "$(scv_mp_rewrite_tagged "Do X" on "")"
-  e w4 "$(scv_mp_rewrite_tagged "" on "[T]")"
   e c1 "$(scv_mp_principle_candidates /p/c/)"
   e c2 "$(scv_mp_principle_candidates "")"
   e l1 "$(scv_mp_principle_lang JA)"
@@ -836,16 +852,9 @@ eqc "section: empty language is english" "tag: [E]|E1" "$(g s5)"
 eqc "section: empty body" "" "$(g s6)"
 eqc "section: no english section to fall back to" "" "$(g s7)"
 eqc "section: stops at the file end, no tag line" "X1" "$(g s8)"
-eqc "tag: first line" "[K]" "$(g t1)"
-eqc "tag: none" "" "$(g t2)"
-eqc "tag: empty value" "" "$(g t3)"
 eqc "text: without the tag line" "K1|K2" "$(g x1)"
 eqc "text: section without a tag" "X1|X2" "$(g x2)"
 eqc "text: tag only" "" "$(g x3)"
-eqc "tagged: on" "Do X [T]" "$(g w1)"
-eqc "tagged: off" "Do X" "$(g w2)"
-eqc "tagged: no tag" "Do X" "$(g w3)"
-eqc "tagged: no rewrite" "" "$(g w4)"
 eqc "candidates: core root, then the vendored core" "/p/c/contracts/rewrite-principle.md|/p/c/vendor/scv-core/core/contracts/rewrite-principle.md" "$(g c1)"
 eqc "candidates: no root" "" "$(g c2)"
 eqc "lang: JA" "japanese" "$(g l1)"
@@ -854,41 +863,45 @@ eqc "lang: quotes stripped" "korean" "$(g l3)"
 if [[ $BAD -eq 0 ]]; then ok "OK [T24] $N/$N"; else fail "[T24] $((N - BAD))/$N"; fi
 
 echo
-echo "T25. SCV 원칙 — 등록 결과에 표식 · 전문, 저장된 제출은 그대로"
+echo "T25. SCV 원칙 — 매 턴 훅이 전문을 싣고(0.88.0+), 등록 결과에는 표식도 전문도 없다"
 c=0
 R="$(new_repo t25)"; printf '{\n  "SCV_LANG": "korean"\n}\n' > "$R/scv/scv_settings.json"
-hook_cl "$R" "로그인 고쳐" >/dev/null; tok="$(head -1 "$(tf "$R" .help-turn)" 2>/dev/null)"
+h="$(hook_cl "$R" "로그인 고쳐")"; tok="$(head -1 "$(tf "$R" .help-turn)" 2>/dev/null)"
 out="$(reg_cl "$R")"
-SK="$(psec korean)"; TK="$(ptag "$SK")"; XK="$(ptext "$SK")"
-[[ -n "$TK" ]] && grep -qxF "REWRITE: Fix the login bug until the login test passes $TK" <<<"$out" && c=$((c + 1)) || echo "      (1) tag: $out"
-got="$(printf '%s\n' "$out" | sed -n '/^PRINCIPLE:$/,$p' | sed '1d')"
+SK="$(psec korean)"; XK="$(ptext "$SK")"
 # (2026-10-08+) 전문 아래 해로운 변경 줄 하나 — 이 픽스처 호스트는 선택 창 이름이 없어 text 통로.
 XH="$(pharm "$SK" text)"
-[[ -n "$XK" && -n "$XH" && "$got" == "$XK"$'\n'"$XH" ]] && c=$((c + 1)) || echo "      (2) principle text + text-channel harm line differ from the korean section"
-! grep -qF "$TK" "$(tf "$R" .help-rewrite)" && ! grep -qF "$(printf '%s\n' "$XK" | head -1)" "$(tf "$R" .help-rewrite)" && c=$((c + 1)) || echo "      (3) saved submission must not carry the principle"
-[[ "$(printf '%s\n' "$out" | head -1)" == "REGISTERED: turn $tok · model vendor-model-a · 3 item(s)" ]] && c=$((c + 1)) || echo "      (4) first line: $(printf '%s\n' "$out" | head -1)"
-if [[ $c -eq 4 ]]; then ok "OK [T25] 4/4 principle attached to the register output"; else fail "[T25] $c/4"; fi
+# (1) 매 턴 훅 출력에 원칙 전문 + 통로별 해로운 변경 줄이 글자 그대로
+[[ -n "$XK" && -n "$XH" && "$h" == *"PRINCIPLE:"$'\n'"$XK"$'\n'"$XH"* ]] && c=$((c + 1)) || echo "      (1) the hook must carry the korean section verbatim + the text-channel harm line"
+# (2) 등록 결과: REWRITE 줄은 넣은 글 그대로, 원칙 전문 없음
+grep -qxF "REWRITE: Fix the login bug until the login test passes" <<<"$out" && ! grep -q '^PRINCIPLE' <<<"$out" && ! grep -qF "$(printf '%s\n' "$XK" | head -1)" <<<"$out" && c=$((c + 1)) || echo "      (2) register output: $out"
+! grep -qF "$(printf '%s\n' "$XK" | head -1)" "$(tf "$R" .help-rewrite)" && c=$((c + 1)) || echo "      (3) saved submission must not carry the principle"
+[[ "$(printf '%s\n' "$out" | head -1)" == "REGISTERED: turn $tok · model vendor-model-a" ]] && c=$((c + 1)) || echo "      (4) first line: $(printf '%s\n' "$out" | head -1)"
+# (5) 같은 규약 지문의 다음 턴에는 한 줄만
+h2="$(hook_cl "$R" "다음")"
+grep -q '^PRINCIPLE: (' <<<"$h2" && ! grep -qF "$(printf '%s\n' "$XK" | head -1)" <<<"$h2" && c=$((c + 1)) || echo "      (5) the next turn under the same fingerprint must carry one line only"
+if [[ $c -eq 5 ]]; then ok "OK [T25] 5/5 principle rides the per-turn hook, not the registration"; else fail "[T25] $c/5"; fi
 
 echo
-echo "T26. SCV 원칙 — 끄면 등록 결과가 이 기능 전과 같다"
+echo "T26. SCV 원칙 — 끄면 매 턴 훅이 싣지 않고, 등록 결과는 두 줄 그대로"
 R="$(new_repo t26)"; printf '{\n  "SCV_REWRITE_PRINCIPLE": "off",\n  "SCV_LANG": "korean"\n}\n' > "$R/scv/scv_settings.json"
-hook_cl "$R" "로그인 고쳐" >/dev/null; tok="$(head -1 "$(tf "$R" .help-turn)" 2>/dev/null)"
+h="$(hook_cl "$R" "로그인 고쳐")"; tok="$(head -1 "$(tf "$R" .help-turn)" 2>/dev/null)"
 out="$(reg_cl "$R")"
-want="$(printf 'REGISTERED: turn %s · model vendor-model-a · 3 item(s)\nREWRITE: Fix the login bug until the login test passes' "$tok")"
-if [[ -n "$tok" && "$out" == "$want" ]]; then ok "OK [T26] off → the pre-feature output, byte for byte"; else fail "[T26] $out"; fi
+want="$(printf 'REGISTERED: turn %s · model vendor-model-a\nREWRITE: Fix the login bug until the login test passes' "$tok")"
+if [[ -n "$tok" && "$out" == "$want" ]] && ! grep -q '^PRINCIPLE' <<<"$h"; then ok "OK [T26] off → no principle in the hook, the two-line register output"; else fail "[T26] $out"; fi
 
 echo
-echo "T27. SCV 원칙 — 표식이 붙은 다시 쓴 요청을 인용하면 종료 훅을 지나고, 인용이 없으면 지금처럼 막힌다"
+echo "T27. SCV 원칙 — 다시 쓴 요청에 표식이 없다: 넣은 글 그대로 인용하면 종료 훅을 지나고, 인용이 없으면 지금처럼 막힌다"
 if command -v jq >/dev/null 2>&1; then
   c=0
   R="$(new_repo t27)"; (cd "$R" && git init -q . 2>/dev/null); mkdir -p "$R/src" "$R/scv/promote"
   hook_cl "$R" "로그인 고쳐" >/dev/null
   rw="$(reg_cl "$R" | sed -n 's/^REWRITE: //p')"
   o="$(stop_cl "$R" "$(printf '> **Rewritten request**: %s\n\n**Done**\n- fixed\n' "$rw")" false)"
-  [[ "$rw" == *"$(ptag "$(psec english)")" && -z "$o" ]] && c=$((c + 1)) || echo "      (1) tagged quote should pass: [$rw] [$o]"
+  [[ "$rw" == "Fix the login bug until the login test passes" && -z "$o" ]] && c=$((c + 1)) || echo "      (1) untagged quote should pass: [$rw] [$o]"
   o="$(stop_cl "$R" "done without quote" false)"
   [[ "$(jq -r .decision <<<"$o" 2>/dev/null)" == block ]] && c=$((c + 1)) || echo "      (2) no quote should still block: [$o]"
-  if [[ $c -eq 2 ]]; then ok "OK [T27] 2/2 stop gate unchanged by the tag"; else fail "[T27] $c/2"; fi
+  if [[ $c -eq 2 ]]; then ok "OK [T27] 2/2 stop gate with an untagged rewrite"; else fail "[T27] $c/2"; fi
 else
   echo "  · (jq 없음 — T27 생략)"
 fi
@@ -898,12 +911,12 @@ echo "T28. SCV 원칙 — 언어별 구역 (korean · english · japanese · 모
 c=0
 for L in korean english japanese spanish; do
   R="$(new_repo "t28-$L")"; printf '{\n  "SCV_LANG": "%s"\n}\n' "$L" > "$R/scv/scv_settings.json"
-  hook_cl "$R" "x" >/dev/null
+  h="$(hook_cl "$R" "x")"
   exp="$L"; [[ "$L" == spanish ]] && exp=english
-  T="$(ptag "$(psec "$exp")")"
-  [[ -n "$T" ]] && grep -qxF "REWRITE: Fix the login bug until the login test passes $T" <<<"$(reg_cl "$R")" && c=$((c + 1)) || echo "      ($L) expected the $exp tag"
+  F1="$(ptext "$(psec "$exp")" | head -1)"
+  [[ -n "$F1" ]] && grep -qxF "$F1" <<<"$h" && c=$((c + 1)) || echo "      ($L) expected the $exp section in the hook"
 done
-[[ "$(ptag "$(psec korean)")" != "$(ptag "$(psec english)")" && "$(ptag "$(psec japanese)")" != "$(ptag "$(psec english)")" ]] && c=$((c + 1)) || echo "      (distinct) the three tags must differ"
+[[ "$(ptext "$(psec korean)" | head -1)" != "$(ptext "$(psec english)" | head -1)" && "$(ptext "$(psec japanese)" | head -1)" != "$(ptext "$(psec english)" | head -1)" ]] && c=$((c + 1)) || echo "      (distinct) the three sections must differ"
 if [[ $c -eq 5 ]]; then ok "OK [T28] 5/5 language sections"; else fail "[T28] $c/5"; fi
 
 echo
@@ -956,7 +969,7 @@ for L in korean english japanese; do
   hits="$(grep -rlF -- "$first" "$CORE" 2>/dev/null | grep -vxF "$PRIN" || true)"
   [[ -n "$first" && -z "$hits" ]] && c=$((c + 1)) || echo "      ($L) also found in: $hits"
 done
-grep -qF 'contracts/rewrite-principle.md' "$REFINE" && grep -qF 'principle tag included' "$REFINE" && c=$((c + 1)) || echo "      (refine) the exception and the tag line are missing"
+grep -qF 'contracts/rewrite-principle.md' "$REFINE" && ! grep -q -E 'principle tag|checklist|STE' "$REFINE" && c=$((c + 1)) || echo "      (refine) must point at the principle file and carry no tag · requirement-list · word-list wording"
 # 도움말 답 모양 절은 2026-09-16 잠금으로 바이트 그대로(test-help-router-diet) — 표 통일은 다시 쓰기 규약("원칙대로 답하라")과
 # 원칙 파일의 "항목 표 대신" 선언이 맡는다(사용자 결정 2026-10-01, Top-level rules 해소 순서 4).
 grep -qF 'answer by it' "$REFINE" && [[ "$(psec korean)" == *"항목 표 대신"* ]] && c=$((c + 1)) || echo "      (help) refine must say answer by it, and the principle must replace the help item table"
@@ -966,9 +979,9 @@ echo
 echo "T31. SCV 원칙 — 투영된 플러그인 루트(원칙 파일 없음)에서도 벤더 사본의 원칙 파일을 찾는다"
 PL2="$WORK/plugin2"; mkdir -p "$PL2/vendor/scv-core/core/contracts"; cp -R "$CORE/scripts" "$PL2/scripts"
 cp "$PRIN" "$PL2/vendor/scv-core/core/contracts/rewrite-principle.md"
-R="$(new_repo t31)"; hook_cl "$R" "x" >/dev/null
-o="$(reg_cl "$R" "$PL2/scripts/model-prompting.sh")"
-if grep -qx 'PRINCIPLE:' <<<"$o" && grep -qxF "REWRITE: Fix the login bug until the login test passes $(ptag "$(psec english)")" <<<"$o"; then
+R="$(new_repo t31)"
+o="$(cd "$R" && printf '{}' | SCV_HOST_PROFILE="$WORK/profile-cl.env" bash "$PL2/scripts/model-prompting.sh" prompt --session s1 2>/dev/null)"
+if grep -qx 'PRINCIPLE:' <<<"$o" && grep -qxF "$(ptext "$(psec english)" | head -1)" <<<"$o"; then
   ok "OK [T31] a projected root finds the vendored principle"
 else
   fail "[T31] $o"
@@ -1083,7 +1096,7 @@ if command -v jq >/dev/null 2>&1; then
   [[ -n "$(tok_of "$R")" && "$(tok_of "$R")" != "$tok1" && ! -f "$(tf "$R" .help-turn-auto)" ]] && c=$((c + 1)) \
     || echo "      (3) person turn: a new token and the marker dropped"
   o="$(stop_p "$R" "$WORK/profile-auto.env" "answer" false)"
-  [[ "$(jq -r .decision <<<"$o" 2>/dev/null)" == block ]] && grep -q 'checklist --model' <<<"$o" && c=$((c + 1)) \
+  [[ "$(jq -r .decision <<<"$o" 2>/dev/null)" == block ]] && grep -q 'register --model' <<<"$o" && c=$((c + 1)) \
     || echo "      (4) an unregistered person turn must block: $o"
   if [[ $c -eq 4 ]]; then ok "OK [T35] 4/4 stop skips only the automatic turn"; else fail "[T35] $c/4"; fi
 
@@ -1214,18 +1227,17 @@ B="$(printf 'tag: [K]\nK1\nK2\nharm-choice: C\nharm-text: T\nharm-none: N')"
   && c=$((c + 1)) || echo "      (a1) channel pick"
 [[ "$(ptext "$B")" == "$(printf 'K1\nK2')" && -z "$(pharm "$(printf 'tag: [K]\nK1')" choice)" && -z "$(pharm "$(printf 'harm-choice: ')" choice)" ]] \
   && c=$((c + 1)) || echo "      (a2) principle text keeps the harm lines out; no line → empty"
-# (b) 등록 출력: 선택 창 있음 → choice, 없음 → text, 사람 없는 실행 → none. 그 줄 하나만.
+# (b) 매 턴 훅 출력(0.88.0+ — 원칙은 등록이 아니라 훅이 싣는다): 선택 창 있음 → choice, 없음 → text, 사람 없는 실행 → none. 그 줄 하나만.
 { cat "$WORK/profile-cl.env"; printf 'SCV_CHOICE_TOOL=PickTool\n'; } > "$WORK/profile-ch.env"
 { cat "$WORK/profile-ch.env"; printf 'SCV_CHOICE_OFF_WHEN=SCV_TEST_ATTENDED=0\n'; } > "$WORK/profile-un.env"
 SK="$(psec korean)"
 for row in "ch:choice" "cl:text" "un:none"; do
   pf="${row%%:*}"; ch="${row#*:}"
   R="$(new_repo "t43-$pf")"; printf '{\n  "SCV_LANG": "korean"\n}\n' > "$R/scv/scv_settings.json"
-  (cd "$R" && printf '{"prompt":"x","session_id":"s1"}' | SCV_TEST_ATTENDED=0 CLAUDE_PLUGIN_ROOT="$CORE" SCV_HOST_PROFILE="$WORK/profile-$pf.env" bash "$CORE/template/hooks/on-user-prompt.sh" >/dev/null 2>&1)
-  o="$(cd "$R" && printf '%s\n' "$SUB_OK" | SCV_TEST_ATTENDED=0 SCV_HOST_PROFILE="$WORK/profile-$pf.env" bash "$MP" register --model vendor-model-a 2>/dev/null)"
+  o="$(cd "$R" && printf '{"prompt":"x","session_id":"s1"}' | SCV_TEST_ATTENDED=0 CLAUDE_PLUGIN_ROOT="$CORE" SCV_HOST_PROFILE="$WORK/profile-$pf.env" bash "$CORE/template/hooks/on-user-prompt.sh" 2>/dev/null)"
   want="$(pharm "$SK" "$ch")"; n=0
   for other in choice text none; do [[ "$other" != "$ch" ]] && grep -qF -- "$(pharm "$SK" "$other")" <<<"$o" && n=$((n + 1)); done
-  [[ -n "$want" && "$(printf '%s\n' "$o" | tail -1)" == "$want" && $n -eq 0 ]] && c=$((c + 1)) || echo "      (b:$pf) expected the $ch line only: $(printf '%s\n' "$o" | tail -1)"
+  [[ -n "$want" && "$o" == *"$(ptext "$SK" | tail -1)"$'\n'"$want"* && $n -eq 0 ]] && c=$((c + 1)) || echo "      (b:$pf) expected the $ch line only, right under the principle text"
 done
 # (c) 규칙 본문은 원칙 파일 한 곳에만(코어 어디에도 같은 줄이 없다)
 for L in korean english japanese; do

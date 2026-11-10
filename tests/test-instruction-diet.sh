@@ -19,22 +19,20 @@ bad() { echo "✖ $1" >&2; fail=1; }
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/scv-diet.XXXXXX")"; trap 'rm -rf "$WORK"' EXIT
 cp -R "$FIX/guides" "$WORK/guides"
-printf '# source: common.md\ngoal\tState the goal\tq a\nfinish\tState the done condition\tq b\n' > "$WORK/guides/checklist-common.tsv"
-printf '# source: model-a.md\nfinish\tState the done condition precisely\tq c\n' > "$WORK/guides/checklist-model-a.tsv"
 { cat "$FIX/profile.env"; printf 'SCV_PROMPTING_GUIDES=%s\nSCV_CHOICE_TOOL=PickTool\n' "$WORK/guides"; } > "$WORK/profile.env"
 R="$WORK/r"; mkdir -p "$R/scv/journal"; (cd "$R" && git init -q)
 printf '{"SCV_LANG": "korean"}\n' > "$R/scv/scv_settings.json"
 printf '{"session":"s1","protocol":1,"turn":3,"diag":"","diag_at":"","nonce":"abcd1234"}\n' > "$R/scv/journal/.help-state"
 hook() { (cd "$R" && jq -cn '{prompt:"로그인 버그 고쳐 줘",session_id:"s1"}' \
   | CLAUDE_PLUGIN_ROOT="$CORE" SCV_HOST_PROFILE="$WORK/profile.env" bash "$HOOK" 2>/dev/null); }
-reg() { (cd "$R" && printf 'goal | msg | 로그인 버그 고침\nfinish | ctx | 시험 통과\nrewrite | - | 로그인 버그를 고쳐 줘\n' \
+reg() { (cd "$R" && printf 'scope | - | src/login.js\nrewrite | - | 로그인 버그를 고쳐 줘\n' \
   | SCV_HOST_PROFILE="$WORK/profile.env" bash "$MP" register --model vendor-model-a --session s1 2>/dev/null); }
 
-# T1b — 원칙 전문은 첫 등록과 규약을 다시 읽은 뒤에만
-hook >/dev/null; r1="$(reg)"
-hook >/dev/null; r2="$(reg)"
+# T1b — 원칙 전문은 첫 턴과 규약을 다시 읽은 뒤에만(0.88.0+: 등록이 아니라 매 턴 훅이 싣는다)
+r1="$(hook)"; reg >/dev/null
+r2="$(hook)"; reg >/dev/null
 sed -i.bak 's/abcd1234/ef567890/' "$R/scv/journal/.help-state"
-hook >/dev/null; r3="$(reg)"
+r3="$(hook)"; reg >/dev/null
 n1="$(grep -c . <<<"$r1")"; n2="$(grep -c . <<<"$r2")"; n3="$(grep -c . <<<"$r3")"
 if grep -q '^PRINCIPLE:$' <<<"$r1" && grep -q '^PRINCIPLE: (이 세션에 이미 실음' <<<"$r2" && grep -q '^PRINCIPLE:$' <<<"$r3" && (( n2 < n1 )); then
   ok "T1b principle full → one line → full again after reload ($n1 · $n2 · $n3 lines)"
