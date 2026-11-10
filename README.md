@@ -78,9 +78,9 @@ Every turn, SCV also:
 - **answers in plain language** — a one- or two-sentence conclusion first,
   then one example, code values only when you ask (`SCV_PLAIN_LANGUAGE`);
 - **prompts your model the way its vendor recommends** — SCV ships the
-  official prompting guide for the model you run, compares each request with
-  that guide's checklist item by item, and quotes the rewritten request right
-  after the conclusion. File writes wait until the turn is registered
+  official prompting guide for the model you run, rewrites each request the
+  way that guide says, and quotes the rewritten request at the top of the
+  answer. File writes wait until the turn is registered
   (`SCV_MODEL_PROMPTING`);
 - **picks up where you left off** — after `/clear`, compaction, or a resume,
   it re-injects active plans, recent decisions, open items, and the active
@@ -187,8 +187,8 @@ Three layers keep the workflow honest:
   writes outside `scv/` until any SCV action has run in the session
   (`/scv:status` is enough). Fails open on internal errors; inert where SCV
   isn't adopted. Off switch: `SCV_GUARD=off` in the process environment.
-- **Every turn**: file writes wait until the turn's request is registered
-  against the model's checklist, and a turn that ends without the rewritten
+- **Every turn**: file writes wait until the turn's rewritten request is
+  registered, and a turn that ends without the rewritten
   request is stopped once so it can be added (`SCV_MODEL_PROMPTING=off`
   turns both off).
 - **At merge**: CI gates deny a PR that changes code without an archived plan
@@ -245,8 +245,8 @@ This repository is the Claude Code adapter:
 - slash commands, hooks registration, install/update UX
 - the background investigator agent
 - the model prompting guides under `prompting/` — verbatim copies of the
-  official guides; CI checks that every checklist quote appears in them word
-  for word
+  official guides; CI checks that each copy carries its source, date and
+  copyright lines
 
 What the hooks do:
 
