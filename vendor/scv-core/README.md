@@ -122,9 +122,9 @@ an answer breaks the answer shape (`SCV_HELP_LOAD_ONCE`,
   answer's shape (`SCV_ANSWER_LINT`).
 - **Per-model prompting** — when a wrapper ships a model's official prompting
   guide (a verbatim offline copy), help reads it once per context and rewrites
-  the request as the best prompt for that model. Every turn, the request is
-  compared item by item with the model's requirement checklist — each item
-  quotes the guide verbatim, and the wrapper's CI checks the quotes — and
+  the request as the best prompt for that model — the guide alone decides how
+  the rewrite is written (a model with no guide of its own reads the common
+  guide). Every turn, the rewritten request and the turn's scope are
   registered. File writes before the turn is registered are refused, and a
   turn that ends without the registration or the rewritten-request quote is
   blocked once (`SCV_MODEL_PROMPTING`).
@@ -225,8 +225,8 @@ in this session, that an SCV action is running. That report is the one signal
 the model cannot fabricate, which is why the guard keys on it.
 
 A third rule
-refuses file writes until the current turn's request is registered against the
-model's checklist (per-model prompting, above). The guard fails open on an
+refuses file writes until the current turn's rewritten request is registered
+(per-model prompting, above). The guard fails open on an
 empty payload and where no JSON reader exists, rather than blocking every
 project; a receipt store it cannot write is the one failure that closes. It
 stays inert where SCV was never adopted.

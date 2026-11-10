@@ -1,4 +1,4 @@
-# 요구 항목(checklist-best-practices.tsv) 인용이 든 구역 — 원문의 제목 줄 그대로. 바꾸면 bash prompting/excerpt.sh
+# 요청을 다시 쓸 때 읽는 구역 — 원문의 제목 줄 그대로. 바꾸면 bash prompting/excerpt.sh (코어 0.88.0 까지는 요구 항목 인용이 든 구역이라는 기준이었다)
 ### Be clear and direct
 ### Add context to improve performance
 ### Tool usage

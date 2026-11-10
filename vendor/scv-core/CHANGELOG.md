@@ -2,6 +2,18 @@
 
 All notable changes to SCV Core are documented here.
 
+## [0.88.0] - 2026-11-10
+
+### Changed
+- 요청을 다시 쓰는 법은 그 모델의 프롬프팅 가이드만 정한다. 매 턴 요청을 요구 항목 표(`checklist-<키>.tsv`)와 1:1 로 견주던 단계를 없앴다 — 등록(`model-prompting.sh register`)은 `scope`(이 턴에 바꿀 대상)와 `rewrite`(다시 쓴 요청) 두 줄만 받는다. 옛 모양(항목 줄이 든 제출)도 받아 주고 항목 줄은 무시한다. 등록 전 파일 쓰기 거절, 범위가 '변경 없음'일 때의 편집 거절, 다시 쓴 요청 인용이 답 맨 위에 없을 때의 종료 차단은 그대로다. 실제 요청 60개로 잰 결과 표가 있든 없든 계획이 사용자 뜻과 맞는 정도가 같았다(계획 `20261110-wookiya1364-rewrite-by-guide-only`).
+- 다시 쓰기 · 등록 장치는 래퍼가 가이드 색인(`INDEX.tsv`)을 실으면 켜진다(전에는 요구 항목 표 파일이 있어야 켜졌다). 래퍼는 `checklist-*.tsv` 를 지워도 된다. `model-prompting.sh checklist` 는 옛 안내문을 받은 세션이 깨지지 않게 등록 모양만 알린다.
+- SCV 원칙(사실 말하기 · 해결책 표 · 해로운 변경은 먼저 묻기)은 다시 쓴 요청에 붙지 않는다. `REWRITE:` 줄 끝의 표식과 등록 출력의 전문을 없애고, 같은 문구를 매 턴 훅이 답 모양 안내와 같은 자리에 싣는다(같은 규약 지문 안에서는 처음 한 번 전문, 그 뒤는 한 줄). 문구는 `core/contracts/rewrite-principle.md` 그대로이고, 끝 메시지의 문제 표를 막는 종료 훅 검사도 그대로다.
+- 색인에 행이 없는 모델은 공통(`*`) 가이드만 읽고 다시 쓴다(전에는 아무것도 읽지 않았다). 읽음 기록은 `<모델 id>@common` 으로 남아, 나중에 그 모델의 행이 생기면 다시 읽는다.
+
+### Removed
+- 다시 쓴 요청 낱말 규칙(R1–R15 · 허용 동사 · 금지 낱말 · 용어): `core/contracts/rewrite-ste.md`, 도움말과 매 턴 훅의 `STE:` 줄, 설정 `SCV_REWRITE_STE`. 옛 설정값이 남아 있어도 조용히 무시한다.
+- 순수 함수 `scv_mp_checklist_merge` · `scv_mp_principle_tag` · `scv_mp_rewrite_tagged`. 새 순수 함수 `scv_mp_has_guides`.
+
 ## [0.87.4] - 2026-11-10
 
 ### Fixed

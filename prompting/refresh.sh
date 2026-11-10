@@ -6,12 +6,28 @@
 # 색인 INDEX.tsv 의 각 행(모델 id · 키 · 파일 · 원본 주소 · 가져온 날짜)의 원본 .md 를 받아
 # 머리 표기(출처 · 날짜 · 저작권자)만 붙이고 본문은 그대로 쓴 뒤, 그 행의 날짜를 오늘로 바꾼다.
 #
-# Usage: bash prompting/refresh.sh [--dry-run]
+# Usage: bash prompting/refresh.sh [--dry-run] [<키> ...]
+#   키(색인의 둘째 칸, 예: fable-5-2)를 주면 그 행의 원문만 받는다 — 다른 사본은 건드리지 않는다. 키가 없으면 전부 받는다.
 # 맥·리눅스 공통: curl · mktemp · awk 만 쓴다(sed -i 없음). 받기에 실패한 파일은 그대로 두고 알린다.
 set -uo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INDEX="$DIR/INDEX.tsv"
-DRY=0; [[ "${1:-}" == "--dry-run" ]] && DRY=1
+DRY=0; KEYS=" "
+for _a in "$@"; do
+  case "$_a" in --dry-run) DRY=1 ;; -*) echo "refresh: unknown option $_a" >&2; exit 1 ;; *) KEYS+="$_a " ;; esac
+done
+
+# @pure
+# 역할: 색인 행의 키가 받을 대상인지 1|0 으로 정한다(고른 키가 없으면 모든 행이 대상)
+# 종류: 판정
+# 예: " fable-5-2 " fable-5-2 → "1"
+# 예: " fable-5-2 " opus-5 → "0"
+# 예: " " opus-5 → "1"
+# <고른 키들(앞뒤 · 사이 공백 구분, 없으면 " ")> <행의 키> → 1 | 0.
+rf_pick_rows() {
+  local keys="${1:- }" key="${2:-}"
+  [[ "$keys" == " " || "$keys" == *" $key "* ]] && printf '1' || printf '0'
+}
 [[ -f "$INDEX" ]] || { echo "refresh: no INDEX.tsv in $DIR" >&2; exit 1; }
 command -v curl >/dev/null 2>&1 || { echo "refresh: curl is required" >&2; exit 1; }
 TODAY="$(date +%Y-%m-%d)"
@@ -21,6 +37,7 @@ ok=0; bad=0; done_files=" "
 while IFS=$'\t' read -r mid key file url fetched || [[ -n "$mid" ]]; do
   [[ -z "$mid" || "$mid" == \#* || "$mid" == @* ]] && continue
   [[ -n "$file" && -n "$url" ]] || continue
+  [[ "$(rf_pick_rows "$KEYS" "$key")" == "1" ]] || continue
   [[ "$done_files" == *" $file "* ]] && continue
   done_files+="$file "
   if (( DRY )); then echo "would fetch: $url -> $file"; continue; fi

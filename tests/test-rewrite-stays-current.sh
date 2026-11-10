@@ -40,8 +40,7 @@ command -v jq >/dev/null 2>&1 || { echo "jq 없음 — 이 검사는 jq 가 필�
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/scv-rsc.XXXXXX")"; trap 'chmod -R u+w "$WORK" 2>/dev/null; rm -rf "$WORK"' EXIT
 cp -R "$FIX/guides" "$WORK/guides"
-printf '# source: common.md\ngoal\tState the goal\tq a\nfinish\tState the done condition\tq b\nscope\tState what is in and out of scope\tq c\n' > "$WORK/guides/checklist-common.tsv"
-printf '# source: model-a.md\nsources\tName the sources to check\tq d\n' > "$WORK/guides/checklist-model-a.tsv"
+# 0.88.0+ — 요구 항목 표 파일은 만들지 않는다(장치는 가이드 색인만으로 켜진다). 아래 제출은 옛 모양 그대로 둔다 — 항목 줄은 무시된다.
 { cat "$FIX/profile.env"; printf 'SCV_PROMPTING_GUIDES=%s\nSCV_AUTO_PROMPT_TAGS=machine-event\nSCV_CHOICE_TOOL=PickTool\n' "$WORK/guides"; } > "$WORK/profile.env"
 export SCV_HOST_PROFILE="$WORK/profile.env" CLAUDE_PLUGIN_ROOT="$CORE" SCV_TODAY=2026-10-03 GIT_AUTHOR_NAME="Hook User"
 # 이 검사를 모델 세션 안에서 돌려도 바깥 세션 값이 섞이지 않게(세션은 훅 입력 · --session 으로만 준다).
@@ -143,7 +142,7 @@ hook "$R" s1 "다음 일" >/dev/null; answered "$R" s1; reg "$R" s1 >/dev/null
 hook "$R" s1 "또 다음" >/dev/null; reg "$R" s1 >/dev/null
 ! denied "$(gate "$R" s1 src/a.js)" && c=$((c + 1)) || echo "      (6) a turn without answers: unchanged (allowed)"
 hook "$R" s1 "등록 없이" >/dev/null; answered "$R" s1
-o="$(gate "$R" s1 src/a.js)"; denied "$o" && grep -q '아직 모델 가이드 요구 항목과 비교' <<<"$o" && c=$((c + 1)) || echo "      (7) unregistered turn: the earlier refusal: $o"
+o="$(gate "$R" s1 src/a.js)"; denied "$o" && grep -q '아직 다시 써 등록하지 않아' <<<"$o" && c=$((c + 1)) || echo "      (7) unregistered turn: the earlier refusal: $o"
 if [[ $c -eq 7 ]]; then ok "OK [T3] 7/7 refuse → re-register → allow"; else fail "[T3] $c/7"; fi
 
 echo
@@ -271,7 +270,7 @@ echo "T8. 세션별 턴 상태 — 두 세션이 서로 끼어들지 않는다"
 c=0
 R="$(new_repo t8)"; hook "$R" sA "A 의 일" >/dev/null; hook "$R" sB "B 의 일" >/dev/null; reg "$R" sB >/dev/null
 denied "$(gate "$R" sA src/a.js)" && c=$((c + 1)) || echo "      (1) B's registration must not unlock A"
-o="$(stop "$R" sA "A 의 답" false)"; blocked "$o" && grep -q 'checklist --model' <<<"$(reason "$o")" && c=$((c + 1)) || echo "      (2) A unregistered: A is blocked by its own turn: $o"
+o="$(stop "$R" sA "A 의 답" false)"; blocked "$o" && grep -q 'register --model' <<<"$(reason "$o")" && c=$((c + 1)) || echo "      (2) A unregistered: A is blocked by its own turn: $o"
 ! denied "$(gate "$R" sB src/a.js)" && c=$((c + 1)) || echo "      (3) B registered: allowed"
 reg "$R" sA >/dev/null
 [[ -z "$(stop "$R" sB "$GOOD" false)" ]] && c=$((c + 1)) || echo "      (4) A's registration must not block B"

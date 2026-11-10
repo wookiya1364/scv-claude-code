@@ -41,25 +41,9 @@ while IFS=$'\t' read -r mid key file url fetched || [[ -n "$mid" ]]; do
     rm -f "$tmpl" "$tmpr"
   fi
 done < "$INDEX"
-# v0.62.0+ (core) — 요구 항목 목록: 색인의 키마다 checklist-<키>.tsv 가 있고, 첫 줄 출처가 그 키의 원문이며,
-# 항목마다 id · label · 인용이 있고, 인용이 그 원문에 글자 그대로 있는지(매 턴 1:1 비교의 기준이 원문에서 왔다는 증거).
-nitem=0; seenkeys=" "
-while IFS=$'\t' read -r mid key file url fetched || [[ -n "$mid" ]]; do
-  [[ -z "$mid" || "$mid" == \#* || "$mid" == @* || -z "$key" || -z "$file" ]] && continue
-  [[ "$seenkeys" == *" $key "* ]] && continue; seenkeys+="$key "
-  cl="$DIR/checklist-$key.tsv"
-  [[ -f "$cl" ]] || { err "missing checklist: checklist-$key.tsv"; continue; }
-  head -1 "$cl" | grep -qxF "# source: $file" || err "checklist-$key.tsv: first line must be '# source: $file'"
-  while IFS=$'\t' read -r cid clabel cquote extra || [[ -n "$cid" ]]; do
-    [[ -z "$cid" || "$cid" == \#* ]] && continue
-    [[ "$cid" =~ ^[a-z0-9-]+$ && -n "$clabel" && -n "$cquote" && -z "${extra:-}" ]] || { err "checklist-$key.tsv: bad line: $cid"; continue; }
-    grep -qF -- "$cquote" "$DIR/$file" || err "checklist-$key.tsv: $cid quote is not verbatim in $file"
-    # 발췌본이 있으면 help 는 그것을 읽으므로, 인용이 발췌본에도 있어야 한다
-    [[ -f "$DIR/excerpt-$file" ]] && { grep -qF -- "$cquote" "$DIR/excerpt-$file" || err "checklist-$key.tsv: $cid quote is missing from excerpt-$file"; }
-    nitem=$((nitem + 1))
-  done < "$cl"
-done < "$INDEX"
+# 코어 0.88.0+ — 요구 항목 목록(checklist-<키>.tsv)은 없다: 다시 쓰는 법은 원문만 정한다. 남아 있으면 지우라고 알린다.
+for _cl in "$DIR"/checklist-*.tsv; do [[ -e "$_cl" ]] && err "leftover requirement list: $(basename "$_cl") (core 0.88.0 no longer reads it — delete it)"; done
 # 발췌본은 원문에서 기계적으로 뽑은 것이어야 한다(손으로 고친 발췌 금지)
 bash "$DIR/excerpt.sh" --check >/dev/null || err "excerpts are stale or broken (run excerpt.sh)"
 (( fail )) && exit 1
-echo "OK prompting guides: $nid model id(s), $nfile file(s), $nitem checklist item(s)$( (( ONLINE )) && echo ', bodies match the source')"
+echo "OK prompting guides: $nid model id(s), $nfile file(s)$( (( ONLINE )) && echo ', bodies match the source')"

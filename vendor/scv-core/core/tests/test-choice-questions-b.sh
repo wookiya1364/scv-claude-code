@@ -43,10 +43,9 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/scv-choice.XXXXXX")"; trap 'rm -rf "$WORK"' E
 cp "$FIX/profile.env" "$WORK/profile-none.env"
 # 등록 판정까지 켠 프로필 — 요구 항목 목록 · 자동 알림 태그 · 선택지 도구.
 cp -R "$FIX/guides" "$WORK/guides-cl"
-printf '# source: common.md\ngoal\tState the goal\tfixture quote a\nfinish\tState the done condition\tfixture quote b\n' > "$WORK/guides-cl/checklist-common.tsv"
-printf '# source: model-a.md\nfinish\tState the done condition precisely\tfixture quote c\nsources\tName the sources to check\tfixture quote d\n' > "$WORK/guides-cl/checklist-model-a.tsv"
+# 0.88.0+ — 요구 항목 표 파일은 만들지 않는다(다시 쓰기 · 등록 장치는 가이드 색인만으로 켜진다).
 { cat "$FIX/profile.env"; printf 'SCV_PROMPTING_GUIDES=%s\nSCV_AUTO_PROMPT_TAGS=machine-event\nSCV_CHOICE_TOOL=PickTool\n' "$WORK/guides-cl"; } > "$WORK/profile-full.env"
-SUB_OK="$(printf 'goal | msg | fix the login bug\nfinish | ctx | conversation turn 2: the test passes\nsources | asked | which log file? (recommended: app.log)\nrewrite | - | Fix the login bug until the login test passes')"
+SUB_OK="$(printf 'scope | - | src/login.js\nrewrite | - | Fix the login bug until the login test passes')"
 # (0.76.0+) 보이는 곳 — 답 맨 위 전문 인용(계획 answer-bullets). 그 전에는 맨 위 한 줄 + 결론 뒤 인용.
 QUOTE=$'> **Rewritten request**: Fix the login bug until the login test passes'
 
@@ -226,7 +225,7 @@ R="$(fresh_turn t23off)"; printf '{\n  "SCV_REWRITE_PRINCIPLE": "off"\n}\n' > "$
 o="$(stop_p "$R" "$WORK/profile-full.env" "$(printf '%s\n\n%s\n\n%s' "$QUOTE" "결론." "$PTA")" false)"
 [[ -z "$o" ]] && ok "원칙 스위치 off — 판정 없음(이 기능 전과 같다)" || fail "T23 off: [$o]"
 o="$(stop_p "$(new_repo t23nc)" "$WORK/profile-pick.env" "$(printf '%s\n\n%s' "결론." "$PTA")" false)"
-[[ -z "$o" ]] && ok "원칙이 실리지 않는 호스트(요구 항목 데이터 없음) — 판정 없음" || fail "T23 no checklist: [$o]"
+[[ -z "$o" ]] && ok "원칙이 실리지 않는 호스트(가이드 색인 없음) — 판정 없음" || fail "T23 no checklist: [$o]"
 
 echo "── [T25] 프로젝트 스위치 · 끝 메시지 없음 · 실행부 인자 ──"
 R="$(new_repo t25)"; printf '{\n  "SCV_CHOICE_GATE": "off"\n}\n' > "$R/scv/scv_settings.json"
