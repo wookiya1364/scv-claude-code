@@ -2,6 +2,14 @@
 
 All notable changes to SCV Core are documented here.
 
+## [0.88.2] - 2026-11-11
+
+### Fixed
+- 턴 끝 계획 기록 검사가 기록 파일만 바꾼 턴을 막던 것: SCV 폴더(`scv/`)나 그 바로 아래 폴더(`scv/raw` · `scv/journal` 따위)를 다른 저장소로 연결(symlink)해 둔 프로젝트에서, 그 안 파일이 연결된 저장소의 경로로 세어져 "파일 N개가 바뀌었는데 계획 기록이 없다"로 막혔다. 연결이 가리키는 실제 폴더 안의 파일은 이제 '일'로 세지 않는다. 그 저장소의 다른 폴더와 코드 파일은 그대로 센다.
+- `plan-link.sh progress` · `append` 가 적으려는 글을 계획의 '하지 않음'(Non-Goals) 항목과 낱말 하나만 같아도 종료 코드 3 으로 거절하던 것: 항목 낱말의 절반 이상이 글에 있을 때만 거절한다. 항목 낱말이 하나뿐이면 그 하나로 거절한다("환불 기능" ↔ "환불 버튼 추가"는 그대로 멈춘다). 낱말을 글자로 나누도록 `plan-link.sh` 가 UTF-8 지역 설정을 고른다.
+- `readpath.sh consume` 이 원자료 폴더(`scv/raw`) 자체가 연결일 때 거절하고 `unused` · `scan` 이 그 안 파일을 못 보던 것: 원자료 폴더 뿌리의 연결은 따라간다. 뿌리 아래 폴더(`stale/` 포함)가 연결이면 `consume` 은 지금처럼 거절한다.
+- 새 순수 함수 `scv_tc_record_globs` · `scv_tc_overlap_count`. 버전 0.88.1 은 건너뛴다(래퍼만의 릴리스에 쓰였다). 계획 `20261111-wookiya1364-false-rejects-three`.
+
 ## [0.88.0] - 2026-11-10
 
 ### Changed
