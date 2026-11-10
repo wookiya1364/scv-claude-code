@@ -79,6 +79,23 @@ scv_tc_filter() {
 }
 
 # @pure
+# 역할: 기록 폴더의 실제 경로들 중 이 저장소 뿌리 아래에 있는 것을 '뺄 글롭'(: 로 이음)으로 바꾼다 — 기록 폴더를 다른 저장소로 연결해 둔 프로젝트에서 그 안 파일을 '일'로 세지 않으려고
+# 종류: 변환
+# 예: "/b" $'/b/core/raw\n/b/core/journal\n/x/y' → "core/raw/*:core/journal/*"
+# 예: "/b" "/b" → "*"
+# 예: "/b" "" → ""
+scv_tc_record_globs() {
+  local root="${1%/}" reals="${2:-}" r out=""
+  while IFS= read -r r; do
+    [[ -n "$r" ]] || continue
+    r="${r%/}"
+    if [[ "$r" == "$root" ]]; then out="$out${out:+:}*"
+    elif [[ "$r" == "$root"/* ]]; then out="$out${out:+:}${r#"$root"/}/*"; fi
+  done <<< "$reals"
+  printf '%s' "$out"
+}
+
+# @pure
 # 역할: 도구 입력에 어떤 칸이 있는지로 이 도구가 파일을 쓰는지 가른다 — 명령 글이 있으면 shell, 경로와 쓸 내용이 있으면 write, 그 밖(읽기 · 찾기)은 read
 # 종류: 판정
 # 예: "ls" "" "" → "shell"
@@ -180,23 +197,39 @@ scv_tc_progress_entry() {
 }
 
 # @pure
-# 역할: 덧붙이거나 진행으로 적으려는 글이 계획의 '하지 않음'(Non-Goals) 항목과 낱말로 겹치면 한 줄씩 낸다 — 겹치면 사용자에게 물을 일
+# 역할: 항목 낱말들 중 메모 낱말에 있는 것의 수와 항목 낱말 수를 "겹친 수 전체 수"로 낸다 — 같은 낱말은 한 번만 센다
+# 종류: 세기
+# 예: "환불" "환불 버튼" → "1 1"
+# 예: "가나 다라 마바 사아" "가나 사아 자차" → "2 4"
+# 예: "" "가나" → "0 0"
+scv_tc_overlap_count() {
+  local item="${1:-}" text=" ${2:-} " w n=0 t=0 seen=" "
+  for w in $item; do
+    [[ "$seen" == *" $w "* ]] && continue
+    seen="$seen$w "
+    t=$((t + 1))
+    [[ "$text" == *" $w "* ]] && n=$((n + 1))
+  done
+  printf '%s %s' "$n" "$t"
+}
+
+# @pure
+# 역할: 덧붙이거나 진행으로 적으려는 글에 계획의 '하지 않음'(Non-Goals) 항목 낱말의 절반 이상이 들어 있으면 한 줄씩 낸다 — 겹치면 사용자에게 물을 일
 # 종류: 판정
 # 예: $'## Goals / Non-Goals\n- **Goals**\n  - 결제 버튼\n- **Non-Goals**\n  - 환불 기능' "환불 버튼 추가" → "충돌 · 하지 않기로 함: 환불 기능 ↔ 적으려는 글: 환불 버튼 추가"
 # 예: $'## Goals / Non-Goals\n- **Non-Goals**\n  - 환불 기능' "결제 버튼 색" → ""
+# 예: $'## Goals / Non-Goals\n- **Non-Goals**\n  - 답 모양 같은 output 규칙의 내용을 바꾸는 일' "시험 파일을 새 모양에 맞춤" → ""
 # 예: "# a" "x" → ""
-# 낱말 = 2자 이상, 조사 · 흔한 말(기능 · 추가 · 수정 · 변경 · 화면 · 단계 · 계획 · 사용자)은 뺀다. 뜻의 충돌은 모델이 판단한다.
+# 낱말 = 2자 이상, 조사 · 흔한 말(기능 · 추가 · 수정 · 변경 · 화면 · 단계 · 계획 · 사용자)은 뺀다. 항목 낱말의 절반 이상(겹친 수 × 2 ≥ 항목 낱말 수)일 때만 충돌 —
+# 낱말 하나만 같은 글을 막지 않으려고(0.88.2). 뜻의 충돌은 모델이 판단한다.
 scv_tc_nongoal_hits() {
-  local plan="${1:-}" text="${2:-}" ng w tw out="" hit
-  tw=" $(scv_tc_words "$text") "
-  [[ "$tw" != "  " ]] || return 0
+  local plan="${1:-}" text="${2:-}" ng tw out="" n t
+  tw="$(scv_tc_words "$text")"
+  [[ -n "$tw" ]] || return 0
   while IFS= read -r ng; do
     [[ -n "$ng" ]] || continue
-    hit=0
-    for w in $(scv_tc_words "$(scv_plan_norm_req "$ng")"); do
-      [[ "$tw" == *" $w "* ]] && { hit=1; break; }
-    done
-    if (( hit )); then
+    read -r n t <<< "$(scv_tc_overlap_count "$(scv_tc_words "$(scv_plan_norm_req "$ng")")" "$tw")"
+    if (( ${t:-0} > 0 && ${n:-0} * 2 >= t )); then
       [[ -n "$out" ]] && out="$out"$'\n'
       out="${out}충돌 · 하지 않기로 함: $ng ↔ 적으려는 글: $text"
     fi

@@ -57,7 +57,7 @@ STATE_FILE="$JOURNAL_DIR/.help-state"
 TURNS_DIR="$JOURNAL_DIR/.help-turns"          # v0.65.0+: 세션별 턴 상태 폴더들
 
 cmd="${1:-guide}"; shift || true
-MODEL_RAW=""; SESSION_ARG=""; SESSION_SET=0; ACTIVE_ARG="0"; AUTO_ARG=0; KEEP_ARG=0; AGENT_ARG=""; CODE_ARG="0"; TRANSCRIPT_ARG=""; OPENED_AUTO=0
+EFFORT_ARG=""; MODEL_RAW=""; SESSION_ARG=""; SESSION_SET=0; ACTIVE_ARG="0"; AUTO_ARG=0; KEEP_ARG=0; AGENT_ARG=""; CODE_ARG="0"; TRANSCRIPT_ARG=""; OPENED_AUTO=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --session) SESSION_ARG="${2:-}"; SESSION_SET=1; shift 2 || shift ;;
@@ -70,6 +70,8 @@ while [[ $# -gt 0 ]]; do
     --opened-auto) OPENED_AUTO="${2:-0}"; shift 2 || shift ;;
     --model)   MODEL_RAW="${2:-}"; shift 2 || shift ;;
     --model=*) MODEL_RAW="${1#--model=}"; shift ;;
+    --effort)  EFFORT_ARG="${2:-}"; shift 2 || shift ;;
+    --effort=*) EFFORT_ARG="${1#--effort=}"; shift ;;
     *) shift ;;
   esac
 done
@@ -193,6 +195,8 @@ ANS_FILE="$TDIR/.help-answered"        # v0.65.0+: 선택 창 답 — "<표>\x1f
 HUMAN_FILE="$TDIR/.help-human"         # v0.65.0+: 이 세션이 사람 메시지를 받았다(하위 세션에는 없다)
 TRANS_FILE="$TDIR/.help-transcript"    # v0.65.0+: 이 세션의 대화 기록 경로(가이드 다시 읽기 판단)
 HELPED_FILE="$TDIR/.help-called"     # 0.80.0+: 이번 턴에 help(또는 SCV 액션)를 부른 턴 표 — 도구 앞 검사가 본다
+EFFORT_ARG_FILE="$TDIR/.effort-arg"      # 0.89.0+: 도움말이 받은 이 세션의 effort 값(호스트가 값을 주지 않을 때만 쓴다)
+EFFORT_ASKED_FILE="$JOURNAL_DIR/.effort-asked"  # 0.89.0+: 물은 조건들 "모델|지금 값|권장 값"(한 줄에 하나) — 프로젝트에서 같은 조건은 다시 묻지 않는다(새 세션도)
 SCAN_FILE="$TDIR/.help-guide-scan"    # v0.65.0+: 대화 기록을 어디까지 읽었나 — "<경로>\x1f<바이트>\x1f<표시된 모델 집합>"
 _fsize() { stat -c '%s' "$1" 2>/dev/null || stat -f '%z' "$1" 2>/dev/null || printf ''; }
 _guide_set() {  # <대화 기록> → 마지막 압축 경계 뒤에 읽음 표시한 모델 집합(공백 구분, 없으면 빈 값) 또는 "N"(판단 못 함)
@@ -258,6 +262,46 @@ MFILE_RAW="$MFILE"; MFILE="$(scv_mp_safe_name "$MFILE")"
 COMMON="$(scv_mp_common "$INDEX")"; CFILE=""; CDATE=""
 [[ -n "$COMMON" ]] && IFS=$'\t' read -r CFILE CDATE <<< "$COMMON"
 CFILE="$(scv_mp_safe_name "$CFILE")"
+# 0.89.0+: 권장 effort 요청 — 매 턴 훅(prompt)이 부른다. 래퍼가 가이드 폴더에 권장 표(EFFORT.tsv)를 실었고 이 세션의 effort 가
+# 그 모델의 권장 값과 다르면, 선택 창으로 한 번 물으라는 줄을 싣는다. 지금 값은 호스트의 세션 기록(프로필 SCV_EFFORT_LOG_KEY 가
+# 이름 붙인 키의 마지막 값 — 지난 턴의 값이라 세션의 첫 턴에는 없다)이 먼저, 없으면 도움말이 받은 값. 모르면 묻지 않는다.
+# 사람이 없는 실행(확인 통로 none)에서는 묻지 않고, 물었다고 적지도 않는다. 판단은 순수 함수가 한다.
+# 물은 조건은 프로젝트 자리(저널 폴더)에 남긴다 — "한 번"은 세션마다가 아니라 그 프로젝트에서 한 번이다.
+# @effect _effort_block
+# 이유: 권장 표 · 세션 기록 · 물은 조건 파일을 읽고, 물은 조건을 그 파일에 쓴다
+_effort_block() {  # <모델 id(정규화)> <대화 기록 경로>
+  local id="$1" tr="$2" sw table row now="" last v ch key
+  sw="$(_setting SCV_EFFORT_RECOMMEND)"
+  [[ "$(scv_mp_switch "$sw")" == "on" ]] || return 0
+  [[ -n "$id" && "$id" != "none" && -n "$GUIDES_DIR" && -f "$GUIDES_DIR/EFFORT.tsv" && ! -L "$GUIDES_DIR/EFFORT.tsv" ]] || return 0
+  table="$(head -c 65536 "$GUIDES_DIR/EFFORT.tsv" 2>/dev/null)"
+  row="$(scv_mp_effort_row "$table" "$id")"; [[ -n "$row" ]] || return 0
+  key="${SCV_EFFORT_LOG_KEY:-}"
+  if [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ && -n "$tr" && -f "$tr" && -r "$tr" ]]; then
+    now="$(scv_mp_effort_from_log "$(tail -c 262144 "$tr" 2>/dev/null | LC_ALL=C grep -o "\"$key\":\"[a-z]*\"" 2>/dev/null | tail -n 1)" "$key")"
+  fi
+  [[ -n "$now" ]] || now="$(scv_mp_effort_word "$(_first_line "$EFFORT_ARG_FILE")")"
+  # 물은 조건은 프로젝트 자리에 줄로 쌓는다 — 새 세션이 같은 조건으로 다시 묻지 않게. 권장 값으로 돌아오면 그 모델의 줄을 지운다
+  # (다시 벗어나면 한 번 더 묻는다). 파일은 4KB 까지만 읽고, 줄은 50개까지만 둔다.
+  local all="" keyline="$id|$now|${row%%$'\t'*}" keep=""
+  [[ -f "$EFFORT_ASKED_FILE" && ! -L "$EFFORT_ASKED_FILE" ]] && all="$(head -c 4096 "$EFFORT_ASKED_FILE" 2>/dev/null)"
+  last=""; [[ $'\n'"$all"$'\n' == *$'\n'"$keyline"$'\n'* ]] && last="$keyline"
+  v="$(scv_mp_effort_verdict "$sw" "$now" "$row" "$last" "$id")"
+  case "$v" in
+    same)
+      if [[ $'\n'"$all" == *$'\n'"$id|"* ]]; then
+        keep="$(printf '%s\n' "$all" | grep -v -F -- "$id|" || true)"
+        if [[ -n "$keep" ]]; then _put "$EFFORT_ASKED_FILE" "$keep"; else _drop "$EFFORT_ASKED_FILE"; fi
+      fi ;;
+    ask)
+      ch="$(_harm_channel)"; [[ "$ch" == "none" ]] && return 0
+      scv_mp_effort_block ask "$id" "$now" "$row" "$ch"; printf '\n'
+      keep="$(printf '%s\n%s\n' "$all" "$keyline" | grep . | tail -n 50)"
+      _put "$EFFORT_ASKED_FILE" "$keep" ;;
+  esac
+  return 0
+}
+
 _on() {  # 0.88.0+ — 다시 쓰기 · 등록 장치가 켜졌나: 스위치가 on 이고 이 호스트가 가이드 색인을 싣는다(예전 근거는 요구 항목 표 파일)
   [[ "$SWITCH" == "on" && "$(scv_mp_has_guides "$INDEX")" == "1" ]]
 }
@@ -266,6 +310,8 @@ _last_model() { local m; m="$(_first_line "$LAST_FILE")"; m="${m//[[:space:]]/}"
 
 case "$cmd" in
   guide)
+    # 0.89.0+ — 도움말이 받은 effort 값을 이 세션 자리에 적어 둔다(값 낱말일 때만). 출력은 바뀌지 않는다.
+    if [[ -n "$EFFORT_ARG" ]]; then _e="$(scv_mp_effort_word "$EFFORT_ARG")"; [[ -n "$_e" ]] && _put "$EFFORT_ARG_FILE" "$_e"; fi
     [[ -n "$INDEX_FILE" || -n "${SCV_PROMPTING_GUIDES:-}" || -n "$ID" ]] || { echo "GUIDE: none"; exit 0; }
     MISSING=""
     MPATH=""; CPATH=""
@@ -402,6 +448,10 @@ case "$cmd" in
     fi
     scv_mp_first_turn_lines "$SWITCH" "$_read" "$_warned" "$_rec"
     (( _haslist )) && _principle_block
+    if (( _haslist )); then
+      _etr="$TRANSCRIPT_ARG"; [[ -n "$_etr" ]] || _etr="$(_first_line "$TRANS_FILE")"
+      _effort_block "$(scv_mp_normalize_id "${_lm%%$'\n'*}")" "$_etr"
+    fi
     ;;
   human)
     # v0.65.0+ — 사람 입력(매 턴 훅이 자동 입력 밖의 모든 입력에 부른다): 자동 턴 표시를 지우고(이 기능 전에는 훅이 직접 지웠다),

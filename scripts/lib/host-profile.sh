@@ -53,6 +53,10 @@ SCV_STEP_TOOL=""
 # 비면 강제하지 않는다 — 진행은 계획 파일의 진행 줄로만 남고, 대시보드는 그 줄로 단계를 센다.
 SCV_STEP_TOOL_ON_FILE=""
 SCV_STEP_TOOL_ON_MARK=""
+# 0.89.0+ 선택 키: 호스트의 세션 기록(매 턴 훅이 넘기는 대화 기록 파일)에서 그 턴의 effort 값을 담는 JSON 키 이름. 있으면
+# 권장 effort 요청(scripts/model-prompting.sh prompt)이 기록의 마지막 "<키>":"<값>" 을 지금 값으로 읽는다. 비면 도움말이
+# 받은 값(--effort)만 쓰고, 그것도 없으면 묻지 않는다.
+SCV_EFFORT_LOG_KEY=""
 
 _scv_profile_assign() {
   local key="$1" value="$2"
@@ -81,6 +85,7 @@ _scv_profile_assign() {
     SCV_STEP_TOOL) SCV_STEP_TOOL="$value" ;;
     SCV_STEP_TOOL_ON_FILE) SCV_STEP_TOOL_ON_FILE="$value" ;;
     SCV_STEP_TOOL_ON_MARK) SCV_STEP_TOOL_ON_MARK="$value" ;;
+    SCV_EFFORT_LOG_KEY) SCV_EFFORT_LOG_KEY="$value" ;;
   esac
 }
 
