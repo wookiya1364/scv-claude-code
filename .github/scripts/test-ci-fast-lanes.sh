@@ -42,8 +42,8 @@ require(
 require(
     "name: Contract (${{ matrix.os }})" in contract
     and "os: [ubuntu-latest, macos-latest]" in contract
-    and "timeout-minutes: 6" in contract,
-    "PR smoke retains Ubuntu and macOS portability checks",
+    and "timeout-minutes: ${{ matrix.os == 'macos-latest' && 10 || 6 }}" in contract,
+    "PR smoke retains Ubuntu and macOS portability checks (macOS ten minutes, Ubuntu six)",
 )
 require(
     "- '.github/scripts/**'" in contract
@@ -94,9 +94,10 @@ require(
     all(
         text.count("\n    runs-on:")
         == text.count("\n    timeout-minutes: 6")
+        + text.count("\n    timeout-minutes: ${{ matrix.os == 'macos-latest' && 10 || 6 }}")
         for text in AUTOMATIC_CI.values()
     ),
-    "every automatic CI job has a hard six-minute execution limit",
+    "every automatic CI job has a hard six-minute execution limit (the macOS contract lane: ten)",
 )
 require(
     "workflow_dispatch:" in workflows["promote.yml"]

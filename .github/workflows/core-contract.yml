@@ -47,7 +47,9 @@ jobs:
     if: github.event_name == 'pull_request'
     name: Contract (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 6
+    # macOS gets ten minutes, Ubuntu keeps six (decided 2026-11-12): the same work took 142–340 s on macOS runners
+    # and was cut off at 380 s and 397 s. .github/scripts/test-ci-fast-lanes.sh holds both numbers.
+    timeout-minutes: ${{ matrix.os == 'macos-latest' && 10 || 6 }}
     strategy:
       fail-fast: false
       matrix:
