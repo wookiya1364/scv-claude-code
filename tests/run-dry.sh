@@ -2262,16 +2262,18 @@ printf '%s' "$PR_PLATFORM_OUT" | awk '/---UNKNOWN-ENV---/{f=1;next} f' | grep -q
   || fail "pr-platform: unknown env value not falling back"
 
 echo
-echo "=== [11dd] PROMOTE.md — fast-path section (v0.2.1) ==="
+echo "=== [11dd] PROMOTE.md — no change without a plan (the fast-path section is gone) ==="
 PROMOTE_DOC="$STANDARD_ROOT/template/scv/PROMOTE.md"
-assert_contains "$PROMOTE_DOC" "Fast-path"
-# why: [11dd] PROMOTE.md — fast-path section (v0.2.1) — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
-assert_contains "$PROMOTE_DOC" "direct PR without promote"
-assert_contains "$PROMOTE_DOC" "typo fix"
-assert_contains "$PROMOTE_DOC" "Patch-version dep bump"
-assert_contains "$PROMOTE_DOC" "when in doubt, promote"
-# why: [11dd] PROMOTE.md — fast-path section (v0.2.1) — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
-assert_contains "$PROMOTE_DOC" "verification is NOT skipped"
+# why: 계획 없이 가는 빠른 길을 없앴다(계획 20261113-wookiya1364-wrapup-report-plan-required) — 문서가 다시 그 길을 열지 않게 고정
+assert_contains "$PROMOTE_DOC" "## 1.6. No change without a plan"
+# why: 크기와 상관없이 계획을 거친다는 문장이 규칙의 본문이다 — 이 문장이 빠지면 "작은 것은 괜찮다"로 다시 읽힌다
+assert_contains "$PROMOTE_DOC" "Every change goes through a plan, whatever its size"
+# why: 남은 예외 둘(릴리스 · 동기화)과 그 기록 명령 — 턴 끝 검사가 받는 종류와 문서의 말이 같아야 한다
+assert_contains "$PROMOTE_DOC" "plan-link.sh exempt --kind release|sync"
+grep -qF -- "direct PR without promote" "$PROMOTE_DOC" \
+  && fail "PROMOTE.md still offers a direct PR without a plan" || pass "PROMOTE.md: no direct PR without a plan"
+grep -qF -- "Fast-path criteria" "$PROMOTE_DOC" \
+  && fail "PROMOTE.md still lists fast-path criteria" || pass "PROMOTE.md: no fast-path criteria"
 
 echo
 echo "=== [11aa] PROMOTE.md — epic / refactor / retirement docs ==="
@@ -2330,16 +2332,16 @@ assert_out_contains "brew install"       "$HELP_DEP_MISSING_OUT"  "help.sh: inst
 assert_out_contains "apt install"        "$HELP_DEP_MISSING_OUT"  "help.sh: install hint mentions apt"
 
 echo
-echo "=== [11uu] PROMOTE.md — fast-path threshold + .env override (v0.5.1+) ==="
+echo "=== [11uu] the fast-path line-ceiling setting is gone ==="
 PROMOTE_DOC="$STANDARD_ROOT/template/scv/PROMOTE.md"
-assert_contains "$PROMOTE_DOC" "Touches ≤ 5 lines"
-assert_contains "$PROMOTE_DOC" "single function or block"
-assert_contains "$PROMOTE_DOC" "SCV_FAST_PATH_LINE_THRESHOLD"
-assert_contains "$PROMOTE_DOC" "Team override"
-# why: [11uu] PROMOTE.md — fast-path threshold + .env override (v0.5.1+) — 규약 문장 고정 (0.48.0 자동 부착: 이 섹션의 계약; 표현만 고정한다면 지울 것)
-assert_contains "$PROMOTE_DOC" "single-function/block rule is **not** overridable"
 ENV_EXAMPLE="$STANDARD_ROOT/template/scv/scv_settings.example.json"
-assert_contains "$ENV_EXAMPLE" "SCV_FAST_PATH_LINE_THRESHOLD"
+# why: 줄 수 설정은 빠른 길과 함께 없앴다 — 예시 · 아는 키 목록에 다시 들어오면 "계획 없이 되는 줄 수"가 있는 것처럼 읽힌다
+grep -qF -- "SCV_FAST_PATH_LINE_THRESHOLD" "$ENV_EXAMPLE" \
+  && fail "settings example still carries SCV_FAST_PATH_LINE_THRESHOLD" || pass "settings example: no fast-path ceiling"
+grep -qF -- "SCV_FAST_PATH_LINE_THRESHOLD" "$STANDARD_ROOT/scripts/lib/settings.sh" \
+  && fail "known settings keys still carry SCV_FAST_PATH_LINE_THRESHOLD" || pass "known settings keys: no fast-path ceiling"
+grep -qF -- "Team override" "$PROMOTE_DOC" \
+  && fail "PROMOTE.md still carries the fast-path team override" || pass "PROMOTE.md: no fast-path team override"
 
 echo
 echo "=== [11ww] lib/pr-platform.sh — _pr_gitlab_token glab→env fallback (v0.5.2+) ==="

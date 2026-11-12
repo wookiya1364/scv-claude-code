@@ -268,6 +268,39 @@ pb_pick_measure() {
   printf cpu
 }
 
+# @pure
+# 역할: 방금 잰 잣대가 "재지 못함"이고 다시 잰 횟수가 한도에 못 미치면 한 번 더 재라고(1) 한다 — 그 밖에는 0
+# 종류: 판정
+# 예: unmeasured 0 2 → "1"
+# 예: unmeasured 1 2 → "1"
+# 예: unmeasured 2 2 → "0"
+# 예: cpu 0 2 → "0"
+# 예: wall-gpu 0 2 → "0"
+# 예: unmeasured 0 0 → "0"
+# 컴퓨터가 잠깐 바쁘면 프로그램을 띄우는 함수는 벽시계만 늘어 "재지 못함"이 된다(2026-11-12 맥 러너 실측: 시험 뒤의
+# 러너 3대에서 48줄 가운데 0 · 2 · 11줄, 갓 띄운 러너는 0줄). 그 순간은 짧다 — 규칙은 그대로 두고 그 함수만 다시 잰다.
+pb_remeasure() {
+  local nm="${1:-}" done_n="${2:-0}" max="${3:-2}"
+  [[ "$done_n" =~ ^[0-9]+$ && "$max" =~ ^[0-9]+$ ]] || { printf 0; return 0; }
+  if [[ "$nm" == unmeasured && $done_n -lt $max ]]; then printf 1; else printf 0; fi
+}
+
+# @pure
+# 역할: 다시 잰 기록 줄들("함수<탭>배<탭>다시 잰 횟수<탭>끝 잣대")을 표 아래에 보일 한 줄로 잇는다 — 없으면 빈 글
+# 종류: 조립/measure
+# 예: $'f\t1\t1\tcpu' → "다시 잰 함수 1 — 재지 못해 같은 횟수로 다시 쟀다: f(1배 · 1번 → cpu)"
+# 예: $'f\t1\t1\tcpu\ng\t4\t2\tunmeasured' → "다시 잰 함수 2 — 재지 못해 같은 횟수로 다시 쟀다: f(1배 · 1번 → cpu) · g(4배 · 2번 → 재지 못함)"
+# 예: "" → ""
+pb_remeasure_line() {
+  local rows="${1:-}" n sc k nm out="" c=0 word
+  while IFS=$'\t' read -r n sc k nm; do
+    [[ -n "$n" ]] || continue
+    word="$nm"; [[ "$nm" != unmeasured ]] || word="재지 못함"
+    out+="${out:+ · }$n(${sc}배 · ${k}번 → $word)"; c=$((c + 1))
+  done <<< "$rows"
+  [[ $c -eq 0 ]] || printf '다시 잰 함수 %s — 재지 못해 같은 횟수로 다시 쟀다: %s' "$c" "$out"
+}
+
 # ---------------------------------------------------------------- 엮은 함수와 표
 
 # @deterministic

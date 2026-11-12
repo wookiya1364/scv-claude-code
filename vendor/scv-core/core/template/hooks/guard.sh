@@ -276,7 +276,7 @@ deny() {
   exit 0
 }
 
-PLAN_FILES='PLAN.md TESTS.md FEATURE_ARCHITECTURE.md'
+PLAN_FILES='PLAN.md TESTS.md WRAPUP.md FEATURE_ARCHITECTURE.md'
 
 # ---------- Rule H (0.80.0+): a person's turn calls help before any other tool ---
 # The per-turn hook asks for help first, and asking was not enough: in a long working session the
@@ -465,7 +465,7 @@ while IFS= read -r raw; do
   rel="${abs#$PROJECT_ROOT/}"
   is_exempt "$rel" && continue
   [[ -n "$STORE_DENY_SUFFIX" ]] && deny "$(store_deny_reason)"
-  deny "SCV guard: no SCV action has run in this session, so this edit to ${rel} is not accounted for. Run the work action on a plan, or declare a fast-path change, and this write proceeds. Any SCV action clears the block for the session."
+  deny "SCV guard: no SCV action has run in this session, so this edit to ${rel} is not accounted for. Make a plan (the promote action) and run the work action on it, and this write proceeds — a change without a plan is not allowed, whatever its size. Any SCV action clears the block for the session."
 done < <(targets)
 
 allow

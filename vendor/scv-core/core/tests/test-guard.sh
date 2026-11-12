@@ -66,7 +66,7 @@ payload() {  # payload <cwd> <session> <file_path>
 echo "=== Rule A — plan forgery ==="
 
 P="$(mk_project a)"
-for f in PLAN.md TESTS.md FEATURE_ARCHITECTURE.md; do          # T1, T2
+for f in PLAN.md TESTS.md WRAPUP.md FEATURE_ARCHITECTURE.md; do          # T1, T2
   out="$(run "$P" gate-write "$(payload "$P" s1 "scv/promote/x/$f")")"
   denied "$out" && pass "T2 create $f without a receipt is denied" \
                 || fail "T2 create $f was allowed"

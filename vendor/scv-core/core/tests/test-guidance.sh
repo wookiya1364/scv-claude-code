@@ -80,7 +80,7 @@ for s in "Question template (use as-is)" "Recommended migration to Playwright" "
   grep -qF -- "$s" "$TMP/work.min.md" && bad "minimal work.md: guidance leaked: $s" || ok
 done
 # the CONTRACT surface fully survives
-for s in "promote-helper.sh" "handoff.sh" "deck.sh" "readpath.sh" \
+for s in "promote-helper.sh" "handoff.sh" "deck.sh" "readpath.sh" 'wrapup.sh" new' \
          "status: planned" "raw_sources:" "refs: []" "## How to run" \
          "scv/DECISIONS.md" "<YYYYMMDD>-<AUTHOR>-<slug>" "Never silently overwrite"; do
   grep -qF -- "$s" "$TMP/promote.min.md" && ok || bad "minimal promote.md: contract lost: $s"
@@ -90,7 +90,7 @@ done
 # [19b] never runs an agent — so a contract line wrongly wrapped in GUIDANCE
 # markers disappears for minimal users with every other test still green. This
 # array is the only detector. Add an anchor whenever work.md gains a CONTRACT line.
-for s in "work.sh" "regression.sh" "pr-helper.sh" "deck.sh" "drift-detect.sh" \
+for s in "work.sh" "regression.sh" "pr-helper.sh" "deck.sh" "drift-detect.sh" "wrapup.sh check" \
          "--archive" "status: obsolete" "obsoleted_at" "ARCHIVED_AT.md" \
          "All tests passed. Archive" "video: 'on'" "scv/DECISIONS.md" \
          "- path delta:" "Step 9b.0 only" \
