@@ -17,6 +17,8 @@
 #   plan-link.sh exempt --kind release|sync --why "<이유>"         (0.87.0+ 계획 없이 해도 되는 정한 예외)
 #
 # 턴 끝 계획 기록 검사(turn-check.sh)가 켜진 턴이면 기록 줄마다 "요청: <원문 앞부분> (요청 <번호>)" 가 붙는다.
+# 기록을 실제로 남긴 명령은 그 턴의 영수증도 스스로 남긴다(0.92.2+) — 도구 앞 훅은 명령 글의 첫 줄이 정해진 꼴일 때만
+# 영수증을 남겨, 경로를 변수에 담거나 다른 명령 뒤에 이어 돌린 기록이 "기록 없음"으로 막혔다.
 # 계획 이름은 promote/ 에서 먼저, 없으면 archive/ 에서 찾는다(끝난 B 는 보관돼 있다).
 # PROMOTE_DIR · ARCHIVE_DIR 를 주면 그대로 쓴다(모노레포 · 시험). SCV_TODAY 로 날짜를 고정할 수 있다(시험).
 #
@@ -88,6 +90,13 @@ turn_info() {
   TAG="$(scv_tc_req_tag "$TURN_ID" "$TURN_REQ")"
 }
 
+# @effect leave_receipt
+# 이유: 기록을 실제로 남긴 뒤 이번 턴의 영수증 파일에 한 줄을 더한다 — 턴 끝 검사가 명령 글의 모양(변수에 담은 경로 · 다른 명령 뒤 · 둘째 줄)에 기대지 않게
+leave_receipt() {
+  [[ -n "$TURN_DIR" && -d "$TURN_DIR/.turn-plan" && ! -L "$TURN_DIR/.turn-plan" && -f "$TURN_DIR/.turn-plan/id" ]] || return 0
+  printf 'plan-link %s (ran)\n' "$1" >> "$TURN_DIR/.turn-plan/receipts" 2>/dev/null || true
+}
+
 # @effect write_plan
 # 이유: 계획 파일에 쓴다 — 바뀐 것이 없으면 쓰지 않는다
 write_plan() {
@@ -143,6 +152,7 @@ case "$CMD" in
     [[ -n "$REDO" ]] || { NA="$(scv_plan_shift_progress "$NA" "$AFTER"; printf x)"; NA="${NA%x}"; }
     NA="$(scv_plan_history_add "$NA" "$ENTRY"; printf x)"; NA="${NA%x}"
     write_plan "$FA" "$TA" "$NA"
+    leave_receipt append
     echo "APPENDED: $A (${ENTRY%%$'\n'*})"
     ;;
 
@@ -181,6 +191,7 @@ case "$CMD" in
     NA="$(scv_plan_mark_pause "$TA" "$B" "$(plan_title "$TB" "$B")" "$AT" "$DAY" "$WHY"; printf x)"; NA="${NA%x}"
     NB="$(scv_plan_link_return "$TB" "$A" "$(plan_title "$TA" "$A")" "$DAY" "$WHY"; printf x)"; NB="${NB%x}"
     write_plan "$FA" "$TA" "$NA"; write_plan "$FB" "$TB" "$NB"
+    leave_receipt pause
     echo "PAUSED: $A (by $B · ${AT}단계에서 재개)"
     echo "LINKED: $B → return_to $A"
     ;;
@@ -215,6 +226,7 @@ case "$CMD" in
     fi
     NA="$(scv_plan_mark_resume "$TA" "$(plan_title "$TB" "$B")" "$DAY"; printf x)"; NA="${NA%x}"
     write_plan "$FA" "$TA" "$NA"
+    leave_receipt resume
     echo "RESUMED: $A (from $B · $(scv_plan_fm_get "$TA" resume_at)단계부터)"
     ;;
 
@@ -241,6 +253,7 @@ case "$CMD" in
     fi
     NA="$(scv_plan_history_add "$TA" "$(scv_tc_progress_entry "$DAY" "$STEPN" "$PSTATE" "$NOTE" "$TAG")"; printf x)"; NA="${NA%x}"
     write_plan "$FA" "$TA" "$NA"
+    leave_receipt progress
     echo "PROGRESS: $A (${STEPN}단계 $PSTATE: $NOTE)"
     ;;
 
@@ -269,6 +282,7 @@ case "$CMD" in
       NA="$(scv_plan_history_add "$TA" "$ENTRY"; printf x)"; NA="${NA%x}"
       write_plan "$FA" "$TA" "$NA"; break
     done
+    leave_receipt exempt
     echo "EXEMPT: $KIND — $WHY"
     ;;
 

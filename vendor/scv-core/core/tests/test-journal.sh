@@ -160,14 +160,16 @@ eq "invalid JSON: exit 0 (non-blocking)" "0" "$RC"
 [[ "$SNAP_BEFORE" == "$SNAP_AFTER" ]] && ok "invalid JSON: no record written" || fail "invalid JSON wrote something"
 
 # JSON without prompt / empty stdin → exit 0, no record
-(cd "$HP" && printf '{"no_prompt":"x"}' | bash "$HOOK_PROMPT"); eq "JSON without prompt: exit 0" "0" "$?"
-(cd "$HP" && printf '' | bash "$HOOK_PROMPT"); eq "empty stdin: exit 0" "0" "$?"
+# 훅의 입력은 여기 글(<<<)로 준다 — `printf … | bash 훅` 은 훅이 입력을 읽기 전에 끝나면 보내는 쪽이 끊겨
+# (Broken pipe) pipefail 아래에서 끝 코드 1이 된다. 붐비는 러너에서 한 번 났다(2026-11-12, 아래 'no scv/' 줄).
+(cd "$HP" && bash "$HOOK_PROMPT" <<< '{"no_prompt":"x"}'); eq "JSON without prompt: exit 0" "0" "$?"
+(cd "$HP" && bash "$HOOK_PROMPT" < /dev/null); eq "empty stdin: exit 0" "0" "$?"
 SNAP_AFTER2="$(cd "$HP" && find scv -type f -exec cksum {} + | sort)"
 [[ "$SNAP_BEFORE" == "$SNAP_AFTER2" ]] && ok "degenerate inputs: still no record" || fail "degenerate input wrote something"
 
 # un-hydrated dir (no scv/) → exit 0, nothing created
 NOSCV="$WORK/noscv"; mkdir -p "$NOSCV"
-(cd "$NOSCV" && printf '{"prompt":"hi"}' | bash "$HOOK_PROMPT"); RC=$?
+(cd "$NOSCV" && bash "$HOOK_PROMPT" <<< '{"prompt":"hi"}'); RC=$?
 eq "no scv/: exit 0" "0" "$RC"
 [[ ! -e "$NOSCV/scv" ]] && ok "no scv/: nothing created" || fail "hook created scv/ in a non-SCV project"
 
@@ -222,13 +224,13 @@ done
 write_settings "$PL" '{"SCV_PLAIN_LANGUAGE": "off", "SCV_PLAIN_MAX_SENTENCES": "4"}'
 _no_plain "$PL" && ok "off wins over a cap" || fail "cap printed despite off"
 rm -f "$PL/.env"
-[[ -z "$(cd "$NOSCV" && printf '{"prompt":"hi"}' | bash "$HOOK_PROMPT")" ]] && ok "no scv/: no reminder" || fail "reminder printed outside an SCV project"
-(cd "$PL" && printf 'not json' | bash "$HOOK_PROMPT" >/dev/null); eq "reminder path: invalid JSON still exit 0" "0" "$?"
+[[ -z "$(cd "$NOSCV" && bash "$HOOK_PROMPT" <<< '{"prompt":"hi"}')" ]] && ok "no scv/: no reminder" || fail "reminder printed outside an SCV project"
+(cd "$PL" && bash "$HOOK_PROMPT" <<< 'not json' >/dev/null); eq "reminder path: invalid JSON still exit 0" "0" "$?"
 
 echo "── [6+] on-stop.sh — non-blocking + transcript extraction ──"
 
-(cd "$HP" && printf 'garbage' | bash "$HOOK_STOP"); eq "on-stop garbage stdin: exit 0" "0" "$?"
-(cd "$HP" && printf '{"transcript_path":"/nonexistent/x.jsonl"}' | bash "$HOOK_STOP")
+(cd "$HP" && bash "$HOOK_STOP" <<< 'garbage'); eq "on-stop garbage stdin: exit 0" "0" "$?"
+(cd "$HP" && bash "$HOOK_STOP" <<< '{"transcript_path":"/nonexistent/x.jsonl"}')
 eq "on-stop missing transcript: exit 0 (quiet skip)" "0" "$?"
 
 if command -v jq >/dev/null 2>&1; then

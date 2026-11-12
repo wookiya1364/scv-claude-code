@@ -167,6 +167,50 @@ scv_tc_req_count() {
 }
 
 # @pure
+# 역할: 요청 원문에서 첨부 파일의 경로를 지우고 그 자리에 "[첨부]"를 둔다 — 원문은 계획 기록(공개될 수 있는 글)에 붙으므로 내 컴퓨터의 경로가 남지 않게
+# 종류: 다듬기
+# 예: '@"/Users/x/uploads/s/a.png" 이 화면처럼 고쳐줘' → "[첨부] 이 화면처럼 고쳐줘"
+# 예: '둘 다 봐 @"/Users/x/a b.png" @"~/c.pdf" 끝' → "둘 다 봐 [첨부] [첨부] 끝"
+# 예: "이것 @/Users/x/shot.png 처럼" → "이것 [첨부] 처럼"
+# 예: '이름에 골뱅이 @"/Users/x/a@2x.png" 끝' → "이름에 골뱅이 [첨부] 끝"
+# 예: "전사 체력 87로 수정해" → "전사 체력 87로 수정해"
+# 예: '메일은 a@b.com, 경로 글 @"상대/경로" 는 그대로' → '메일은 a@b.com, 경로 글 @"상대/경로" 는 그대로'
+# 지우는 것은 "@" 바로 뒤에 오는 절대 경로(/ 또는 ~/ 로 시작)뿐이다 — 따옴표 꼴(@"…")은 닫는 따옴표까지,
+# 맨 꼴(@/…)은 빈칸 앞까지이고 "@" 가 글의 처음이거나 빈칸 뒤일 때만이다(메일 주소는 건드리지 않는다).
+# 글을 "@" 에서 한 번만 나눠 조각마다 본다 — 남은 글을 되풀이해 복사하면 첨부 수 × 글 길이만큼 느려진다
+# (2026-11-12 실측, 입력 4배에 10.4배 → 나눠 보기로 바꾼 뒤의 값은 계획 20261112-wookiya1364-small-fixes-bundle).
+scv_tc_strip_attach() {
+  local t="${1:-}" out="" piece prev="" tok held="" mode="" i=0 tail_at="" had_f=""
+  [[ "$t" == *@* ]] || { printf '%s' "$t"; return 0; }
+  # 바이트로 본다 — 찾는 글(@ · " · / · ~ · 빈칸)이 모두 한 바이트라 답이 같다
+  local LC_ALL="${LC_ALL-}"; LC_ALL=C
+  [[ "$t" == *@ ]] && tail_at=1
+  [[ $- == *f* ]] && had_f=1
+  local IFS=@
+  set -f; set -- $t; [[ -n "$had_f" ]] || set +f
+  for piece in "$@"; do
+    if (( i == 0 )); then out="$piece"
+    elif [[ "$mode" == quoted ]]; then          # 따옴표 꼴의 경로 안 — 닫는 따옴표를 찾는다
+      if [[ "$piece" == *\"* ]]; then tok="${piece%%\"*}"; out+="[첨부]${piece:${#tok}+1}"; mode=""; held=""
+      else held+="@$piece"; fi
+    elif [[ "$mode" == bare ]]; then            # 맨 꼴의 경로 안 — 빈칸을 찾는다
+      if [[ "$piece" == *[[:space:]]* ]]; then tok="${piece%%[[:space:]]*}"; out+="${piece:${#tok}}"; mode=""; fi
+    elif [[ "$piece" == \"/* || "$piece" == \"~/* ]]; then
+      tok="${piece:1}"
+      if [[ "$tok" == *\"* ]]; then tok="${tok%%\"*}"; out+="[첨부]${piece:${#tok}+2}"
+      else mode=quoted; held="@$piece"; fi
+    elif [[ ( "$piece" == /* || "$piece" == '~/'* ) && ( ( $i == 1 && -z "$prev" ) || "$prev" == *[[:space:]] ) ]]; then
+      out+="[첨부]"
+      if [[ "$piece" == *[[:space:]]* ]]; then tok="${piece%%[[:space:]]*}"; out+="${piece:${#tok}}"; else mode=bare; fi
+    else out+="@$piece"; fi
+    prev="$piece"; i=$((i + 1))
+  done
+  [[ "$mode" == quoted ]] && out+="$held"       # 닫는 따옴표가 없었다 — 경로가 아니다, 그대로 둔다
+  [[ -n "$tail_at" ]] && out+="@"
+  printf '%s' "$out"
+}
+
+# @pure
 # 역할: 기록 줄에 붙일 요청 꼬리를 만든다 — 사용자 원문 앞부분(줄바꿈은 빈칸, 80자) + "(요청 <번호>)"
 # 종류: 변환
 # 예: "ab12cd34" "전사 체력 87로 수정해" → "요청: 전사 체력 87로 수정해 (요청 ab12cd34)"

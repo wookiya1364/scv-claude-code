@@ -261,7 +261,9 @@ case "$CMD" in
     state_dir "$DIR" || exit 0
     rm -f "$S"/snap.* "$S"/head.* "$S"/pend.* "$S"/phead.* "$S/pend-roots" "$S/mine" "$S/roots" "$S/receipts" "$S/blocks" "$S/exempt" "$S/steps" 2>/dev/null
     # 원문은 저장 전에 비밀 가리개(journal-append.sh --redact-only)를 거친다 — 계획 줄에도 이 글이 붙는다.
+    # 첨부 파일의 경로도 지운다(0.92.2+) — 파일을 붙여 보낸 요청은 원문에 내 컴퓨터의 경로가 들어 있다.
     REQ="$(head -c 4000 2>/dev/null | bash "$SCRIPT_DIR/journal-append.sh" --redact-only 2>/dev/null || true)"
+    REQ="$(scv_tc_strip_attach "$REQ")"
     printf '%s' "$REQ" > "$S/req"
     od -An -N4 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n' > "$S/id"
     [[ -s "$S/id" ]] || printf '%08x' "$$" > "$S/id"
