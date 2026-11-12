@@ -60,6 +60,12 @@ PLAN_ONLY_SENTINEL — 계획서에만 있는 문장.
 
 flow(normalize, validate)
 
+### 합성 설계 체크리스트
+
+| # | 물음 | 답 | 근거 |
+|---|---|---|---|
+| 1 | 단계가 단항 순수 함수인가 | 예 | normalize · validate 는 값 하나를 받는다 |
+
 ## Exit criteria
 
 - 인수기준: 한도 초과 시 거절된다

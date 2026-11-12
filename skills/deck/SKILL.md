@@ -189,6 +189,9 @@ If the helper errors (missing Node/pnpm), relay it and suggest `/scv:install-dep
    user which spots to draw (the choice tool, recommended first: all of them). For each picked spot,
    add one ```mermaid flowchart to that section of the source markdown, built only from that section's
    own steps and names — no step, label or link the section does not state — then re-run.
+   `합성 설계 체크리스트` lines (0.90.0+) name a missing table, rows without an answer, and answers
+   without evidence (`core/contracts/composition.md`). On a plan archived or written before 0.90.0
+   the missing-table line is expected — report it, do not offer to fill it.
 4. **Offer** (by asking the user, default: just report) to help draft the missing sections **into the source markdown** — then the user re-runs `/scv:deck`. Never write invented specifics; propose structure + `<TODO>` placeholders and let the user fill real values.
 
 ## Never

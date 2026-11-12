@@ -335,35 +335,46 @@ scv_plan_norm_req() {
 # 예: $'## Goals / Non-Goals\n- **Non-Goals**\n  - 가' $'## Goals / Non-Goals\n- **Goals**\n  - 나' → ""
 # 글자 겹침(한쪽이 다른 쪽을 품음)만 본다 — 뜻의 충돌은 모델이 판단한다. 다듬은 글이 2자 미만이면 보지 않는다.
 scv_plan_conflict_before() {
-  local a="${1:-}" b="${2:-}" goal ng g n out="" row num mark rest r
+  local a="${1:-}" b="${2:-}" goal ng g n row num mark rest r i first=1
   local goals nongoals steps
+  local -a ng_raw=() ng_norm=() st_num=() st_rest=() st_norm=()
   goals="$(scv_plan_goal_items "$b" Goals)"
   nongoals="$(scv_plan_goal_items "$a" Non-Goals)"
   steps="$(scv_plan_steps "$a")"
+  # A 쪽 글은 목표마다 다시 다듬지 않는다 — 한 번만 다듬어 배열에 둔다.
+  while IFS= read -r ng; do
+    n="$(scv_plan_norm_req "$ng")"
+    (( ${#n} >= 2 )) || continue
+    ng_raw[${#ng_raw[@]}]="$ng"; ng_norm[${#ng_norm[@]}]="$n"
+  done <<< "$nongoals"
+  while IFS= read -r row; do
+    [[ -n "$row" ]] || continue
+    num="${row%%$'\t'*}"; r="${row#*$'\t'}"; mark="${r%%$'\t'*}"; rest="${r#*$'\t'}"
+    [[ "$mark" == done ]] && continue
+    n="$(scv_plan_norm_req "$rest")"
+    (( ${#n} >= 2 )) || continue
+    st_num[${#st_num[@]}]="$num"; st_rest[${#st_rest[@]}]="$rest"; st_norm[${#st_norm[@]}]="$n"
+  done <<< "$steps"
+  (( ${#ng_norm[@]} + ${#st_norm[@]} )) || return 0
+  # 답 줄은 큰 글 하나에 붙이지 않고 나오는 대로 낸다.
   while IFS= read -r goal; do
     g="$(scv_plan_norm_req "$goal")"
     (( ${#g} >= 2 )) || continue
-    while IFS= read -r ng; do
-      n="$(scv_plan_norm_req "$ng")"
-      (( ${#n} >= 2 )) || continue
+    for (( i = 0; i != ${#ng_norm[@]}; i++ )); do
+      n="${ng_norm[i]}"
       if [[ "$g" == *"$n"* || "$n" == *"$g"* ]]; then
-        [[ -n "$out" ]] && out="$out"$'\n'
-        out="${out}충돌 · A 가 하지 않기로 함: $ng ↔ B 목표: $goal"
+        if (( first )); then first=0; else printf '\n'; fi
+        printf '%s' "충돌 · A 가 하지 않기로 함: ${ng_raw[i]} ↔ B 목표: $goal"
       fi
-    done <<< "$nongoals"
-    while IFS= read -r row; do
-      [[ -n "$row" ]] || continue
-      num="${row%%$'\t'*}"; r="${row#*$'\t'}"; mark="${r%%$'\t'*}"; rest="${r#*$'\t'}"
-      [[ "$mark" == done ]] && continue
-      n="$(scv_plan_norm_req "$rest")"
-      (( ${#n} >= 2 )) || continue
+    done
+    for (( i = 0; i != ${#st_norm[@]}; i++ )); do
+      n="${st_norm[i]}"
       if [[ "$g" == *"$n"* || "$n" == *"$g"* ]]; then
-        [[ -n "$out" ]] && out="$out"$'\n'
-        out="${out}겹침 · A ${num}단계: $rest ↔ B 목표: $goal"
+        if (( first )); then first=0; else printf '\n'; fi
+        printf '%s' "겹침 · A ${st_num[i]}단계: ${st_rest[i]} ↔ B 목표: $goal"
       fi
-    done <<< "$steps"
+    done
   done <<< "$goals"
-  printf '%s' "$out"
 }
 
 # @pure
@@ -373,18 +384,23 @@ scv_plan_conflict_before() {
 # 예: $'## Suggested path\n1. 문서 고침' "core/a.sh" → ""
 # 예: $'## Suggested path\n1. a' "" → ""
 scv_plan_conflict_after() {
-  local a="${1:-}" files="${2:-}" row num r mark rest f out=""
+  local a="${1:-}" files="${2:-}" row num r mark rest f first=1
+  local -a fl=()
+  # 파일 목록은 단계마다 다시 줄로 나누지 않는다 — 한 번만 나눠 배열에 둔다.
+  while IFS= read -r f; do
+    [[ -n "$f" ]] && fl[${#fl[@]}]="$f"
+  done <<< "$files"
+  (( ${#fl[@]} )) || return 0
+  # 답 줄은 큰 글 하나에 붙이지 않고 나오는 대로 낸다.
   while IFS= read -r row; do
     [[ -n "$row" ]] || continue
     num="${row%%$'\t'*}"; r="${row#*$'\t'}"; mark="${r%%$'\t'*}"; rest="${r#*$'\t'}"
     [[ "$mark" == done ]] && continue
-    while IFS= read -r f; do
-      [[ -n "$f" ]] || continue
+    for f in "${fl[@]}"; do
       if [[ "$rest" == *"$f"* ]]; then
-        [[ -n "$out" ]] && out="$out"$'\n'
-        out="${out}겹침 · A ${num}단계 · $f"
+        if (( first )); then first=0; else printf '\n'; fi
+        printf '%s' "겹침 · A ${num}단계 · $f"
       fi
-    done <<< "$files"
+    done
   done <<< "$(scv_plan_steps "$a")"
-  printf '%s' "$out"
 }

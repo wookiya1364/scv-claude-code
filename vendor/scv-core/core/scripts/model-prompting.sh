@@ -196,6 +196,7 @@ HUMAN_FILE="$TDIR/.help-human"         # v0.65.0+: 이 세션이 사람 메시�
 TRANS_FILE="$TDIR/.help-transcript"    # v0.65.0+: 이 세션의 대화 기록 경로(가이드 다시 읽기 판단)
 HELPED_FILE="$TDIR/.help-called"     # 0.80.0+: 이번 턴에 help(또는 SCV 액션)를 부른 턴 표 — 도구 앞 검사가 본다
 EFFORT_ARG_FILE="$TDIR/.effort-arg"      # 0.89.0+: 도움말이 받은 이 세션의 effort 값(호스트가 값을 주지 않을 때만 쓴다)
+EFFORT_PEND_FILE="$TDIR/.effort-pending"   # 0.89.2+: 이번 턴에 줄을 실은 조건 "<조건>\x1f<턴 표>" — 턴 끝 · 선택 창 답에서 물었는지 본다
 EFFORT_ASKED_FILE="$JOURNAL_DIR/.effort-asked"  # 0.89.0+: 물은 조건들 "모델|지금 값|권장 값"(한 줄에 하나) — 프로젝트에서 같은 조건은 다시 묻지 않는다(새 세션도)
 SCAN_FILE="$TDIR/.help-guide-scan"    # v0.65.0+: 대화 기록을 어디까지 읽었나 — "<경로>\x1f<바이트>\x1f<표시된 모델 집합>"
 _fsize() { stat -c '%s' "$1" 2>/dev/null || stat -f '%z' "$1" 2>/dev/null || printf ''; }
@@ -285,8 +286,9 @@ _effort_block() {  # <모델 id(정규화)> <대화 기록 경로>
   # (다시 벗어나면 한 번 더 묻는다). 파일은 4KB 까지만 읽고, 줄은 50개까지만 둔다.
   local all="" keyline="$id|$now|${row%%$'\t'*}" keep=""
   [[ -f "$EFFORT_ASKED_FILE" && ! -L "$EFFORT_ASKED_FILE" ]] && all="$(head -c 4096 "$EFFORT_ASKED_FILE" 2>/dev/null)"
-  last=""; [[ $'\n'"$all"$'\n' == *$'\n'"$keyline"$'\n'* ]] && last="$keyline"
+  last="$(scv_mp_effort_state_of "$all" "$keyline")"
   v="$(scv_mp_effort_verdict "$sw" "$now" "$row" "$last" "$id")"
+  _drop "$EFFORT_PEND_FILE"
   case "$v" in
     same)
       if [[ $'\n'"$all" == *$'\n'"$id|"* ]]; then
@@ -296,9 +298,25 @@ _effort_block() {  # <모델 id(정규화)> <대화 기록 경로>
     ask)
       ch="$(_harm_channel)"; [[ "$ch" == "none" ]] && return 0
       scv_mp_effort_block ask "$id" "$now" "$row" "$ch"; printf '\n'
-      keep="$(printf '%s\n%s\n' "$all" "$keyline" | grep . | tail -n 50)"
-      _put "$EFFORT_ASKED_FILE" "$keep" ;;
+      # 실은 것만 적는다(몇 번째인지) — '물었다'는 턴 끝 · 선택 창 답에서 실제로 물은 것을 본 뒤에 적는다(_effort_settle).
+      _put "$EFFORT_ASKED_FILE" "$(scv_mp_effort_state_next "$all" "$keyline" shown)"
+      _put "$EFFORT_PEND_FILE" "$(printf '%s\x1f%s' "$keyline" "${_tok:-}")" ;;
   esac
+  return 0
+}
+
+# @effect _effort_settle
+# 이유: 이번 턴에 실은 조건(.effort-pending)과 물은 조건 파일을 읽고, 실제로 물었으면 '물었다'로 올려 쓴다
+_effort_settle() {  # <답 글> <선택 창 질문 글> — 물었으면 물은 조건 파일을 올리고 대기 표시를 지운다. 안 물었으면 그대로 둔다(다음 턴에 다시 실린다).
+  local ans="$1" q="$2" pend key all now rec
+  [[ -f "$EFFORT_PEND_FILE" && ! -L "$EFFORT_PEND_FILE" ]] || return 0
+  pend="$(_first_line "$EFFORT_PEND_FILE")"; key="${pend%%$'\x1f'*}"
+  [[ "$key" == *"|"*"|"* ]] || return 0
+  rec="${key##*|}"; now="${key%|*}"; now="${now##*|}"
+  [[ "$(scv_mp_effort_asked_in "$ans" "$q" "$now" "$rec")" == "1" ]] || return 0
+  all=""; [[ -f "$EFFORT_ASKED_FILE" && ! -L "$EFFORT_ASKED_FILE" ]] && all="$(head -c 4096 "$EFFORT_ASKED_FILE" 2>/dev/null)"
+  _put "$EFFORT_ASKED_FILE" "$(scv_mp_effort_state_next "$all" "$key" asked)"
+  _drop "$EFFORT_PEND_FILE"
   return 0
 }
 
@@ -474,6 +492,10 @@ case "$cmd" in
     echo "TURN_DIR: $TDIR"
     echo "HUMAN: $_h"
     ;;
+  effort-seen)
+    # 0.89.2+ — 선택 창 답 훅이 그 질문 글을 표준 입력으로 넘긴다: 이번 턴에 실은 effort 줄을 선택 창으로 물었으면 '물었다'로 올린다.
+    _effort_settle "" "$(head -c 8192 2>/dev/null || true)"
+    ;;
   answered)
     # v0.65.0+ — 선택 창 답(래퍼의 답 신호 훅이 부른다). 이번 턴 표와 "그때 마지막 등록의 차례"를 적는다 — 쓰기 검사는 그 차례가
     # 지금 등록의 차례와 같으면(답 뒤에 다시 등록하지 않았으면) 편집을 거절한다. 하위 에이전트 · 표 없음 · 기능 꺼짐이면 아무것도 안 한다.
@@ -605,6 +627,7 @@ case "$cmd" in
     ;;
   stop)
     ANSWER="$(head -c 65536 2>/dev/null || true)"
+    _effort_settle "$ANSWER" ""   # 0.89.2+ — 이번 턴에 effort 줄을 실었으면, 답에 그 질문이 있었는지 본다
     # v0.62.0+ — 매 턴 등록 판정: 이번 턴 표가 있고(매 턴 훅이 씀) 가이드 색인이 있을 때만. ok | block | warn.
     if _on; then
       _tok="$(_first_line "$TOKEN_FILE")"

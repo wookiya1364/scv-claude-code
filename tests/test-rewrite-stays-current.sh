@@ -241,24 +241,31 @@ blk="$WORK/blk.jsonl"; { for i in $(seq 1 60); do jl_user "turn $i $(printf 'x%.
 cp "$blk" "$BIG.tmp"; while [[ "$(wc -c < "$BIG.tmp" | tr -d ' ')" -lt 40000000 ]]; do cat "$BIG.tmp" "$BIG.tmp" > "$BIG.t2" && mv "$BIG.t2" "$BIG.tmp"; done
 { jl_user "시작"; jl_bash "$MARK_A"; cat "$BIG.tmp"; } > "$BIG"; rm -f "$BIG.tmp"
 MB="$(( $(wc -c < "$BIG" | tr -d ' ') / 1000000 ))"
-run_t7() {  # <대화 기록> → "처음 다음" (매 턴 훅 + help 두 번)
-  local R t0 t1 t2 t3 t4 t5
+# shellcheck source=lib/cpu-time.sh
+source "$CORE/tests/lib/cpu-time.sh"
+run_t7() {  # <대화 기록> → "처음 다음 처음(벽시계) 다음(벽시계)" — 앞의 둘은 CPU 초(매 턴 훅 + help 두 번)
+  local R t0 t1 t2 t3 c0 c1 c2 c3
   rm -rf "$WORK/t7"; R="$(new_repo t7)"; help_guide "$R" >/dev/null
-  t0="$(now)"; hook "$R" s1 "로그인 고쳐" "$1" >/dev/null; help_guide "$R" >/dev/null; t1="$(now)"
+  cpu_mark c0; t0="$(now)"; hook "$R" s1 "로그인 고쳐" "$1" >/dev/null; help_guide "$R" >/dev/null; t1="$(now)"; cpu_mark c1
   printf '%s\n' "$(jl_user "더")" >> "$1"
-  t2="$(now)"; hook "$R" s1 "더" "$1" >/dev/null; help_guide "$R" >/dev/null; t3="$(now)"
-  [[ "$(help_guide "$R")" == "GUIDE: loaded model-a" ]] || echo "      (t7) wrong decision on $1"
-  printf '%s %s' "$(secs "$t0" "$t1")" "$(secs "$t2" "$t3")"
+  cpu_mark c2; t2="$(now)"; hook "$R" s1 "더" "$1" >/dev/null; help_guide "$R" >/dev/null; t3="$(now)"; cpu_mark c3
+  [[ "$(help_guide "$R")" == "GUIDE: loaded model-a" ]] || echo "      (t7) wrong decision on $1" >&2
+  printf '%s %s %s %s' "$(secs "$c0" "$c1")" "$(secs "$c2" "$c3")" "$(secs "$t0" "$t1")" "$(secs "$t2" "$t3")"
 }
 # 쪽마다 두 번 재고 작은 값을 쓴다(0.81.3): 공유 맥 실행기의 잡음은 시간을 더하기만 한다 — 같은 코드가
 # 맥 CI 에서 처음 +0.61 · +1.55 · +2.07 · +3.1초로 흔들렸다(#445). 병적인 느려짐은 두 번 모두 나타나 그대로 잡힌다.
 lo() { python3 -c "import sys; print(min(float(x) for x in sys.argv[1:]))" "$@" 2>/dev/null || echo "$1"; }
-read -r s_first s_next <<<"$(run_t7 "$SMALL")"; read -r b_first b_next <<<"$(run_t7 "$BIG")"
-read -r s_first2 s_next2 <<<"$(run_t7 "$SMALL")"; read -r b_first2 b_next2 <<<"$(run_t7 "$BIG")"
+# 판정은 CPU 시간으로 한다(0.89.2): 벽시계는 붐비는 검사 기계에서 같은 코드가 +1.21초까지 흔들렸다(2026-11-11 맥 CI).
+# 벽시계 값은 참고로 함께 찍는다.
+read -r s_first s_next sw_first sw_next <<<"$(run_t7 "$SMALL")"; read -r b_first b_next bw_first bw_next <<<"$(run_t7 "$BIG")"
+read -r s_first2 s_next2 sw_first2 sw_next2 <<<"$(run_t7 "$SMALL")"; read -r b_first2 b_next2 bw_first2 bw_next2 <<<"$(run_t7 "$BIG")"
 s_first="$(lo "$s_first" "$s_first2")"; s_next="$(lo "$s_next" "$s_next2")"
 b_first="$(lo "$b_first" "$b_first2")"; b_next="$(lo "$b_next" "$b_next2")"
+sw_first="$(lo "$sw_first" "$sw_first2")"; sw_next="$(lo "$sw_next" "$sw_next2")"
+bw_first="$(lo "$bw_first" "$bw_first2")"; bw_next="$(lo "$bw_next" "$bw_next2")"
 d_first="$(python3 -c "print(max(0.0, round($b_first - $s_first, 2)))" 2>/dev/null || echo 0)"; d_next="$(python3 -c "print(max(0.0, round($b_next - $s_next, 2)))" 2>/dev/null || echo 0)"
-echo "  · ${MB}MB 기록: 처음 +${d_first}s · 다음 턴 +${d_next}s (작은 기록 대비, 매 턴 훅 + help)"
+w_first="$(python3 -c "print(max(0.0, round($bw_first - $sw_first, 2)))" 2>/dev/null || echo 0)"; w_next="$(python3 -c "print(max(0.0, round($bw_next - $sw_next, 2)))" 2>/dev/null || echo 0)"
+echo "  · ${MB}MB 기록(CPU 시간): 처음 +${d_first}s · 다음 턴 +${d_next}s (작은 기록 대비, 매 턴 훅 + help) — 벽시계: 처음 +${w_first}s · 다음 턴 +${w_next}s"
 # 다음 턴 상한 1.0초(2026-10-28, 0.5 → 1.0): 맥 CI 러너는 이 시험을 혼자 돌려도 +0.64초를 냈다(#364 · #365,
 # 코드 변경과 무관). 상한은 큰 기록을 매 턴 처음부터 다시 읽는 병적인 느려짐(수 초)을 잡는 자리다.
 python3 -c "import sys; sys.exit(0 if ($d_first <= 3.0 and $d_next <= 1.0) else 1)" 2>/dev/null \

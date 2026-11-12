@@ -36,11 +36,13 @@ else
   [[ "$(grep '^GUIDE:' <<<"$uout")" == "GUIDE: none" ]] || err "unknown model should be GUIDE: none"
 fi
 # 코어 0.89.0+ — 권장 effort 요청: 이 호스트의 실제 세션 기록 모양(답 줄의 "perTurnEffort":"<값>")에서 지금 값을 읽어,
-# 그 모델의 권장 값과 다르면 한 번만 싣는다. 프로필의 키 이름이 기록 모양과 어긋나면 여기서 붉다(조용히 꺼지지 않게).
+# 그 모델의 권장 값과 다르면 싣는다. 프로필의 키 이름이 기록 모양과 어긋나면 여기서 붉다(조용히 꺼지지 않게).
+# 코어 0.89.2+ — 줄을 실은 것만으로는 '물었다'가 아니다. 모델이 실제로 물은 턴(선택 창의 질문 글이 코어에 닿은 턴) 뒤에만
+# 다시 싣지 않고, 묻지 않았으면 다음 턴에 다시 싣는다. 그래서 두 장면을 본다: 물은 턴 → 1 · 0, 안 물은 턴 → 1 · 1.
 neff=0
 if [[ -f "$ROOT/prompting/EFFORT.tsv" ]]; then
   MPS="$ROOT/scripts/model-prompting.sh"
-  eff_case() {  # <이름> <모델> <기록의 값> → 매 턴 안내를 두 번 돌려 "첫 번째 요청 수 · 두 번째 요청 수 · 첫 안내 글" 을 낸다
+  eff_case() {  # <이름> <모델> <기록의 값> <asked|silent> [권장 값] → 매 턴 안내를 두 번 돌려 "첫 번째 요청 수 · 두 번째 요청 수 · 첫 안내 글" 을 낸다
     local d="$WORK/eff-$1" tr o1 o2
     mkdir -p "$d/scv/journal"; (cd "$d" && git init -q . 2>/dev/null)
     printf '{"session":"s1","protocol":1,"turn":1,"diag":"","diag_at":"","nonce":"abcd1234"}\n' > "$d/scv/journal/.help-state"
@@ -48,6 +50,10 @@ if [[ -f "$ROOT/prompting/EFFORT.tsv" ]]; then
     printf '{"type":"user","message":{"content":[{"type":"text","text":"q"}]}}\n{"type":"assistant","effort":"%s","perTurnEffort":"%s","message":{"model":"%s","content":[{"type":"text","text":"a"}]}}\n' "$3" "$3" "$2" > "$tr"
     (cd "$d" && bash "$MPS" human --session s1 >/dev/null 2>&1; bash "$MPS" guide --model "$2" --session s1 >/dev/null 2>&1) || true
     o1="$(cd "$d" && bash "$MPS" prompt --session s1 --transcript "$tr" 2>/dev/null)"
+    # 물은 턴: 선택 창 답 훅이 하는 것처럼 그 질문 글을 코어에 넘긴다. 안 물은 턴: 아무것도 넘기지 않는다.
+    if [[ "${4:-silent}" == asked ]]; then
+      (cd "$d" && printf '%s' "effort 를 ${5:-high} 로 바꾸시겠어요?" | bash "$MPS" effort-seen --session s1 >/dev/null 2>&1) || true
+    fi
     o2="$(cd "$d" && bash "$MPS" prompt --session s1 --transcript "$tr" 2>/dev/null)"
     printf '%s %s\n%s' "$(grep -c '^\[SCV effort\]' <<<"$o1")" "$(grep -c '^\[SCV effort\]' <<<"$o2")" "$o1"
   }
@@ -55,18 +61,20 @@ if [[ -f "$ROOT/prompting/EFFORT.tsv" ]]; then
     [[ -z "$emid" || "$emid" == \#* ]] && continue
     neff=$((neff + 1))
     other=low; [[ "$erec" == low ]] && other=high
-    r="$(eff_case "d$neff" "$emid" "$other")"
-    [[ "$(head -1 <<<"$r")" == "1 0" ]] || err "effort: $emid at $other (recommended $erec) should be asked once, then not again — got '$(head -1 <<<"$r")'"
+    r="$(eff_case "d$neff" "$emid" "$other" asked "$erec")"
+    [[ "$(head -1 <<<"$r")" == "1 0" ]] || err "effort: $emid at $other (recommended $erec) should be carried once, then not again after it was asked — got '$(head -1 <<<"$r")'"
     grep -q "effort 는 $other 인데" <<<"$r" && grep -q "권하는 값은 $erec 이다" <<<"$r" || err "effort: $emid — the line must name $other and $erec"
     grep -qF -- "\"$equote\"" <<<"$r" || err "effort: $emid — the guide's sentence must be carried verbatim"
     [[ "$econd" == "-" ]] || grep -qxF "조건: $econd" <<<"$r" || err "effort: $emid — the condition must be carried"
-    r="$(eff_case "s$neff" "$emid" "$erec")"
+    r="$(eff_case "n$neff" "$emid" "$other" silent)"
+    [[ "$(head -1 <<<"$r")" == "1 1" ]] || err "effort: $emid at $other, not asked → should be carried again on the next turn (core 0.89.2) — got '$(head -1 <<<"$r")'"
+    r="$(eff_case "s$neff" "$emid" "$erec" silent)"
     [[ "$(head -1 <<<"$r")" == "0 0" ]] || err "effort: $emid at $erec (the recommended value) should not be asked — got '$(head -1 <<<"$r")'"
   done < "$ROOT/prompting/EFFORT.tsv"
-  r="$(eff_case unknown no-such-model-xyz low)"
+  r="$(eff_case unknown no-such-model-xyz low silent)"
   [[ "$(head -1 <<<"$r")" == "0 0" ]] || err "effort: a model with no row should not be asked"
   (( neff > 0 )) || err "EFFORT.tsv has no rows"
 fi
 (( n > 0 )) || err "no model rows in INDEX.tsv"
 (( fail )) && exit 1
-echo "OK prompting guides resolve from the plugin root: $n model id(s) (+[1m] variants), unknown → common guide$( (( neff > 0 )) && echo ", effort asked once for $neff model(s)")"
+echo "OK prompting guides resolve from the plugin root: $n model id(s) (+[1m] variants), unknown → common guide$( (( neff > 0 )) && echo ", effort: asked → once, not asked → again, for $neff model(s)")"

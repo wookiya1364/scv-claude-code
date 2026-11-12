@@ -180,13 +180,32 @@ scv_echo_check() {
 # 첫 문단에서 따옴표(" " “ ” ‘ ’)와 괄호(( ) （ ）) 안을 비운다 — 인용문 안의 마침표를 문장 끝으로 세지 않기 위해.
 # 짝이 안 맞는 기호는 그대로 둔다(그러면 0.50.0 과 같은 세기). 곧은 작은따옴표는 영어 축약형과 겹쳐 손대지 않는다.
 scv_lint_strip_quoted() {
-  local s="${1:-}"
-  while [[ "$s" =~ ^(.*)\"[^\"]*\"(.*)$ ]]; do s="${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"; done
-  while [[ "$s" =~ ^(.*)“.*”(.*)$ ]]; do s="${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"; done
-  while [[ "$s" =~ ^(.*)‘.*’(.*)$ ]]; do s="${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"; done
-  while [[ "$s" =~ ^(.*)\([^()]*\)(.*)$ ]]; do s="${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"; done
-  while [[ "$s" =~ ^(.*)（.*）(.*)$ ]]; do s="${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"; done
-  printf '%s' "$s"
+  local s="${1:-}" tail="" S pre rest out seg c pp='[()]'
+  local -a stack=()
+  # 정규식을 짝마다 처음부터 다시 돌리지 않는다. 따옴표는 오른쪽 끝에서부터 한 짝씩 잘라 내고,
+  # 괄호는 왼쪽부터 한 번 훑으며 짝이 맞는 묶음을 빈칸 하나로 바꾼다. 답은 정규식으로 하던 때와 같다.
+  while [[ "$s" == *\"*\"* ]]; do S="${s##*\"}"; pre="${s%\"*}"; s="${pre%\"*}"; tail=" $S$tail"; done
+  s="$s$tail"; tail=""
+  while [[ "$s" == *“*”* ]]; do S="${s##*”}"; pre="${s%”*}"; s="${pre%“*}"; tail=" $S$tail"; done
+  s="$s$tail"; tail=""
+  while [[ "$s" == *‘*’* ]]; do S="${s##*’}"; pre="${s%’*}"; s="${pre%‘*}"; tail=" $S$tail"; done
+  s="$s$tail"; tail=""
+  if [[ "$s" == *\(*\)* ]]; then
+    rest="$s"; out=""
+    while [[ "$rest" == *$pp* ]]; do
+      seg="${rest%%$pp*}"; c="${rest:${#seg}:1}"; rest="${rest:${#seg}+1}"
+      out+="$seg"
+      if [[ "$c" == "(" ]]; then stack[${#stack[@]}]="$out"; out=""
+      elif (( ${#stack[@]} )); then out="${stack[${#stack[@]}-1]} "; unset "stack[${#stack[@]}-1]"
+      else out+=")"; fi
+    done
+    out+="$rest"
+    # 닫히지 않은 여는 괄호는 그대로 남긴다
+    while (( ${#stack[@]} )); do out="${stack[${#stack[@]}-1]}($out"; unset "stack[${#stack[@]}-1]"; done
+    s="$out"
+  fi
+  while [[ "$s" == *（*）* ]]; do S="${s##*）}"; pre="${s%）*}"; s="${pre%（*}"; tail=" $S$tail"; done
+  printf '%s' "$s$tail"
 }
 
 # @pure
@@ -229,11 +248,18 @@ scv_lint_bullet_polite() {
 # 바이트로 센다(LC_ALL=C): 한글 음절의 첫 바이트(0xEA–0xED) 수와 ASCII 영문 글자 수. 맥 기본 bash 3.2 의 큰 글 치환이 느려 앞
 # 4000바이트만 본다.
 scv_lint_hangul_ratio() {
-  local LC_ALL=C t="${1:-}" h l
-  t="${t:0:4000}"
-  h="${t//[^$'\xea'-$'\xed']/}"; l="${t//[^A-Za-z]/}"
-  if (( ${#h} + ${#l} == 0 )); then printf '0'; return 0; fi
-  printf '%s' "$(( ${#h} * 100 / (${#h} + ${#l}) ))"
+  local LC_ALL=C t="${1:-}" c x h=0 l=0 i=0 n step=40
+  t="${t:0:4000}"; n=${#t}
+  # 옛 셸(bash 3.2)은 긴 글에서 "무늬에 맞는 글자를 모두 지우기"가 길이의 제곱보다 느리다.
+  # 40바이트씩 잘라 센다 — 바이트 단위라 어디서 잘라도 센 수는 같다. 새 셸은 통째로 해도 빨라 한 번에 한다.
+  [[ ${BASH_VERSINFO[0]} -ge 4 ]] && step=4000
+  while [[ $i -lt $n ]]; do
+    c="${t:i:step}"; i=$((i + step))
+    x="${c//[^$'\xea'-$'\xed']/}"; h=$((h + ${#x}))
+    x="${c//[^A-Za-z]/}"; l=$((l + ${#x}))
+  done
+  if (( h + l == 0 )); then printf '0'; return 0; fi
+  printf '%s' "$(( h * 100 / (h + l) ))"
 }
 
 # @pure
@@ -263,22 +289,51 @@ scv_lint_lang_verdict() {
 # 줄마다 따로 보는 까닭: 긴 한국어 답 사이의 영어 한두 줄은 전체 비율로는 묻힌다(0.78.0+ — 2026-11-03 중간 보고가 세 번
 # 영어로 샜는데 마지막 답만 보는 검사가 놓쳤다).
 scv_lint_lang_turn() {
-  local last="${1:-}" turn="${2:-}" lang="${3:-}" line t pl infence=0 n=0 letters
+  local LC_ALL="${LC_ALL-}" last="${1:-}" turn="${2:-}" lang="${3:-}" line t pl infence=0 n=0
+  local c x i len h l h4 l4 letters step=40
   local re_link='^(.*)\[[^]]*\]\([^)]*\)(.*)$' re_url='^(.*)https?://[^[:space:]]*(.*)$'
+  local -a pls=()
   [[ "$lang" == korean || "$lang" == ko ]] || return 0
+  # 1) 줄을 다듬는다 — 글자 단위로(지금 로캘). 정규식은 맞을 수 있는 줄에서만 돌린다.
   while IFS= read -r line || [[ -n "$line" ]]; do
     t="${line#"${line%%[![:space:]]*}"}"
     if [[ "$t" == '```'* ]]; then infence=$(( 1 - infence )); continue; fi
     (( infence )) && continue
     [[ "$t" == $'\x3e'* || "$t" == \|* ]] && continue
-    pl="$t"; while [[ "$pl" =~ ^(.*)\`[^\`]*\`(.*)$ ]]; do pl="${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"; done
+    pl="$t"
+    if [[ "$pl" == *\`*\`* ]]; then
+      while [[ "$pl" =~ ^(.*)\`[^\`]*\`(.*)$ ]]; do pl="${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"; done
+    fi
     # 0.79.0+ — 링크([글](주소))와 맨 주소는 이름이다 — 세지 않는다(15자로 낮추자 'PR을 열었음: [저장소#420](https://…)' 가 걸렸다).
-    while [[ "$pl" =~ $re_link ]]; do pl="${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"; done
-    while [[ "$pl" =~ $re_url ]]; do pl="${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"; done
-    letters="$(LC_ALL=C; printf '%s' "${pl//[^A-Za-z$'\xea'-$'\xed']/}")"
-    (( ${#letters} >= 15 )) || continue
-    [[ "$(scv_lint_hangul_ratio "$pl")" -lt 20 ]] && n=$((n + 1))
+    if [[ "$pl" == *\[*\]\(*\)* ]]; then
+      while [[ "$pl" =~ $re_link ]]; do pl="${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"; done
+    fi
+    if [[ "$pl" == *http://* || "$pl" == *https://* ]]; then
+      while [[ "$pl" =~ $re_url ]]; do pl="${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"; done
+    fi
+    pls[${#pls[@]}]="$pl"
   done <<< "$turn"$'\n'"$last"
+  (( ${#pls[@]} )) || return 0
+  # 2) 글자를 센다 — 바이트 단위로. 줄마다 따로 띄우던 셸 둘(글자 수 · 한글 비율)을 없앴다.
+  #    글자 수는 줄 전체에서, 한글 비율은 앞 4000바이트에서 본다(scv_lint_hangul_ratio 와 같은 셈).
+  #    40바이트씩 잘라 센다 — 옛 셸은 긴 줄을 통째로 세면 길이의 제곱보다 느리다. 새 셸은 4000바이트씩 한다.
+  [[ ${BASH_VERSINFO[0]} -ge 4 ]] && step=4000
+  LC_ALL=C
+  for pl in "${pls[@]}"; do
+    len=${#pl}; i=0; h4=0; l4=0; letters=0
+    while [[ $i -lt $len ]]; do
+      [[ $i -ge 4000 && $letters -ge 15 ]] && break
+      c="${pl:i:step}"
+      x="${c//[^$'\xea'-$'\xed']/}"; h=${#x}
+      x="${c//[^A-Za-z]/}"; l=${#x}
+      letters=$((letters + h + l))
+      if [[ $i -lt 4000 ]]; then h4=$((h4 + h)); l4=$((l4 + l)); fi
+      i=$((i + step))
+    done
+    (( letters >= 15 )) || continue
+    if (( h4 + l4 == 0 )); then n=$((n + 1))
+    elif [[ $(( h4 * 100 / (h4 + l4) )) -lt 20 ]]; then n=$((n + 1)); fi
+  done
   (( n > 0 )) && printf 'lang-mismatch-lines=%s\n' "$n"
   return 0
 }
