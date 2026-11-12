@@ -25,7 +25,10 @@
 # 마지막 줄 'run-focused: pass=N fail=N jobs=N wall=Ns'. 하나라도 실패하면 종료 코드 1.
 # GitHub Actions 에서는 시험마다 로그를 접힌 묶음으로 함께 찍는다.
 #
-# 파이프라인: list_tests → classify → partition → run_batch → summarize → report
+# 시험이 배경으로 띄워 남긴 프로그램은 그 시험이 끝날 때 실행기가 끝낸다 — 뒤에 오는 시험이
+# 앞 시험의 남은 일과 CPU 를 나눠 쓰지 않는다. 끝낸 것이 있으면 그 시험의 로그 끝에 한 줄을 남긴다.
+#
+# 파이프라인: list_tests → classify → partition → run_batch(run_one → reap) → summarize → report
 #   (classify · partition · summarize 는 문자열만 받고 돌려주는 순수 함수다.)
 
 set -u
@@ -121,15 +124,45 @@ rf_list_tests() {
   done
 }
 
-# ── 부수효과: 시험 하나를 돌려 로그와 결과 줄을 남긴다
+# ── 부수효과: 끝난 시험의 프로세스 묶음에 남은 프로그램을 끝내고, 남아 있던 수를 찍는다
+#   시험이 배경으로 띄운 프로그램은 시험이 끝나도 계속 돈다(예: 프롬프트 훅이 띄우는 dreams.sh --auto).
+#   한 러너에서 모든 시험을 돌리면 그것이 뒤에 오는 시간 시험과 CPU 를 나눠 쓴다 — 2026-11-12 코덱스 검사에서
+#   넷이 35%씩 1분 넘게 돌아 '선택 답 17번'이 0.8초 → 2.1초가 됐다(부하 6.3 / 4코어).
+# @effect rf_reap
+# 이유: 프로세스 묶음에 종료 신호를 보낸다
+rf_reap() {
+  local pgid="$1" left i
+  kill -0 -- "-$pgid" 2>/dev/null || { echo 0; return 0; }
+  left="$(ps -A -o pgid= 2>/dev/null | awk -v g="$pgid" '$1 == g { n++ } END { print n + 0 }')"
+  kill -TERM -- "-$pgid" 2>/dev/null
+  i=0
+  while (( i < 10 )) && kill -0 -- "-$pgid" 2>/dev/null; do sleep 0.2; i=$((i + 1)); done
+  kill -0 -- "-$pgid" 2>/dev/null && kill -KILL -- "-$pgid" 2>/dev/null
+  echo "${left:-0}"
+}
+
+# ── 부수효과: 시험 하나를 돌려 로그와 결과 줄을 남기고, 그 시험이 남긴 프로그램을 끝낸다
+#   시험을 제 프로세스 묶음으로 띄운다(set -m — 묶음 번호 = 시험의 프로세스 번호). 시험이 배경으로 띄운
+#   프로그램도 그 묶음에 남으므로 끝난 뒤 묶음째 끝낼 수 있다. 종료 코드는 시험의 것 그대로다.
+# @effect rf_run_one
+# 이유: 시험 프로그램을 돌리고 로그 · 결과 파일을 쓴다
 rf_run_one() {
-  local logdir="$1" path="$2" name file t0 t1 rc
+  local logdir="$1" path="$2" name file t0 t1 rc pid left
   name="$(rf_key "$path")"
   file="$(printf '%s' "$name" | tr '/' '_')"
   t0=$(date +%s)
-  bash "$path" > "$logdir/$file.log" 2>&1 < /dev/null
+  set -m
+  bash "$path" > "$logdir/$file.log" 2>&1 < /dev/null &
+  pid=$!
+  set +m
+  # 묶음이 달라 터미널의 중단 신호가 시험에 닿지 않는다 — 실행기가 받아서 넘긴다.
+  trap 'kill -TERM -- "-$pid" 2>/dev/null; exit 130' INT TERM
+  wait "$pid"
   rc=$?
+  trap - INT TERM
   t1=$(date +%s)
+  left="$(rf_reap "$pid")"
+  [[ "$left" == 0 ]] || printf 'run-focused: 시험이 끝난 뒤 남은 프로그램 %s개를 끝냈다\n' "$left" >> "$logdir/$file.log"
   printf '%s\t%s\t%s\n' "$name" "$rc" "$((t1 - t0))" > "$logdir/$file.result"
 }
 

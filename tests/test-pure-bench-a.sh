@@ -197,7 +197,9 @@ crow="$(grep '^| t_both | 둘을 잇는다 | ' "$TMP/bench.md" | tail -1)"
 IFS='|' read -r _ _ _ _ whole parts ratio calls _ <<<"$crow"
 [[ "$(pb_to_milli "${whole// /}")" -gt 0 && "$(pb_to_milli "${parts// /}")" -gt 0 && "${ratio// /}" != "-" ]] && ok "OK [S13] whole · sum of parts · 4x ratio are all there (${whole// /} · ${parts// /} · ${ratio// /})" || fail "[S13] $crow"
 eq "S13 the composed function runs two programs, at any size" "2 → 2" "$(sed 's/^ *//; s/ *$//' <<<"$calls")"
-grep -q '^잰 함수 3 · 못 잰 함수 0' "$TMP/bench.md" && ok "OK [S13] the count line" || fail "[S13] $(grep '^잰 함수' "$TMP/bench.md")"
+# 실패하면 잰 표와 줄들을 함께 찍는다 — "재지 못함"은 러너가 붐빌 때 나는데(벽시계 ≥ CPU × 1.5), 어느 함수가 어떤 값이었는지 보여야 가른다.
+grep -q '^잰 함수 3 · 못 잰 함수 0' "$TMP/bench.md" && ok "OK [S13] the count line" \
+  || { fail "[S13] $(grep '^잰 함수' "$TMP/bench.md")"; echo "    --- bench.md"; sed 's/^/    /' "$TMP/bench.md" | head -n 30; echo "    --- rows.tsv"; sed 's/^/    /' "$TMP/rows.tsv" | head -n 10; echo "    --- uptime: $(uptime 2>/dev/null)"; ps -A -o pcpu=,etime=,args= 2>/dev/null | sort -rn | head -n 8 | cut -c1-160 | sed 's/^/    /'; }
 if [[ -d "$CORE/../scv/core/catalog/pure" ]]; then
   n="$("$BASH" "$PB" composed | grep -c .)"
   [[ "$n" -ge 20 ]] && ok "OK [S13] this repository: $n composed functions" || fail "[S13] composed=$n"

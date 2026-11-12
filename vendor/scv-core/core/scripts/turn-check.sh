@@ -9,6 +9,10 @@
 #   turn-check.sh choice  --question <질문> --answer <답>
 #   turn-check.sh step    --dir <턴 폴더> --tool <도구 이름>   (도구 앞: 단계 보고 도구면 표시)
 #   turn-check.sh info                               → TURN_ID: … · TURN_REQ: … (plan-link 이 읽음)
+#   turn-check.sh close   --dir <턴 폴더> --kind startup|resume|clear|compact   (세션 시작 훅: 새로 열기 · 다시 열기면 앞 턴을 끝난 것으로 표시)
+#
+# 사람의 말이 왔는데 앞 턴이 아직 끝나지 않았으면(끝 표시 없음) start 는 새로 시작하지 않고 그 턴을 이어 간다 — 일하는 도중에
+# 온 말과 사용자가 멈춘 턴 뒤의 말이 그렇다. 끝 표시는 end 가 통과를 낼 때와 close 가 남긴다.
 #
 # 호스트 설정 경로(SCV_GUARD_EXEMPT — 래퍼가 도구 앞 훅에 넘김)는 바뀐 파일에서 뺀다.
 # 작업 공간 = 이 프로젝트 + SCV_WORKSPACE_REPOS(절대 경로를 : 로 이음) + 그 턴에 쓰기 도구 · 셸 명령이 건드린 저장소.
@@ -43,7 +47,7 @@ MAX_FILES="${SCV_TURN_SNAP_MAX:-20000}"
 
 # @effect usage
 # 이유: 사용법을 표준 오류에 쓰고 끝낸다
-usage() { sed -n '5,10p' "${BASH_SOURCE[0]}" | sed 's/^#   //' >&2; exit 2; }
+usage() { sed -n '5,12p' "${BASH_SOURCE[0]}" | sed 's/^#   //' >&2; exit 2; }
 
 # @effect setting
 # 이유: 설정 파일에서 값을 읽는다
@@ -259,11 +263,22 @@ case "$CMD" in
   start)
     enabled || exit 0
     state_dir "$DIR" || exit 0
-    rm -f "$S"/snap.* "$S"/head.* "$S"/pend.* "$S"/phead.* "$S/pend-roots" "$S/mine" "$S/roots" "$S/receipts" "$S/blocks" "$S/exempt" "$S/steps" 2>/dev/null
     # 원문은 저장 전에 비밀 가리개(journal-append.sh --redact-only)를 거친다 — 계획 줄에도 이 글이 붙는다.
     # 첨부 파일의 경로도 지운다(0.92.2+) — 파일을 붙여 보낸 요청은 원문에 내 컴퓨터의 경로가 들어 있다.
     REQ="$(head -c 4000 2>/dev/null | bash "$SCRIPT_DIR/journal-append.sh" --redact-only 2>/dev/null || true)"
     REQ="$(scv_tc_strip_attach "$REQ")"
+    # 앞 턴이 아직 끝나지 않았으면(턴 끝이 통과를 낸 적이 없고 세션을 새로 열거나 다시 연 것도 아니면) 이 말은 그 턴의
+    # 도중에 온 것이다 — 번호 · 사진 · 영수증 · 내가 쓴 파일 · 계획 기준선 · 막힌 횟수를 그대로 두고 요청 글만 잇는다.
+    # 새로 시작하면 그 앞의 기록이 '앞 턴 것'이 되고, 그 턴에 보관한 계획은 시작 표시보다 옛것이 되어 읽히지 않는다.
+    HAS_ID=0; [[ -s "$S/id" ]] && HAS_ID=1
+    HAS_END=0; [[ -e "$S/ended" ]] && HAS_END=1
+    if [[ "$(scv_tc_start_mode "$HAS_ID" "$HAS_END")" == continue ]]; then
+      CUR="$(cat "$S/req" 2>/dev/null; printf x)"; CUR="${CUR%x}"
+      printf '%s' "$(scv_tc_req_join "$CUR" "$REQ" 4000)" > "$S/req"
+      mkdir -p "$JDIR" 2>/dev/null && printf '%s\n' "$(cd "$DIR" && pwd -P)" > "$JDIR/.turn-latest" 2>/dev/null
+      exit 0
+    fi
+    rm -f "$S"/snap.* "$S"/head.* "$S"/pend.* "$S"/phead.* "$S/pend-roots" "$S/mine" "$S/roots" "$S/receipts" "$S/blocks" "$S/exempt" "$S/steps" "$S/ended" 2>/dev/null
     printf '%s' "$REQ" > "$S/req"
     od -An -N4 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n' > "$S/id"
     [[ -s "$S/id" ]] || printf '%08x' "$$" > "$S/id"
@@ -325,6 +340,15 @@ case "$CMD" in
     exit 0
     ;;
 
+  close)
+    # 세션을 새로 열거나 다시 열었다 — 앞 프로세스의 턴은 끝났다. 번호가 있을 때만 끝 표시를 남긴다.
+    enabled || exit 0
+    [[ "$(scv_tc_session_closes "$KIND")" == 1 ]] || exit 0
+    state_dir "$DIR" || exit 0
+    [[ -f "$S/id" ]] && : > "$S/ended" 2>/dev/null
+    exit 0
+    ;;
+
   info)
     D="$(cat "$JDIR/.turn-latest" 2>/dev/null || true)"
     [[ -n "$D" && -f "$D/.turn-plan/id" ]] || exit 0
@@ -376,6 +400,8 @@ case "$CMD" in
     NSTEP="$(grep -c . "$S/steps" 2>/dev/null || true)"; NSTEP="${NSTEP:-0}"
     ORPH="$(orphan_return)"
     V="$(scv_tc_judge "$NCH" "$NRC" "$NST" "$NRQ" "$EX" "$NPL" "$BL" "$NEED" "$NSTEP" "$ORPH")"
+    # 통과를 내면 이 턴은 끝난 것이다 — 다음에 오는 사람의 말은 새 턴으로 시작한다. 막힘이면 턴이 이어진다.
+    case "$V" in pass|pass-unrecorded) : > "$S/ended" 2>/dev/null || true ;; esac
     case "$V" in
       pass) echo "TURN_PLAN: pass" ;;
       pass-unrecorded)
