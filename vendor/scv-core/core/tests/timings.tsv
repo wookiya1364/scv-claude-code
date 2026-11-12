@@ -101,6 +101,7 @@ core/tests/test-workspace-helper.sh	1
 core/tests/test-workspace-monorepo.sh	1
 core/tests/test-workspace-setup.sh	1
 core/tests/test-workspace.sh	1
+core/tests/test-wrapup.sh	2
 core/tests/test-writing-guidance.sh	1
 tests/test-actions.sh	1
 tests/test-check-readme.sh	8

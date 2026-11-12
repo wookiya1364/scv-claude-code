@@ -20,7 +20,7 @@ If the user is acting on an **incoming cross-repo handoff** (shown by `/scv:stat
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/handoff.sh" adopt "<handoff_id>"
 ```
 
-This writes a local `scv/promote/<slug>/PLAN.md` + `TESTS.md` seeded from the handoff's "what to build" + acceptance criteria, with a `refs: type=handoff-origin` back-link. It is **local-only** (no write to the workspace root). Then refine the scaffolded PLAN/TESTS with the user and implement via `/scv:codegen <slug>` (TDD-first) or `/scv:work <slug>`. The rest of this document (raw → promote) is the normal, single-repo path.
+This writes a local `scv/promote/<slug>/PLAN.md` + `TESTS.md` seeded from the handoff's "what to build" + acceptance criteria, with a `refs: type=handoff-origin` back-link. Add the wrap-up report to that folder as Step 5 describes (`wrapup.sh new`, the `- Wrap-up:` line in `## Links`) — the adopt script does not write it. It is **local-only** (no write to the workspace root). Then refine the scaffolded PLAN/TESTS with the user and implement via `/scv:codegen <slug>` (TDD-first) or `/scv:work <slug>`. The rest of this document (raw → promote) is the normal, single-repo path.
 
 Optionally, so the umbrella's `/scv:status` reflects that this work is underway, mark the handoff **claimed** in the root — ask first, since the mark commits there (then push with the user's consent — same rule as `/scv:handoff`):
 
@@ -324,7 +324,7 @@ outline and costly once paragraphs exist (`contracts/writing.md`).
 
 ### Step 5 — Write scaffolds (only after the Step 4.5 approval per folder)
 
-For each approved folder, create the directory and write **two files**:
+For each approved folder, create the directory and write **three files** — PLAN.md, TESTS.md, and the wrap-up report WRAPUP.md (below, after TESTS.md):
 
 **`scv/promote/<folder>/PLAN.md`**:
 
@@ -457,6 +457,7 @@ flow(
 ## Links
 
 - Raw originals: (listed in frontmatter)
+- Wrap-up: [`WRAPUP.md`](./WRAPUP.md)
 - Related PRs:
 ```
 
@@ -495,6 +496,20 @@ flow(
 - [`tests/e2e-scenarios.md`](./tests/e2e-scenarios.md)
 -->
 ```
+
+**`scv/promote/<folder>/WRAPUP.md`** — the wrap-up report: problem → observation → hypothesis → experiment → root cause → solution and validation → learning (seven groups, 16 fields; `scv/PROMOTE.md` §5a). The script below is the only way this file comes to exist: it writes the skeleton in the plan's language, and the guard refuses a WRAPUP.md created any other way:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/wrapup.sh" new "scv/promote/<folder>" --lang "<LANG_RESOLVED>"
+```
+
+Then fill, from the source material, **what is already known** — at least group 1 (the problem: situation, expected, actual, how to reproduce):
+
+- A plan that **fixes something that went wrong**: also fill groups 2 and 3 (what was observed, the hypotheses actually held) — and 4 and 5 when the experiment was already done before the plan. Never invent a hypothesis the source does not hold.
+- A plan that **does not** (a new feature): replace the field lines of groups 2, 3, 4 and 5 with one line each — `N/A — <reason>` (Korean: `해당 없음 — <이유>`). Groups 1, 6 and 7 are never skipped.
+- Leave the fields that can only be known after the work as they are (`<TODO: …>`). `/scv:work` fills them before the archive, and the archive is refused while one is empty.
+
+Keep the `- Wrap-up:` line in PLAN.md's `## Links` — it is how the archive tells this plan from an older one that never had a report.
 
 **Per-slug E2E spec (video-faithful, v0.16.0+)** — when the plan ships or changes **user-facing behavior** AND the project is a Playwright project (`playwright.config.*` exists), give the plan its **own** E2E spec and scope its `## How to run` to that spec. This is what makes the PR video show *this* feature. (Non-Playwright project — Cypress/Puppeteer/none: see `/scv:work` Step 5b's framework notice; SCV auto-attach is Playwright-only, so adapt the command or skip. Pure-logic plan: keep a unit `## How to run`, no e2e spec.)
 
@@ -1088,7 +1103,7 @@ After this step, files still directly under `scv/raw/` are exactly the **unused*
 ### Step 9 — Report to user
 
 Summarize:
-- Created folders (list paths to PLAN.md + TESTS.md, FEATURE_ARCHITECTURE.md if generated, and the `<folder>.deck.html` 기획서)
+- Created folders (list paths to PLAN.md + TESTS.md + WRAPUP.md, FEATURE_ARCHITECTURE.md if generated, and the `<folder>.deck.html` 기획서) — and which WRAPUP.md groups are filled so far
 - Consumed raw docs: each `old → new` move into `scv/raw/stale/` and the slugs now on its `ref_docs` entry
 - Raw docs still unused (never promoted), if any remain
 - Graph update status
