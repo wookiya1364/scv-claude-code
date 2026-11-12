@@ -3,6 +3,9 @@
 # 계산은 순수 함수의 값으로, 명령은 임시 폴더의 작은 입력으로 실제로 돌려 본다.
 #
 # Run: bash core/tests/test-pipe-arrange.sh
+#
+# 재는 명령을 실제로 돌린다 — 겹쳐 돌면 잰 시간이 틀어지므로 다른 시험이 다 끝난 뒤 혼자 돈다:
+# scv-test: serial
 set -uo pipefail
 
 CORE="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"

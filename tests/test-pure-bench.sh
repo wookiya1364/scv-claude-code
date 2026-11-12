@@ -3,6 +3,10 @@
 # 순수 함수는 값으로, 실행기는 임시 폴더의 작은 함수로 본다.
 #
 # Run: bash core/tests/test-pure-bench.sh
+#
+# 시간을 재는 시험이라 다른 시험과 겹쳐 돌면 값이 틀어진다(붐비는 러너에서 '재지 못함'이 나오고,
+# 다른 시험이 만든 임시 폴더를 남은 것으로 본다) — 다른 시험이 다 끝난 뒤 혼자 돈다:
+# scv-test: serial
 set -uo pipefail
 
 CORE="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"

@@ -5,6 +5,9 @@
 # 출력과 끝 코드를 맞댄다.
 #
 # Run: bash core/tests/test-slow-pure-functions.sh
+#
+# T4 가 벽시계 5초 한도를 본다 — 겹쳐 돌면 흔들리므로 다른 시험이 다 끝난 뒤 혼자 돈다:
+# scv-test: serial
 set -uo pipefail
 
 CORE="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
