@@ -108,5 +108,30 @@ c1="$(grep -c '^PASS' <<< "$o1")"; c2="$(grep -c '^PASS' <<< "$o2")"
   && ok "T12 조각 1/2 · 2/2 가 다섯 시험을 한 번씩 (${c1}+${c2}), 조각 안은 동시 1" || fail "T12 조각 실행: $o1 / $o2"
 bash "$RUNNER" --dir "$D" --shard 3/2 >/dev/null 2>&1; [[ $? -eq 2 ]] && ok "T12 --shard 3/2 는 거절(2)" || fail "T12 3/2 허용"
 
+# T13 — 재는 시험에는 혼자 돈다 표시가 있다 (계획 20261112-wookiya1364-release-verify-shards)
+#   재는 명령을 실제로 돌리는 시험은 다른 시험과 겹쳐 돌면 잰 값이 틀어진다(붐비는 러너에서
+#   '재지 못함', 다른 시험의 임시 폴더를 남은 것으로 봄). 벽시계 한도를 보는 시험도 같다.
+echo "── T13 재는 시험의 혼자 돈다 표시 ──"
+serial_missing() {  # <시험 폴더> — 표시가 있어야 하는데 없는 시험 파일의 이름(한 줄에 하나)
+  local d="$1" f
+  for f in "$d"/test-*.sh; do
+    [[ -f "$f" ]] || continue
+    grep -Eq 'scripts/(pure-bench|pipe-arrange)\.sh' "$f" || [[ "${f##*/}" == test-slow-pure-functions.sh ]] || continue
+    head -n 30 "$f" | grep -Eq '^# scv-test: serial([[:space:]]|$)' || printf '%s\n' "${f##*/}"
+  done
+}
+D="$WORK/marks"
+t_bench="pure-bench"; t_arrange="pipe-arrange"   # 이름을 나눠 적는다 — 이 파일이 스스로 "재는 시험"으로 잡히지 않게
+mk "$D" "measures" "PB=\"\$CORE/scripts/$t_bench.sh\"; echo ok"
+mk "$D" "marked" "# scv-test: serial
+PA=\"\$CORE/scripts/$t_arrange.sh\"; echo ok"
+mk "$D" "plain" 'echo ok'
+[[ "$(serial_missing "$D")" == "test-measures.sh" ]] \
+  && ok "T13 재는 명령을 돌리는데 표시가 없는 시험만 잡는다 (test-measures.sh)" || fail "T13 가짜 폴더: [$(serial_missing "$D" | tr '\n' ' ')]"
+miss="$(serial_missing "$HERE")"
+[[ -z "$miss" ]] && ok "T13 이 폴더의 재는 시험은 모두 표시가 있다" || fail "T13 표시가 빠진 시험: $(printf '%s' "$miss" | tr '\n' ' ')"
+n_marked="$(for f in "$HERE"/test-pure-bench.sh "$HERE"/test-pipe-arrange.sh "$HERE"/test-slow-pure-functions.sh; do [[ -f "$f" ]] && head -n 30 "$f" | grep -Ec '^# scv-test: serial([[:space:]]|$)'; done | awk '{ s += $1 } END { print s + 0 }')"
+[[ "$n_marked" == 3 ]] && ok "T13 재는 시험 셋(재는 명령 · 엮음 고르기 · 느린 함수)에 표시가 있다" || fail "T13 표시가 있는 재는 시험: $n_marked / 3"
+
 echo "test-run-focused: PASS=$PASS FAIL=$FAIL"
 (( FAIL == 0 ))
