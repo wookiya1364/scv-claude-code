@@ -130,8 +130,14 @@ mk "$D" "plain" 'echo ok'
   && ok "T13 재는 명령을 돌리는데 표시가 없는 시험만 잡는다 (test-measures.sh)" || fail "T13 가짜 폴더: [$(serial_missing "$D" | tr '\n' ' ')]"
 miss="$(serial_missing "$HERE")"
 [[ -z "$miss" ]] && ok "T13 이 폴더의 재는 시험은 모두 표시가 있다" || fail "T13 표시가 빠진 시험: $(printf '%s' "$miss" | tr '\n' ' ')"
-n_marked="$(for f in "$HERE"/test-pure-bench.sh "$HERE"/test-pipe-arrange.sh "$HERE"/test-slow-pure-functions.sh; do [[ -f "$f" ]] && head -n 30 "$f" | grep -Ec '^# scv-test: serial([[:space:]]|$)'; done | awk '{ s += $1 } END { print s + 0 }')"
-[[ "$n_marked" == 3 ]] && ok "T13 재는 시험 셋(재는 명령 · 엮음 고르기 · 느린 함수)에 표시가 있다" || fail "T13 표시가 있는 재는 시험: $n_marked / 3"
+n_marked="$(for f in "$HERE"/test-pure-bench-a.sh "$HERE"/test-pure-bench-b.sh "$HERE"/test-pure-bench-c.sh "$HERE"/test-pure-bench-d.sh "$HERE"/test-pipe-arrange.sh "$HERE"/test-slow-pure-functions.sh "$HERE"/test-turn-plan-check.sh; do [[ -f "$f" ]] && head -n 30 "$f" | grep -Ec '^# scv-test: serial([[:space:]]|$)'; done | awk '{ s += $1 } END { print s + 0 }')"
+[[ "$n_marked" == 7 ]] && ok "T13 재는 시험 일곱(재는 명령 넷 · 엮음 고르기 · 느린 함수 · 턴 끝 검사)에 표시가 있다" || fail "T13 표시가 있는 재는 시험: $n_marked / 7"
+# 재는 명령 시험은 넷으로 나뉘었다 — 옛 이름은 넷을 차례로 부르는 묶음이고, 실행기가 모으는 목록에는 넷만 있다
+head -n 30 "$HERE/test-pure-bench.sh" | grep -Eq '^# scv-test: aggregate([[:space:]]|$)' \
+  && ok "T13 옛 이름(test-pure-bench.sh)은 묶음 표시가 있다" || fail "T13 test-pure-bench.sh 에 묶음 표시가 없다 — 넷이 두 번 돈다"
+listed="$(pure rf_list_tests "D:$HERE" | cut -f1 | sed 's#.*/##' | grep '^test-pure-bench' | tr '\n' ' ')"
+[[ "$listed" == "test-pure-bench-a.sh test-pure-bench-b.sh test-pure-bench-c.sh test-pure-bench-d.sh " ]] \
+  && ok "T13 실행기가 모으는 것은 넷뿐이다(묶음은 건너뜀)" || fail "T13 모은 것: [$listed]"
 
 echo "test-run-focused: PASS=$PASS FAIL=$FAIL"
 (( FAIL == 0 ))

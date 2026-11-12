@@ -62,7 +62,10 @@ core/tests/test-pr-base.sh	5
 core/tests/test-pr-notify.sh	5
 core/tests/test-project-pure-catalog.sh	3
 core/tests/test-provenance-gates.sh	2
-core/tests/test-pure-bench.sh	246
+core/tests/test-pure-bench-a.sh	19
+core/tests/test-pure-bench-b.sh	71
+core/tests/test-pure-bench-c.sh	54
+core/tests/test-pure-bench-d.sh	103
 core/tests/test-pure-catalog.sh	60
 core/tests/test-pure-declare.sh	6
 core/tests/test-purity.sh	4
