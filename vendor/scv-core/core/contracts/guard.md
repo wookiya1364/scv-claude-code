@@ -25,6 +25,7 @@ could write itself.
 ```guard:guarded
 plan-create   <scv_root>/promote/*/PLAN.md
 plan-create   <scv_root>/promote/*/TESTS.md
+plan-create   <scv_root>/promote/*/WRAPUP.md
 plan-create   <scv_root>/promote/*/FEATURE_ARCHITECTURE.md
 outside-write **
 ```

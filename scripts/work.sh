@@ -17,10 +17,8 @@ fi
 #   work.sh <slug> --archive      Move promote/<slug>/ → archive/<slug>/
 #                                 Auto-writes ARCHIVED_AT.md.
 #   work.sh <slug> --archive --reason="..."
-#   work.sh --fast "<intent>"     Declare a fast-path change (PROMOTE.md §1.6).
-#                                 Emits the criteria to check and the line ceiling;
-#                                 writes nothing. Required before a fast-path edit
-#                                 so the change is announced rather than assumed.
+#   work.sh --fast "<intent>"     Removed — every change goes through a plan;
+#                                 prints where to go instead and exits 2.
 #
 # Output header (same style as promote-helper.sh) — Claude Code parses these keys:
 #   MODE / TODAY / AUTHOR / GRAPH_STATUS / GRAPH_DIR
@@ -60,8 +58,8 @@ for a in "$@"; do
       sed -n '2,16p' "$0"; exit 0 ;;
     -*)  echo "Unknown flag: $a" >&2; exit 1 ;;
     *)
-      # In fast mode the free-form intent is the payload, not a slug — a fast-path
-      # change has no promote folder by definition, so slug resolution would fail.
+      # The removed --fast flag took a free-form intent — keep reading it as the
+      # payload, not a slug, so the caller gets the removal notice and not a slug error.
       if [[ "$MODE" == "fast" && -z "$FAST_INTENT" ]]; then
         FAST_INTENT="$a"
       elif [[ -z "$SCV_TARGET" && -z "$TARGET_SLUG" ]] && scv_target_path "$a" >/dev/null 2>&1; then
@@ -94,29 +92,20 @@ fi
 [[ -z "$AUTHOR" ]] && AUTHOR="unknown"
 echo "AUTHOR: $AUTHOR"
 
-# ---------- fast-path declaration (PROMOTE.md §1.6) ----------
-# A fast-path change is a sanctioned exception to the promote loop, and it used to
-# be the one legitimate path that ran no command at all — which made it
-# indistinguishable from skipping SCV entirely. Declaring it here costs one call,
-# writes nothing, and makes the exception observable instead of assumed.
+# ---------- the removed fast-path declaration ----------
+# Until 0.92.x a change of a few lines could skip the plan by declaring itself here
+# (PROMOTE.md §1.6). The turn-end check (0.87.0+) already refused a turn that changed
+# files without a plan record, so the document allowed what the check blocked. The
+# path is closed: every change goes through a plan, whatever its size. Only a release
+# and a Core sync stay exempt (plan-link.sh exempt). The flag is kept so an old habit
+# gets told where to go instead of an "unknown flag".
 if [[ "$MODE" == "fast" ]]; then
-  if [[ -z "$FAST_INTENT" ]]; then
-    echo "FAST_ERROR: --fast needs the change's intent, e.g. --fast \"typo in readpath.sh usage text\"" >&2
-    exit 2
-  fi
-  echo "FAST_INTENT: $FAST_INTENT"
-  echo "FAST_LINE_CEILING: ${SCV_FAST_PATH_LINE_THRESHOLD:-5}"
-  cat <<'CRITERIA'
-FAST_CRITERIA: all five must hold, or take the formal promote loop instead
-  1. single simple intent (typo / null-guard hotfix / patch-version dep bump / doc tweak)
-  2. within the line ceiling above, inside one function or block
-  3. no new behavior, API, or feature
-  4. covered by existing regression TESTS
-  5. the PR description fits in one paragraph
-FAST_REMINDER: verification is NOT skipped — run the affected tests before the PR.
-  When in doubt, promote.
-CRITERIA
-  exit 0
+  cat >&2 <<'REMOVED'
+FAST_REMOVED: the fast-path is gone — a change without a plan is not allowed, whatever its size.
+  Make a plan first (the promote action), then run the work action on it.
+  Only a release and a Core sync need no plan: plan-link.sh exempt --kind release|sync --why "<one line>".
+REMOVED
+  exit 2
 fi
 
 # SCV 자체 그래프 (v0.51.0+). 낡았으면 여기서 자동으로 다시 만든다(bash+jq, 목표 2초 안).
@@ -211,6 +200,15 @@ if [[ "$MODE" == "archive" ]]; then
     echo "ERROR: archive destination already exists: $DEST" >&2
     exit 1
   fi
+  # 마무리 보고(WRAPUP.md)가 다 채워졌는지 옮기기 전에 본다 — 막히면 아무것도 옮기거나 쓰지 않는다.
+  # 보고 파일도 없고 계획 문서가 그 파일을 가리키지도 않는 옛 계획은 알림 한 줄만 내고 지나간다.
+  if WRAPUP_CHECK="$(bash "$SCRIPT_DIR/wrapup.sh" check "$TARGET_DIR")"; then
+    :
+  else
+    echo "$WRAPUP_CHECK" >&2
+    echo "ERROR: not archived — fill every field of $TARGET_DIR/WRAPUP.md, then run the archive again" >&2
+    exit 1
+  fi
   mkdir -p "$ARCHIVE_DIR"
   mv "$TARGET_DIR" "$DEST"
 
@@ -259,6 +257,13 @@ EOF
   # scripts/archive-index.sh so the triage's obsolete marking can refresh the same index
   # (0.54.0) — one generator, two callers.
   ARCHIVE_DIR="$ARCHIVE_DIR" bash "$SCRIPT_DIR/archive-index.sh"
+
+  # 끝 답에 실을 마무리 보고 — 옛 계획이면 알림 한 줄, 아니면 묶음 제목과 칸.
+  case "$WRAPUP_CHECK" in
+    "WRAPUP: legacy"*) echo "$WRAPUP_CHECK" ;;
+    *) echo "=== wrap-up report ($DEST/WRAPUP.md) ==="
+       bash "$SCRIPT_DIR/wrapup.sh" show "$DEST" ;;
+  esac
 
   exit 0
 fi

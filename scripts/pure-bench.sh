@@ -55,6 +55,9 @@
 #
 # 설정: SCV_PURE_BENCH=off 로 턴 끝 · 계획 끝 검사를 끈다(기본 on). SCV_PR_BASE 가 있으면 그 가지가 기준이다.
 # 환경: SCV_PB_GPU_TOOL=none|ioreg|nvidia 로 GPU 읽는 도구를 정한다(기본: 있는 것을 찾는다).
+#       SCV_PB_REMEASURE=N 은 "재지 못함"이 나온 함수를 같은 되풀이 수로 다시 재는 횟수의 한도다(기본 2, 0 이면 끔).
+#       다시 잰 함수는 표 아래 한 줄로 보인다. SCV_PB_REMEASURE_LOG=FILE 을 주면 "함수<탭>배<탭>다시 잰 횟수<탭>끝 잣대"를 적는다.
+#       SCV_PB_TIME_TOOL=PATH 는 시간 재는 도구를 바꾼다(기본 /usr/bin/time — 시험이 가짜 도구를 끼울 때 쓴다).
 # 잰 값은 이 스크립트를 돌린 셸과 지역 설정의 값이다 — 같은 함수가 bash 3.2 와 bash 5 에서 열 배 넘게 다를 수 있다
 # (2026-11-11: 낱말 나누기 한 번에 22ms 대 1.8ms). 앞뒤를 견줄 때는 같은 셸로 잰다. `env` 로 그 셸을 본다.
 # Exit: 0 통과 · 2 사용법 오류
@@ -114,11 +117,11 @@ pb_gpu_read() {
 # @effect pb_timed
 # 이유: 명령을 운영체제의 시간 재는 명령으로 감싸 돌리고 그 보고를 파일에 쓴다(없으면 셸의 time — 메모리는 재지 못함)
 pb_timed() {
-  local report="$1"; shift
-  if [[ -x /usr/bin/time ]] && /usr/bin/time -l -p -o "$report" true >/dev/null 2>&1; then
-    /usr/bin/time -l -p -o "$report" "$@" >/dev/null 2>&1          # BSD(맥)
-  elif [[ -x /usr/bin/time ]] && /usr/bin/time -v -o "$report" true >/dev/null 2>&1; then
-    /usr/bin/time -v -o "$report" "$@" >/dev/null 2>&1             # GNU(리눅스)
+  local report="$1" tool="${SCV_PB_TIME_TOOL:-/usr/bin/time}"; shift
+  if [[ -x "$tool" ]] && "$tool" -l -p -o "$report" true >/dev/null 2>&1; then
+    "$tool" -l -p -o "$report" "$@" >/dev/null 2>&1          # BSD(맥)
+  elif [[ -x "$tool" ]] && "$tool" -v -o "$report" true >/dev/null 2>&1; then
+    "$tool" -v -o "$report" "$@" >/dev/null 2>&1             # GNU(리눅스)
   else
     { TIMEFORMAT=$'real %R\nuser %U\nsys %S'; time "$@" >/dev/null 2>&1; } 2> "$report"
   fi
@@ -250,7 +253,7 @@ pb_drive() {
 # @effect pb_measure_fn
 # 이유: 사전의 함수 하나를 한 배(1 또는 4)의 입력으로 재서 한 줄을 낸다 — 되풀이 수를 맞추고, 시간 · 메모리 · GPU · 부른 횟수를 모은다
 pb_measure_fn() {
-  local tool="$1" base="$2" name="$3" rel="$4" args="$5" scale="$6" reps=1 try cpu="" m ms r2 wall tcpu rss gutil gmem grise out="$PB_TMP/drive"
+  local tool="$1" base="$2" name="$3" rel="$4" args="$5" scale="$6" reps=1 try cpu="" m ms r2 wall tcpu rss gutil gmem grise out="$PB_TMP/drive" nm again=0
   # 한 번부터 잰다 — 한 번에 몇 초가 걸리는 함수를 여러 번 부르지 않게. 짧으면 되풀이 수를 늘려 다시 잰다.
   for try in 1 2 3; do
     rm -f "$out.slow"
@@ -265,7 +268,24 @@ pb_measure_fn() {
   ms="$(LC_ALL=C awk -v c="$cpu" -v r="$reps" 'BEGIN { printf "%.3f", c * 1000 / r }')"
   "$BASH" "$0" _drive "$base" "$rel" "$name" "$args" 1 "$out" "$PB_TMP/fn.count" >/dev/null 2>&1
   IFS=$'\t' read -r wall tcpu rss gutil gmem grise <<< "$m"
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\tok\t%s\n' "$name" "$scale" "$reps" "$ms" "$wall" "$rss" "$gutil" "$gmem" "$(grep -c . "$PB_TMP/fn.count")" "$(pb_measure_name "$wall" "$tcpu" "$gmem" "$grise")"
+  nm="$(pb_measure_name "$wall" "$tcpu" "$gmem" "$grise")"
+  # 재지 못했으면 같은 되풀이 수로 다시 잰다(기본 두 번까지, SCV_PB_REMEASURE=0 이면 끔) — 컴퓨터가 잠깐 바쁜 순간에
+  # 프로그램을 띄우는 함수는 벽시계만 늘어 "재지 못함"이 된다. 규칙은 그대로다: 다시 재도 못 재면 "재지 못함"으로 남는다.
+  while [[ "$(pb_remeasure "$nm" "$again" "${SCV_PB_REMEASURE:-2}")" == 1 ]]; do
+    again=$((again + 1)); rm -f "$out.slow" "$out.a" "$out.b"
+    m="$(run_measured "$tool" "$BASH" "$0" _drive "$base" "$rel" "$name" "$args" "$reps" "$out")"
+    [[ ! -e "$out.slow" && -s "$out.b" ]] || { rm -f "$out.slow" "$out.a" "$out.b"; break; }
+    cpu="$(LC_ALL=C awk -v a="$(pb_times_secs "$(cat "$out.a")")" -v b="$(pb_times_secs "$(cat "$out.b")")" 'BEGIN { printf "%.3f", b - a }')"
+    rm -f "$out.a" "$out.b"
+    ms="$(LC_ALL=C awk -v c="$cpu" -v r="$reps" 'BEGIN { printf "%.3f", c * 1000 / r }')"
+    IFS=$'\t' read -r wall tcpu rss gutil gmem grise <<< "$m"
+    nm="$(pb_measure_name "$wall" "$tcpu" "$gmem" "$grise")"
+  done
+  if [[ $again -ne 0 ]]; then
+    printf '%s\t%s\t%s\t%s\n' "$name" "$scale" "$again" "$nm" >> "$PB_TMP/remeasured"
+    [[ -z "${SCV_PB_REMEASURE_LOG:-}" ]] || printf '%s\t%s\t%s\t%s\n' "$name" "$scale" "$again" "$nm" >> "$SCV_PB_REMEASURE_LOG"
+  fi
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\tok\t%s\n' "$name" "$scale" "$reps" "$ms" "$wall" "$rss" "$gutil" "$gmem" "$(grep -c . "$PB_TMP/fn.count")" "$nm"
 }
 
 # @effect pb_fixed_run
@@ -495,6 +515,7 @@ case "$CMD" in
     LINES="${LINES%$'\n'}"; VERD="${VERD%$'\n'}"
     echo "잰 환경: bash $BASH_VERSION · LC_ALL=${LC_ALL:-} · GPU 도구 $TOOL · 쌍 $PAIRS$( [[ $FULL -eq 1 ]] && echo ' · 입력 4배 포함' )"; echo
     pb_render_compare "$LINES" "$VERD"; echo
+    AGAIN="$(pb_remeasure_line "$(cat "$PB_TMP/remeasured" 2>/dev/null)")"; [[ -z "$AGAIN" ]] || { echo; echo "$AGAIN"; }
     [[ -z "$PENDING" ]] || printf '%s' "$PEND" > "$PENDING"
     if [[ $NFAIL -gt 0 ]]; then echo; echo "한도를 넘은 것:"; pb_fail_lines "$VERD"; exit 1; fi
     exit 0 ;;
@@ -572,6 +593,7 @@ case "$CMD" in
     ROWS="${ROWS%$'\n'}"
     [[ -z "$TSV" ]] || printf '%s\n' "$ROWS" > "$TSV"
     pb_render "$ROWS" "bash $BASH_VERSION · LC_ALL=${LC_ALL:-} · GPU 도구 $TOOL"; echo
+    AGAIN="$(pb_remeasure_line "$(cat "$PB_TMP/remeasured" 2>/dev/null)")"; [[ -z "$AGAIN" ]] || { echo; echo "$AGAIN"; }
     if [[ $COMPOSED -eq 1 ]]; then echo; pb_render_composed "$CALLS" "$ROWS"; echo; fi
     if [[ -n "$BASELINE" ]]; then
       OVER=""
