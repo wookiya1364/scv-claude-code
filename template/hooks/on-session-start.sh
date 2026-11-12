@@ -65,6 +65,19 @@ fi
 if [[ -f "$CORE_HOME/scripts/help-state.sh" ]]; then
   bash "$CORE_HOME/scripts/help-state.sh" reset ${_scv_rtd[@]+"${_scv_rtd[@]}"} >/dev/null 2>&1 || true
 fi
+# ---------- turn plan check: 앞 턴의 끝 표시 ----------------------------------
+# 세션을 새로 열거나 다시 열었으면 앞 프로세스의 턴은 끝났다 — 다음에 오는 사람의 말이 새 턴으로 시작하도록 표시한다.
+# 압축(compact)은 턴 도중이라 표시하지 않는다. 어느 종류가 끝내는지는 turn-check.sh 가 가린다 — 아래의 종류 견주기는
+# 끝내지 않는 종류에 프로그램을 띄우지 않으려는 값싼 앞 검사다.
+# 표시가 없으면 턴 끝 검사는 그 말을 앞 턴의 도중에 온 것으로 보고 이어 간다. 어떤 실패도 세션을 막지 않는다.
+_scv_tc_sh="$CORE_HOME/scripts/turn-check.sh"
+if [[ -n "$INPUT" && -f "$_scv_tc_sh" ]] && command -v jq >/dev/null 2>&1; then
+  _scv_src="$(printf '%s' "$INPUT" | jq -r 'try (.source // empty)' 2>/dev/null || true)"
+  if [[ "$_scv_src" == startup || "$_scv_src" == resume ]]; then
+    bash "$_scv_tc_sh" close --dir "${_scv_std:-${SCV_JOURNAL_DIR:-scv/journal}}" --kind "$_scv_src" >/dev/null 2>&1 || true
+  fi
+fi
+# ---------- /turn plan check -------------------------------------------------
 # ---------- dreams (v0.69.0+) ------------------------------------------------
 # 대화를 비우거나(clear) 압축(compact)한 직후 드림을 배경으로 한 번 띄우고 바로 돌아온다 — 재개 · 새 시작에는 띄우지 않는다.
 # 규칙 전문은 protocols/dreams.md. 아무것도 출력하지 않는다. 설정 SCV_DREAMS=off 면 띄우지 않는다(되찾기 스위치와 무관).
