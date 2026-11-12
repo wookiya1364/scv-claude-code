@@ -289,17 +289,24 @@ pc_split_example() {
 # 예: $'k1\tb\nk2\tc\nk1\ta' → $'b\ta'
 # 예: $'k1\ta\nk2\tb' → ""
 pc_duplicate_pairs() {
-  local lines="${1:-}" key name i j n=0 a b
-  local -a keys=() names=()
+  local lines="${1:-}" key name i j n=0 seen="" x NL=$'\n' TAB=$'\t'
+  local -a keys=() names=() nxt=()
   while IFS=$'\t' read -r key name; do
     [[ -n "$name" ]] || continue
     keys[n]="$key"; names[n]="$name"; n=$((n + 1))
   done <<< "$lines"
+  # 뒤에서부터 훑으며 줄마다 "지문이 같은 바로 다음 줄"을 적어 둔다 — 짝을 찾으려고 줄마다 뒤의 모든 줄을 다시 돌지 않는다.
+  # seen 은 "<줄바꿈>지문<탭>번호" 를 앞에 붙여 가는 글이다. 앞에 붙이므로 가장 가까운 뒤 줄이 먼저 찾아진다.
+  for (( i = n - 1; i >= 0; i-- )); do
+    key="$NL${keys[i]}$TAB"
+    if [[ "$seen" == *"$key"* ]]; then x="${seen#*"$key"}"; nxt[i]="${x%%"$NL"*}"; else nxt[i]=""; fi
+    seen="$key$i$seen"
+  done
   for (( i = 0; i != n; i++ )); do
-    for (( j = i + 1; j != n; j++ )); do
-      [[ "${keys[i]}" == "${keys[j]}" ]] || continue
-      a="${names[i]}"; b="${names[j]}"
-      printf '%s\t%s\n' "$a" "$b"
+    j="${nxt[i]}"
+    while [[ -n "$j" ]]; do
+      printf '%s\t%s\n' "${names[i]}" "${names[j]}"
+      j="${nxt[j]}"
     done
   done
 }
@@ -310,15 +317,31 @@ pc_duplicate_pairs() {
 # 예: $'a\tb\na\tc\nb\ta' → $'a\tb'
 # 예: $'a\tb' → ""
 pc_mutual_pairs() {
-  local lines="${1:-}" x y i j n=0
-  local -a xs=() ys=()
+  local lines="${1:-}" x y i j n=0 seen="" key r NL=$'\n' TAB=$'\t'
+  local -a xs=() ys=() same=() rev=()
   while IFS=$'\t' read -r x y; do
     [[ -n "$y" ]] || continue
     xs[n]="$x"; ys[n]="$y"; n=$((n + 1))
   done <<< "$lines"
+  # 뒤에서부터 훑으며 줄마다 둘을 적어 둔다: 뒤에 오는 "거꾸로 된 첫 줄"(rev)과 "똑같은 바로 다음 줄"(same).
+  # 그러면 거꾸로 된 줄들을 rev → same → same … 으로 따라가기만 하면 되고, 줄마다 뒤의 모든 줄을 다시 돌지 않는다.
+  # seen 은 "<줄바꿈>가<탭>나<줄바꿈>번호" 를 앞에 붙여 가는 글이다.
+  for (( i = n - 1; i >= 0; i-- )); do
+    key="$NL${xs[i]}$TAB${ys[i]}$NL"
+    if [[ "$seen" == *"$key"* ]]; then r="${seen#*"$key"}"; same[i]="${r%%"$NL"*}"; else same[i]=""; fi
+    rev[i]=""
+    # 나 쪽에 탭이 들어 있으면 거꾸로 된 줄이 있을 수 없다(가 쪽에는 탭이 없다).
+    if [[ "${ys[i]}" != *"$TAB"* ]]; then
+      r="$NL${ys[i]}$TAB${xs[i]}$NL"
+      if [[ "$seen" == *"$r"* ]]; then r="${seen#*"$r"}"; rev[i]="${r%%"$NL"*}"; fi
+    fi
+    seen="$key$i$seen"
+  done
   for (( i = 0; i != n; i++ )); do
-    for (( j = i + 1; j != n; j++ )); do
-      [[ "${xs[j]}" == "${ys[i]}" && "${ys[j]}" == "${xs[i]}" ]] && printf '%s\t%s\n' "${xs[i]}" "${ys[i]}"
+    j="${rev[i]}"
+    while [[ -n "$j" ]]; do
+      printf '%s\t%s\n' "${xs[i]}" "${ys[i]}"
+      j="${same[j]}"
     done
   done
 }

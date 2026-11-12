@@ -171,14 +171,18 @@ fi
 TR="$WORK/t15.jsonl"; big="$(head -c 100000 /dev/zero | tr '\0' 'x')"
 { jl_user "큰 일"; for i in $(seq 1 400); do jl_call "c$i" '{"command":"ls","description":"목록"}'; jl_res "c$i" "$big"; done; } > "$TR"
 now() { perl -MTime::HiRes=time -e 'printf "%.3f", time'; }
-best() {  # <끄기 on|off> → 두 번 중 짧은 시간(초)
-  local m="" i t0 t1 d R
-  for i in 1 2; do R="$(new_repo "t15$1$i" korean "$1")"; t0="$(now)"; stop_hook "$R" "$TR" "답" false >/dev/null; t1="$(now)"
-    d="$(perl -e "printf '%.3f', $t1 - $t0")"; if [[ -z "$m" ]] || perl -e "exit !($d < $m)"; then m="$d"; fi; done
-  printf '%s' "$m"
+# 판정은 CPU 시간으로 한다(0.89.2): 벽시계는 붐비는 검사 기계에서 같은 코드가 켬 6.40초 · 끔 3.73초까지 흔들렸다(2026-11-11 맥 CI).
+# shellcheck source=lib/cpu-time.sh
+source "$CORE/tests/lib/cpu-time.sh"
+best() {  # <끄기 on|off> → "CPU 초 벽시계 초" — 각각 두 번 중 짧은 값
+  local m="" mw="" i t0 t1 c0 c1 d dw R
+  for i in 1 2; do R="$(new_repo "t15$1$i" korean "$1")"; cpu_mark c0; t0="$(now)"; stop_hook "$R" "$TR" "답" false >/dev/null; t1="$(now)"; cpu_mark c1
+    d="$(perl -e "printf '%.3f', $c1 - $c0")"; if [[ -z "$m" ]] || perl -e "exit !($d < $m)"; then m="$d"; fi
+    dw="$(perl -e "printf '%.3f', $t1 - $t0")"; if [[ -z "$mw" ]] || perl -e "exit !($dw < $mw)"; then mw="$dw"; fi; done
+  printf '%s %s' "$m" "$mw"
 }
-on_t="$(best on)"; off_t="$(best off)"; sz="$(wc -c < "$TR" | tr -d ' ')"
-perl -e "exit !($on_t - $off_t <= 1.0 || $on_t <= $off_t * 1.5)" && ok "T15 속도 ${sz}B 원본: 켬 ${on_t}s · 끔 ${off_t}s" || bad "T15 켬 ${on_t}s 끔 ${off_t}s"
+read -r on_t on_w <<<"$(best on)"; read -r off_t off_w <<<"$(best off)"; sz="$(wc -c < "$TR" | tr -d ' ')"
+perl -e "exit !($on_t - $off_t <= 1.0 || $on_t <= $off_t * 1.5)" && ok "T15 속도 ${sz}B 원본(CPU 시간): 켬 ${on_t}s · 끔 ${off_t}s — 벽시계: 켬 ${on_w}s · 끔 ${off_w}s" || bad "T15 (CPU 시간) 켬 ${on_t}s 끔 ${off_t}s — 벽시계: 켬 ${on_w}s 끔 ${off_w}s"
 
 # T16 — 근거 목록 파일: 가림 필터 · 기록 자리에만 · 링크면 안 씀
 R="$(new_repo t16 korean)"; TR="$WORK/t16.jsonl"

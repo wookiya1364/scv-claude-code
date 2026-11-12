@@ -59,6 +59,11 @@ turn() {  # <저장소> <기록 파일> [<프로필>] → 매 턴 안내(prompt)
   (cd "$1" && SCV_HOST_PROFILE="${3:-$P}" bash "$MP" prompt --session s1 --transcript "$2" 2>/dev/null)
 }
 asks() { grep -c '^\[SCV effort\]' <<<"$1" || true; }
+ended() {  # <저장소> <답 글> [<프로필>] — 턴 끝 판정에 그 턴의 답을 넘긴다(물었는지는 코어가 가린다)
+  (cd "$1" && printf '%s' "$2" | SCV_HOST_PROFILE="${3:-$P}" bash "$MP" stop --session s1 >/dev/null 2>&1) || true
+}
+Q_HM='이 세션의 effort 는 high 인데 권장은 medium 입니다. medium 로 바꿀까요, high 그대로 둘까요?'
+NOQ='파일은 한 줄입니다.'
 
 echo "T3. 다르면 요청 1번 — 지금 값 · 권장 값 · 근거 문장이 실린다"
 R="$(new_repo t3)"; seen "$R" vendor-model-a; T="$(log "$R" high)"
@@ -67,7 +72,8 @@ if [[ "$(asks "$o")" == 1 ]] && grep -q 'effort 는 high 인데' <<<"$o" && grep
    && grep -qxF "근거(model-a.md): \"$QA\"" <<<"$o" && grep -q '글 질문 한 번으로 물어라' <<<"$o" && ! grep -q '^조건:' <<<"$o"; then
   ok "OK [T3] differs → asked once, with the quote"; else fail "[T3] $o"; fi
 
-echo "T4. 같은 조건에서 다시 0번"
+echo "T4. 물은 턴 뒤에는 같은 조건에서 다시 0번"
+ended "$R" "$Q_HM"
 o2="$(turn "$R" "$T")"; o3="$(turn "$R" "$T")"
 # 새 세션(s2)도 같은 조건이면 묻지 않는다 — "한 번"은 프로젝트에서 한 번
 (cd "$R" && SCV_HOST_PROFILE="$P" bash "$MP" human --session s2 >/dev/null 2>&1) || true
@@ -96,11 +102,46 @@ R="$(new_repo t7c)"; seen "$R" vendor-model-a "$PNK"; T="$(log "$R" high)"; [[ "
 R="$(new_repo t7d)"; seen "$R" vendor-model-a; T="$(log "$R" medium)"; [[ "$(asks "$(turn "$R" "$T")")" == 0 ]] && c=$((c + 1))
 [[ $c == 4 ]] && ok "OK [T7] 4/4 unknown → 0" || fail "[T7] $c/4"
 
+echo "T6. 안 물은 턴 — 다음 턴에 다시 싣는다 (0.89.2)"
+R="$(new_repo t6b)"; seen "$R" vendor-model-a; T="$(log "$R" high)"
+a1="$(asks "$(turn "$R" "$T")")"; ended "$R" "$NOQ"; a2="$(asks "$(turn "$R" "$T")")"
+[[ "$a1$a2" == "11" ]] && ok "OK [T6] not asked → carried again" || fail "[T6] $a1$a2"
+
+echo "T7. 세 번에서 멈춘다 — 답에 질문이 계속 없으면 1 · 1 · 1 · 0 · 0"
+R="$(new_repo t7x)"; seen "$R" vendor-model-a; T="$(log "$R" high)"; seq=""
+for _i in 1 2 3 4 5; do seq="$seq$(asks "$(turn "$R" "$T")")"; ended "$R" "$NOQ"; done
+[[ "$seq" == "11100" ]] && ok "OK [T7] 11100" || fail "[T7] $seq"
+
+echo "T7b. 선택 창으로 물은 턴 — 질문 글을 받으면 '물었다'로 적는다(턴 끝의 답 글에 질문이 없어도)"
+R="$(new_repo t7c)"; seen "$R" vendor-model-a "$PCH"; T="$(log "$R" high)"
+a1="$(asks "$(turn "$R" "$T" "$PCH")")"
+(cd "$R" && printf '%s' '이 세션의 effort 가 high 인데 가이드는 medium 을 권합니다. 바꾸시겠어요?' | SCV_HOST_PROFILE="$PCH" bash "$MP" effort-seen --session s1 >/dev/null 2>&1)
+ended "$R" "medium 로 바꾸는 법: 설정에서 고르면 됩니다." "$PCH"
+a2="$(asks "$(turn "$R" "$T" "$PCH")")"
+R2="$(new_repo t7d)"; seen "$R2" vendor-model-a "$PCH"; T2="$(log "$R2" high)"
+b1="$(asks "$(turn "$R2" "$T2" "$PCH")")"
+(cd "$R2" && printf '%s' '다음에 무엇을 할까요?' | SCV_HOST_PROFILE="$PCH" bash "$MP" effort-seen --session s1 >/dev/null 2>&1)
+b2="$(asks "$(turn "$R2" "$T2" "$PCH")")"
+[[ "$a1$a2 $b1$b2" == "10 11" ]] && ok "OK [T7b] 10 (effort question) · 11 (another question)" || fail "[T7b] $a1$a2 $b1$b2"
+
+echo "T7c. 선택 창 답 훅 — 훅 입력의 질문 글이 코어에 닿는다"
+AHOOK="$CORE/template/hooks/on-choice-answer.sh"
+R="$(new_repo t7e)"; seen "$R" vendor-model-a "$PCH"; T="$(log "$R" high)"
+if command -v jq >/dev/null 2>&1; then
+  a1="$(asks "$(turn "$R" "$T" "$PCH")")"
+  (cd "$R" && jq -cn '{session_id:"s1",tool_name:"PickOne",tool_input:{questions:[{question:"effort 를 medium 으로 바꾸시겠어요?"}]},tool_response:{answers:{"effort 를 medium 으로 바꾸시겠어요?":"그대로"}}}' \
+     | CLAUDE_PLUGIN_ROOT="$CORE" SCV_HOST_PROFILE="$PCH" bash "$AHOOK" >/dev/null 2>&1)
+  a2="$(asks "$(turn "$R" "$T" "$PCH")")"
+  [[ "$a1$a2" == "10" ]] && ok "OK [T7c] the answer hook marks it asked" || fail "[T7c] $a1$a2"
+else ok "OK [T7c] (skip) jq unavailable"; fi
+
 echo "T8. 조건이 달라지면 다시 1번 — 값이 바뀜 · 모델이 바뀜 · 권장으로 갔다가 다시 벗어남"
+Q_LM='effort 는 low 인데 권장은 medium 입니다. medium 로 바꿀까요, low 그대로 둘까요?'
+Q_MX='effort 는 medium 인데 권장은 xhigh 입니다. xhigh 로 바꿀까요, medium 그대로 둘까요?'
 R="$(new_repo t8)"; seen "$R" vendor-model-a; T="$(log "$R" high)"
-a1="$(asks "$(turn "$R" "$T")")"; a2="$(asks "$(turn "$R" "$T")")"
-T="$(log "$R" low)"; b1="$(asks "$(turn "$R" "$T")")"; b2="$(asks "$(turn "$R" "$T")")"
-seen "$R" vendor-model-b; T="$(log "$R" medium)"; c1="$(asks "$(turn "$R" "$T")")"; c2="$(asks "$(turn "$R" "$T")")"
+a1="$(asks "$(turn "$R" "$T")")"; ended "$R" "$Q_HM"; a2="$(asks "$(turn "$R" "$T")")"
+T="$(log "$R" low)"; b1="$(asks "$(turn "$R" "$T")")"; ended "$R" "$Q_LM"; b2="$(asks "$(turn "$R" "$T")")"
+seen "$R" vendor-model-b; T="$(log "$R" medium)"; c1="$(asks "$(turn "$R" "$T")")"; ended "$R" "$Q_MX"; c2="$(asks "$(turn "$R" "$T")")"
 seen "$R" vendor-model-a; T="$(log "$R" medium)"; d0="$(asks "$(turn "$R" "$T")")"
 T="$(log "$R" low)"; d1="$(asks "$(turn "$R" "$T")")"
 # 물은 조건은 줄로 쌓인다: 모델 a 가 권장으로 돌아오면 a 의 줄만 지워지고 b 의 줄은 남는다
@@ -136,7 +177,7 @@ HOOK="$CORE/template/hooks/on-user-prompt.sh"
 R="$(new_repo t12)"; seen "$R" vendor-model-a; T="$(log "$R" high)"
 hk() { (cd "$R" && jq -cn --arg t "$T" '{prompt:"로그인 고쳐",session_id:"s1",transcript_path:$t}' | CLAUDE_PLUGIN_ROOT="$CORE" SCV_HOST_PROFILE="$P" bash "$HOOK" 2>/dev/null); }
 if command -v jq >/dev/null 2>&1; then
-  h1="$(hk)"; h2="$(hk)"
+  h1="$(hk)"; ended "$R" "$Q_HM"; h2="$(hk)"
   [[ "$(grep -c '\[SCV effort\]' <<<"$h1")" == 1 && "$(grep -c '\[SCV effort\]' <<<"$h2")" == 0 ]] && grep -qF "$QA" <<<"$h1" \
     && ok "OK [T12] the hook carries it once" || fail "[T12] $(grep -c '\[SCV effort\]' <<<"$h1") · $(grep -c '\[SCV effort\]' <<<"$h2")"
 else
@@ -168,11 +209,18 @@ TB="$(cat "$WORK/guides/EFFORT.tsv")"
 [[ -z "$(scv_mp_effort_row "$TB" nobody)" && -z "$(scv_mp_effort_row $'m\tfast\t-\tq\ts' m)" && -z "$(scv_mp_effort_row "$TB" "")" ]] && c=$((c + 1))
 [[ "$(scv_mp_effort_from_log $'"k":"low"\n"k":"high"' k)" == high && -z "$(scv_mp_effort_from_log '"k":"banana"' k)" && -z "$(scv_mp_effort_from_log '"k":"low"' 'k"x')" ]] && c=$((c + 1))
 r=$'medium\t-\tq\ts'
-[[ "$(scv_mp_effort_verdict on high "$r" "" m)" == ask && "$(scv_mp_effort_verdict on high "$r" "m|high|medium" m)" == asked && "$(scv_mp_effort_verdict on medium "$r" "" m)" == same \
+[[ "$(scv_mp_effort_verdict on high "$r" "" m)" == ask && "$(scv_mp_effort_verdict on high "$r" "asked" m)" == asked && "$(scv_mp_effort_verdict on medium "$r" "" m)" == same \
+   && "$(scv_mp_effort_verdict on high "$r" "shown:2" m)" == ask && "$(scv_mp_effort_verdict on high "$r" "shown:3" m)" == asked \
    && "$(scv_mp_effort_verdict on "" "$r" "" m)" == unknown && "$(scv_mp_effort_verdict on high "" "" m)" == unknown && "$(scv_mp_effort_verdict off high "$r" "" m)" == off ]] && c=$((c + 1))
 [[ -z "$(scv_mp_effort_block same m high "$r" choice)" && -z "$(scv_mp_effort_block ask m high "" choice)" && "$(scv_mp_effort_block ask m high "$r" choice | wc -l | tr -d ' ')" == 1 ]] && c=$((c + 1))
 [[ "$(scv_mp_effort_word High)" == high && -z "$(scv_mp_effort_word banana)" && "$(scv_mp_effort_word ' XHIGH ')" == xhigh ]] && c=$((c + 1))
-[[ $c == 6 ]] && ok "OK [T16] 6/6" || fail "[T16] $c/6"
+k='m|high|medium'
+[[ -z "$(scv_mp_effort_state_of "" "$k")" && "$(scv_mp_effort_state_of "$k" "$k")" == asked && "$(scv_mp_effort_state_of "$k|shown:2" "$k")" == "shown:2" \
+   && "$(scv_mp_effort_state_next "" "$k" shown)" == "$k|shown:1" && "$(scv_mp_effort_state_next "$k|shown:1" "$k" shown)" == "$k|shown:2" \
+   && "$(scv_mp_effort_state_next $'a|low|high|asked\n'"$k|shown:2" "$k" asked)" == $'a|low|high|asked\n'"$k|asked" && "$(scv_mp_effort_state_next "$k|asked" "$k" shown)" == "$k|asked" ]] && c=$((c + 1))
+[[ "$(scv_mp_effort_asked_in "" "effort 를 high 로 바꾸시겠어요?" medium high)" == 1 && "$(scv_mp_effort_asked_in "effort 는 low 인데 권장은 high. high 로 바꿀까요, low 그대로 둘까요?" "" low high)" == 1 \
+   && "$(scv_mp_effort_asked_in "effort 를 high 로 올렸습니다." "" low high)" == 0 && "$(scv_mp_effort_asked_in "파일은 한 줄입니다." "" low high)" == 0 ]] && c=$((c + 1))
+[[ $c == 8 ]] && ok "OK [T16] 8/8" || fail "[T16] $c/8"
 
 echo "T17. 프로필 도구 — 검사가 새 키를 받고, 프로필 만들기가 옮긴다 (0.89.1 — 0.89.0 래퍼 릴리스가 여기서 막혔다)"
 VH="$CORE/../tools/validate-host-profile.sh"; MZ="$CORE/../tools/materialize-profile.sh"; FXE="$CORE/../tests/fixtures/codex.env"
