@@ -115,6 +115,24 @@ if [[ "$_scv_human" == 1 && -f "$_scv_tc_sh" ]]; then
   fi
 fi
 # ---------- /turn plan check -------------------------------------------------
+# ---------- pure bench gate (0.91.0+) ---------------------------------------
+# 이번 턴에 순수함수(사전에 오른 함수)를 고쳤으면, 고치기 전보다 한도를 넘어 느려졌는지 빠르게 본다 — 시간 1.2배 ·
+# 다른 프로그램을 부른 횟수 · 메모리(사용자 결정 2026-11-11). 사전 함수를 고치지 않은 턴은 아무것도 재지 않는다.
+# 넘으면 막고, 모델이 선택 창으로 실제 값을 넣어 묻는다. 끄기: SCV_PURE_BENCH=off.
+_scv_pb_sh="$_scv_core/scripts/pure-bench.sh"
+_scv_pb_cat="scv/core/catalog/pure"
+# 값싼 앞 검사(과정 둘): 고친 파일 가운데 사전 함수가 사는 파일이 있을 때만 재는 명령을 띄운다.
+if [[ "$_scv_human" == 1 && -f "$_scv_pb_sh" && -d "$_scv_pb_cat" && -s "$_scv_tdir/.turn-plan/changed" ]] \
+   && awk '{ print "- 위치: " $0 " · "; if (sub(/^core\//, "")) print "- 위치: " $0 " · " }' "$_scv_tdir/.turn-plan/changed" 2>/dev/null \
+      | grep -q -F -f - "$_scv_pb_cat"/*.md 2>/dev/null; then
+  _scv_pbo="$(bash "$_scv_pb_sh" turn-end --dir "$_scv_tdir" 2>/dev/null || true)"
+  if grep -qx 'PURE_BENCH: block' <<<"$_scv_pbo"; then
+    _scv_pbr="$(sed -n 's/^PURE_BENCH_REASON: //p' <<<"$_scv_pbo" | head -n 1)"
+    jq -cn --arg r "$_scv_pbr" '{decision:"block",reason:$r}' 2>/dev/null || true
+    exit 0
+  fi
+fi
+# ---------- /pure bench gate -------------------------------------------------
 _scv_sarg=(); [[ -n "$_scv_sess" ]] && _scv_sarg=(--session "$_scv_sess")
 # ---------- /session ---------------------------------------------------------
 _scv_hs="$_scv_core/scripts/help-state.sh"

@@ -132,8 +132,23 @@ AUTHOR="$(scv_author_slug "$AUTHOR")"
 SPEAKER="$(printf '%s\n' "$SPEAKER" | scv_redact)"
 
 JOURNAL_DIR="${SCV_JOURNAL_DIR:-scv/journal}"
-if [[ -L "$JOURNAL_DIR" ]]; then
-  echo "✖ $JOURNAL_DIR is a symlink — refusing to write through it (fail-closed)" >&2
+
+# @effect journal_root_ok
+# 이유: 파일 시스템과 git 을 읽어, 저널 폴더가 연결(symlink)일 때 따라가도 되는지 가린다
+# 저널 폴더 뿌리의 연결은 "이 컴퓨터에서 만든 것"만 따라간다 — git 저장소 안이고, git 이 그 연결을 추적하지 않으며,
+# 가리키는 곳이 폴더일 때. 기록을 다른(비공개) 저장소에 두는 설정이 이 모양이다(0.89.2 — 그 전에는 뿌리의 연결을
+# 모두 거절해, 그런 프로젝트는 저널이 한 줄도 쌓이지 않았다). 저장소에 함께 온 연결(git 이 추적)은 남이 정한 곳으로
+# 대화 글이 새는 길이라 지금처럼 거절한다. git 저장소가 아니면 어디서 온 연결인지 알 수 없어 거절한다.
+journal_root_ok() {
+  local dir="$1"
+  [[ -L "$dir" ]] || return 0
+  [[ -d "$dir" ]] || return 1
+  git rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 1
+  git ls-files --error-unmatch -- "$dir" >/dev/null 2>&1 && return 1
+  return 0
+}
+if ! journal_root_ok "$JOURNAL_DIR"; then
+  echo "✖ $JOURNAL_DIR is a symlink this repository tracks (or not a local link to a folder) — refusing to write through it (fail-closed)" >&2
   exit 1
 fi
 mkdir -p "$JOURNAL_DIR"
@@ -142,6 +157,12 @@ DAY="$(date +%Y%m%d)"
 TODAY="$(date +%Y-%m-%d)"
 NOW="$(date +%H:%M:%S)"
 FILE="$JOURNAL_DIR/${DAY}-${AUTHOR}.md"
+
+# 저널 파일 자체가 연결이면 쓰지 않는다 — 뿌리 말고는 어떤 연결도 따라가지 않는다.
+if [[ -L "$FILE" ]]; then
+  echo "✖ $FILE is a symlink — refusing to write through it (fail-closed)" >&2
+  exit 1
+fi
 
 if [[ ! -f "$FILE" ]]; then
   {

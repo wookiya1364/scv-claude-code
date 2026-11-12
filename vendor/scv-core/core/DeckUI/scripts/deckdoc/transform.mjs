@@ -14,6 +14,7 @@ import remarkParse from "remark-parse";
 import remarkGfm from "remark-gfm";
 import remarkFrontmatter from "remark-frontmatter";
 import { makeT } from "./i18n.mjs";
+import { checklist_rows, checklist_problems, render_warnings } from "./checklist.mjs";
 
 // mdast node → plain text (MVP: inline formatting flattened, faithful to words).
 const txt = (n) =>
@@ -433,6 +434,10 @@ export function mdToDeck(raw, slug, sourceLabel, lang, lintRaw) {
   const hasSection = (...keys) => sectionTexts.some((h) => keys.some((k) => h.includes(k)));
   if (!hasSection("순수함수", "파이프라인", "pure function", "pipeline", "純粋関数", "パイプライン"))
     lint.push({ level: "warn", message: t("lintNoPipeline") });
+  // The pipeline section says WHAT the pure steps are; the checklist says how they are
+  // composed (core/contracts/composition.md). Asked only where the section exists — a plan
+  // without it already carries the warning above, and one warning names the gap.
+  else lint.push(...render_warnings(checklist_problems(checklist_rows(lintTree)), t));
 
   // Marker hygiene, per picture: detail written for a marker that is not on the
   // picture is a pairing mistake (never silently dropped), and a picture carrying

@@ -39,17 +39,24 @@ scv_reg_line_key() {
 # 예: "echo 'a && b'" → $'echo \'a && b\'\x1f'
 # 시험 여럿을 한 줄에 이은 줄이 보관된 계획에 47개 — 첫 시험만 공유되고 나머지는 계획마다 다시 돌았다(2026-11-01).
 scv_reg_split_chain() {
-  local line="${1:-}" seg="" i=0 n c2
+  # 찾는 글자(따옴표 · & · | · ;)는 모두 한 바이트다 — 바이트 단위로 잘라도 같은 조각이 나온다.
+  local LC_ALL=C line="${1:-}" seg="" w pre c2 pp='[&|;]' i=0 n
   if [[ "$line" == *"'"* || "$line" == *'"'* ]]; then printf '%s\x1f\n' "$line"; return 0; fi
+  # 한 글자씩 돌지 않는다 — 64바이트 토막에서 다음 &, |, ; 앞까지를 한 번에 옮긴다.
+  # (남은 줄 전체를 매번 다시 자르면 줄 길이의 제곱으로 느려진다.)
   n=${#line}
   while [[ $i -lt $n ]]; do
+    w="${line:i:64}"; pre="${w%%$pp*}"
+    if [[ ${#pre} -eq ${#w} ]]; then seg+="$w"; i=$((i + ${#w})); continue; fi
+    seg+="$pre"; i=$((i + ${#pre}))
     c2="${line:i:2}"
     if [[ "$c2" == "&&" || "$c2" == "||" ]]; then
-      printf '%s\x1f%s\n' "$seg" "$c2"; seg=""; i=$((i + 2)); continue
-    elif [[ "${line:i:1}" == ";" ]]; then
-      printf '%s\x1f;\n' "$seg"; seg=""; i=$((i + 1)); continue
+      printf '%s\x1f%s\n' "$seg" "$c2"; seg=""; i=$((i + 2))
+    elif [[ "${c2:0:1}" == ";" ]]; then
+      printf '%s\x1f;\n' "$seg"; seg=""; i=$((i + 1))
+    else
+      seg+="${c2:0:1}"; i=$((i + 1))
     fi
-    seg+="${line:i:1}"; i=$((i + 1))
   done
   printf '%s\x1f\n' "$seg"
 }

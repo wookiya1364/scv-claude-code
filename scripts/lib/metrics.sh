@@ -289,7 +289,7 @@ scv_mx_metric_followup() {
 # n = 값이 있는 계획 수, m = 전체. avg10·med10 은 소수 한 자리를 정수로 (x10).
 # none 만 있으면 avg10·med10 은 빈 값.
 scv_mx_aggregate() {
-  local lines="${1:-}" slug v n=0 m=0 sum=0 i j tmp avg10="" med10=""
+  local lines="${1:-}" slug v n=0 m=0 sum=0 i j tmp gap avg10="" med10=""
   local vals=()
   while IFS=$'\t' read -r slug v || [[ -n "$slug" ]]; do
     [[ -z "$slug" ]] && continue
@@ -298,15 +298,21 @@ scv_mx_aggregate() {
     n=$(( n + 1 )); sum=$(( sum + v )); vals+=("$v")
   done <<< "$lines"
   if (( n > 0 )); then
-    # 삽입 정렬 — sort 를 부르지 않는다 (n 은 계획 수, 수백을 넘지 않는다)
-    for (( i = 1; i < n; i++ )); do
-      tmp=${vals[$i]}; j=$(( i - 1 ))
-      # bash 3.2 는 단락 평가 뒤에도 vals[-1] 첨자를 오류로 본다 — 조건을 둘로 나눈다
-      while (( j >= 0 )); do
-        (( vals[j] > tmp )) || break
-        vals[$(( j + 1 ))]=${vals[$j]}; j=$(( j - 1 ))
+    # 간격을 줄여 가는 삽입 정렬(셸 정렬, 간격 … 40 · 13 · 4 · 1) — sort 를 부르지 않는다.
+    # 한 칸씩만 옮기는 삽입 정렬은 값이 많아지면 제곱으로 느려졌다. 정렬된 결과는 같다.
+    gap=1
+    while (( gap < n / 3 )); do gap=$(( gap * 3 + 1 )); done
+    while (( gap >= 1 )); do
+      for (( i = gap; i < n; i++ )); do
+        tmp=${vals[$i]}; j=$(( i - gap ))
+        # bash 3.2 는 단락 평가 뒤에도 음수 첨자를 오류로 본다 — 조건을 둘로 나눈다
+        while (( j >= 0 )); do
+          (( vals[j] > tmp )) || break
+          vals[$(( j + gap ))]=${vals[$j]}; j=$(( j - gap ))
+        done
+        vals[$(( j + gap ))]=$tmp
       done
-      vals[$(( j + 1 ))]=$tmp
+      gap=$(( gap / 3 ))
     done
     avg10=$(( (sum * 10 + n / 2) / n ))
     if (( n % 2 )); then med10=$(( vals[n / 2] * 10 )); else med10=$(( (vals[n / 2 - 1] + vals[n / 2]) * 5 )); fi
