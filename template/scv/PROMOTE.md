@@ -24,6 +24,7 @@ Drop into scv/raw/ → action:promote (refines via dialogue)
                   → scv/promote/<YYYYMMDD>-<author>-<slug>/
                       ├── PLAN.md    (required)
                       ├── TESTS.md   (required)
+                      ├── WRAPUP.md  (required — problem → … → learning; see §5a)
                       └── free additional files (optional)
                   → action:work <slug> (implement + test)
                   → scv/archive/<YYYYMMDD>-<author>-<slug>/ (moved on completion)
@@ -67,69 +68,17 @@ Hydrate seeds only the workflow files — there is no scaffolding to fill before
 
 ---
 
-## 1.6. Fast-path — direct PR without promote (small changes only)
+## 1.6. No change without a plan
 
-**Not every change needs a promote folder.** Small changes meeting the criteria below may skip the SCV loop and go straight to GitHub PR. Fast-path balances "ceremony cost vs verification value" — we don't want a 5-minute typo fix to require an 18-minute PLAN write-up.
+**Every change goes through a plan, whatever its size** — a typo fix included.
 
-### Fast-path criteria (all must be true)
+Until 0.92.x a change of a few lines could skip the plan by declaring itself. That path is closed. The turn-end check already refused a turn that changed files without a plan record, so this document allowed what the check blocked. And a change with no plan leaves nothing behind: no problem statement, no test, no wrap-up report (§5a).
 
-- [ ] Change has a single simple intent (typo fix / null-guard hotfix / patch-version dep bump / one-paragraph doc tweak)
-- [ ] **Touches ≤ 5 lines and stays inside a single function or block** (default — see "Team override" below)
-- [ ] No new behavior, API, or feature — preservation of existing behavior is obvious
-- [ ] Within scope of existing regression TESTS (so archived TESTS won't break post-merge — reasonably expected)
-- [ ] PR description fits in one paragraph (PLAN.md's Goals / Non-Goals / Steps would compress to one line)
+- **Small change, small plan.** The plan for a one-line fix is short — the problem, one test scenario, and the wrap-up report filled in at the end.
+- **Two exceptions only: a release and a Core sync.** Both follow a fixed procedure instead of a plan, and each leaves a one-line reason: `plan-link.sh exempt --kind release|sync --why "<one line>"`. The turn-end check accepts no other kind.
+- **The old declaration and its line-ceiling setting are gone.** The declaration command only says where to go instead and exits 2; a leftover ceiling value in a settings file is ignored.
 
-If even one of the five is suspect, take the formal promote loop. **The default decision is "formal promote loop"** — fast-path is a deliberate exception for obvious cases.
-
-### Declare it first — `action:work --fast "<intent>"`
-
-Before making a fast-path change, run:
-
-```bash
-action:work --fast "<one line: what you are changing and why it qualifies>"
-```
-
-It writes nothing. It prints the five criteria and the team's current line ceiling so the exception is checked rather than assumed, and it records that this session took the fast-path deliberately instead of skipping SCV by accident. **A fast-path change without this declaration is not a fast-path change — it is an undeclared edit**, and the workspace guard treats it as one.
-
-This is the whole difference between the sanctioned exception and the failure mode it resembles: both produce a small commit with no promote folder, and only the declaration distinguishes them.
-
-### Team override — `SCV_FAST_PATH_LINE_THRESHOLD`
-
-The 5-line ceiling is a default, not dogma. Teams shipping mostly to mature codebases can raise it; teams in security-sensitive domains can lower it. Set in `scv/scv_settings.json`:
-
-```bash
-// scv/scv_settings.json
-SCV_FAST_PATH_LINE_THRESHOLD=3   # stricter — only ≤3 lines qualify
-# or
-SCV_FAST_PATH_LINE_THRESHOLD=10  # looser — ≤10 lines OK if other 4 criteria still hold
-```
-
-Locking the threshold per team in the settings file removes the per-PR negotiation ("is this 6-line change really fast-path-able?"). When unset, default is 5. The single-function/block rule is **not** overridable — multi-function changes always take the formal loop regardless of line count.
-
-### Fast-path examples
-
-| ✅ Fast-path OK | ❌ NOT OK — formal promote loop |
-|---|---|
-| README / code comment typo fix | New feature (even if 1-hour) |
-| Patch-version dep bump (security advisory response) | Bug fix that needs spec change ("was this behavior intentional?" — anything needing review) |
-| ≤5 line null-guard / off-by-one hotfix in a single function | Refactor (even single-file — rename, helper extraction, signature changes) |
-| Linter / formatter auto-cleanup | DB schema change / API compat impact |
-| Comment / doc paragraph addition | "Looks small but I'm not sure" change — when in doubt, promote |
-
-### Fast-path PR safety nets (verification is NOT skipped)
-
-Fast-path skips **PLAN/TESTS authoring**, NOT verification. These safety nets stay in place:
-
-1. **GitHub PR review** — Normal code review process. SCV doesn't bypass the PR itself.
-2. **`action:regression` archived TESTS** — Auto-runs nightly or at the next archive. If fast-path breaks an archived feature, it shows up here → triage flow (regression / obsolete / flaky).
-3. **Project's general CI test suite** — pytest / jest / etc. run as usual. If gated on PR merge, that gate still applies.
-4. **Git blame / `git log -p`** — Fast-path PRs land in git history, traceable 6 months later when asking "why was this line added?".
-
-So fast-path **reduces ceremony cost**, NOT verification.
-
-### When in doubt, promote
-
-The default principle of this guide is **"when in doubt, formal promote loop"**. Fast-path is for clearly small changes only; if the boundary is fuzzy, even at slightly more cost it's right long-term to take the promote loop. The most dangerous task is the 1-hour task you thought was 5 minutes — that goes through the formal loop.
+Verification is unchanged: PR review, `action:regression` over archived TESTS, and the project's own CI.
 
 ---
 
@@ -203,14 +152,15 @@ settings_get          효과            파일을 읽어 위 둘에 넘긴다
 문서만 바꾸는 계획, 설정값 하나 바꾸는 계획에는 순수부가 없을 수 있다. 그때는
 계획에 그렇게 적으면 된다 — 없는 것을 지어내지 않는다.
 
-## 3. Two required files + free extension
+## 3. Three required files + free extension
 
-Every promotion folder must contain **PLAN.md and TESTS.md**. Add any others as needed.
+Every promotion folder must contain **PLAN.md, TESTS.md and WRAPUP.md**. Add any others as needed. (A plan written before WRAPUP.md existed has two — it is archived as it is.)
 
 ```
 20260420-sspark-user-auth/
 ├── PLAN.md                   # required — plan body + frontmatter
 ├── TESTS.md                  # required — test scenarios + pass criteria
+├── WRAPUP.md                 # required — wrap-up report, filled before and after the work (see §5a)
 ├── FEATURE_ARCHITECTURE.md   # optional — two Mermaid diagrams (see §5b)
 ├── REQUIREMENTS.md           # optional — detailed requirements (split if large)
 ├── ARCH.md                   # optional — architecture design (deeper than the two diagrams)
@@ -224,7 +174,7 @@ Every promotion folder must contain **PLAN.md and TESTS.md**. Add any others as 
 
 | Scale | Structure |
 |---|---|
-| ≤ 1 day | `PLAN.md` + `TESTS.md` only |
+| ≤ 1 day | `PLAN.md` + `TESTS.md` + `WRAPUP.md` only |
 | 2 ~ 5 days | Above + one of `ARCH.md` or `REQUIREMENTS.md` |
 | Multi-week | Free further split as needed (ARCH, REQUIREMENTS, API, MIGRATION, assets/, etc.) |
 
@@ -345,6 +295,7 @@ Kinds: 추가 · 다시 하기 · 보류 · 연결 · 재개. Read from a phone,
 ## Links
 
 - Raw originals: `scv/raw/...` (consumed by readpath.json)
+- Wrap-up: [`WRAPUP.md`](./WRAPUP.md)
 - Related PR: (if any)
 ```
 
@@ -563,6 +514,67 @@ TESTS.md is used both for `action:work` initial verification AND, **after archiv
 
 ---
 
+## 5a. WRAPUP.md template — the wrap-up report
+
+A plan is not finished when its tests pass. What was the problem, what was seen, what was suspected, what settled it, what the cause was, what fixed it, and what was learned — that chain is the part worth reading a year later, and it had no fixed place. WRAPUP.md is that place.
+
+- **When the plan is written** (`action:promote`): fill what is already known — at least group 1.
+- **When the work is done** (`action:work`, before the archive): fill every remaining field.
+- **A plan that does not fix something that went wrong** (a new feature) skips groups 2–5 with one line each: `N/A — <reason>` (Korean: `해당 없음 — <이유>`). Groups 1, 6 and 7 are filled by every plan.
+- **The archive is refused while a field is empty**, a field line is missing, or a skip has no reason — `action:work --archive` names each one. After the archive it prints the report once, and the final answer carries it.
+- Write the field names in the plan's language (`lang:`). The check reads the group numbers (`## 1.` … `## 7.`) and the field lines (`- name: value`), never the words.
+
+```markdown
+# Wrap-up — {{title}}
+
+<!-- Fill what is known when the plan is written (at least group 1), and every field once the work is done.
+     A plan that does not fix something that went wrong skips groups 2-5 with one line each: "N/A — reason".
+     Groups 1, 6 and 7 are filled by every plan. The archive is refused while a field is empty. -->
+
+## 1. Problem
+
+- Situation: <TODO>
+- Expected: <TODO>
+- Actual: <TODO>
+- How to reproduce: <TODO>
+
+## 2. Observation
+
+- Facts and measurements: <TODO>
+- Difference from the normal case: <TODO>
+
+## 3. Hypothesis
+
+- H1: <TODO>
+
+## 4. Experiment
+
+- Method and what was held equal: <TODO>
+- Result and verdict per hypothesis: <TODO>
+
+## 5. Root cause
+
+- Direct cause and how it happens: <TODO>
+- Underlying cause: <TODO>
+
+## 6. Solution and validation
+
+- Solution and why it was chosen: <TODO>
+- Before and after values: <TODO>
+- Side effects and regression tests: <TODO>
+
+## 7. Learning
+
+- How to diagnose it next time: <TODO>
+- What applies elsewhere: <TODO>
+```
+
+Korean names for the same fields: 문제(상황 · 기대 · 실제 · 재현 조건) / 관찰(관찰한 사실과 측정값 · 정상일 때와 차이) / 가설(H1 …) / 실험(방법과 같게 둔 것 · 결과와 가설별 판정) / 원인(직접 원인과 일어난 길 · 근본 원인) / 해결과 검증(해결책과 고른 이유 · 고치기 전후 값 · 부작용과 회귀 시험) / 배운 것(다음에 같은 문제를 만나면 진단하는 법 · 다른 곳에도 쓸 수 있는 것).
+
+PLAN.md's `## Links` carries one line pointing at the file — `- Wrap-up: [WRAPUP.md](./WRAPUP.md)` — which is also how the archive tells a plan that owes a report from an older plan that never had one.
+
+---
+
 ## 5b. FEATURE_ARCHITECTURE.md (optional, prompted on every promote)
 
 After PLAN.md / TESTS.md, `action:promote` asks **per folder** whether to also write `FEATURE_ARCHITECTURE.md` — two Mermaid diagrams that describe the feature's design before implementation.
@@ -671,9 +683,9 @@ If the user explicitly says **"split it"**, ignore the criteria and split. If **
 
 | Step | Command | Responsibility |
 |---|---|---|
-| 1. Refine raw | `action:promote` | Confirm slug/title via dialogue → create folder + PLAN + TESTS scaffold → update `scv/readpath.json` |
-| 2. Implement / verify | `action:work <slug>` | Read PLAN + TESTS, implement, run TESTS, report result, ask about archive |
-| 3. Archive | `action:work --archive` | On tests pass + user approval: move `promote/<slug>/` → `archive/<slug>/` + create `ARCHIVED_AT.md` |
+| 1. Refine raw | `action:promote` | Confirm slug/title via dialogue → create folder + PLAN + TESTS + WRAPUP scaffold (WRAPUP: the fields known so far) → update `scv/readpath.json` |
+| 2. Implement / verify | `action:work <slug>` | Read PLAN + TESTS, implement, run TESTS, report result, fill the rest of WRAPUP, ask about archive |
+| 3. Archive | `action:work --archive` | On tests pass + user approval: refuse while WRAPUP has an empty field → move `promote/<slug>/` → `archive/<slug>/` + create `ARCHIVED_AT.md` → print the wrap-up report |
 
 ---
 

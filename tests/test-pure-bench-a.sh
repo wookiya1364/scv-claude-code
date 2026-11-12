@@ -205,6 +205,58 @@ if [[ -d "$CORE/../scv/core/catalog/pure" ]]; then
   [[ "$n" -ge 20 ]] && ok "OK [S13] this repository: $n composed functions" || fail "[S13] composed=$n"
 fi
 
+echo "S13b. 재지 못한 함수만 다시 잰다 — 가짜 시간 도구로 (계획 20261112-wookiya1364-pure-bench-remeasure)"
+# 컴퓨터가 잠깐 바쁘면 프로그램을 띄우는 함수는 벽시계만 늘어 "재지 못함"이 된다(2026-11-12 맥 러너 실측).
+# 재는 명령은 그 함수만 같은 되풀이 수로 두 번까지 다시 잰다. 규칙은 그대로다 — 계속 못 재면 "재지 못함"으로 남는다.
+eq "S13b remeasure decision" "1 0 0 0 0" "$(pb_remeasure unmeasured 0 2) $(pb_remeasure unmeasured 2 2) $(pb_remeasure cpu 0 2) $(pb_remeasure unmeasured 0 0) $(pb_remeasure wall-gpu 0 2)"
+eq "S13b the line under the table" "다시 잰 함수 2 — 재지 못해 같은 횟수로 다시 쟀다: f(1배 · 1번 → cpu) · g(4배 · 2번 → 재지 못함)" "$(pb_remeasure_line $'f\t1\t1\tcpu\ng\t4\t2\tunmeasured')"
+eq "S13b no line when nothing was measured again" "" "$(pb_remeasure_line "")"
+# 가짜 시간 도구(BSD 꼴: -l -p -o <보고> <명령…>) — 명령은 그대로 돌리고 보고만 지어낸다.
+#   first-bad : 함수를 재는 실행이 바로 앞 실행과 되풀이 수가 같으면(= 다시 재기) 좋은 값, 다르면 나쁜 값(벽시계 = CPU × 3)
+#   always-bad: 함수를 재는 실행은 늘 나쁜 값          good: 늘 좋은 값
+cat > "$TMP/faketime" <<'FK'
+#!/usr/bin/env bash
+report=""
+while [[ $# -gt 0 ]]; do case "$1" in -l|-p) shift ;; -o) report="$2"; shift 2 ;; *) break ;; esac; done
+"$@"; rc=$?
+kind=good; a=("$@"); i=0
+while [[ $i -lt ${#a[@]} ]]; do
+  if [[ "${a[$i]}" == _drive ]]; then
+    reps="${a[$((i + 5))]}"; last="$(cat "$FAKE_STATE" 2>/dev/null)"; printf '%s' "$reps" > "$FAKE_STATE"
+    case "$FAKE_MODE" in always-bad) kind=bad ;; first-bad) [[ "$reps" == "$last" ]] || kind=bad ;; esac
+    break
+  fi
+  i=$((i + 1))
+done
+if [[ $kind == bad ]]; then printf 'real 0.90\nuser 0.20\nsys 0.10\n  8388608  maximum resident set size\n' > "$report"
+else printf 'real 0.31\nuser 0.20\nsys 0.10\n  8388608  maximum resident set size\n' > "$report"; fi
+exit $rc
+FK
+chmod +x "$TMP/faketime"
+# @effect fk
+# 이유: 가짜 시간 도구를 끼워 재는 명령을 돌린다 — <방식> <명령(fn|bench)> [환경 설정 하나]
+fk() {
+  rm -f "$TMP/fk.state" "$TMP/again.log"
+  env FAKE_MODE="$1" FAKE_STATE="$TMP/fk.state" SCV_PB_TIME_TOOL="$TMP/faketime" SCV_PB_REMEASURE_LOG="$TMP/again.log" SCV_PB_GPU_TOOL=none ${3:+"$3"} \
+    "$BASH" "$PB" "$2" --catalog "$B/cat" --base "$B" --only t_up $( [[ "$2" != fn ]] || echo "--scale 1" )
+}
+line="$(fk first-bad fn)"
+[[ "$(cut -f11 <<< "$line")" == cpu && "$(cat "$TMP/again.log" 2>/dev/null)" == $'t_up\t1\t1\tcpu' ]] \
+  && ok "OK [S13b] measured on the second try" || fail "[S13b] first-bad: line=[$line] log=[$(cat "$TMP/again.log" 2>/dev/null)]"
+[[ "$(awk -F'\t' '{ print NF }' <<< "$line")" == 11 ]] && ok "OK [S13b] the row keeps its eleven fields" || fail "[S13b] fields: [$line]"
+out="$(fk first-bad bench)"
+grep -q '^다시 잰 함수 [12] — 재지 못해 같은 횟수로 다시 쟀다: t_up(1배 · 1번 → cpu)' <<< "$out" && grep -q '^잰 함수 1 · 못 잰 함수 0' <<< "$out" \
+  && ok "OK [S13b] the table says which function was measured again" || fail "[S13b] bench: $(grep -E '^다시 잰|^잰 함수' <<< "$out")"
+line="$(fk always-bad fn)"
+[[ "$(cut -f11 <<< "$line")" == unmeasured && "$(cat "$TMP/again.log" 2>/dev/null)" == $'t_up\t1\t2\tunmeasured' ]] \
+  && ok "OK [S13b] still unmeasured after two more tries" || fail "[S13b] always-bad: line=[$line] log=[$(cat "$TMP/again.log" 2>/dev/null)]"
+line="$(fk good fn)"
+[[ "$(cut -f11 <<< "$line")" == cpu && ! -s "$TMP/again.log" ]] \
+  && ok "OK [S13b] a measured function is not measured again" || fail "[S13b] good: line=[$line] log=[$(cat "$TMP/again.log" 2>/dev/null)]"
+line="$(fk always-bad fn SCV_PB_REMEASURE=0)"
+[[ "$(cut -f11 <<< "$line")" == unmeasured && ! -s "$TMP/again.log" ]] \
+  && ok "OK [S13b] off: no second try" || fail "[S13b] off: line=[$line] log=[$(cat "$TMP/again.log" 2>/dev/null)]"
+
 echo "S14. 앞뒤 견주기의 판정 — 순수 함수 (TESTS T9 · T12)"
 eq "S14 median, odd" "2.000" "$(pb_median "3.000 1.000 2.000")"
 eq "S14 median, even" "2.500" "$(pb_median "4.0 1.0 3.0 2.0")"

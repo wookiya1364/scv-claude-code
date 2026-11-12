@@ -521,15 +521,35 @@ words (never the bare terms); first option (recommended) `고침`, second `이�
 the answer is recorded as accepted and the check passes on the next run. A project without a
 pure-function catalog, or with `SCV_PURE_BENCH=off`, measures nothing — say so in one line.
 
+**Then the wrap-up report — every field filled.** When the plan folder has `WRAPUP.md`, fill what
+is still open before asking or archiving: the experiment as it was really run and the verdict on each
+hypothesis, the direct and the underlying cause, the solution with its before and after values and the
+regression tests, and what was learned (`scv/PROMOTE.md` §5a). Write facts from this work — numbers that
+were measured, tests that were run — never a guess; a group skipped as `N/A — <reason>` when the plan was
+written stays skipped unless the work turned up what belongs there. Check it:
+
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/wrapup.sh check "<SCV_DIR>/promote/<slug>"
+```
+
+Exit 1 names each empty field, short group and reasonless skip — fill them and run it again. The archive
+runs the same check and moves nothing while it fails. A plan with no `WRAPUP.md` and no `- Wrap-up:`
+line in its `## Links` was written before the report existed: say so in one line and go on.
+
 Only if tests fully passed in Step 7 (and Step 9a passed or was skipped):
 
 | User posture | Action |
 |---|---|
 | Pre-declared (e.g., "auto-archive when tests pass" / "tests 통과하면 알아서 archive 해", spoken earlier in this conversation) | Auto-invoke: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/work.sh [<SCV_DIR>] <slug> --archive --reason="tests passed"`. Report the ARCHIVED: line. |
 | No pre-declaration | Ask: "All tests passed. Archive `<slug>` now?" with options: **Archive now** / **Keep in promote** / **Let me review first**. Proceed per answer. |
-| User says no (keep in promote) | Update PLAN.md frontmatter `status: done` but leave the folder in `scv/promote/`. |
+| User says no (keep in promote) | Update PLAN.md frontmatter `status: done` but leave the folder in `scv/promote/`. Show the filled report now: `wrapup.sh show "<SCV_DIR>/promote/<slug>"`. |
 
-After a successful archive, remind the user:
+After a successful archive, **show the wrap-up report once**: the archive prints it under
+`=== wrap-up report (…) ===`. Carry it in your final answer under a bold topic, group by group as
+printed — it is what the user reads to know how the plan ended, so never shorten it to "see WRAPUP.md".
+(`WRAPUP: legacy` instead of the block: an older plan with no report — relay that one line.)
+
+Then remind the user:
 - `scv/archive/<slug>/ARCHIVED_AT.md` has the archive record.
 - Future `/scv:status` will no longer flag this plan.
 
@@ -874,14 +894,14 @@ Question: "All features of epic <epic-slug> are archived — per PROMOTE.md §8e
 ```
 <!-- /SCV:GUIDANCE -->
 
-**On [1] Yes**: Claude Code directly creates the folder + PLAN.md + TESTS.md scaffold via `Write`. Auto-include the epic's archived feature slugs in the PLAN.md Summary section.
+**On [1] Yes**: Claude Code directly creates the folder + PLAN.md + TESTS.md scaffold via `Write`. Add the wrap-up report with `wrapup.sh new` and the `- Wrap-up:` line in `## Links` (`/scv:promote` Step 5). Auto-include the epic's archived feature slugs in the PLAN.md Summary section.
 
 **On [2] Later**: Terminate quietly.
 
 ## Flag semantics
 
 - `<slug>` — required for actual work; optional when you just want to list plans. Partial match supported (helper fuzzy-resolves suffixes).
-- `--archive` — Skip implementation; move `promote/<slug>/` → `archive/<slug>/` and write `ARCHIVED_AT.md`. Useful for manually archiving plans whose tests passed outside `/scv:work`.
+- `--archive` — Skip implementation; move `promote/<slug>/` → `archive/<slug>/` and write `ARCHIVED_AT.md`. Refused (exit 1, nothing moved) while the plan's `WRAPUP.md` has an empty field. Useful for manually archiving plans whose tests passed outside `/scv:work`.
 - `--reason="..."` — Used only with `--archive`; goes into `ARCHIVED_AT.md` body.
 
 ## Never
