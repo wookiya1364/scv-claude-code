@@ -127,7 +127,8 @@ scv_lang_stop_decide() {
 # <글> → 블록을 뺀 글. 닫는 꼬리표가 없으면(앞 4000바이트에서 잘림) 여는 꼬리표부터 끝까지 뺀다.
 # 계기(0.81.5): 알림 · 세션 넘김 안내(영어)가 이번 턴 사용자 글로 잡혀 '사용자가 영어로 썼다'가 되고, 언어 검사가 꺼졌다.
 scv_lang_drop_machine() {
-  local p="${1:-}" lt=$'\x3c' gt=$'\x3e' t pre rest
+  # 블록 머리 · 꼬리는 모두 ASCII 글이다 — 바이트 단위로 찾아도 같은 자리를 찾고, 긴 글을 글자로 바꾸는 값이 들지 않는다.
+  local LC_ALL=C p="${1:-}" lt=$'\x3c' gt=$'\x3e' t pre rest
   for t in task-notification system-reminder local-command-caveat local-command-stdout local-command-stderr \
            command-name command-message command-args side-sessions-event ci-monitor-event artifact-view-context; do
     while [[ "$p" == *"$lt$t"* ]]; do

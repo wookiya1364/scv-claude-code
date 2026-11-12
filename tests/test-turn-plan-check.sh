@@ -285,5 +285,26 @@ if grep -q 'turn-check.sh' "$hk/on-user-prompt.sh" && grep -q 'turn-check.sh' "$
   ok "hooks — 턴 시작 · 턴 끝 · 도구 앞 · 선택 답이 turn-check.sh 를 부름"
 else bad "hooks do not call turn-check.sh"; fi
 
+# T32 — 계획을 보관한 턴: 그 계획에 남긴 기록이 보관함으로 옮겨져도 읽는다 → 통과 (계획 20261112-wookiya1364-bench-gate-gaps T1)
+# 보관 기록 파일이 턴 시작 표시보다 새것이어야 하므로(초 단위로 견준다) 1초 쉰다.
+cd "$R" || exit 1
+reset; start; ed
+H "bash $PL progress p1 --step 2 --note '체력 숫자를 87로 고침'"
+sleep 1
+mkdir -p scv/archive && mv scv/promote/p1 scv/archive/p1 && printf '보관: 시험 통과\n' > scv/archive/p1/ARCHIVED_AT.md
+v="$(verdict)"
+if [[ "$v" == pass ]]; then ok "T32 계획을 보관한 턴 → pass (보관함으로 옮긴 계획의 기록을 읽음)"
+else bad "T32 v=$v"; fi
+
+# T33 — 턴이 시작되기 전에 보관된 계획으로는 통과하지 않는다 → 지금처럼 막힘 (같은 계획 T2)
+reset
+mkdir -p scv/archive && mv scv/promote/p1 scv/archive/p1 && printf '보관: 예전\n' > scv/archive/p1/ARCHIVED_AT.md
+sleep 1
+start; ed
+v="$(verdict)"
+if [[ "$v" == block ]]; then ok "T33 예전에 보관된 계획만 있고 기록 없음 → block"
+else bad "T33 v=$v"; fi
+reset
+
 if [[ $fail -ne 0 ]]; then echo "test-turn-plan-check: FAIL" >&2; exit 1; fi
 echo "test-turn-plan-check: all passed"

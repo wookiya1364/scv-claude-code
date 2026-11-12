@@ -59,4 +59,14 @@ if [[ -f "$_scv_tc_sh" ]]; then
     bash "$_scv_tc_sh" choice --question "$_scv_q" --answer "$_scv_a" >/dev/null 2>&1 || true
   done <<< "$_scv_qa"
 fi
+
+# ---------- recommended effort (0.89.2+) --------------------------------------
+# 이번 턴에 effort 요청 줄이 실렸고 그 질문을 선택 창으로 물었으면 '물었다'로 적는다 — 질문 글만 넘기고 판단은 코어가 한다.
+# 실린 줄이 없으면(대부분의 턴) 아무 일도 없다.
+_scv_eq="$(printf '%s' "$INPUT" | jq -r 'try ([.tool_input.questions[]?.question // empty] | join("\n")) catch ""' 2>/dev/null || true)"
+[[ -n "$_scv_eq" ]] || _scv_eq="$(printf '%s' "${_scv_qa:-}" | cut -f1)"
+if [[ -n "$_scv_eq" ]]; then
+  if [[ -n "$_scv_sid" ]]; then printf '%s' "$_scv_eq" | bash "$_scv_mp" effort-seen --session "$_scv_sid" >/dev/null 2>&1 || true
+  else printf '%s' "$_scv_eq" | bash "$_scv_mp" effort-seen >/dev/null 2>&1 || true; fi
+fi
 exit 0

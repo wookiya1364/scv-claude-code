@@ -474,6 +474,32 @@ Result handling:
 
 ### Step 9b — Archive decision
 
+**First, the composition checklist — answered from the code (0.90.0+).** Every route into this
+step passes here, pre-declared mode included. Before asking or archiving, rewrite the plan's
+`합성 설계 체크리스트` table in place — the same table, never a second one — from the code that
+was written, not from the design (`core/contracts/composition.md`). Each answer names its
+evidence: a file and line, or the step it rests on. Where an answer changed since the plan was
+written, say which row and why in one line. A plan written before 0.90.0 has no table: add
+nothing, say so in one line. Step 0's archive short-circuit skips this — that work was done
+outside this conversation.
+
+**Then the pure-function check, in full (0.91.0+).** Run it once before asking or archiving:
+
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/pure-bench.sh plan-end
+```
+
+It compares every catalogued pure function this work changed — and the composed functions that
+call them — with the code from before this work began: up to six alternating pairs (it stops after
+two when the new code is clearly faster, 0.91.2+), 4x input, memory,
+programs called (`core/contracts/composition.md`). Exit 0: one line in your report ("잰 함수 N ·
+한도 넘음 0"). Exit 1: a function went over a limit. Fix the cause and run it again, or — when the
+change is right as it is — ask the user through the choice tool, one question per function,
+starting with `[재는 검사] <function> —` and carrying the real before/after numbers in everyday
+words (never the bare terms); first option (recommended) `고침`, second `이대로 둠`. On `이대로 둠`
+the answer is recorded as accepted and the check passes on the next run. A project without a
+pure-function catalog, or with `SCV_PURE_BENCH=off`, measures nothing — say so in one line.
+
 Only if tests fully passed in Step 7 (and Step 9a passed or was skipped):
 
 | User posture | Action |

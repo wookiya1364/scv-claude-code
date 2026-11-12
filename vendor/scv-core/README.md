@@ -165,6 +165,19 @@ read. Every key and its default:
   a new pure function, so an existing one is reused instead of rewritten.
   `build --project` does the same for any project and language, knowing only
   comment prefixes ([the purity contract](core/contracts/purity.md)).
+- **Composition checklist** — pure steps are the base; how they are composed
+  decides speed and memory. Every plan answers the composition questions with
+  evidence, again from the code before archiving, and `deck` warns about a
+  missing table or an answer without evidence
+  ([the composition contract](core/contracts/composition.md)).
+- **Measuring pure functions** — `core/scripts/pure-bench.sh` measures a
+  function (or one shell command) for time, memory, GPU and programs called,
+  and how time grows at 4x input. A changed function that got slower than the
+  code before the work stops the turn, and you decide with the real numbers.
+- **Choosing how steps are composed** — `core/scripts/pipe-arrange.sh` takes
+  a list of line-stream steps and a sample input, measures each step once, and
+  computes a faster order instead of trying every order. It runs the chosen
+  order once to check the answer is the same, and shows a table; you decide.
 - **SCV's own graph** — docs links, archived plans → files, decision
   references, and files that change together, rebuilt automatically by
   promote and work with bash and jq, no install (`SCV_GRAPH`). Graft is

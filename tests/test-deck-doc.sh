@@ -80,7 +80,8 @@ node "$DECKDOC/doc.mjs" "$FIX" "$SLUG" --out "$TMP/ns.html" --no-source >/dev/nu
 DOC="$TMP/doc.html"   # includes the side panel + print appendix
 NS="$TMP/ns.html"     # NO source panel — body/structural greps target THIS
 has "$TMP/out.txt" "DECK_HTML:" "emits DECK_HTML"
-has "$TMP/out.txt" "LINT: 2 warning" "lint = 2 (acceptance criteria missing + one picture spot, 0.85.0)"
+has "$TMP/out.txt" "LINT: 3 warning" "lint = 3 (acceptance criteria missing + one picture spot, 0.85.0 + no composition checklist, 0.90.0)"
+has "$TMP/out.txt" "No composition checklist" "the sample has a pipeline part and no checklist — said once (0.90.0)"
 has "$TMP/out.txt" "Picture spot: \"작업 순서\" — 3 ordered steps" "picture spot names the 3-step section (0.85.0)"
 hasnt "$TMP/out.txt" "Picture spot: \"순수함수" "arrows in a table / code are not a picture spot (0.85.0)"
 has "$TMP/out.txt" "Acceptance" "lint names the missing acceptance section (English default)"

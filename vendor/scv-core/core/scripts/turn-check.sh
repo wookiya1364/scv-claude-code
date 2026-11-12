@@ -106,8 +106,15 @@ head_of() { git -C "$1" rev-parse HEAD 2>/dev/null || true; }
 # 종류: 변환
 # 예: "/Users/a/b c" → "_Users_a_b_c"
 key_of() {
-  local k="${1//\//_}"
-  printf '%s' "${k// /_}"
+  # / 와 빈칸은 한 바이트 글자다 — 바이트 단위로 바꿔도 같은 글이 나온다.
+  # 옛 셸은 바꿀 곳이 많은 긴 글을 통째로 바꾸면 길이의 제곱으로 느려서, 128바이트씩 잘라 바꾼다(새 셸은 4096바이트씩).
+  local LC_ALL=C s="$1" c out="" i=0 n step=128
+  [[ ${BASH_VERSINFO[0]} -ge 4 ]] && step=4096
+  n=${#s}
+  while [[ $i -lt $n ]]; do
+    c="${s:i:step}"; c="${c//\//_}"; out+="${c// /_}"; i=$((i + step))
+  done
+  printf '%s' "$out"
 }
 
 # @effect take_snap
@@ -121,8 +128,18 @@ take_snap() {
 }
 
 # @effect plan_texts
-# 이유: 진행 중 계획 파일들을 읽는다
-plan_texts() { local f; for f in "$PROMOTE"/*/PLAN.md; do [[ -f "$f" ]] && cat "$f" && printf '\n'; done; }
+# 이유: 진행 중 계획 파일들과, 이번 턴에 보관한 계획 파일들을 읽는다
+plan_texts() {
+  local f
+  for f in "$PROMOTE"/*/PLAN.md; do [[ -f "$f" ]] && cat "$f" && printf '\n'; done
+  # 이번 턴에 보관한 계획의 글도 읽는다(0.91.2+) — 턴 도중 보관하면 그 턴에 남긴 기록이 진행 중 자리에서 사라져
+  # "기록 없음"으로 막혔다. 보관 기록 파일이 턴 시작 표시보다 새것인 계획만 본다(예전에 보관된 것은 읽지 않는다).
+  [[ -n "${S:-}" && -f "$S/id" ]] || return 0
+  for f in "$ARCHIVE"/*/ARCHIVED_AT.md; do
+    [[ -f "$f" && "$f" -nt "$S/id" && -f "${f%/*}/PLAN.md" ]] && cat "${f%/*}/PLAN.md" && printf '\n'
+  done
+  return 0
+}
 
 # @effect active_plans
 # 이유: 계획 파일들을 읽어 진행 중(in_progress · testing) 계획 이름을 최근에 고친 것부터 낸다
@@ -345,6 +362,7 @@ case "$CMD" in
       while IFS= read -r f; do [[ -n "$f" ]] && CHANGED="$CHANGED$pre$f"$'\n'; done <<< "$d"
     done < "$S/roots"
     CHANGED="$(printf '%s' "$CHANGED" | LC_ALL=C sort -u | sed '/^$/d')"
+    printf '%s\n' "$CHANGED" > "$S/changed" 2>/dev/null || true   # 재는 검사(pure-bench.sh turn-end)가 읽는다
     NCH=0; [[ -n "$CHANGED" ]] && NCH="$(printf '%s\n' "$CHANGED" | wc -l | tr -d ' ')"
     NEWL="$(scv_tc_new_lines "$(cat "$S/plans" 2>/dev/null)" "$(plan_texts | { t="$(cat)"; scv_tc_plan_lines "$t"; })")"
     NST="$(scv_tc_struct_count "$NEWL")"; NRQ="$(scv_tc_req_count "$NEWL" "$ID")"
@@ -386,6 +404,9 @@ case "$CMD" in
   choice)
     enabled || exit 0
     [[ -n "$Q$A" ]] || exit 0
+    # 재는 검사의 물음에 "이대로"로 답했으면 받아들인 값으로 적는다(계획이 없어도).
+    # 그 물음일 때만 띄운다 — 선택 답마다 띄우면 답 17개에 1초가 더 든다(2026-11-11 시험 T12 가 잡음).
+    [[ "$Q" != *"[재는 검사]"* ]] || bash "$SCRIPT_DIR/pure-bench.sh" accept --question "$Q" --answer "$A" >/dev/null 2>&1 || true
     slug="$(active_plans | head -n 1)"
     [[ -n "$slug" ]] || exit 0
     f="$PROMOTE/$slug/PLAN.md"

@@ -72,16 +72,27 @@ export function parsePipelineSection(markdown) {
     return lines.length;
   })();
 
-  // 절 안의 첫 표를 찾는다. 표 = 파이프로 시작하는 줄이 둘 이상 이어지고, 둘째 줄이 구분선.
-  let header = null, rows = [], inTable = false;
+  // 합성 설계 체크리스트 표(0.90.0)는 이 절 아래에 오지만 단계 표가 아니다. 머리줄에 답 · 근거 칸이
+  // 함께 있으면 그 표다 — 소제목 아래든 굵은 글씨 아래든, 단계 표의 앞이든 뒤든 건너뛴다.
+  // (단계 표로 읽으면 물음들이 변경 지도에 단계로 그려진다.)
+  const isChecklist = (cells) => {
+    const t = cells.map((c) => unwrap(c).toLowerCase());
+    const hasAny = (keys) => t.some((c) => keys.some((k) => c.includes(k)));
+    return hasAny(["답", "answer", "答"]) && hasAny(["근거", "증거", "evidence", "根拠"]);
+  };
+
+  // 절 안의 첫 단계 표를 찾는다. 표 = 파이프로 시작하는 줄이 둘 이상 이어지고, 둘째 줄이 구분선.
+  let header = null, rows = [], inTable = false, skipping = false;
   for (let j = i; j < end; j++) {
     const line = lines[j].trim();
     const looksRow = line.startsWith("|") && line.includes("|", 1);
-    if (!looksRow) { if (inTable) break; continue; }
+    if (!looksRow) { if (inTable) break; skipping = false; continue; }
+    if (skipping) continue;
     const cells = splitRow(line);
     if (!inTable) {
       const next = (lines[j + 1] || "").trim();
       if (!next.startsWith("|") || !isDivider(splitRow(next))) continue;
+      if (isChecklist(cells)) { skipping = true; continue; }
       header = cells; inTable = true; j++; continue;
     }
     if (isDivider(cells)) continue;

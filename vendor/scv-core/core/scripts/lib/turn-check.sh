@@ -19,7 +19,8 @@ declare -F scv_plan_goal_items >/dev/null 2>&1 || source "$(cd "$(dirname "${BAS
 # 앞에 `cd <폴더> &&` 하나와 `이름=값` 환경 설정은 허용한다. plan-link 경로는 / 로 시작하는 절대 경로여야 한다.
 scv_tc_receipt() {
   local cmd="${1:-}" re
-  cmd="${cmd%%$'\n'*}"
+  # 첫 줄만 본다. 줄바꿈이 없는 긴 글에서 "첫 줄바꿈부터 지우기"는 길이의 제곱으로 느리다 — 있을 때만 자른다.
+  [[ "$cmd" == *$'\n'* ]] && cmd="${cmd%%$'\n'*}"
   re='^[[:space:]]*(cd[[:space:]]+[^;&|]+(&&|;)[[:space:]]*)?([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*bash[[:space:]]+"?/[^"[:space:]]*/plan-link\.sh"?[[:space:]]+(append|pause|resume|progress|exempt)([[:space:]]|$)'
   if [[ "$cmd" =~ $re ]]; then
     printf 'plan-link %s' "${BASH_REMATCH[4]}"
@@ -244,16 +245,20 @@ scv_tc_nongoal_hits() {
 # 예: "결제 화면 기능" → "결제"
 # 예: "x" → ""
 scv_tc_words() {
-  local t="${1:-}" w out=""
-  t="${t//[^[:alnum:]가-힣%]/ }"
-  for w in $t; do
+  local t="${1:-}" w out="" c clean="" i=0 n step=8
+  # 낱말 글자가 아닌 것을 빈칸으로 바꾼다 — 긴 글을 통째로 바꾸면 길이의 제곱으로 느려서(옛 셸은 훨씬 더)
+  # 짧은 토막으로 잘라 바꾼다. 글자 하나짜리 무늬라 어디서 잘라도 답은 같다.
+  [[ ${BASH_VERSINFO[0]} -ge 4 ]] && step=32
+  n=${#t}
+  while [[ $i -lt $n ]]; do c="${t:i:step}"; clean+="${c//[^[:alnum:]가-힣%]/ }"; i=$((i + step)); done
+  for w in $clean; do
     case "$w" in
       *으로|*에서|*에게|*부터|*까지) w="${w%??}" ;;
       *은|*는|*이|*가|*을|*를|*의|*에|*로|*도|*만|*와|*과) w="${w%?}" ;;
     esac
     (( ${#w} >= 2 )) || continue
     case "$w" in 기능|추가|수정|변경|화면|단계|계획|사용자|하기|한다|있음|없음) continue ;; esac
-    out="$out${out:+ }$w"
+    out+="${out:+ }$w"
   done
   printf '%s' "$out"
 }

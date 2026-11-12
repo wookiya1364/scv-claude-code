@@ -138,14 +138,26 @@ scv_as_group_of() {
 # 예: 'nothing' $'login' → "0"
 # <줄 내용> <낱말 목록> → 그 줄에 함께 나온 낱말 수. 대소문자를 가리지 않는다.
 scv_as_count_terms() {
-  local line="${1:-}" terms="${2:-}" t n=0
+  local line="${1:-}" terms="${2:-}" t n=0 i=0 k=0 lowered=0
   local lower; lower="$(printf '%s' "$line" | tr '[:upper:]' '[:lower:]')"
   local tl
+  local -a tls=()
   while IFS= read -r t; do
+    i=$((i + 1))
     [[ -n "$t" ]] || continue
     # 있는 그대로 먼저 — 문자 변환이 여러 바이트 글자를 깨뜨리는 환경이 있다.
     case "$line" in *"$t"*) n=$((n+1)); continue ;; esac
-    tl="$(printf '%s' "$t" | tr '[:upper:]' '[:lower:]')"
+    # 소문자 낱말이 처음 필요해질 때 낱말 전체를 한 번에 바꿔 둔다 — 낱말마다 프로그램을 띄우지 않는다.
+    # 줄 수는 그대로이므로 같은 줄 번호의 것이 그 낱말의 소문자다.
+    if (( ! lowered )); then
+      lowered=1
+      while IFS= read -r tl; do tls[k]="$tl"; k=$((k + 1)); done <<< "$(printf '%s' "$terms" | tr '[:upper:]' '[:lower:]')"
+    fi
+    if [[ $i -le $k ]]; then tl="${tls[i - 1]}"
+    else
+      # 바꾸는 프로그램이 깨진 글자에서 멈춰 뒤 줄이 없을 때만 — 그 낱말 하나를 따로 바꾼다(예전과 같은 답).
+      tl="$(printf '%s' "$t" | tr '[:upper:]' '[:lower:]')"
+    fi
     case "$lower" in *"$tl"*) n=$((n+1)) ;; esac
   done <<< "$terms"
   printf '%s' "$n"

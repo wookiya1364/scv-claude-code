@@ -34,11 +34,21 @@ scv_lower() {
 # 앞 공백 · 인용 기호 뒤 공백 · 꾸밈 글자(* _)는 무시한다. 이름표 목록은 이곳 하나다 —
 # 다시 쓴 요청이 맨 위에 있는지 보는 판정(model-prompting)과 답 모양 검사(help-state)가 같이 쓴다.
 scv_is_rewrite_quote() {
-  local t="${1:-}" q=$'\x3e'
-  t="${t#"${t%%[![:space:]]*}"}"
-  [[ "${t:0:1}" == "$q" ]] || { printf '0'; return 0; }
-  t="${t:1}"; t="${t//\*/}"; t="${t//_/}"; t="${t#"${t%%[![:space:]]*}"}"
-  case "$t" in
+  local t="${1:-}" q=$'\x3e' w win=64 len
+  len=${#t}
+  # 판정에는 줄 머리만 있으면 된다(가장 긴 문구가 17자). 긴 줄 전체에서 * 와 _ 를 지우지 않고,
+  # 머리 토막에서 답이 정해질 때까지만 본다 — 모자라면 토막을 4배로 늘린다.
+  while :; do
+    w="${t:0:win}"
+    w="${w#"${w%%[![:space:]]*}"}"
+    if [[ -n "$w" ]]; then
+      [[ "${w:0:1}" == "$q" ]] || { printf '0'; return 0; }
+      w="${w:1}"; w="${w//\*/}"; w="${w//_/}"; w="${w#"${w%%[![:space:]]*}"}"
+    fi
+    (( ${#w} >= 17 || win >= len )) && break
+    win=$((win * 4))
+  done
+  case "$w" in
     "다시 쓴 요청"*|"Rewritten request"*|"rewritten request"*|"書き直した依頼"*) printf '1' ;;
     *) printf '0' ;;
   esac
