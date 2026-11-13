@@ -229,5 +229,61 @@ if (( IS_CORE_REPO )); then
 fi
 
 echo ""
+echo "── 마무리 보고도 훑는다 (0.93.1) ──"
+# 마무리 보고는 모든 계획이 같은 틀(묶음 제목 · 칸 이름 · 안내 글)을 가진다. 값에 적은 말로는 그 계획을 찾고,
+# 틀에만 있는 말로는 걸리지 않아야 한다 — 걸리면 낱말 하나에 모든 계획이 올라와 다른 답을 밀어낸다.
+WU_CMD="$CORE/scripts/wrapup.sh"
+PW=$(mkproj wrap)
+mkplan "$PW" "20260201-a-alpha" $'---\ntitle: 알파 계획\nlang: korean\n---\n# 알파 계획\n\n본문에는 수달이 산다.\n\n## Links\n- Wrap-up: [`WRAPUP.md`](./WRAPUP.md)'
+mkplan "$PW" "20260202-a-beta"  $'---\ntitle: 베타 계획\nlang: korean\n---\n# 베타 계획\n\n## Links\n- Wrap-up: [`WRAPUP.md`](./WRAPUP.md)'
+mkplan "$PW" "20260203-a-gamma" $'---\ntitle: gamma plan\nlang: english\n---\n# gamma plan\n\n## Links\n- Wrap-up: [`WRAPUP.md`](./WRAPUP.md)'
+for s in 20260201-a-alpha 20260202-a-beta 20260203-a-gamma; do bash "$WU_CMD" new "$PW/scv/archive/$s" >/dev/null 2>&1; done
+WA="$PW/scv/archive/20260201-a-alpha/WRAPUP.md"; WB="$PW/scv/archive/20260202-a-beta/WRAPUP.md"
+[[ -f "$WA" && -f "$WB" ]] && ok || bad "마무리 보고 틀을 만들지 못함"
+fillwu() {  # <파일> <칸 이름> <값> → 그 칸의 채울 자리를 값으로 바꾼다
+  local text from="- $2: <TODO>" to="- $2: $3"; text="$(cat "$1")"
+  [[ "$text" == *"$from"* ]] || { bad "칸 없음: $2"; return 0; }
+  # 바꿀 글은 변수로 — bash 3.2 는 바꿀 글 자리의 따옴표를 글자로 남긴다
+  printf '%s\n' "${text/"$from"/$to}" > "$1"
+}
+
+# T4. 마무리 보고의 값에만 있는 말로 그 계획을 찾는다
+fillwu "$WA" "다른 곳에도 쓸 수 있는 것" "고슴도치 규칙은 다른 검사에도 쓴다"
+o="$(run "$PW" 고슴도치)"
+has "$o" "ARCHIVE_SEARCH: 1" "T4 한 건"
+has "$o" "20260201-a-alpha (마무리 보고)" "T4 계획 이름과 종류"
+has "$o" "고슴도치 규칙은 다른 검사에도 쓴다" "T4 걸린 값"
+hasnt "$o" "다른 곳에도 쓸 수 있는 것" "T4 칸 이름은 대목에 싣지 않는다"
+want "종류 마무리 보고" "$(scv_as_kind_of 'scv/archive/x/WRAPUP.md')" "마무리 보고"
+want "묶음은 계획 폴더" "$(scv_as_group_of 'scv/archive/20260201-a-alpha/WRAPUP.md')" "20260201-a-alpha"
+
+# T5. 틀에만 있는 말(묶음 제목 · 칸 이름 · 안내 글 · 채울 자리 표시)로는 걸리지 않는다
+has "$(run "$PW" 가설)" "ARCHIVE_SEARCH: 0" "T5 묶음 제목"
+has "$(run "$PW" 재현)" "ARCHIVE_SEARCH: 0" "T5 칸 이름"
+has "$(run "$PW" 건너뛴다)" "ARCHIVE_SEARCH: 0" "T5 안내 글"
+has "$(run "$PW" TODO)" "ARCHIVE_SEARCH: 0" "T5 채울 자리 표시"
+has "$(run "$PW" Hypothesis)" "ARCHIVE_SEARCH: 0" "T5 영어 틀의 묶음 제목"
+has "$(run "$PW" Reproduce)" "ARCHIVE_SEARCH: 0" "T5 영어 틀의 칸 이름"
+fillwu "$WB" "H1" "가설 낱말을 값에 적었다"
+o="$(run "$PW" 가설)"
+has "$o" "ARCHIVE_SEARCH: 1" "T5 값에 있으면 걸린다"
+has "$o" "20260202-a-beta (마무리 보고)" "T5 값에 적은 계획만"
+hasnt "$o" "20260201-a-alpha" "T5 틀만 가진 계획은 안 나온다"
+
+# T6. 계획 문서와 마무리 보고 둘 다에 같은 말이 있어도 그 계획은 한 칸만 차지한다
+fillwu "$WA" "상황" "수달 문제가 있었다"
+o="$(run "$PW" 수달)"
+has "$o" "ARCHIVE_SEARCH: 1" "T6 출처 한 곳"
+want "T6 한 계획 한 칸" "$(grep -c '^  20260201-a-alpha (' <<<"$o" | tr -d '[:space:]')" "1"
+
+# 순수부 — 칸 줄을 훑은 줄 모양("파일:묶음 번호:값")으로 바꾼다. 묶음 제목 · 빈 값 · 채울 자리 표시는 버린다
+TAB=$'\t'; NL=$'\n'; TODO_MARK='<TODO>'
+want "값만 남긴다" "$(scv_as_wrapup_lines "${US}a/WRAPUP.md${NL}1${TAB}#${TAB}문제${NL}1${TAB}상황${TAB}수달이 느리다${NL}1${TAB}기대${TAB}${NL}7${TAB}배운 것${TAB}${TODO_MARK}")" "a/WRAPUP.md:1:수달이 느리다"
+want "건너뜀 줄의 이유는 값이다" "$(scv_as_wrapup_lines "${US}a/WRAPUP.md${NL}2${TAB}-${TAB}해당 없음 — 새 기능")" "a/WRAPUP.md:2:해당 없음 — 새 기능"
+want "파일 둘" "$(scv_as_wrapup_lines "${US}a/WRAPUP.md${NL}1${TAB}상황${TAB}하나${NL}${US}b/WRAPUP.md${NL}6${TAB}fix${TAB}둘: 쌍점도 값")" "a/WRAPUP.md:1:하나${NL}b/WRAPUP.md:6:둘: 쌍점도 값"
+want "파일 이름 줄이 없으면 버린다" "$(scv_as_wrapup_lines "1${TAB}상황${TAB}주인 없는 줄")" ""
+want "없으면 빈 글" "$(scv_as_wrapup_lines "")" ""
+
+echo ""
 echo "── test-archive-search: $pass passed, $fail failed ──"
 [[ $fail -eq 0 ]]

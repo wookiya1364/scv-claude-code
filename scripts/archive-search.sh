@@ -6,7 +6,7 @@
 #
 # 읽기만 한다. 어떤 파일도 만들거나 고치지 않는다. 설치할 것을 늘리지 않는다 — grep 과 awk 뿐.
 #
-# 훑는 곳: 보관된 계획서·검사·구조·보관 기록, 소비된 원자료, 대화(보관 하위 폴더 포함), 결정 기록.
+# 훑는 곳: 보관된 계획서·검사·구조·보관 기록·마무리 보고(값만), 소비된 원자료, 대화(보관 하위 폴더 포함), 결정 기록.
 # 생성물(기획서 HTML)은 훑지 않는다 — 위 문서들로 만들어진 것이라 같은 내용을 두 번 세게 된다.
 #
 # 훑기는 한 번에 끝낸다. 줄마다 셸에서 다시 비교하면 백 배 느려진다(실측 26ms 대 3,729ms).
@@ -14,6 +14,8 @@ set -uo pipefail
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/lib/archive-search.sh"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/lib/wrapup.sh"
 # 경로 초기화 helper 는 부르지 않는다 — 그것은 자동 동기화를 함께 부르고, 이 명령은
 # 읽기만 해야 한다(안전장치). 필요한 것은 scv 폴더 위치 하나뿐이라 직접 찾는다.
 if [[ -z "${SCV_DIR:-}" ]]; then
@@ -57,7 +59,17 @@ while IFS= read -r f; do [[ -f "$f" ]] && files+=("$f"); done < <(
     "$SCV_DIR"/conversations/*.md "$SCV_DIR"/conversations/archive/*.md \
     "$SCV_DIR"/DECISIONS.md 2>/dev/null
 )
-if (( ${#files[@]} == 0 )); then
+# 마무리 보고는 값만 훑는다 — 틀(묶음 제목 · 칸 이름 · 안내 글)은 모든 계획이 같아서 그대로 훑으면
+# 낱말 하나에 모든 계획이 걸린다. 칸 줄은 마무리 보고 쪽 함수가 꺼내고, 여기서는 파일 이름만 붙인다.
+wu_marked=""
+for f in "$SCV_DIR"/archive/*/WRAPUP.md; do
+  [[ -f "$f" ]] || continue
+  wu_marked+="${US}${f}"$'\n'"$(scv_wu_fields "$(<"$f")")"$'\n'
+done
+wu_lines="$(scv_as_wrapup_lines "$wu_marked")"
+unset wu_marked
+
+if (( ${#files[@]} == 0 )) && [[ -z "$wu_lines" ]]; then
   echo "ARCHIVE_SEARCH: 0"
   echo "아직 보관된 기록이 없습니다. 계획 세우기로 첫 계획을 만들어 보세요."
   exit 0
@@ -72,10 +84,17 @@ fi
 # 여러 바이트 글자(한글 등)를 깨뜨리는 grep 에서 한 건도 못 찾는다 — 실제로 맥에서 그랬다.
 # 둘 중 하나만 맞아도 잡히고, 겹치는 줄은 뒤에서 하나로 합쳐진다.
 _pat="$(printf '%s\n' "$TERMS" | awk "$_SCV_AS_AWK_NONEMPTY")"
-sweep="$( { printf '%s\n' "$_pat" | grep -H -n -F -f /dev/stdin -- "${files[@]}" 2>/dev/null
-            printf '%s\n' "$_pat" | grep -H -n -i -F -f /dev/stdin -- "${files[@]}" 2>/dev/null
-          } | sort -u || true )"
+sweep=""
+if (( ${#files[@]} > 0 )); then
+  sweep="$( { printf '%s\n' "$_pat" | grep -H -n -F -f /dev/stdin -- "${files[@]}" 2>/dev/null
+              printf '%s\n' "$_pat" | grep -H -n -i -F -f /dev/stdin -- "${files[@]}" 2>/dev/null
+            } | sort -u || true )"
+fi
 unset _pat
+# 마무리 보고의 값 줄은 그대로 잇는다 — 낱말이 없는 줄은 점수 매기기가 버린다.
+if [[ -n "$wu_lines" ]]; then
+  if [[ -n "$sweep" ]]; then sweep+=$'\n'"$wu_lines"; else sweep="$wu_lines"; fi
+fi
 if [[ -z "$sweep" ]]; then
   scv_as_render "" 0 "$NTERMS" "$LIMIT" ""
   exit 0

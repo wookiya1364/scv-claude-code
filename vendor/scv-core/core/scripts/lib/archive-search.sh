@@ -56,6 +56,7 @@ _SCV_AS_AWK_SCORE='
       if (f ~ /\/archive\/[^\/]+\/TESTS\.md$/)                return "검사"
       if (f ~ /\/archive\/[^\/]+\/FEATURE_ARCHITECTURE\.md$/) return "구조"
       if (f ~ /\/archive\/[^\/]+\/ARCHIVED_AT\.md$/)          return "보관"
+      if (f ~ /\/archive\/[^\/]+\/WRAPUP\.md$/)               return "마무리 보고"
       if (f ~ /\/raw\/stale\//)                               return "원자료"
       if (f ~ /\/conversations\//)                             return "대화"
       if (f ~ /DECISIONS\.md$/)                                 return "결정"
@@ -78,6 +79,20 @@ _SCV_AS_AWK_SCORE='
       printf "%d%s%s%s%s%s%s%s%s\n", n, US, group_of(f), US, kind_of(f), US, ln, US, body
     }'
 
+# 마무리 보고의 칸 줄 → 훑은 줄 모양. 파일 이름 줄은 단위 구분자(US)로 시작한다.
+_SCV_AS_AWK_WRAPUP='
+    substr($0, 1, 1) == US { f = substr($0, 2); next }
+    f == "" { next }
+    {
+      t1 = index($0, "\t"); if (t1 == 0) next
+      g = substr($0, 1, t1 - 1); r = substr($0, t1 + 1)
+      t2 = index(r, "\t"); if (t2 == 0) next
+      name = substr(r, 1, t2 - 1); v = substr(r, t2 + 1)
+      if (g !~ /^[1-7]$/ || name == "#") next
+      if (v == "" || index(v, "\074TODO") > 0) next
+      printf "%s:%s:%s\n", f, g, v
+    }'
+
 # 비었는지는 길이로만 본다. 셸의 문자열 치환(${s//.../})을 큰 입력에 돌리면 아주 느리다 —
 # 74KB 한 번에 1.9초였고, 그게 이 명령이 2.5초 걸리던 이유였다. 공백만 든 입력은
 # awk 가 알아서 아무것도 내지 않으므로 따로 막지 않아도 된다.
@@ -98,6 +113,7 @@ scv_as_parse_terms() {
 # 역할: 파일 경로 모양만 보고 기록의 종류(계획 · 검사 · 대화 · 결정 · 기타 …)를 정한다
 # 종류: 판정/answer
 # 예: scv/archive/x/PLAN.md → "계획"
+# 예: scv/archive/x/WRAPUP.md → "마무리 보고"
 # 예: scv/conversations/a.md → "대화"
 # 예: scv/DECISIONS.md → "결정"
 # 예: README.md → "기타"
@@ -108,6 +124,7 @@ scv_as_kind_of() {
     */archive/*/TESTS.md)                printf '검사' ;;
     */archive/*/FEATURE_ARCHITECTURE.md) printf '구조' ;;
     */archive/*/ARCHIVED_AT.md)          printf '보관' ;;
+    */archive/*/WRAPUP.md)               printf '마무리 보고' ;;
     */raw/stale/*)                       printf '원자료' ;;
     */conversations/*)                   printf '대화' ;;
     */DECISIONS.md)                      printf '결정' ;;
@@ -183,6 +200,23 @@ scv_as_score_lines() {
   # 여러 낱말 물음이 한 건도 안 잡혔다. 한 줄짜리 구분자로 이어 붙여 넘긴다.
   local joined; joined="$(printf '%s' "$terms" | tr '\n' '\t')"
   printf '%s\n' "$sweep" | awk -v TERMS="$joined" -v US="$_SCV_AS_US" "$_SCV_AS_AWK_SCORE"
+}
+
+# @deterministic
+# 역할: 마무리 보고의 칸 줄들을 훑은 줄 모양("파일:묶음 번호:값")으로 바꾼다 — 묶음 제목 · 빈 값 · 채울 자리 표시(TODO)는 버리고 값만 남긴다
+# 종류: 변환
+# 예: $'\x1fa/WRAPUP.md\n1\t#\t문제\n1\t상황\t수달이 느리다\n7\t배운 것\t' → "a/WRAPUP.md:1:수달이 느리다"
+# 예: $'\x1fa/WRAPUP.md\n2\t-\t해당 없음 — 새 기능' → "a/WRAPUP.md:2:해당 없음 — 새 기능"
+# 예: $'1\t상황\t파일 이름 줄이 없다' → ""
+# 예: "" → ""
+# <파일 이름 줄(US + 경로)과 그 아래 칸 줄("묶음<TAB>이름<TAB>값")들> → 훑은 줄들. 여러 파일을 이어 줘도 된다.
+# 마무리 보고는 모든 계획이 같은 틀(묶음 제목 · 칸 이름 · 안내 글)을 가진다. 파일을 그대로 훑으면
+# "가설" 한 낱말에 모든 계획이 걸려 다른 답을 밀어낸다 — 그래서 값만 훑는다. 줄 번호 자리에는 묶음 번호(1 ~ 7)가 온다.
+# 칸 줄은 scv_wu_fields(lib/wrapup.sh)가 낸 그대로다 — 무엇이 칸인지는 그 함수 하나만 안다.
+scv_as_wrapup_lines() {
+  local marked="${1:-}"
+  [[ -n "$marked" ]] || return 0
+  printf '%s\n' "$marked" | awk -v US="$_SCV_AS_US" "$_SCV_AS_AWK_WRAPUP"
 }
 
 # @deterministic
