@@ -164,6 +164,90 @@ reset; start; ed; H "bash $PL progress p1 --step 1 --note '결제 버튼'"; vD="
 unset SCV_STEP_TOOL SCV_STEP_TOOL_ON_FILE SCV_STEP_TOOL_ON_MARK
 [[ "$vA $vB $vC $vD" == "block block pass pass" ]] && ok "T17 켜짐: 보고 없음 block · 다른 도구 block · 보고 pass, 꺼짐: 진행 줄만 pass" || bad "T17 $vA $vB $vC $vD"
 
+# T43 ~ T50 — 단계 보고 도구에 도구 앞 훅이 닿지 않는 호스트 (계획 20261113-wookiya1364-step-report-and-bench-before · TESTS T1 ~ T8).
+# 그 도구를 앱의 모드가 직접 처리하면 도구 앞 훅이 돌지 않아 표시가 0 이다(2026-11-13 실제 세션에서 확인: 16번 넘게 불러도 0).
+# 턴 끝 검사는 막을 참일 때만 대화 기록에서 "이번 턴이 시작된 뒤 어시스턴트가 그 도구를 부른 줄"을 센다.
+printf '{"enabledPlugins": {"dash@m": true}}' > "$ON"
+export SCV_STEP_TOOL=tool_step SCV_STEP_TOOL_ON_FILE="$ON" SCV_STEP_TOOL_ON_MARK='"dash@m": true'
+TR="$WORK/transcript.jsonl"; LATER="2099-01-01T00:00:00.000Z"; EARLIER="2000-01-01T00:00:00.000Z"
+tline() {  # <call|other|text|user|list|junk> <시각> → 대화 기록 한 줄
+  case "$1" in
+    call)  printf '{"type":"assistant","timestamp":"%s","message":{"role":"assistant","content":[{"type":"text","text":"단계를 알린다"},{"type":"tool_use","id":"t1","name":"tool_step","input":{"plan":"p1","step":1,"state":"doing"}}]}}\n' "$2" ;;
+    other) printf '{"type":"assistant","timestamp":"%s","message":{"role":"assistant","content":[{"type":"tool_use","id":"t2","name":"other_tool","input":{"note":"tool_step 은 아니다"}}]}}\n' "$2" ;;
+    text)  printf '{"type":"assistant","timestamp":"%s","message":{"role":"assistant","content":[{"type":"text","text":"tool_step 을 부르겠다"}]}}\n' "$2" ;;
+    user)  printf '{"type":"user","timestamp":"%s","message":{"role":"user","content":"이 세션에 tool_step 도구가 있으면 단계를 알려라 — tool_use 가 아니다"}}\n' "$2" ;;
+    list)  printf '{"type":"attachment","timestamp":"%s","attachment":{"type":"tool_list","names":["tool_step","other_tool"],"note":"tool_use"}}\n' "$2" ;;
+    junk)  printf 'tool_step tool_use — JSON 이 아닌 줄 %s\n' "$2" ;;
+  esac
+}
+verdict_t() { bash "$TC" end --session s1 --transcript "$1" | sed -n 's/^TURN_PLAN: //p'; }
+turn_ready() { reset; start; ed; H "bash $PL progress p1 --step 1 --note '결제 버튼'"; }
+
+turn_ready; tline call "$LATER" > "$TR"; v="$(verdict_t "$TR")"
+[[ "$v" == pass ]] && ok "T43 표시 없이 대화 기록에 이번 턴의 호출 → pass" || bad "T43 $v"
+
+turn_ready; { tline other "$LATER"; tline text "$LATER"; } > "$TR"
+o="$(bash "$TC" end --session s1 --transcript "$TR")"
+[[ "$(sed -n 's/^TURN_PLAN: //p' <<< "$o")" == block ]] && grep -q '^TURN_PLAN_REASON: .*tool_step' <<< "$o" && ok "T44 부르지 않은 턴 → block, 이유에 도구 이름" || bad "T44 $o"
+
+turn_ready; tline call "$EARLIER" > "$TR"; v="$(verdict_t "$TR")"
+[[ "$v" == block ]] && ok "T45 앞 턴의 호출은 세지 않음 → block" || bad "T45 $v"
+
+turn_ready; { tline user "$LATER"; tline list "$LATER"; tline text "$LATER"; tline junk "$LATER"; } > "$TR"; v="$(verdict_t "$TR")"
+[[ "$v" == block ]] && ok "T46 이름이 글에 나온 것만으로는 세지 않음 → block" || bad "T46 $v"
+
+# 호출 줄의 시각은 "턴 시작 1초 뒤, 도중에 온 말보다 앞"이다 — 시작 시각이 도중에 온 말로 밀리면 세지 못해 막힌다
+turn_ready; i0="$(cat scv/journal/.turn-plan/id)"; sleep 2; tline call "$(date -u +%Y-%m-%dT%H:%M:%S).000Z" > "$TR"
+sleep 2; start "도중에 온 말"; i1="$(cat scv/journal/.turn-plan/id)"; v="$(verdict_t "$TR")"
+[[ -n "$i0" && "$i0" == "$i1" && "$v" == pass ]] && ok "T47 도중에 온 말로 이어진 턴: 처음 시작 시각부터 셈 · pass" || bad "T47 [$i0] [$i1] $v"
+
+turn_ready; bash "$TC" step --session s1 --tool tool_step
+e="$(bash "$TC" end --session s1 --transcript "$WORK/no-such-transcript.jsonl" 2>&1 >/dev/null)"; reset
+turn_ready; bash "$TC" step --session s1 --tool tool_step; v="$(verdict_t "$WORK/no-such-transcript.jsonl")"
+[[ "$v" == pass && -z "$e" ]] && ok "T48 훅의 표시가 있으면 대화 기록 없이 pass, 오류 출력 없음" || bad "T48 $v [$e]"
+
+n7=0; : > "$WORK/empty.jsonl"; { tline junk "$LATER"; printf '{"type":"assistant"\n'; } > "$WORK/junk.jsonl"
+for tr7 in "$WORK/no-such-transcript.jsonl" "$WORK/empty.jsonl" "$WORK/junk.jsonl" ""; do
+  turn_ready
+  if [[ -n "$tr7" ]]; then o="$(bash "$TC" end --session s1 --transcript "$tr7" 2>&1)"; rc=$?; else o="$(bash "$TC" end --session s1 2>&1)"; rc=$?; fi
+  [[ $rc == 0 && "$(sed -n 's/^TURN_PLAN: //p' <<< "$o")" == block && "$(grep -c . <<< "$o")" == 4 ]] && n7=$((n7 + 1))
+done
+[[ $n7 == 4 ]] && ok "T49 대화 기록을 읽을 수 없는 넷(없음 · 빔 · JSON 아님 · 안 넘김) → 모두 block, 종료 코드 0, 군말 없음" || bad "T49 $n7/4"
+
+# shellcheck source=../scripts/lib/turn-check.sh
+c8="$( source "$CORE/scripts/lib/plan-link.sh"; source "$CORE/scripts/lib/turn-check.sh"
+  L="$(tline call "$LATER"; tline call "2026-11-13T02:00:00.500Z"; tline call "$EARLIER"; tline other "$LATER"; tline text "$LATER"; tline junk "$LATER")"
+  printf '%s %s %s %s' "$(scv_tc_step_calls "$L" tool_step "2026-11-13T02:00:00")" "$(scv_tc_step_calls "" tool_step "2026-11-13T02:00:00")" \
+    "$(scv_tc_step_calls "$L" tool_step "")" "$(scv_tc_step_calls "$L" "" "2026-11-13T02:00:00")" )"
+[[ "$c8" == "2 0 0 0" ]] && ok "T50 세는 함수: 시작 뒤 호출 2 · 빈 입력 0 · 시작 시각 없음 0 · 도구 이름 없음 0" || bad "T50 [$c8]"
+# T51 — 끝 훅이 대화 기록 자리를 턴 끝 검사에 넘긴다 (TESTS T10)
+STOP_HOOK="$CORE/template/hooks/on-stop.sh"
+stop_out() { jq -cn --arg p "$1" '{transcript_path:$p,last_assistant_message:"끝",stop_hook_active:false}' | CLAUDE_PLUGIN_ROOT="$CORE" bash "$STOP_HOOK" 2>/dev/null; }
+turn_ready; tline call "$LATER" > "$TR"; oA="$(stop_out "$TR")"
+turn_ready; tline other "$LATER" > "$TR"; oB="$(stop_out "$TR")"
+if ! grep -q 'tool_step' <<< "$oA" && grep -q '"decision":"block"' <<< "$oB" && grep -q 'tool_step' <<< "$oB"; then ok "T51 끝 훅: 호출이 있으면 단계 보고로 막지 않고, 없으면 막는다"
+else bad "T51 A=[$(head -c 200 <<< "$oA")] B=[$(head -c 200 <<< "$oB")]"; fi
+# T52 — 막을 일이 없는 턴은 대화 기록을 열지 않고, 막을 참인 턴이 큰 대화 기록(30MB)을 읽어도 0.7초를 더 쓰지 않는다 (TESTS T9)
+BIG="$WORK/big.jsonl"
+yes '{"type":"user","timestamp":"2099-01-01T00:00:00.000Z","message":{"role":"user","content":"긴 대화 기록의 한 줄 — 단계 보고 도구의 이름은 없다"}}' 2>/dev/null | head -c 30000000 > "$BIG"
+end_ms() {  # [대화 기록] → 턴 끝 검사를 세 번 돌린 가운데 가장 빠른 시간(ms)
+  local best=999999 a b i
+  for i in 1 2 3; do
+    a="$(now_ms)"; if [[ -n "${1:-}" ]]; then bash "$TC" end --session s1 --transcript "$1" >/dev/null; else bash "$TC" end --session s1 >/dev/null; fi; b="$(now_ms)"
+    [[ $((b - a)) -lt $best ]] && best=$((b - a))
+  done
+  printf '%s' "$best"
+}
+printf '{"enabledPlugins": {"dash@m": false}}' > "$ON"
+turn_ready; off_no="$(end_ms)"; off_big="$(end_ms "$BIG")"
+printf '{"enabledPlugins": {"dash@m": true}}' > "$ON"
+turn_ready; printf '5' > scv/journal/.turn-plan/blocks; on_no="$(end_ms)"; on_big="$(end_ms "$BIG")"
+# 큰 기록의 맨 끝에 붙은 호출도 센다 — 끝 쪽만 읽어도 이번 턴의 호출은 거기 있다
+turn_ready; cp "$BIG" "$WORK/big-call.jsonl"; { printf '\n'; tline call "$LATER"; } >> "$WORK/big-call.jsonl"; vbig="$(verdict_t "$WORK/big-call.jsonl")"
+if [[ $off_big -le $((off_no * 3 / 2 + 200)) && $((on_big - on_no)) -le 700 && "$vbig" == pass ]]; then ok "T52 대화 기록 30MB: 보고가 필요 없는 턴 ${off_no} → ${off_big}ms · 막을 참인 턴 ${on_no} → ${on_big}ms"
+else bad "T52 필요 없음 ${off_no} → ${off_big}ms · 막을 참 ${on_no} → ${on_big}ms · 큰 기록 끝의 호출 $vbig"; fi
+unset SCV_STEP_TOOL SCV_STEP_TOOL_ON_FILE SCV_STEP_TOOL_ON_MARK
+
 # T18 — 보류시킨 계획이 보관됐는데 원래 계획이 아직 보류면 막고, resume 뒤 통과
 reset; mkdir -p scv/promote/p2 scv/archive
 printf -- '---\ntitle: 로그\nstatus: in_progress\nreturn_to: p1\n---\n\n## Suggested path\n\n1. 로그 — l\n' > scv/promote/p2/PLAN.md

@@ -5,7 +5,7 @@
 #   turn-check.sh start   --dir <턴 폴더> | --session <세션>            (표준 입력: 이번 턴 사용자 원문)
 #   turn-check.sh touch   --dir <턴 폴더> [--kind write|shell|read] <경로>…  (도구 앞: 쓴 파일 · 셸 앞 모습을 적음)
 #   turn-check.sh receipt --dir <턴 폴더>            (표준 입력: 도구가 돌릴 명령 글)
-#   turn-check.sh end     --dir <턴 폴더>            → TURN_PLAN: pass|block|pass-unrecorded|off · TURN_PLAN_REASON: …
+#   turn-check.sh end     --dir <턴 폴더> [--transcript <대화 기록 파일>]   → TURN_PLAN: pass|block|pass-unrecorded|off · TURN_PLAN_REASON: …
 #   turn-check.sh choice  --question <질문> --answer <답>
 #   turn-check.sh step    --dir <턴 폴더> --tool <도구 이름>   (도구 앞: 단계 보고 도구면 표시)
 #   turn-check.sh info                               → TURN_ID: … · TURN_REQ: … (plan-link 이 읽음)
@@ -155,6 +155,28 @@ active_plans() {
   done
 }
 
+# @effect step_call_lines
+# 이유: 대화 기록 파일의 끝 8 ~ 9MB 에서 단계 보고 도구의 이름과 도구 호출 표시가 함께 든 줄의 끝 쪽(200줄)을 읽는다
+# 끝 쪽만 읽는 것은 이 길이 대시보드를 켠 세션에서 턴마다 돌기 때문이다. 맥에서 30MB 를 통째로 훑으면 0.28초,
+# tail -c 로 끝을 자르면 0.58초, dd 로 끝 16MB 를 건너뛰어 읽으면 0.16초였다(2026-11-13 실측) — 그래서 dd 로 건너뛴다.
+# 이번 턴의 호출은 파일의 끝 쪽에 있다(이 저장소의 긴 턴이 1.5MB 안팎). 잘린 첫 줄은 세는 함수가 버린다.
+step_call_lines() {
+  local f="$1" sz skip=0
+  sz="$(wc -c < "$f" 2>/dev/null | tr -d '[:space:]')"
+  [[ "$sz" =~ ^[0-9]+$ ]] || return 0
+  (( sz > 8388608 )) && skip=$(( sz / 1048576 - 8 ))
+  dd if="$f" bs=1048576 skip="$skip" 2>/dev/null | LC_ALL=C grep -F -- "$2" | LC_ALL=C grep -F -- 'tool_use' | tail -n 200
+}
+
+# @effect turn_started_at
+# 이유: 턴 번호 파일의 고친 시각을 읽어 UTC 글(2026-01-01T00:00:00 꼴)로 낸다(맥 BSD · 리눅스 GNU 둘 다) — 읽지 못하면 빈 글
+turn_started_at() {
+  local m
+  if m="$(stat -f '%m' "$S/id" 2>/dev/null)" && [[ "$m" =~ ^[0-9]+$ ]]; then date -u -r "$m" +%Y-%m-%dT%H:%M:%S 2>/dev/null
+  elif m="$(stat -c '%Y' "$S/id" 2>/dev/null)" && [[ "$m" =~ ^[0-9]+$ ]]; then date -u -d "@$m" +%Y-%m-%dT%H:%M:%S 2>/dev/null
+  fi
+}
+
 # @effect step_needed
 # 이유: 호스트 설정 파일을 읽어 대시보드(단계 보고 도구)가 켜졌는지 본다 — 래퍼가 준 파일 · 표시가 없으면 "no"
 step_needed() {
@@ -241,7 +263,7 @@ trap 'rm -f "$TMPF"' EXIT
 
 [[ $# -ge 1 ]] || usage
 CMD="$1"; shift
-DIR=""; SID=""; Q=""; A=""; TOOL=""; KIND="write"; PATHS=()
+DIR=""; SID=""; Q=""; A=""; TOOL=""; KIND="write"; TRANSCRIPT=""; PATHS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dir) DIR="${2:-}"; shift 2 ;;
@@ -250,6 +272,7 @@ while [[ $# -gt 0 ]]; do
     --answer) A="${2:-}"; shift 2 ;;
     --tool) TOOL="${2:-}"; shift 2 ;;
     --kind) KIND="${2:-write}"; shift 2 ;;
+    --transcript) TRANSCRIPT="${2:-}"; shift 2 ;;
     *) PATHS+=("$1"); shift ;;
   esac
 done
@@ -398,6 +421,13 @@ case "$CMD" in
     BL="$(cat "$S/blocks" 2>/dev/null || echo 0)"
     NEED=no; (( NPL > 0 )) && NEED="$(step_needed)"
     NSTEP="$(grep -c . "$S/steps" 2>/dev/null || true)"; NSTEP="${NSTEP:-0}"
+    # 단계 보고 도구를 앱이 직접 처리하는 호스트에서는 도구 앞 훅이 돌지 않아 표시가 0 이다(0.93.2). 막을 참일 때만
+    # 대화 기록에서 이번 턴의 그 도구 호출을 센다 — 표시가 있거나 보고가 필요 없는 턴은 대화 기록을 열지 않는다.
+    # 이번 턴이 시작된 시각은 턴 번호 파일이 만들어진 시각이다 — 턴을 시작할 때 따로 적지 않는다(시작 길에 프로그램 호출을
+    # 하나 더하면 사진 0.3초 한도에 닿았다). 도중에 온 말로 이어지는 턴은 그 파일을 건드리지 않으므로 처음 시각이 남는다.
+    if [[ "$NEED" == yes && "$NSTEP" == 0 && -n "$TRANSCRIPT" && -f "$TRANSCRIPT" ]]; then
+      NSTEP="$(scv_tc_step_calls "$(step_call_lines "$TRANSCRIPT" "$SCV_STEP_TOOL")" "$SCV_STEP_TOOL" "$(turn_started_at)")"
+    fi
     ORPH="$(orphan_return)"
     V="$(scv_tc_judge "$NCH" "$NRC" "$NST" "$NRQ" "$EX" "$NPL" "$BL" "$NEED" "$NSTEP" "$ORPH")"
     # 통과를 내면 이 턴은 끝난 것이다 — 다음에 오는 사람의 말은 새 턴으로 시작한다. 막힘이면 턴이 이어진다.
