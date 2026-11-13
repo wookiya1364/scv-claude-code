@@ -48,6 +48,8 @@ EOF
 HID="${DATE}-be-refund-button__to-be"
 
 # adopt
+root_files() { ( cd "$ROOT" && find . -type f -not -path './.git/*' | LC_ALL=C sort ); }
+ROOT_BEFORE="$(root_files)"
 AOUT="$( cd "$CHILD" && bash "$HANDOFF" adopt "$HID" --author bob 2>&1 )"; ARC=$?
 eq "adopt exit 0" "0" "$ARC"
 SLUG="${DATE}-bob-refund-button"
@@ -64,6 +66,29 @@ grep -q "POST /api/refunds" "$PLAN" && ok "PLAN carries 'what to build'" || fail
 
 grep -q "409" "$TESTS" && ok "TESTS carries acceptance criteria" || fail "TESTS missing acceptance"
 grep -q "exit 1" "$TESTS" && ok "TESTS starts failing (TDD Red placeholder)" || fail "TESTS missing red placeholder"
+
+# wrap-up report (0.93.1): an adopted plan gets the report skeleton too, and PLAN.md points at it —
+# so the archive checks the report instead of passing the plan as one written before the report existed.
+WRAPUP_CMD="$REPO_ROOT/scripts/wrapup.sh"
+PDIR="$CHILD/scv/promote/$SLUG"
+WRAP="$PDIR/WRAPUP.md"
+[[ -f "$WRAP" ]] && ok "WRAPUP.md scaffolded" || fail "WRAPUP.md missing"
+eq "promote folder holds three files" "3" "$(find "$PDIR" -type f | wc -l | tr -d '[:space:]')"
+eq "WRAPUP has seven groups" "7" "$(grep -c '^## [1-7]\. ' "$WRAP" 2>/dev/null | tr -d '[:space:]')"
+eq "PLAN points at the wrap-up once" "1" "$(grep -c '^- Wrap-up: .*WRAPUP\.md' "$PLAN" | tr -d '[:space:]')"
+eq "PLAN keeps the wrap-up line under Links" "## Links" "$(awk '/^## /{h=$0} /^- Wrap-up: /{print h; exit}' "$PLAN")"
+
+WOUT="$(bash "$WRAPUP_CMD" check "$PDIR" 2>&1)"; WRC=$?
+eq "unfilled adopted plan is blocked at the report check" "1" "$WRC"
+grep -q 'WRAPUP: block' <<<"$WOUT" && ok "report check says block" || fail "report check did not block: $WOUT"
+grep -q 'legacy' <<<"$WOUT" && fail "adopted plan still counted as a plan without a report" || ok "adopted plan is not counted as legacy"
+
+# what adopt did before stays: nothing written to the workspace root, and a second adopt is refused
+eq "workspace root untouched by adopt" "$ROOT_BEFORE" "$(root_files)"
+BEFORE_SUM="$(cat "$PLAN" "$TESTS" "$WRAP" 2>/dev/null | cksum)"
+( cd "$CHILD" && bash "$HANDOFF" adopt "$HID" --author bob >/dev/null 2>&1 ) && fail "second adopt should be refused" || ok "second adopt refused"
+eq "second adopt leaves the three files as they were" "$BEFORE_SUM" "$(cat "$PLAN" "$TESTS" "$WRAP" 2>/dev/null | cksum)"
+eq "still three files after the refused adopt" "3" "$(find "$PDIR" -type f | wc -l | tr -d '[:space:]')"
 
 # adopt addressed to another repo → refuse
 cat > "$WORK/b2.md" <<'EOF'

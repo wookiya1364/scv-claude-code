@@ -27,6 +27,8 @@ source "$SCRIPT_DIR/lib/workspace.sh"
 source "$SCRIPT_DIR/lib/scvroot.sh"
 # shellcheck source=lib/yaml.sh
 source "$SCRIPT_DIR/lib/yaml.sh"
+# shellcheck source=lib/settings.sh
+source "$SCRIPT_DIR/lib/settings.sh"
 
 die() { echo "✖ $*" >&2; exit 1; }
 
@@ -388,6 +390,10 @@ cmd_adopt() {
     echo "## Risks / Open Questions"
     echo ""
     echo "- (any)"
+    echo ""
+    echo "## Links"
+    echo ""
+    echo "- Wrap-up: [\`WRAPUP.md\`](./WRAPUP.md)"
   } > "$dir/PLAN.md"
 
   {
@@ -423,10 +429,19 @@ cmd_adopt() {
     echo "- Handoff: \`$hf\`"
   } > "$dir/TESTS.md"
 
+  # The wrap-up report skeleton (0.93.1). Only wrapup.sh knows the skeleton — it is never copied
+  # here — and PLAN.md's "- Wrap-up:" line above is what makes the archive check the report instead
+  # of passing this plan as one written before the report existed. Language: the project's own.
+  local wlang
+  wlang="$(settings_get SCV_PROMOTE_LANG)"
+  [[ -n "$wlang" ]] || wlang="$(settings_get SCV_LANG)"
+  bash "$SCRIPT_DIR/wrapup.sh" new "$dir" ${wlang:+--lang "$wlang"} >/dev/null \
+    || die "could not write the wrap-up report skeleton: $dir/WRAPUP.md"
+
   echo "✓ scaffolded promote from handoff $HID"
   echo "SLUG: $localslug"
   echo "DIR: $dir"
-  echo "NEXT: refine $dir/PLAN.md + TESTS.md, then /scv:codegen $localslug (or /scv:work $localslug)"
+  echo "NEXT: refine $dir/PLAN.md + TESTS.md, fill $dir/WRAPUP.md as the work goes, then /scv:codegen $localslug (or /scv:work $localslug)"
 }
 
 cmd_mark() {
