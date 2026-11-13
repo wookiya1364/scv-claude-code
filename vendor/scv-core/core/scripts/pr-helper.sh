@@ -218,6 +218,10 @@ if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/n
 fi
 _pr_origin_head="$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||')"
 BASE_BRANCH="$(scv_pr_base_branch "$EPIC" "${SCV_PR_BASE:-}" "$_pr_origin_head")"
+# 묶음 계획(에픽)의 가지가 원격에 없을 때 그 가지를 만들 출발점 — PR 대상과 같은 순서다: 설정 SCV_PR_BASE > origin 기본 브랜치 > main
+# (0.93.3). 전에는 늘 origin/main 이었다 — 설정과 기본 브랜치를 보지 않았고, main 이 없는 저장소에서는 커밋한 뒤에 실패했다.
+EPIC_START=""
+[[ -z "$EPIC" ]] || EPIC_START="$(scv_pr_base_branch "" "${SCV_PR_BASE:-}" "$_pr_origin_head")"
 if [[ -n "$STRAY" && $DRY_RUN -eq 0 ]]; then
   echo "ERROR: uncommitted changes outside the SCV records — the PR would open without them. Commit them first:" >&2
   printf '%s\n' "$STRAY" | sed 's/^/  · /' >&2
@@ -577,6 +581,18 @@ if [[ "$CURRENT_BRANCH" == "$BASE_BRANCH" ]]; then
   exit 1
 fi
 
+# ---- 묶음 계획의 가지를 만들 수 있는지 — 커밋 앞에서 (0.93.3) ----
+# 가지가 원격에 없고 출발점도 원격에 없으면 여기서 멈춘다. 커밋하고 나서 실패하면 되돌릴 것이 남는다.
+if [[ -n "$EPIC" && $NO_PUSH -eq 0 && $DRY_RUN -eq 0 ]] \
+   && ! git ls-remote --exit-code --heads origin "$BASE_BRANCH" >/dev/null 2>&1 \
+   && ! git ls-remote --exit-code --heads origin "$EPIC_START" >/dev/null 2>&1; then
+  echo "ERROR: cannot create $BASE_BRANCH — it is not on origin, and neither is the branch it would start from: '$EPIC_START'." >&2
+  echo "  Set SCV_PR_BASE (scv/scv_settings.json) to a branch that exists on origin, or push $BASE_BRANCH first." >&2
+  echo "  Nothing was committed, pushed or created." >&2
+  rm -f "$TMP_BODY"
+  exit 1
+fi
+
 # ---- stage + commit ----
 git add "$TARGET_DIR" 2>/dev/null || true
 # v0.63.0+: SCV 기록도 같은 커밋에 — 무시 목록은 git 이 거른다. 세션 표식 파일(journal/.help-*)은 저널을 공유하는
@@ -603,12 +619,12 @@ fi
 
 # ---- push current + ensure base branch exists on remote ----
 if [[ $NO_PUSH -eq 0 ]]; then
-  # Ensure base branch exists on origin (create from origin/main if missing)
+  # Ensure base branch exists on origin (create from the epic's starting branch if missing — see EPIC_START above)
   if [[ -n "$EPIC" ]]; then
     if ! git ls-remote --exit-code --heads origin "$BASE_BRANCH" >/dev/null 2>&1; then
-      echo "Creating remote $BASE_BRANCH from origin/main ..."
-      git fetch origin main >/dev/null 2>&1 || true
-      git push origin "origin/main:refs/heads/$BASE_BRANCH" 2>&1 || {
+      echo "Creating remote $BASE_BRANCH from origin/$EPIC_START ..."
+      git fetch origin "$EPIC_START" >/dev/null 2>&1 || true
+      git push origin "origin/$EPIC_START:refs/heads/$BASE_BRANCH" 2>&1 || {
         echo "ERROR: failed to create $BASE_BRANCH on origin" >&2
         rm -f "$TMP_BODY"
         exit 1
