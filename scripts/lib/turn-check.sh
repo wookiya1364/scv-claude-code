@@ -321,6 +321,29 @@ scv_tc_words() {
   printf '%s' "$out"
 }
 
+# 대화 기록 줄에서 "시작 시각 뒤에 어시스턴트가 그 도구를 부른 줄"만 고르는 jq 프로그램 — 함수 밖 상수(순수성 검사가 부등호를 리다이렉션으로 본다).
+# 줄 모양은 호스트 판마다 다를 수 있다: JSON 이 아닌 줄 · 칸이 없는 줄 · 내용이 글 하나인 줄은 조용히 버린다.
+_SCV_TC_JQ_STEP_CALLS='fromjson? | select(type == "object" and .type == "assistant") | select((.timestamp // "") >= $s)
+  | select([(.message.content? // [])[]? | select(type == "object" and .type == "tool_use" and .name == $t)] | length > 0) | 1'
+
+# @deterministic
+# 역할: 대화 기록 줄들에서 시작 시각 뒤에 어시스턴트가 그 도구를 부른 줄을 센다 — 도구 이름이 글에만 나온 줄 · 다른 도구 · 시작 앞의 호출 · JSON 이 아닌 줄은 세지 않는다
+# 종류: 세기
+# 예: '{"type":"assistant","timestamp":"2026-01-02T00:00:00.000Z","message":{"content":[{"type":"tool_use","name":"t"}]}}' t "2026-01-01T00:00:00" → "1"
+# 예: '{"type":"assistant","timestamp":"2025-12-31T00:00:00.000Z","message":{"content":[{"type":"tool_use","name":"t"}]}}' t "2026-01-01T00:00:00" → "0"
+# 예: '{"type":"user","timestamp":"2026-01-02T00:00:00.000Z","message":{"content":"t 를 불러라 — tool_use"}}' t "2026-01-01T00:00:00" → "0"
+# 예: "" t "2026-01-01T00:00:00" → "0"
+# 예: "x" t "" → "0"
+# <대화 기록 줄들(줄마다 JSON 하나)> <도구 이름> <턴 시작 시각(UTC, 2026-01-01T00:00:00 꼴)> → 수.
+# 단계 보고 도구를 앱이 직접 처리하는 호스트에서는 도구 앞 훅이 돌지 않아 표시가 남지 않는다(2026-11-13 실제 세션에서 확인).
+# 그때 턴 끝 검사가 이 수를 표시 수 대신 쓴다. 시각은 글자 순서로 견준다 — 둘 다 UTC 이고 같은 꼴이라 순서가 같다.
+scv_tc_step_calls() {
+  local lines="${1:-}" tool="${2:-}" start="${3:-}" n
+  [[ -n "$lines" && -n "$tool" && -n "$start" ]] || { printf '0'; return 0; }
+  n="$(printf '%s\n' "$lines" | jq -R -r --arg t "$tool" --arg s "$start" "$_SCV_TC_JQ_STEP_CALLS" 2>/dev/null | grep -c 1)"
+  printf '%s' "${n:-0}"
+}
+
 # @pure
 # 역할: 호스트 설정 글에 대시보드(단계 보고 도구를 주는 모드)가 켜졌다는 표시가 있는지 가린다
 # 종류: 판정
