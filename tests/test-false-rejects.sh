@@ -146,4 +146,53 @@ else bad "T10b rc=$rc $out"; fi
   [[ "$(below_raw_root scv/raw/sub/a.md scv/raw)" == "sub/a.md" && -z "$(below_raw_root scv/raw scv/raw)" && "$(below_raw_root x/y scv/raw)" == "x/y" ]] ) \
   && ok "T10c below_raw_root 세 경우" || bad "T10c"
 
+# ── 낱말 나누기는 지역 설정과 셸을 타지 않는다 (계획 20261113-wookiya1364-wrapup-followups-three · T8 · T10) ──
+# 고치기 전: 지역 설정이 UTF-8 이 아니면 조사를 뗄 때 글자가 아니라 바이트 하나가 떨어져 "버튼을"이
+# "버튼" + 깨진 바이트 둘이 됐다(bash 3.2 · 5 둘 다). 기준은 UTF-8 지역 설정에서의 답이다.
+LIB_PL="$CORE/scripts/lib/plan-link.sh"; LIB_TC="$CORE/scripts/lib/turn-check.sh"
+in_shell() {  # <셸> <지역 설정 | -(비움)> <함수> <인자…> → 그 셸 · 그 지역 설정에서 함수를 부른 답
+  local sh="$1" loc="$2"; shift 2
+  if [[ "$loc" == "-" ]]; then
+    env -u LC_ALL -u LC_CTYPE -u LANG "$sh" -c 'source "$1"; source "$2"; shift 2; "$@"' _ "$LIB_PL" "$LIB_TC" "$@"
+  else
+    env LC_ALL="$loc" "$sh" -c 'source "$1"; source "$2"; shift 2; "$@"' _ "$LIB_PL" "$LIB_TC" "$@"
+  fi
+}
+shells=""; seen_v=""
+for s in "$BASH" /bin/bash "$(command -v bash 2>/dev/null)" /opt/homebrew/bin/bash /usr/local/bin/bash; do
+  [[ -n "$s" && -x "$s" ]] || continue
+  v="$("$s" -c 'printf %s "${BASH_VERSINFO[0]}"' 2>/dev/null)"
+  [[ -n "$v" && " $seen_v " != *" $v "* ]] || continue
+  seen_v="$seen_v $v"; shells="$shells $s"
+done
+u8=""; for l in C.UTF-8 en_US.UTF-8 ko_KR.UTF-8; do
+  [[ "$(env LC_ALL="$l" "$BASH" -c 'x=가; printf %s "${#x}"' 2>/dev/null)" == 1 ]] && { u8="$l"; break; }
+done
+if [[ -z "$u8" ]]; then
+  echo "skip T8 · T10 — 이 기계에 UTF-8 지역 설정이 없다(C.UTF-8 · en_US.UTF-8 · ko_KR.UTF-8 모두 없음)"
+else
+  w_in=("환불 버튼을 추가해" "결제 화면 기능" "x" "서버에서 받는다" "큰 버튼을 눌러" "값을 본다" "환불·버튼을 추가" "API 응답을 JSON으로 바꾼다" "50%로 낮춘다")
+  w_want=("환불 버튼 추가해" "결제" "" "서버 받는다" "버튼 눌러" "본다" "환불 버튼" "API 응답 JSON 바꾼다" "50% 낮춘다")
+  ng_plan=$'## Goals / Non-Goals\n- **Non-Goals**\n  - 결제 버튼'
+  ng_want="충돌 · 하지 않기로 함: 결제 버튼 ↔ 적으려는 글: 버튼을 고친다"
+  combos=0; diffs=0
+  for s in $shells; do
+    sv="$("$s" -c 'printf %s "${BASH_VERSION%%(*}"')"
+    for loc in C "$u8" -; do
+      combos=$((combos + 1)); miss=""
+      i=0
+      while [[ $i -lt ${#w_in[@]} ]]; do
+        got="$(in_shell "$s" "$loc" scv_tc_words "${w_in[$i]}")"
+        [[ "$got" == "${w_want[$i]}" ]] || miss="$miss [${w_in[$i]}]"
+        i=$((i + 1))
+      done
+      [[ "$(in_shell "$s" "$loc" scv_tc_nongoal_hits "$ng_plan" "버튼을 고친다")" == "$ng_want" ]] || miss="$miss [겹침 검사]"
+      if [[ -z "$miss" ]]; then ok "T8 · T10 bash $sv · 지역 설정 $loc — 낱말 9개와 겹침 검사가 기준과 같다"
+      else diffs=$((diffs + 1)); bad "T8 · T10 bash $sv · 지역 설정 $loc — 기준과 다름:$miss"; fi
+    done
+  done
+  [[ $diffs == 0 ]] && ok "T8 기준과 다른 조합 0개 (본 조합 ${combos}개 — 셸${seen_v} × 지역 설정 C · ${u8} · 비움)"
+  [[ " $seen_v " == *" 3 "* ]] || echo "skip T8 의 옛 셸 — 이 기계에 bash 3 이 없다"
+fi
+
 [[ $fail == 0 ]] && echo "ALL PASS (test-false-rejects)" || { echo "FAILED (test-false-rejects)" >&2; exit 1; }

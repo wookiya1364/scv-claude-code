@@ -38,7 +38,7 @@ If the user is acting on an **incoming cross-repo handoff** (shown by `/scv:stat
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/handoff.sh" adopt "<handoff_id>"
 ```
 
-This writes a local `scv/promote/<slug>/PLAN.md` + `TESTS.md` seeded from the handoff's "what to build" + acceptance criteria, with a `refs: type=handoff-origin` back-link. Add the wrap-up report to that folder as Step 5 describes (`wrapup.sh new`, the `- Wrap-up:` line in `## Links`) — the adopt script does not write it. It is **local-only** (no write to the workspace root). Then refine the scaffolded PLAN/TESTS with the user and implement via `/scv:codegen <slug>` (TDD-first) or `/scv:work <slug>`. The rest of this document (raw → promote) is the normal, single-repo path.
+This writes a local `scv/promote/<slug>/PLAN.md` + `TESTS.md` seeded from the handoff's "what to build" + acceptance criteria, with a `refs: type=handoff-origin` back-link. It also writes the wrap-up report skeleton `WRAPUP.md` and the `- Wrap-up:` line in PLAN.md's `## Links` (0.93.1+) — fill the report as Step 5 describes. It is **local-only** (no write to the workspace root). Then refine the scaffolded PLAN/TESTS with the user and implement via `/scv:codegen <slug>` (TDD-first) or `/scv:work <slug>`. The rest of this document (raw → promote) is the normal, single-repo path.
 
 Optionally, so the umbrella's `/scv:status` reflects that this work is underway, mark the handoff **claimed** in the root — ask first, since the mark commits there (then push with the user's consent — same rule as `/scv:handoff`):
 
