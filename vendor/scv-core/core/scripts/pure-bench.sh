@@ -302,6 +302,26 @@ pb_fixed_run() {
   printf '%s\t%s\t%s' "$cpu" "$rss" "$w"
 }
 
+# @effect pb_unpack_ref
+# 이유: 그 커밋에서 잴 파일이 있는 폴더의 파일들을 임시 폴더에 푼다(git · tar) — 지금 코드와 같은 상대 경로로, 작업 폴더는 건드리지 않는다
+pb_unpack_ref() {
+  local top="$1" ref="$2" prefix="$3" dest="$4" rels="$5" d rec
+  local -a files
+  mkdir -p "$dest"
+  while IFS= read -r d; do
+    [[ -n "$d" ]] || continue
+    # 그 폴더 바로 아래의 파일만(하위 폴더는 빼고) — 저장소 맨 위의 파일을 재더라도 저장소 전체를 풀지 않는다.
+    # 그 커밋에 그 폴더가 없으면 아무것도 나오지 않고, 그 폴더의 함수는 '새 함수'가 된다.
+    files=()
+    while IFS= read -r -d '' rec; do
+      [[ "${rec%%$'\t'*}" == *" blob "* ]] && files+=("${rec#*$'\t'}")
+    done < <(if [[ "$d" == "." ]]; then git -C "$top" ls-tree -z "$ref" ${prefix:+"$prefix"} 2>/dev/null
+             else git -C "$top" ls-tree -z "$ref" "${prefix}${d}/" 2>/dev/null; fi)
+    [[ ${#files[@]} -gt 0 ]] || continue
+    git -C "$top" archive "$ref" -- "${files[@]}" 2>/dev/null | tar -x -C "$dest" 2>/dev/null || true
+  done <<< "$(pb_rel_dirs "$rels")"
+}
+
 # @effect pb_compare_fn
 # 이유: 한 함수를 앞 코드와 뒤 코드에서 번갈아 재서 앞뒤 잰 줄 하나를 낸다 — 답이 같은지 · 부른 횟수 · 시간 쌍 · 메모리 · (꼼꼼히) 입력 4배
 pb_compare_fn() {
@@ -478,12 +498,9 @@ case "$CMD" in
       # 그 커밋의 코드를 임시 폴더에 푼다 — 지금 코드와 같은 상대 경로로
       PREFIX="$(git -C "$BASE" rev-parse --show-prefix 2>/dev/null)" || { echo "pure-bench: git 저장소가 아니다: $BASE" >&2; exit 2; }
       TOP="$(git -C "$BASE" rev-parse --show-toplevel)"
-      # 잴 함수가 있는 파일만 꺼낸다. 그 커밋에 없는 파일의 함수는 '새 함수'가 된다.
-      while IFS=$'\x1d' read -r _ rel _; do
-        [[ -n "$rel" && ! -e "$PB_TMP/before/$PREFIX$rel" ]] || continue
-        mkdir -p "$PB_TMP/before/$PREFIX$(dirname "$rel")"
-        git -C "$TOP" show "$BEFORE_REF:$PREFIX$rel" > "$PB_TMP/before/$PREFIX$rel" 2>/dev/null || rm -f "$PB_TMP/before/$PREFIX$rel"
-      done <<< "$(pb_targets "$(read_catalog "$CATALOG")" "${ONLY%$'\n'}" | tr '\t' '\035')"
+      # 잴 함수가 있는 파일의 폴더째 꺼낸다(0.93.2) — 파일 하나만 꺼내면 그 파일이 불러오는 옆 파일이 없어, 옆 파일의 함수에
+      # 기대는 함수가 앞 코드에서 다른 답을 내고 '답이 달라 뺌'이 됐다. 그 커밋에 없는 파일의 함수는 '새 함수'가 된다.
+      pb_unpack_ref "$TOP" "$BEFORE_REF" "$PREFIX" "$PB_TMP/before" "$(pb_targets "$(read_catalog "$CATALOG")" "${ONLY%$'\n'}" | cut -f2)"
       mkdir -p "$PB_TMP/before/${PREFIX%/}"
       BEFORE="$PB_TMP/before/${PREFIX%/}"
     fi

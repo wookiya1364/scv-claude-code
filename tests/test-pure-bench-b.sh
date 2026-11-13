@@ -50,6 +50,44 @@ if git -C "$CORE" rev-parse --is-inside-work-tree >/dev/null 2>&1 && [[ -d "$COR
   [[ "$(grep -c '^| scv_tc_overlap_count | ' "$TMP/ref.md")" == 1 && $st -le 1 ]] && ok "OK [S15] the code of a commit can be the 'before' ($(grep '^| scv_tc_overlap_count' "$TMP/ref.md" | cut -d'|' -f3 | tr -d ' '))" || fail "[S15] st=$st $(tail -2 "$TMP/ref.md")"
 fi
 
+echo "S15b. 그 커밋의 코드를 폴더째 꺼낸다 — 옆 파일에 기대는 함수 (계획 20261113-wookiya1364-step-report-and-bench-before · TESTS T11 ~ T14)"
+# 고치기 전: 잴 함수가 있는 파일 하나만 꺼내서, 그 파일이 불러오는 옆 파일이 없었다. 기대는 함수는 앞 코드에서
+# 다른 답을 내고 "답이 달라 뺌"이 됐다(2026-11-13, 겹침 검사 함수가 두 번 다 그렇게 나왔다).
+if command -v git >/dev/null 2>&1; then
+  G="$TMP/sib"; mkdir -p "$G/lib" "$G/cat"
+  cat > "$G/lib/a.sh" <<'LIB'
+source "$(dirname "${BASH_SOURCE[0]}")/b.sh"
+ga_up() { gb_up "$1"; }
+LIB
+  cat > "$G/lib/b.sh" <<'LIB'
+gb_up() { printf '%s\n' "$1" | tr 'a-z' 'A-Z'; }
+LIB
+  printf '### ga_up\n- 역할: 옆 파일의 함수로 대문자로 바꾼다\n- 위치: lib/a.sh · @deterministic · sh\n- 예: `$\x27a\\nb\x27 → $\x27A\\nB\x27`\n\n### gb_up\n- 역할: 대문자로 바꾼다\n- 위치: lib/b.sh · @deterministic · sh\n- 예: `$\x27a\\nb\x27 → $\x27A\\nB\x27`\n' > "$G/cat/a.md"
+  ( cd "$G" && git init -q . && git config user.email t@t && git config user.name t && git add -A && git commit -qm init )
+  # 답은 같게, 본문만 바꾼다
+  printf 'source "$(dirname "${BASH_SOURCE[0]}")/b.sh"\nga_up() { local x="$1"; gb_up "$x"; }\n' > "$G/lib/a.sh"
+  SCV_PB_GPU_TOOL=none "$BASH" "$PB" compare --before-ref HEAD --base "$G" --catalog "$G/cat" --only ga_up > "$TMP/sib.md"; st=$?
+  eq "S15b a function that leans on a sibling file is compared, not left out" "0" "$(grep -c '^| ga_up | 답이 달라 뺌 |' "$TMP/sib.md")"
+  grep -Eq '^\| ga_up \| (통과|한도 넘음) \| [0-9.]+ \| [0-9.]+ \|' "$TMP/sib.md" && ok "OK [S15b] with both times measured ($(grep '^| ga_up' "$TMP/sib.md" | cut -d'|' -f3 | tr -d ' '))" || fail "[S15b] $(grep '^| ga_up' "$TMP/sib.md")"
+  # 진짜로 답이 달라진 함수는 지금처럼 뺀다
+  printf 'source "$(dirname "${BASH_SOURCE[0]}")/b.sh"\nga_up() { gb_up "$1" | tr "A-Z" "a-z"; }\n' > "$G/lib/a.sh"
+  SCV_PB_GPU_TOOL=none "$BASH" "$PB" compare --before-ref HEAD --base "$G" --catalog "$G/cat" --only ga_up > "$TMP/sib2.md"
+  grep -q '^| ga_up | 답이 달라 뺌 |' "$TMP/sib2.md" && ok "OK [S15b] a really different answer is still left out" || fail "[S15b] $(grep '^| ga_up' "$TMP/sib2.md")"
+  # 그 커밋에 없던 파일의 함수는 새 함수 — 그리고 작업 폴더에는 아무것도 풀지 않는다
+  ( cd "$G" && git checkout -q -- lib/a.sh )
+  printf 'gc_new() { printf "%%s\\n" "$1"; }\n' > "$G/lib/c.sh"
+  printf '\n### gc_new\n- 역할: 그대로 낸다\n- 위치: lib/c.sh · @pure · sh\n- 예: `$\x27a\\nb\x27 → $\x27a\\nb\x27`\n' >> "$G/cat/a.md"
+  before_files="$(cd "$G" && find . -type f -not -path './.git/*' | LC_ALL=C sort)"
+  SCV_PB_GPU_TOOL=none "$BASH" "$PB" compare --before-ref HEAD --base "$G" --catalog "$G/cat" --only gc_new > "$TMP/sib3.md"
+  grep -q '^| gc_new | 새 함수 |' "$TMP/sib3.md" && ok "OK [S15b] a function whose file the commit lacks is new" || fail "[S15b] $(grep '^| gc_new' "$TMP/sib3.md")"
+  eq "S15b nothing is unpacked into the working folder" "$before_files" "$(cd "$G" && find . -type f -not -path './.git/*' | LC_ALL=C sort)"
+fi
+if git -C "$CORE" rev-parse --is-inside-work-tree >/dev/null 2>&1 && [[ -d "$CORE/../scv/core/catalog/pure" ]] && git -C "$CORE" cat-file -e HEAD:core/scripts/lib/plan-link.sh 2>/dev/null; then
+  SCV_PB_GPU_TOOL=none "$BASH" "$PB" compare --before-ref HEAD --only scv_tc_nongoal_hits > "$TMP/ref2.md"
+  [[ "$(grep -c '^| scv_tc_nongoal_hits | ' "$TMP/ref2.md")" == 1 ]] && ! grep -q '^| scv_tc_nongoal_hits | 답이 달라 뺌 |' "$TMP/ref2.md" \
+    && ok "OK [S15b] this repo's function that calls into lib/plan-link.sh is compared ($(grep '^| scv_tc_nongoal_hits' "$TMP/ref2.md" | cut -d'|' -f3 | tr -d ' '))" || fail "[S15b] $(grep '^| scv_tc_nongoal_hits' "$TMP/ref2.md")"
+fi
+
 echo "S16. 무엇을 견줄지 · 멈출 때의 글 — 순수 함수"
 eq "S16 changed or new bodies" $'g\nh' "$(pb_changed_names $'@@ f\n a\n@@ g\n b' $'@@ f\n a\n@@ g\n c\n@@ h\n d')"
 eq "S16 nothing changed" "" "$(pb_changed_names $'@@ f\n a' $'@@ f\n a')"
