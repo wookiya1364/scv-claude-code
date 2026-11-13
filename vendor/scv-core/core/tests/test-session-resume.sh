@@ -53,6 +53,11 @@ conv() {  # <프로젝트> <파일명> <status> <본문> [<mtime YYYYMMDDhhmm>] 
   [[ -n "${5:-}" ]] && touch -t "$5" "$1/scv/conversations/$2" 2>/dev/null
   return 0
 }
+# 손댄 시각은 지금을 기준으로 준다 — 3일 넘게 손대지 않은 active 대화는 전문을 싣지 않는다(0.93.3).
+ago() {  # <일> [<시간>] → touch -t 에 줄 시각 — 맥 BSD date · 리눅스 GNU date
+  local s=$(( $(date +%s) - $1 * 86400 - ${2:-0} * 3600 ))
+  date -r "$s" +%Y%m%d%H%M 2>/dev/null || date -d "@$s" +%Y%m%d%H%M
+}
 run_hook() {  # <프로젝트> [<stdin>] — stdout 은 OUT 에, 종료 코드는 RC 에 (서브셸이 아니라 전역)
   local p="$1" in="${2:-{\"source\":\"compact\"\}}"
   # 0.81.0+ — 파이프 대신 직접 입력: 훅이 입력을 읽기 전에 끝나면(scv/ 없음) printf 가 파이프 끊김으로 실패해
@@ -98,9 +103,9 @@ miss=0; for i in 2 3 4 5 6; do [[ "$O" == *"결정 번호 $i 제목"* ]] || miss
 
 # ---------- T5 활성 대화 — 전문, 가장 최근 것만 ----------
 P="$(mkproj t5)"; plan "$P" 20260911-x-demo "데모 계획"
-conv "$P" 20260911-000001-a.md promoted "CONV-A-BODY" "202001010000"
-conv "$P" 20260911-000002-b.md active   "CONV-B-BODY" "202101010000"
-conv "$P" 20260911-000003-c.md active   $'## Turn 1\nCONV-C-BODY\n\n## Turn 2\nCONV-C-LAST-TURN' "202201010000"
+conv "$P" 20260911-000001-a.md promoted "CONV-A-BODY" "$(ago 0 3)"
+conv "$P" 20260911-000002-b.md active   "CONV-B-BODY" "$(ago 0 2)"
+conv "$P" 20260911-000003-c.md active   $'## Turn 1\nCONV-C-BODY\n\n## Turn 2\nCONV-C-LAST-TURN' "$(ago 0 1)"
 run_hook "$P"; O="$OUT"
 [[ "$O" == *"20260911-000003-c.md"* && "$O" == *"CONV-C-BODY"* && "$O" == *"CONV-C-LAST-TURN"* ]] \
   && ok "T5 최신 활성 대화(c)의 경로와 전문(모든 턴)이 실린다" || fail "T5 최신 활성 대화 전문이 안 실린다"
@@ -140,14 +145,15 @@ run_hook "$P"; O="$OUT"
 [[ "$O" != *"LONG-OPEN-BODY"* && "$O" != *"000003-longopen"* ]] && ok "T5b 60줄 넘게 닫히지 않은 frontmatter 도 active 로 보지 않는다" || fail "T5b 미완 frontmatter 60줄 초과가 active 로 잡힌다"
 rm -f "$P/scv/conversations/20260911-000003-longopen.md"
 mkdir -p "$P/bin"; printf '#!/bin/bash\n/usr/bin/stat "$@"; exit 1\n' > "$P/bin/stat"; chmod +x "$P/bin/stat"
-conv "$P" 20260911-000003-old.md active "STAT-OLD-BODY" "202001010000"
+conv "$P" 20260911-000003-old.md active "STAT-OLD-BODY" "$(ago 0 5)"
 conv "$P" 20260911-000003-new.md active "STAT-NEW-BODY"
 O="$( cd "$P" && printf '{}' | PATH="$P/bin:$PATH" CLAUDE_PLUGIN_ROOT="$CORE" bash "$HOOK" 2>/dev/null )"
 nold="$(printf '%s' "$O" | grep -c "20260911-000003-old.md" || true)"
 [[ "$O" == *"STAT-NEW-BODY"* && "$nold" == "1" ]] && ok "T5b stat 이 출력 뒤 실패해도 폴백이 겹치지 않는다 (경로 1회)" || fail "T5b stat 폴백 중복: old 경로 ${nold}회"
 rm -rf "$P/bin" "$P/scv/conversations/20260911-000003-old.md" "$P/scv/conversations/20260911-000003-new.md"
-conv "$P" 20260911-000004-a.md active "TIE-A-BODY" "202206010000"
-conv "$P" 20260911-000005-b.md active "TIE-B-BODY" "202206010000"
+TIE_AT="$(ago 0 4)"
+conv "$P" 20260911-000004-a.md active "TIE-A-BODY" "$TIE_AT"
+conv "$P" 20260911-000005-b.md active "TIE-B-BODY" "$TIE_AT"
 run_hook "$P"; O="$OUT"
 [[ "$O" == *"TIE-B-BODY"* && "$O" != *"TIE-A-BODY"* ]] && ok "T5b mtime 동률이면 이름이 뒤인(최신) 대화" || fail "T5b 동률 처리가 오래된 쪽을 고른다"
 mkdir -p "$P/other/promote/20260911-y-other" "$P/other/conversations"
@@ -259,6 +265,71 @@ if [[ -f "$DOC" ]]; then
 else
   skip "T15 docs/ 없음 (벤더링된 페이로드)"
 fi
+
+# ---------- T16 ~ T21 어느 대화를 전문으로 싣나 (계획 20261113-wookiya1364-resume-pick-and-epic-base · TESTS T1 ~ T6) ----------
+# 고치기 전: 표시가 active 인 가장 최근 대화 하나의 전문을 실었다. 끝난 대화가 active 로 남고, 실제로 일하던 대화는
+# 계획으로 넘어가며 표시가 promoted 로 바뀌어 빠졌다(2026-11-13: active 7개가 모두 4 ~ 35일 전에 끝난 것).
+# 이제: 구현 중인 계획에 이어진 대화 먼저 → 없으면 3일 안에 손댄 active → 3일 넘은 active 는 경로만.
+planx() {  # <프로젝트> <slug> <status> [<원자료 경로>…]
+  local p="$1" slug="$2" st="$3" r; shift 3
+  mkdir -p "$p/scv/promote/$slug"
+  { printf -- '---\ntitle: "%s"\nslug: %s\nstatus: %s\nraw_sources:\n' "$slug" "$slug" "$st"
+    for r in "$@"; do printf '  - %s\n' "$r"; done
+    printf -- '---\n# %s\n' "$slug"; } > "$p/scv/promote/$slug/PLAN.md"
+}
+count() { printf '%s\n' "$1" | grep -cF -- "$2"; }
+STALE_MARK="not touched for over 3 days"
+
+P="$(mkproj t16)"
+conv "$P" 20261101-000000-a.md active "CONV-A-BODY" "$(ago 1)"
+conv "$P" 20261101-000001-b.md promoted "CONV-B-BODY" "$(ago 2)"
+conv "$P" 20261101-000002-c.md active "CONV-C-BODY" "$(ago 10)"
+planx "$P" 20261101-x-work in_progress scv/conversations/20261101-000001-b.md scv/raw/stale/note.md
+run_hook "$P"; O="$OUT"
+if [[ "$(count "$O" CONV-B-BODY)" == 1 && "$(count "$O" CONV-A-BODY)" == 0 && "$(count "$O" CONV-C-BODY)" == 0 \
+   && "$(count "$O" "20261101-000000-a.md")" == 1 && "$(count "$O" "20261101-000002-c.md")" == 1 && "$O" == *"$STALE_MARK"* ]]; then
+  ok "T16 구현 중인 계획에 이어진 대화가 전문, 최근 active 는 경로, 오래된 active 는 따로 경로"
+else fail "T16 B=$(count "$O" CONV-B-BODY) A=$(count "$O" CONV-A-BODY) C=$(count "$O" CONV-C-BODY) a경로=$(count "$O" "20261101-000000-a.md") c경로=$(count "$O" "20261101-000002-c.md")"; fi
+
+P="$(mkproj t17)"
+conv "$P" 20261101-000000-a.md active "CONV-A-BODY" "$(ago 1)"
+conv "$P" 20261101-000002-c.md active "CONV-C-BODY" "$(ago 10)"
+run_hook "$P"; O="$OUT"
+[[ "$(count "$O" CONV-A-BODY)" == 1 && "$(count "$O" CONV-C-BODY)" == 0 && "$O" == *"$STALE_MARK"* ]] \
+  && ok "T17 계획의 대화가 없으면 최근에 손댄 active 가 전문" || fail "T17 A=$(count "$O" CONV-A-BODY) C=$(count "$O" CONV-C-BODY)"
+
+P="$(mkproj t18)"; plan "$P" 20260911-x-demo "데모 계획"
+conv "$P" 20261101-000000-a.md active "CONV-A-BODY" "$(ago 5)"
+conv "$P" 20261101-000002-c.md active "CONV-C-BODY" "$(ago 10)"
+run_hook "$P"; O="$OUT"
+[[ "$(count "$O" CONV-A-BODY)" == 0 && "$(count "$O" CONV-C-BODY)" == 0 && "$(count "$O" "20261101-000000-a.md")" == 1 \
+   && "$(count "$O" "20261101-000002-c.md")" == 1 && "$O" == *"20260911-x-demo"* && "$RC" == 0 && ! -s "$WORK/err" ]] \
+  && ok "T18 모두 오래됐으면 전문 없이 경로 둘, 계획 요약은 그대로, 오류 없음" || fail "T18 A=$(count "$O" CONV-A-BODY) C=$(count "$O" CONV-C-BODY) rc=$RC err=$(head -c 120 "$WORK/err")"
+
+T19="$( source "$CORE/scripts/lib/resume-recap.sh" 2>/dev/null
+  now=2000000000; max=259200
+  L="$(printf 'near.md\tactive\t%s\nfar.md\tactive\t%s\nlinked.md\tpromoted\t5\nunknown.md\tactive\t0' "$((now - 2 * 86400 - 23 * 3600))" "$((now - 3 * 86400 - 3600))")"
+  printf '%s|%s|%s|%s|%s' "$(scv_resume_pick "$L" "" "$now" "$max")" "$(scv_resume_stale "$L" near.md "$now" "$max" | tr '\n' ',')" \
+    "$(scv_resume_pick "$L" "linked.md" "$now" "$max")" "$(scv_resume_other_active "$L" near.md "$now" "$max" | tr '\n' ',')" \
+    "$(scv_resume_pick "$(printf 'far.md\tactive\t%s' "$((now - 4 * 86400))")" "" "$now" "$max")" )"
+[[ "$T19" == "near.md|far.md,|linked.md|unknown.md,|" ]] \
+  && ok "T19 기준은 3일 — 2일 23시간은 고르고 3일 1시간은 오래된 것, 계획의 대화가 먼저, 시각을 모르는 것은 오래됐다고 보지 않는다" || fail "T19 [$T19]"
+
+P="$(mkproj t20)"
+conv "$P" 20261101-000000-a.md active "CONV-A-BODY" "$(ago 1)"
+planx "$P" 20261101-x-work testing scv/conversations/20261101-999999-gone.md
+run_hook "$P"; O="$OUT"
+[[ "$(count "$O" CONV-A-BODY)" == 1 && "$RC" == 0 && ! -s "$WORK/err" ]] \
+  && ok "T20 계획의 목록에 적힌 대화가 없는 파일이면 다음 후보(최근 active)" || fail "T20 A=$(count "$O" CONV-A-BODY) rc=$RC"
+
+P="$(mkproj t21)"
+conv "$P" 20261101-000001-p.md promoted "CONV-P-BODY" "$(ago 1)"
+conv "$P" 20261101-000002-q.md promoted "CONV-Q-BODY" "$(ago 1)"
+planx "$P" 20261101-x-planned planned scv/conversations/20261101-000001-p.md
+planx "$P" 20261101-x-done done scv/conversations/20261101-000002-q.md
+run_hook "$P"; O="$OUT"
+[[ "$(count "$O" CONV-P-BODY)" == 0 && "$(count "$O" CONV-Q-BODY)" == 0 && "$RC" == 0 ]] \
+  && ok "T21 세우기만 한 계획 · 끝난 계획의 대화는 우선하지 않는다" || fail "T21 P=$(count "$O" CONV-P-BODY) Q=$(count "$O" CONV-Q-BODY)"
 
 echo
 echo "test-session-resume: PASS=$PASS FAIL=$FAIL SKIP=$SKIP"
