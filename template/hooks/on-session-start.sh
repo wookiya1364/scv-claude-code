@@ -168,20 +168,45 @@ if [[ -d "$_scv_conv_dir" ]]; then
     _scv_lines="$(awk -F'\t' 'NR == FNR { st[$1] = $2; next } { print $1 "\t" st[$1] "\t" $2 }' \
                    <(printf '%s\n' "$_scv_status") <(printf '%s\n' "$_scv_mtimes") 2>/dev/null || true)"
   fi
-  _scv_pick="$(scv_resume_pick_active "$_scv_lines")"
+  # 구현 중인 계획(진행 중 · 시험 중)의 원자료 목록에 적힌 대화 — 표시가 promoted 여도 그 대화가 지금 하던 일이다(0.93.3).
+  # 계획 파일도 awk 한 번으로 읽는다. 계획 폴더가 없거나 읽을 수 없으면 0개.
+  _scv_linked=""
+  _scv_plans=()
+  for _f in scv/promote/*/PLAN.md; do [[ -f "$_f" && ! -L "$_f" ]] && _scv_plans+=("$_f"); done
+  if (( ${#_scv_plans[@]} > 0 )); then
+    _scv_linked="$(LC_ALL=C awk '
+      FNR == 1 { st = ""; n = 0; sub(/\r$/, ""); if ($0 != "---") nextfile; next }
+      FNR > 80 { nextfile }
+      /^---[[:space:]]*\r?$/ { if (st == "in_progress" || st == "testing") for (i = 1; i <= n; i++) print c[i]; nextfile }
+      /^status:/ { v = $0; sub(/^status:[[:space:]]*/, "", v); sub(/[[:space:]]*#.*$/, "", v)
+                   gsub(/["\047\r]/, "", v); sub(/[[:space:]]+$/, "", v); st = tolower(v) }
+      /^[[:space:]]*-[[:space:]]*scv\/conversations\/[^[:space:]]+\.md[[:space:]]*\r?$/ {
+                   v = $0; sub(/^[[:space:]]*-[[:space:]]*/, "", v); sub(/[[:space:]\r]+$/, "", v); c[++n] = v }
+    ' "${_scv_plans[@]}" 2>/dev/null || true)"
+  fi
+  # 3일 넘게 손대지 않은 active 대화는 전문을 싣지 않고 경로만 알린다 — 끝났는데 표시가 남은 대화다(사용자 결정 2026-11-13).
+  _scv_now="$(date +%s 2>/dev/null || echo 0)"; _scv_stale_secs=259200
+  _scv_pick="$(scv_resume_pick "$_scv_lines" "$_scv_linked" "$_scv_now" "$_scv_stale_secs")"
+  _scv_stale="$(scv_resume_stale "$_scv_lines" "$_scv_pick" "$_scv_now" "$_scv_stale_secs")"
   # 고른 경로가 정말 그 폴더의 일반 파일인지 한 번 더 — 줄 목록이 깨졌어도 엉뚱한
   # 파일을 싣지 않는다.
-  if [[ -n "$_scv_pick" && -f "$_scv_pick" && ! -L "$_scv_pick" && "$_scv_pick" == "$_scv_conv_dir"/*.md ]]; then
-    _scv_others="$(scv_resume_other_active "$_scv_lines" "$_scv_pick")"
+  _scv_pick_ok=0
+  [[ -n "$_scv_pick" && -f "$_scv_pick" && ! -L "$_scv_pick" && "$_scv_pick" == "$_scv_conv_dir"/*.md ]] && _scv_pick_ok=1
+  _scv_others="$(scv_resume_other_active "$_scv_lines" "$_scv_pick" "$_scv_now" "$_scv_stale_secs")"
+  if (( _scv_pick_ok )); then
     printf '%s\n' "[SCV resume] active conversation — ${_scv_pick} (most recent; its full text follows)"
-    if [[ -n "$_scv_others" ]]; then
-      printf '%s\n' "[SCV resume] other active conversations (path only):"
-      printf '%s\n' "$_scv_others" | sed 's/^/  · /'
-    fi
-    if [[ -f "$_scv_redact" ]]; then
-      bash "$_scv_redact" --redact-only < "$_scv_pick" 2>/dev/null || true
-      printf '\n'
-    fi
+  fi
+  if [[ -n "$_scv_others" ]]; then
+    printf '%s\n' "[SCV resume] other active conversations (path only):"
+    printf '%s\n' "$_scv_others" | sed 's/^/  · /'
+  fi
+  if [[ -n "$_scv_stale" ]]; then
+    printf '%s\n' "[SCV resume] conversations marked active but not touched for over 3 days (path only — likely finished):"
+    printf '%s\n' "$_scv_stale" | sed 's/^/  · /'
+  fi
+  if (( _scv_pick_ok )) && [[ -f "$_scv_redact" ]]; then
+    bash "$_scv_redact" --redact-only < "$_scv_pick" 2>/dev/null || true
+    printf '\n'
   fi
 fi
 
