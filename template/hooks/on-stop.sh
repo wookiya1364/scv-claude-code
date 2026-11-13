@@ -106,7 +106,8 @@ fi
 # 사람 턴만 본다. 판단할 수 없으면(스크립트 · jq 없음) 막지 않는다.
 _scv_tc_sh="$_scv_core/scripts/turn-check.sh"
 if [[ "$_scv_human" == 1 && -f "$_scv_tc_sh" ]]; then
-  _scv_tco="$(bash "$_scv_tc_sh" end --dir "$_scv_tdir" 2>/dev/null || true)"
+  # 대화 기록 자리도 넘긴다(0.93.2) — 단계 보고 도구에 도구 앞 훅이 닿지 않는 호스트에서, 막을 참일 때만 그 호출을 대화 기록에서 센다.
+  _scv_tco="$(bash "$_scv_tc_sh" end --dir "$_scv_tdir" ${TRANSCRIPT:+--transcript "$TRANSCRIPT"} 2>/dev/null || true)"
   if grep -qx 'TURN_PLAN: block' <<<"$_scv_tco"; then
     _scv_tcr="$(sed -n 's/^TURN_PLAN_REASON: //p' <<<"$_scv_tco" | head -n 1)"
     _scv_tcf="$(sed -n 's/^TURN_PLAN_FILES: //p' <<<"$_scv_tco" | head -n 1)"

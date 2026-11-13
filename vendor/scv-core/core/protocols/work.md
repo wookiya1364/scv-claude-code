@@ -306,7 +306,8 @@ When the host names a step-report tool (host profile `SCV_STEP_TOOL`) and this s
 each `Suggested path` step through it as you go — no question, no extra turn: `doing` when you start
 the step, `done` when it is finished, `blocked` with a one-line reason when you cannot go on. `plan`
 is the folder name, `step` the line's number. The per-turn hook reminds you while a plan is
-`in_progress` or `testing`. No tool: skip this — the step list in your report still says it.
+`in_progress` or `testing`. Where the host handles that tool itself and no tool-before hook runs for it, the
+turn-end check counts this turn's calls of the tool in the transcript instead (0.93.2+). No tool: skip this — the step list in your report still says it.
 
 ### Step 6 — Implement
 
