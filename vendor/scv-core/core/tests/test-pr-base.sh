@@ -241,6 +241,68 @@ files="$(cd "$P" && git show --name-only --format= HEAD)"
 if [[ $c -eq 8 ]]; then ok "OK [T5] 8/8 review findings"; else fail "[T5] $c/8"; fi
 
 echo
+echo "T6. 묶음 계획 가지의 출발점 (계획 20261113-wookiya1364-resume-pick-and-epic-base · TESTS T9 ~ T12)"
+# 고치기 전: 묶음 계획(에픽)의 가지가 원격에 없으면 늘 origin/main 에서 만들었다 — 설정한 PR 대상과 원격의 기본 가지를
+# 보지 않았고, main 이 없는 저장소에서는 커밋을 만든 뒤에 실패했다. 이제 출발점은 PR 대상과 같은 순서로 정하고
+# (설정 → 원격의 기본 가지 → main), 출발점이 원격에 없으면 커밋 앞에서 멈춘다.
+make_remote_proj() {  # <이름> <에픽> <원격에 둘 가지…> → 저장소. 원격은 임시 폴더의 bare 저장소이고 가지마다 커밋이 다르다
+  local P="$WORK/rp-$1" R="$WORK/rp-$1.git" epic="$2" b; shift 2
+  git init -q --bare "$R"
+  mkdir -p "$P/src" "$P/scv/journal" "$P/scv/archive/$SLUG"
+  ( cd "$P" && git init -q && git config user.name t && git config user.email t@example.invalid && git remote add origin "$R"
+    printf 'app\n' > src/app.js; printf '# journal\n' > scv/journal/20261001-tester.md
+    git add -A && git commit -qm init
+    for b in "$@"; do
+      git checkout -q -B "$b" && printf '%s\n' "$b" > "src/on-${b//\//-}.txt" && git add -A && git commit -qm "on $b" && git push -q origin "$b"
+    done
+    git checkout -q -b feat/base ) >/dev/null 2>&1
+  {
+    printf -- '---\ntitle: base feature\nslug: %s\nauthor: tester\ncreated_at: 2026-10-01\nstatus: done\nkind: feature\nlang: english\n' "$SLUG"
+    printf 'epic: %s\n' "$epic"
+    printf -- '---\n\n# base\n\n## Summary\n\nb.\n'
+  } > "$P/scv/archive/$SLUG/PLAN.md"
+  printf '# Test Plan\n\n## How to run\n\n```bash\ntrue\n```\n\n## Pass criteria\n\n- exit 0\n' > "$P/scv/archive/$SLUG/TESTS.md"
+  printf '%s' "$P"
+}
+run_push() {  # <저장소> → 종료 코드 (올리기까지 한다 — 원격은 임시 폴더). 출력은 $WORK/out · $WORK/err
+  : > "$WORK/gh.log"
+  ( cd "$1" && PATH="$WORK/bin:$PATH" SCV_FAKE_GH_LOG="$WORK/gh.log" bash "$PRH" "$SLUG" --no-rerun ) > "$WORK/out" 2> "$WORK/err"
+  echo $?
+}
+rsha() { git --git-dir="$1.git" rev-parse -q --verify "refs/heads/$2" 2>/dev/null; }
+c=0
+# (1) 설정한 대상(develop)에서 만든다 — main 이 아니다
+P="$(make_remote_proj e1 pay-v2 main develop)"; printf '{"SCV_PR_BASE": "develop"}\n' > "$P/scv/scv_settings.json"
+rc="$(run_push "$P")"
+[[ "$rc" == 0 && -n "$(rsha "$P" epic/pay-v2)" && "$(rsha "$P" epic/pay-v2)" == "$(rsha "$P" develop)" && "$(rsha "$P" develop)" != "$(rsha "$P" main)" && "$(created_base)" == epic/pay-v2 ]] \
+  && c=$((c + 1)) || echo "      (1) from the configured base: rc=$rc epic=[$(rsha "$P" epic/pay-v2)] develop=[$(rsha "$P" develop)] main=[$(rsha "$P" main)] $(tail -2 "$WORK/err" | tr '\n' ' ')"
+# (2) 설정이 없으면 원격의 기본 가지(trunk)에서
+P="$(make_remote_proj e2 pay-v2 main trunk)"; ( cd "$P" && git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/trunk )
+rc="$(run_push "$P")"
+[[ "$rc" == 0 && -n "$(rsha "$P" epic/pay-v2)" && "$(rsha "$P" epic/pay-v2)" == "$(rsha "$P" trunk)" ]] \
+  && c=$((c + 1)) || echo "      (2) from origin's default branch: rc=$rc epic=[$(rsha "$P" epic/pay-v2)] trunk=[$(rsha "$P" trunk)] $(tail -2 "$WORK/err" | tr '\n' ' ')"
+# (3) 그것도 없으면 main 에서
+P="$(make_remote_proj e3 pay-v2 develop main)"
+rc="$(run_push "$P")"
+[[ "$rc" == 0 && -n "$(rsha "$P" epic/pay-v2)" && "$(rsha "$P" epic/pay-v2)" == "$(rsha "$P" main)" ]] \
+  && c=$((c + 1)) || echo "      (3) from main: rc=$rc epic=[$(rsha "$P" epic/pay-v2)] main=[$(rsha "$P" main)]"
+# (4) 출발점(main)이 원격에 없으면 커밋 앞에서 멈춘다 — 커밋 0 · 새 가지 0 · PR 0
+P="$(make_remote_proj e4 pay-v2 trunk)"
+before="$(cd "$P" && git rev-list --count HEAD)"
+rc="$(run_push "$P")"
+after="$(cd "$P" && git rev-list --count HEAD)"
+[[ "$rc" == 1 && "$before" == "$after" && -z "$(rsha "$P" epic/pay-v2)" && -z "$(rsha "$P" feat/base)" ]] && ! grep -q '^pr create' "$WORK/gh.log" \
+  && grep -q "'main'" "$WORK/err" && grep -q 'SCV_PR_BASE' "$WORK/err" \
+  && c=$((c + 1)) || echo "      (4) missing start: rc=$rc commits $before → $after epic=[$(rsha "$P" epic/pay-v2)] err=[$(tail -2 "$WORK/err" | tr '\n' ' ')]"
+# (5) 묶음 계획의 가지가 이미 있으면 그대로 쓴다 — 출발점이 없어도 된다
+P="$(make_remote_proj e5 pay-v2 trunk epic/pay-v2)"
+keep="$(rsha "$P" epic/pay-v2)"
+rc="$(run_push "$P")"
+[[ "$rc" == 0 && "$(rsha "$P" epic/pay-v2)" == "$keep" && "$(created_base)" == epic/pay-v2 ]] \
+  && c=$((c + 1)) || echo "      (5) an existing epic branch is left as it is: rc=$rc [$keep] → [$(rsha "$P" epic/pay-v2)] $(tail -2 "$WORK/err" | tr '\n' ' ')"
+if [[ $c -eq 5 ]]; then ok "OK [T6] 5/5 the epic branch starts where the PR base rule says, or nothing happens"; else fail "[T6] $c/5"; fi
+
+echo
 echo "T4. 순수성 · 설정 키"
 c=0
 bash "$CORE/scripts/check-purity.sh" "$FLOW" >/dev/null 2>&1 && c=$((c + 1)) || { echo "      purity:"; bash "$CORE/scripts/check-purity.sh" "$FLOW" 2>&1 | sed 's/^/        /'; }
