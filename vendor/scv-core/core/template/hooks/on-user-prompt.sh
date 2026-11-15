@@ -68,10 +68,12 @@ if [[ "${_scv_plain:-on}" != "off" ]]; then
   [[ "$_scv_cap" =~ ^[1-9][0-9]*$ ]] || _scv_cap=2
   if [[ "$_scv_cap" == "1" ]]; then _scv_first="one sentence"; else _scv_first="1–${_scv_cap} sentences"; fi
   cat <<PLAIN
-[SCV plain language] Answer shape: (1) a **bold topic** line, then bullets — the
-first bullet states the result, the next ones unpack it; no prose paragraph over
-${_scv_first}; (2) bullets end in noun form (Korean ~함 · ~임), a question stays a
-question; (3) everyday words, the user's own — explain a new term on the line it
+[SCV plain language] Answer shape: (1) a **bold topic** line, the result lines —
+${_scv_first}, no bullet — then bullets: connected reasoning (A, so B, so C) in one
+short-paragraph bullet (the user reads on a phone — one screen), separate items one
+short bullet each, a list-only topic needs no result lines; no prose paragraph over
+${_scv_first} outside bullets; (2) result lines and bullets end in noun form
+(Korean ~함 · ~임), a question stays a question; (3) everyday words, the user's own — explain a new term on the line it
 first appears; (4) no code values (paths, variable names, versions, settings) before
 the user asks. Identifiers the user needs to act on stay exact. Body:
 contracts/writing.md. A step rule of the action being executed comes before this

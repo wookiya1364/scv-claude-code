@@ -339,28 +339,48 @@ scv_lint_lang_turn() {
 }
 
 # @pure
-# 역할: 답 본문의 골격(다시 쓴 요청 위치 · 줄글 문단 길이 · 불릿 어미 · 첫 내용의 코드값 · 결정표 추천 칸)이 계약을 벗어난 줄들을 낸다
+# 역할: 답 본문의 골격(다시 쓴 요청 위치 · 줄글 문단 길이 · 결론 줄과 불릿의 어미 · 긴 불릿 · 첫 내용의 코드값 · 결정표 추천 칸)이 계약을 벗어난 줄들을 낸다
 # 종류: 판정/answer
 # 예: $'> **다시 쓴 요청**: x\n\n**주제**\n- 결과임\n- 풀이함\n' → ""
 # 예: $'결론이다. 둘째. 셋째.\n' 2 → "prose-long=3>2"
 # 예: $'결론이다.\n\n> **다시 쓴 요청**: x\n' → "rewrite-not-top"
-# 답 본문 + 줄글 문단 문장 상한 → 위반 줄들 (없으면 빈 출력). 골격만 본다 — 내용은 판정하지 않는다. 본문: contracts/writing.md.
+# 예: $'**주제**\n\n결론임.\n\n- 첫 문장임. 그래서 둘째 문장임.\n  이어 쓴 셋째 문장임.\n' 2 "" 6 → ""
+# 답 본문 + 줄글 문단 문장 상한 [+ 설정 언어] [+ 불릿 문장 기준] → 위반 줄들 (없으면 빈 출력). 골격만 본다 — 내용은 판정하지 않는다. 본문: contracts/writing.md.
 #   rewrite-not-top           다시 쓴 요청 인용이 있는데 답 맨 위가 아님
 #   prose-long=<n>><cap>      목록 · 표 · 제목 · 인용 · 굵은 주제가 아닌 줄글 문단의 문장 수가 상한 초과(첫 문단 하나만 알림)
-#   bullet-polite=<개수>      '~습니다' · '~해요' 로 끝나는 불릿 수(개조식 '~함 · ~임' 이 아님, 물음은 예외)
+#   bullet-polite=<개수>      '~습니다' · '~해요' 로 끝나는 불릿 수(개조식 '~함 · ~임' 이 아님, 물음은 예외) — 문단 불릿은 그 끝을 본다
+#   bullet-long=<n>><기준>    불릿 한 개의 문장 수가 넷째 인자(기준)를 넘음(첫 불릿 하나만 알림) — 기준을 안 주면 보지 않는다
+#   lead-polite=<개수>        굵은 주제 바로 아래 결론 줄이 '~습니다' · '~해요' 로 끝남(물음은 예외)
 #   lead-code=<값>            첫 내용 줄(불릿이나 줄글)의 코드값 (백틱 안 경로·버전·파일·설정 키)
 #   decision-no-reco=<행>     결정표(| # | … |) 행의 셋째 열(추천)이 비어 있음
 #   lang-mismatch=<n>%        셋째 인자(설정 언어)가 korean 인데 코드 · 인용 밖 글에 한글이 20% 미만(0.77.0+)
 # 코드 블록 안은 보지 않는다. 근사이며, 오탐의 비용은 재읽기 한 번이다.
+# 불릿 아래로 이어 쓴 줄(빈 줄 없이 이어진 줄, 빈 줄 뒤 들여 쓴 줄)은 그 불릿의 것으로 센다 — 줄글 문단이 아니다(0.94.0+).
 scv_answer_lint() {
-  local text="${1:-}" cap="${2:-2}" lang="${3:-}" prose="" pl line t infence=0 seen=0 inquote=0 para="" first="" n polite=0 prose_done=0
-  local intable=0 is_decision=0 row c1 c3 bt='`' gt=$'\x3e' pat_code pat_num rest tok
+  local text="${1:-}" cap="${2:-2}" lang="${3:-}" bcap="${4:-0}" prose="" pl line t infence=0 seen=0 inquote=0 para="" first="" n polite=0 prose_done=0
+  local intable=0 is_decision=0 row c1 c3 bt='`' gt=$'\x3e' pat_code pat_num rest tok bul="" bctx=0 afterbold=0 lead=0 blong_done=0 ends
   [[ "$cap" =~ ^[1-9][0-9]*$ ]] || cap=2
+  [[ "$bcap" =~ ^[1-9][0-9]*$ ]] || bcap=0
   pat_code="${bt}([^${bt}]+)${bt}(.*)\$"
   pat_num='^[0-9]+[.)][[:space:]]'
   _scv_lint_flush() {
+    if [[ -n "$bul" ]]; then   # 불릿 한 덩어리의 끝 — 이어 쓴 줄까지 합친 글로 어미와 길이를 본다
+      [[ "$(scv_lint_bullet_polite "$bul")" == "1" ]] && polite=$((polite + 1))
+      if (( bcap > 0 && ! blong_done )); then
+        ends="${bul//[^.!?]/}"   # 문장 끝 글자가 기준보다 많을 때만 제대로 센다 — 짧은 불릿은 프로세스를 띄우지 않는다
+        if (( ${#ends} > bcap )); then
+          n="$(scv_lint_sentences "$bul")"
+          (( n > bcap )) && { printf "bullet-long=%s${gt}%s\n" "$n" "$bcap"; blong_done=1; }
+        fi
+      fi
+      bul=""
+    fi
     [[ -n "$para" ]] || return 0
     [[ -z "$first" ]] && first="$para"
+    if (( afterbold )); then   # 굵은 주제 바로 아래 줄글 = 결론 줄
+      [[ "$(scv_lint_bullet_polite "$para")" == "1" ]] && lead=$((lead + 1))
+      afterbold=0
+    fi
     if (( ! prose_done )); then
       n="$(scv_lint_sentences "$para")"
       (( n > cap )) && { printf "prose-long=%s${gt}%s\n" "$n" "$cap"; prose_done=1; }
@@ -369,15 +389,15 @@ scv_answer_lint() {
   }
   while IFS= read -r line || [[ -n "$line" ]]; do
     t="${line#"${line%%[![:space:]]*}"}"
-    if [[ "$t" == '```'* ]]; then _scv_lint_flush; infence=$((1 - infence)); continue; fi
+    if [[ "$t" == '```'* ]]; then _scv_lint_flush; bctx=0; afterbold=0; infence=$((1 - infence)); continue; fi
     (( infence )) && continue
-    if [[ -z "$t" ]]; then _scv_lint_flush; inquote=0; intable=0; continue; fi
+    if [[ -z "$t" ]]; then _scv_lint_flush; inquote=0; intable=0; (( bctx == 1 )) && bctx=2; continue; fi
     if (( ! seen )); then
       seen=1
       [[ "$(scv_is_rewrite_quote "$t")" == "1" ]] && { inquote=1; continue; }
     fi
     if [[ "${t:0:1}" == "$gt" ]]; then
-      _scv_lint_flush
+      _scv_lint_flush; bctx=0; afterbold=0
       (( inquote )) && continue
       [[ "$(scv_is_rewrite_quote "$t")" == "1" ]] && printf 'rewrite-not-top\n'
       continue
@@ -386,7 +406,7 @@ scv_answer_lint() {
     pl="$t"; while [[ "$pl" =~ ^(.*)\`[^\`]*\`(.*)$ ]]; do pl="${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"; done
     (( ${#prose} < 4000 )) && prose+="$pl "
     if [[ "$t" == \|* ]]; then
-      _scv_lint_flush
+      _scv_lint_flush; bctx=0; afterbold=0
       if (( ! intable )); then
         intable=1; is_decision=0
         [[ "$t" =~ ^\|[[:space:]]*#[[:space:]]*\| ]] && is_decision=1
@@ -401,18 +421,28 @@ scv_answer_lint() {
     fi
     intable=0
     if [[ "$t" =~ $pat_num || "$t" == "- "* || "$t" == "* "* || "$t" == "+ "* ]]; then
-      _scv_lint_flush
+      _scv_lint_flush; bctx=1; afterbold=0
       if [[ "$t" =~ $pat_num ]]; then t="${t#*[.)]}"; else t="${t:2}"; fi
       [[ -z "$first" ]] && first="$t"
-      [[ "$(scv_lint_bullet_polite "$t")" == "1" ]] && polite=$((polite + 1))
+      bul="$t"
       continue
     fi
-    if [[ "$t" == \#* || "$t" == \*\** ]]; then _scv_lint_flush; continue; fi
+    if [[ "$t" == \#* || "$t" == \*\** ]]; then
+      _scv_lint_flush; bctx=0; afterbold=0
+      [[ "$t" == \*\** ]] && afterbold=1
+      continue
+    fi
+    # 불릿에 이어 쓴 줄: 빈 줄 없이 이어진 줄, 또는 빈 줄 뒤 들여 쓴 줄 — 그 불릿의 글이다.
+    if (( bctx == 1 )) || { (( bctx == 2 )) && [[ "$line" == "  "* || "$line" == $'\t'* ]]; }; then
+      bul="${bul:+$bul }$t"; bctx=1; continue
+    fi
+    bctx=0
     para="${para:+$para }$t"
   done <<<"$text"
   _scv_lint_flush
   unset -f _scv_lint_flush
   (( polite > 0 )) && printf 'bullet-polite=%s\n' "$polite"
+  (( lead > 0 )) && printf 'lead-polite=%s\n' "$lead"
   if [[ -n "$lang" ]]; then
     local LC_ALL=C letters="${prose//[^A-Za-z$'\xea'-$'\xed']/}"
     scv_lint_lang_verdict "$lang" "$(scv_lint_hangul_ratio "$prose")" "${#letters}"
@@ -451,6 +481,9 @@ scv_drift_decide() {
       # 0.79.0+ — 언어가 어긋났으면 어느 언어로 쓸지 같은 줄에 적는다(전에는 언어 이름이 없어 고쳐지지 않았다, 2026-11-03 slay 세션).
       case "$lang" in korean|ko) name="한국어" ;; ""|english|en) name="" ;; *) name="$lang" ;; esac
       [[ -n "$name" && "$viol" == *lang-mismatch* ]] && warn+=" 답과 도구 사이 중간 보고를 모두 ${name}로 써라."
+      # 0.94.0+ — 새 표시 둘은 무엇을 고칠지 말로 덧붙인다(표시 이름만으로는 알 수 없다).
+      [[ "$viol" == *bullet-long* ]] && warn+=" 불릿 하나가 너무 길다 — 한 화면에 들어오게 생각을 나눠라."
+      [[ "$viol" == *lead-polite* ]] && warn+=" 굵은 주제 아래 결론 줄은 개조식('~함 · ~임')으로 끝내라."
     fi
   fi
   printf '%s%s%s' "$reload" "$us" "$warn"

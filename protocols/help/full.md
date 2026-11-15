@@ -115,7 +115,7 @@ Refine: **Goal** (one sentence) · **Scope** (in / out) ·
 one question per turn when the next depends on this answer, one Decisions table with a
 recommendation on every row when several are independent (see `Answer shape`).
 
-**Each turn has one shape**: the lead first (bold topic + first bullet, per `Plain language first`),
+**Each turn has one shape**: the lead first (bold topic + result lines, per `Plain language first`),
 then the slots the question calls for (per `Answer shape`), and then
 either one dependent question or one Decisions table — never both.
 
