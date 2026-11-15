@@ -18,7 +18,7 @@ Every message, however short (v0.62.0+). Hooks enforce steps 1, 4 and 5.
    that is the answer's first line — `> **다시 쓴 요청**: …` (`> **Rewritten request**: …`) —
    with what you filled or asked; add `**Rewritten request**:` (e.g. `**다시 쓴 요청**:`)
    to the turn block; work from it. Never hide the user's words or change model or effort.
-   The bold topic and its bullets follow it (`contracts/writing.md`). The `>` block is quoted as
+   The bold topic, its result lines and bullets follow it (`contracts/writing.md`). The `>` block is quoted as
    registered — "no code values" does not reach inside it.
 6. The SCV principle (`contracts/rewrite-principle.md`) is about the answer, not the rewrite:
    the per-turn hook carries it (`PRINCIPLE:`); answer by it (0.88.0+).
