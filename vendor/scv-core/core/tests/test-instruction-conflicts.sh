@@ -58,4 +58,33 @@ want="This directory is not hydrated yet."
 has "$CORE/scripts/help.sh" "$want" && has "$P/help/full.md" "\`$want\`" && ! has "$P/help/full.md" "isn't hydrated yet" \
   && ok "T8 안내 문구 일치" || bad "T8 full.md 와 help.sh 출력 문구가 다름"
 
+# T9 — 답 모양은 한 가지 말만 남았다(계획 20261115-wookiya1364-answer-lead-paragraph-bullets T8 · T10): 결론은 불릿 없는 줄,
+#       이어지는 생각은 문단 불릿. 옛 문구("결론은 첫 불릿")가 규칙 · 규약 · 훅 틀 · 프로젝트 틀 어디에도 없고, 새 문구가 제자리에 있다.
+H="$CORE/template/hooks"; C="$CORE/contracts"; T="$CORE/template/scv/SCV.md"
+old=0
+for w in 'first bullet states the result' 'bullets with the result first' 'its first bullet' '첫 불릿에 결과' 'then short bullets'; do
+  n="$( { grep -rlF -- "$w" "$P" "$C" "$H" "$T" 2>/dev/null || true; } | wc -l | tr -d " ")"
+  old=$((old + n))
+done
+[[ "$old" == 0 ]] && ok "T9 옛 답 모양 문구 0곳" || bad "T9 옛 답 모양 문구 ${old}곳"
+miss=""
+has "$C/writing.md" '결론 줄 → 불릿' || miss+=" [규칙 본문]"
+has "$C/writing.md" '한 화면에 들어오게' || miss+=" [규칙 본문의 이유 문장]"
+has "$H/on-user-prompt.sh" 'the result lines' || miss+=" [매 턴 안내]"
+has "$H/on-user-prompt.sh" 'reads on a phone' || miss+=" [매 턴 안내의 이유 문장]"
+has "$T" 'the result in 1–2 sentences' || miss+=" [프로젝트 틀]"
+has "$P/help.md" 'the result lines under it, no bullet' || miss+=" [도움말 답 모양 절]"
+has "$P/help/full.md" 'bold topic + result lines' || miss+=" [도움말 전체 규약]"
+has "$C/finish-report.md" '결론 줄 없이 불릿만' || miss+=" [끝 보고 규칙]"
+[[ -z "$miss" ]] && ok "T9 새 답 모양 문구가 여덟 자리에 있음" || bad "T9 새 문구 빠짐:$miss"
+# 14개 규약의 글 모양 절은 글자까지 같다 — 한 곳만 고치면 두 가지 지시가 생긴다.
+kinds="$(for f in "$P"/*.md; do awk '/^## Plain language first/{f=1;next} f&&/^## /{exit} f' "$f" | cksum; done | sort -u | wc -l | tr -d " ")"
+with="$( { grep -lF -- 'the result in 1–2 sentences without a bullet' "$P"/*.md 2>/dev/null || true; } | wc -l | tr -d " ")"
+[[ "$with" == 14 && "$kinds" -le 2 ]] && ok "T9 14개 규약의 글 모양 절이 같은 글자" || bad "T9 글 모양 절: 새 문구 ${with}곳 · 서로 다른 본문 ${kinds}종"
+# 불릿 문장 기준 숫자는 lib/writing.sh 한 곳 — 문구에는 이유만 적는다.
+num="$( { grep -nE 'bullet[^.;]*[0-9]+ sentences|불릿[^.]*[0-9]+ ?문장' "$H/on-user-prompt.sh" "$P"/*.md "$C/writing.md" 2>/dev/null || true; } | { grep -vE '1[~–]2|_scv_first' || true; } | wc -l | tr -d " ")"
+# shellcheck source=../scripts/lib/writing.sh
+source "$CORE/scripts/lib/writing.sh"
+[[ "$num" == 0 && "$(scv_writing_bullet_cap)" == 6 ]] && ok "T9 불릿 기준 숫자는 함수 한 곳(6)" || bad "T9 문구에 불릿 숫자 ${num}곳 · 함수 값 $(scv_writing_bullet_cap)"
+
 exit "$fail"

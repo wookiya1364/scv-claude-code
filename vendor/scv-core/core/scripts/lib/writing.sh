@@ -67,6 +67,15 @@ scv_writing_limits() {
   esac
 }
 
+# @pure
+# 역할: 답의 불릿 한 개가 몇 문장을 넘으면 길다고 알릴지 그 기준을 낸다 — 이 숫자는 여기 한 곳에만 둔다
+# 종류: 판정
+# 예: "" → "6"
+# 규칙 문구에는 숫자 대신 이유(휴대폰 한 화면)를 적는다 — contracts/writing.md 1. 답 골격 검사만 이 값을 쓴다.
+scv_writing_bullet_cap() {
+  printf '6'
+}
+
 # @deterministic
 # 역할: 시험서에서 통과 기준 줄('Pass criterion:' 줄과 '## Pass criteria' 절의 목록)만 꺼낸다
 # 종류: 꺼내기
