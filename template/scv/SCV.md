@@ -69,8 +69,9 @@ other document refers to "Top-level rules" instead of restating it.
   `SCV_DELEGATE_EFFORT` (default `off`; `on` sends deep questions to a
   background investigator when the host ships one — the session's effort is
   never changed).
-- **Answers lead plain.** A bold topic line, then short bullets with the
-  result first, prose 1–2 sentences; code values only when asked.
+- **Answers lead plain.** A bold topic line, the result in 1–2 sentences
+  without a bullet, then bullets (connected reasoning as one short paragraph); code
+  values only when asked.
   Switch: `SCV_PLAIN_LANGUAGE=off`;
   sentence cap: `SCV_PLAIN_MAX_SENTENCES=<n>`.
 - Hosts without that hook: add this line to your project-root instruction file

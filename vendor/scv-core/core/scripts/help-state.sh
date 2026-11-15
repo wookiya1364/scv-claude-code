@@ -151,12 +151,16 @@ case "$cmd" in
           _echo="$(scv_echo_check "$_got" "${_n:-}" "${_p:-0}" "$_app")"
           _viol=""
           if [[ "$_lsw" == "on" && "$_text" == *[![:space:]]* ]]; then
+            # 0.94.0+ — 불릿 문장 기준은 lib/writing.sh 한 곳에서 온다. 못 읽으면 긴 불릿은 보지 않는다(이 기능 전과 같다).
+            _bcap=""
+            # shellcheck source=lib/writing.sh
+            source "$SCRIPT_DIR/lib/writing.sh" 2>/dev/null && _bcap="$(scv_writing_bullet_cap 2>/dev/null || true)"
             if [[ -n "$_lang" && -n "$_ltf" && -f "$_ltf" && ! -L "$_ltf" ]]; then
-              _viol="$(scv_answer_lint "$_text" "$_cap" "")"
+              _viol="$(scv_answer_lint "$_text" "$_cap" "" "$_bcap")"
               _lv="$(scv_lint_lang_turn "$_text" "$(head -c 65536 "$_ltf" 2>/dev/null)" "$_lang")"
               [[ -n "$_lv" ]] && _viol="$(printf '%s%s%s' "$_viol" "${_viol:+$'\n'}" "$_lv")"
             else
-              _viol="$(scv_answer_lint "$_text" "$_cap" "$_lang")"
+              _viol="$(scv_answer_lint "$_text" "$_cap" "$_lang" "$_bcap")"
             fi
           fi
           _dec="$(scv_drift_decide "$_echo" "$_viol" "$_esw" "$_lsw" "$_lang")"; _reload="${_dec%%$'\x1f'*}"; _warn="${_dec#*$'\x1f'}"
