@@ -42,15 +42,16 @@
 - **Linux / WSL**: 何も不要。**Windows ネイティブ**: 非対応 — WSL か Git Bash を。
 - 推奨 CLI: `git`, `curl`, `jq`, `gh` (または `glab`)。足りなければ SCV が知らせます。
 
-**更新**は Claude Code の中でそのまま行えます — 再起動は不要です:
+**更新**はコマンド一つで行えます — ターミナルのセッションでも Claude アプリでも同じです:
 
 ```bash
-/plugin marketplace update scv-claude-code
-/reload-plugins
+/scv:update
 ```
 
-`/scv:update` が最新かどうかを知らせます。更新後、各プロジェクトは最初の
-アクションで SCV のファイルを自ら更新し、更新したことを伝えます。
+SCV とインストール済みの SCV モッドをすべて更新し、更新前後のバージョンを伝えます。更新は新しい
+セッションを開くと反映されます。更新後、各プロジェクトは最初のアクションで SCV のファイルを自ら更新し、
+更新したことを伝えます。「SCV は最新?」と尋ねるだけなら確認のみで、何も変更しません。
+(ターミナルのセッションでは標準のコマンド二つでも行えます: `/plugin marketplace update scv-claude-code`、続けて `/reload-plugins`。)
 
 SCV モッド(例: デスクトップアプリの SCV ペイン `scv-dashboard`): `/scv:mods` が更新して一覧を表示し、
 `/scv:mods-install`・`/scv:mods-remove` で一つを選んでインストール・削除します。引数はありません。
@@ -171,7 +172,7 @@ bash "$CORE/scripts/metrics.sh"                                 # プロセス�
 | `/scv:routine [<name>]` | 1 ファイルのメンテナンスルーチンを実行 |
 | `/scv:dreams` | 過去のセッションを振り返り、より良いプロンプトを助言 |
 | `/scv:workspace` · `/scv:handoff` | マルチレポ: アンブレラ構成 · 他リポジトリ作業の宣言 |
-| `/scv:update` · `/scv:set-models` · `/scv:install-deps` | プラグイン更新案内 · モデルポリシー · CLI 依存 |
+| `/scv:update` · `/scv:set-models` · `/scv:install-deps` | プラグイン・モッド更新 · モデルポリシー · CLI 依存 |
 | `/scv:mods` · `/scv:mods-install` · `/scv:mods-remove` | SCV モッド更新 + 一覧 · 一つインストール · 一つ削除 |
 | `/scv:channel` | SCV 開発·ステージング·本番の切替 — リリース前に新作業を確認 |
 
