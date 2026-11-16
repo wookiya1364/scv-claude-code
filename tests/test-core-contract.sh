@@ -191,8 +191,8 @@ if failures:
     )
 PY
 
-grep -q '/plugin marketplace update' skills/update/SKILL.md ||
-  fail "Claude update guide was not kept adapter-owned"
+grep -q 'scripts/update.sh" apply' skills/update/SKILL.md ||
+  fail "Claude update action was not kept adapter-owned"
 grep -q 'SCV_MODEL_POLICY' scripts/apply-model-policy.sh ||
   fail "Claude model-policy adapter is missing"
 

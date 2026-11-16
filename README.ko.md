@@ -42,15 +42,16 @@
 - **Linux / WSL**: 할 것 없음. **Windows 네이티브**: 미지원 — WSL 또는 Git Bash.
 - 권장 CLI: `git`, `curl`, `jq`, `gh` (또는 `glab`). 없으면 SCV가 알려줍니다.
 
-**업데이트**는 Claude Code 안에서 바로 합니다 — 다시 시작할 필요 없습니다:
+**업데이트**는 명령 하나로 합니다 — 터미널 세션에서도 클로드 앱에서도 됩니다:
 
 ```bash
-/plugin marketplace update scv-claude-code
-/reload-plugins
+/scv:update
 ```
 
-`/scv:update`가 최신인지 알려 줍니다. 업데이트 뒤 각 프로젝트는 첫 액션에서
-SCV 파일을 스스로 갱신하고, 갱신했다고 말해 줍니다.
+SCV 와 설치된 SCV 모드를 모두 올리고, 앞뒤 버전을 알려 줍니다. 올라간 버전은 새 세션을 열면
+적용됩니다. 업데이트 뒤 각 프로젝트는 첫 액션에서 SCV 파일을 스스로 갱신하고, 갱신했다고 말해 줍니다.
+"SCV 가 최신이야?"처럼 묻기만 하면 확인만 하고 아무것도 바꾸지 않습니다.
+(터미널 세션에서는 기본 명령 두 개로도 됩니다: `/plugin marketplace update scv-claude-code` 다음 `/reload-plugins`.)
 
 SCV 모드(예: 데스크톱 앱의 SCV 칸 `scv-dashboard`): `/scv:mods` 가 업데이트하고 목록을 보여 주고,
 `/scv:mods-install` · `/scv:mods-remove` 는 하나를 골라 설치 · 삭제합니다. 인자는 없습니다.
@@ -171,7 +172,7 @@ bash "$CORE/scripts/metrics.sh"                                 # 과정 숫자
 | `/scv:routine [<name>]` | 파일 하나짜리 유지보수 루틴 실행 |
 | `/scv:dreams` | 지난 세션을 돌아보며 더 좋은 프롬프트 코칭 |
 | `/scv:workspace` · `/scv:handoff` | 멀티레포: 우산 구성 · 타 저장소 작업 선언 |
-| `/scv:update` · `/scv:set-models` · `/scv:install-deps` | 플러그인 업데이트 안내 · 모델 정책 · CLI 의존성 |
+| `/scv:update` · `/scv:set-models` · `/scv:install-deps` | 플러그인 · 모드 업데이트 · 모델 정책 · CLI 의존성 |
 | `/scv:mods` · `/scv:mods-install` · `/scv:mods-remove` | SCV 모드 업데이트 + 목록 · 하나 설치 · 하나 삭제 |
 | `/scv:channel` | SCV 개발·스테이징·운영 전환 — 릴리스 전 새 작업 확인 |
 
