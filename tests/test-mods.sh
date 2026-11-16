@@ -170,7 +170,9 @@ done
 grep -q 'AskUserQuestion' "$ROOT/skills/mods-install/SKILL.md" && ok "mods-install: 선택 창" || fail "mods-install: 선택 창 없음"
 grep -q 'AskUserQuestion' "$ROOT/skills/mods-remove/SKILL.md" && ok "mods-remove: 선택 창" || fail "mods-remove: 선택 창 없음"
 grep -qiE 'without asking|no question|do not ask' "$ROOT/skills/mods/SKILL.md" && ok "mods: 묻지 않고 업데이트" || fail "mods: 묻지 않는다는 문장 없음"
-grep -q 'mods' "$ROOT/skills/update/SKILL.md" && fail "업데이트 스킬에 모드가 남음" || ok "업데이트 스킬은 그대로"
+# 0.94.1+: 업데이트 명령이 모드까지 함께 올린다(사용자 결정 2026-11-16) — 인자는 여전히 없다.
+grep -q 'mods' "$ROOT/skills/update/SKILL.md" && ok "업데이트 스킬: 모드도 함께 올린다고 말함" || fail "업데이트 스킬에 모드 문구 없음"
+grep -q '^argument-hint: ""$' "$ROOT/skills/update/SKILL.md" && ok "업데이트 스킬: 인자 없음" || fail "업데이트 스킬에 인자 힌트가 있음"
 
 echo "── [T10] 순수 단계 — 같은 입력 같은 출력, 바깥 호출 없음 ──"
 case_dir

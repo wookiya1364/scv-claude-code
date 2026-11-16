@@ -20,7 +20,8 @@ The helper prints `MODS_MARKETPLACE:`, one `STEP:` per `claude plugin` call, `RE
 
 Report it in plain words, in the user's language: each mod's result first ("scv-dashboard 0.1.0 →
 0.2.0", or "already up to date"; `renamed <new>` / `gone` = the marketplace no longer has that mod — say
-its new name), then the list. Relay every `NEXT:` line as it is — a failed
+its new name), then the list. A mod installed in more than one scope is updated in each, and its lines
+end in ` [user]` / ` [project]` — name the scope then. `/scv:update` runs this same update after SCV itself. Relay every `NEXT:` line as it is — a failed
 private-marketplace read prints the sign-in steps (`gh auth login`, then `gh auth setup-git`, or an
 SSH key); never report a failed step as done. When a mod changed, the user runs `/reload-plugins`
 (or opens a new session) — this command cannot run it. To add a mod: `/scv:mods-install`; to remove

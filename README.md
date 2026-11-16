@@ -42,15 +42,16 @@ Six months later, a test nobody remembers still catches the break.
 - **Linux / WSL**: nothing to do. **Windows native**: unsupported — use WSL or Git Bash.
 - Recommended CLIs: `git`, `curl`, `jq`, `gh` (or `glab`). SCV tells you if one is missing.
 
-**Update** to the latest release from inside Claude Code — no restart needed:
+**Update** to the latest release with one command — in a terminal session or in the Claude app:
 
 ```bash
-/plugin marketplace update scv-claude-code
-/reload-plugins
+/scv:update
 ```
 
-`/scv:update` tells you whether you are behind. After an update, each project
-refreshes its SCV files on the first action — and says so.
+It updates SCV and every installed SCV mod, then tells you the versions before and after. Open a new
+session for the update to take effect. After an update, each project refreshes its SCV files on the
+first action — and says so. Asking "is SCV current?" only checks; it changes nothing.
+(In a terminal session the two built-in commands also work: `/plugin marketplace update scv-claude-code`, then `/reload-plugins`.)
 
 SCV mods (e.g. `scv-dashboard`, the SCV pane in the desktop app): `/scv:mods` updates them and lists them,
 `/scv:mods-install` and `/scv:mods-remove` let you pick one. No arguments.
@@ -175,7 +176,7 @@ You never need this table — conversation routes for you. For explicit control:
 | `/scv:routine [<name>]` | Run a one-file maintenance routine |
 | `/scv:dreams` | Look back at past sessions · coach better prompts |
 | `/scv:workspace` · `/scv:handoff` | Multi-repo: umbrella setup · cross-repo work declaration |
-| `/scv:update` · `/scv:set-models` · `/scv:install-deps` | Plugin update guide · model policy · CLI deps |
+| `/scv:update` · `/scv:set-models` · `/scv:install-deps` | Plugin + mods update · model policy · CLI deps |
 | `/scv:mods` · `/scv:mods-install` · `/scv:mods-remove` | Update + list SCV mods · install one · remove one |
 | `/scv:channel` | Switch SCV dev · stage · prod — try new work pre-release |
 

@@ -214,6 +214,7 @@ test-show-real-judge.sh
 test-sync-core-atomicity.sh
 test-state-adapter.sh
 test-mods.sh
+test-update.sh
 test-channel-engine.sh
 '
 FAILURES=0
