@@ -26,6 +26,7 @@
 #   MOD: <name> installed <version>|available
 #   STEP: <claude plugin 인자들> ok|fail
 #   RESULT: <name> installed <ver> | updated <old> -> <new> | up-to-date <ver> | removed | failed <reason>
+#           (같은 모드가 두 범위 이상에 깔려 있으면 범위마다 한 줄, 끝에 " [<범위>]" — 0.94.1+)
 #           | renamed <new> | gone          (새로고침 때 새로 받은 마켓에 없는 모드 — 업데이트하지 않는다)
 #   NEXT: <할 일 한 줄>                    (인증 · 다시 불러오기)
 #
@@ -41,8 +42,19 @@ usage() { echo 'usage: mods.sh [list | candidates | install <mod> | update [<mod
 
 # ── 순수 단계 ────────────────────────────────────────────────────────────────
 
+# mods_update_lines <installed_lines> <mkt_name> [<mod>] → "update <mod>@<mkt>[ -s <범위>]" 줄들
+#   한 범위에만 깔린 모드는 범위 없이 한 줄(지금까지와 같은 명령). 두 범위 이상에 깔려 있으면 범위마다 한 줄 —
+#   범위 없이 부르면 명령줄이 한쪽만 고르기 때문이다.
+mods_update_lines() {
+  printf '%s\n' "$1" | awk -v n="$2" -v only="${3:-}" '
+    NF && (only == "" || $1 == only) { c[$1]++; k++; M[k] = $1; S[k] = $3 }
+    END { for (i = 1; i != k + 1; i++) {
+            if (c[M[i]] != 1 && S[i] != "" && S[i] != "-") print "update " M[i] "@" n " -s " S[i]
+            else if (!seen[M[i]]++) print "update " M[i] "@" n } }'
+}
+
 # mods_plan <op> <mod> <mkt_name> <mkt_source> <mkt_present:0|1> <installed_lines>
-#   installed_lines: "<mod> <version>" 줄들 (이 마켓의 설치된 모드)
+#   installed_lines: "<mod> <version> [<범위>]" 줄들 (이 마켓의 설치된 모드 — 범위가 다르면 줄도 따로)
 #   → stdout: 실행할 claude plugin 인자 줄들 (탭 없이 공백 구분, 순서대로)
 mods_plan() {
   local op=$1 mod=$2 name=$3 src=$4 present=$5 installed=$6
@@ -53,7 +65,7 @@ mods_plan() {
     install)
       if [[ $present -eq 0 ]]; then echo "marketplace add $src"; fi
       if [[ $has_mod -eq 1 ]]; then
-        echo "marketplace update $name"; echo "update $mod@$name"
+        echo "marketplace update $name"; mods_update_lines "$installed" "$name" "$mod"
       else
         [[ $present -eq 1 ]] && echo "marketplace update $name"
         echo "install $mod@$name"
@@ -62,9 +74,9 @@ mods_plan() {
       [[ $present -eq 1 ]] || return 0
       echo "marketplace update $name"
       if [[ -n "$mod" ]]; then
-        [[ $has_mod -eq 1 ]] && echo "update $mod@$name"
+        [[ $has_mod -eq 1 ]] && mods_update_lines "$installed" "$name" "$mod"
       else
-        printf '%s\n' "$installed" | awk -v n="$name" 'NF { print "update " $1 "@" n }'
+        mods_update_lines "$installed" "$name"
       fi ;;
     remove)
       [[ $has_mod -eq 1 ]] && echo "uninstall $mod@$name" ;;
@@ -110,7 +122,8 @@ mods_drop_moved() {
 }
 
 # mods_summary <op> <mod> <before_lines> <after_lines> <failed_step> <fail_text>
-#   before/after: "<mod> <version>" 줄들. failed_step 이 비어 있지 않으면 실패.
+#   before/after: "<mod> <version> [<범위>]" 줄들. failed_step 이 비어 있지 않으면 실패.
+#   설치 · 업데이트 결과는 범위별로 견준다 — 한 모드가 두 범위 이상에 있으면 줄 끝에 " [<범위>]" 를 붙인다.
 #   → stdout: RESULT: / NEXT: 줄들
 mods_summary() {
   local op=$1 mod=$2 before=$3 after=$4 failed=$5 ftext=$6
@@ -129,7 +142,7 @@ mods_summary() {
     return 0
   fi
   [[ "$op" == list ]] && return 0
-  if [[ -n "$mod" ]]; then targets="$mod"; else targets="$(printf '%s\n' "$before" | awk 'NF { print $1 }')"; fi
+  if [[ -n "$mod" ]]; then targets="$mod"; else targets="$(printf '%s\n' "$before" | awk 'NF && !s[$1]++ { print $1 }')"; fi
   if [[ -z "$targets" ]]; then echo "RESULT: none (설치된 모드 없음)"; return 0; fi
   for m in $targets; do
     old="$(printf '%s\n' "$before" | awk -v m="$m" '$1 == m { print $2 }')"
@@ -140,12 +153,29 @@ mods_summary() {
         elif [[ -z "$new" ]]; then echo "RESULT: $m removed"
         else echo "RESULT: $m failed still-installed"; fi ;;
       install|update)
-        if [[ -z "$new" ]]; then
-          if [[ "$op" == update && -z "$old" ]]; then echo "RESULT: $m not-installed (설치: /scv:mods-install)"
-          else echo "RESULT: $m failed not-installed-after-run"; fi
-        elif [[ -z "$old" ]]; then echo "RESULT: $m installed $new"
-        elif [[ "$old" == "$new" ]]; then echo "RESULT: $m up-to-date $new"
-        else echo "RESULT: $m updated $old -> $new"; fi ;;
+        MODS_BEFORE="$before" MODS_AFTER="$after" awk -v m="$m" -v op="$op" '
+          function note(line, into,   f, s) {
+            split(line, f, " "); if (f[1] != m) return
+            s = (f[3] == "") ? "-" : f[3]
+            if (!(s in ord)) { k++; ord[s] = k; S[k] = s }
+            if (into == "old") old[s] = f[2]; else new[s] = f[2]
+          }
+          BEGIN {
+            n = split(ENVIRON["MODS_BEFORE"], B, "\n"); for (i = 1; i != n + 1; i++) note(B[i], "old")
+            n = split(ENVIRON["MODS_AFTER"], A, "\n");  for (i = 1; i != n + 1; i++) note(A[i], "new")
+            if (!k) {
+              if (op == "update") print "RESULT: " m " not-installed (설치: /scv:mods-install)"
+              else print "RESULT: " m " failed not-installed-after-run"
+              exit
+            }
+            for (i = 1; i != k + 1; i++) {
+              s = S[i]; tag = (k != 1 && s != "-") ? " [" s "]" : ""
+              if (!(s in new)) print "RESULT: " m " failed not-installed-after-run" tag
+              else if (!(s in old)) print "RESULT: " m " installed " new[s] tag
+              else if (old[s] == new[s]) print "RESULT: " m " up-to-date " new[s] tag
+              else print "RESULT: " m " updated " old[s] " -> " new[s] tag
+            }
+          }' ;;
     esac
   done
   if [[ "$(printf '%s\n' "$before" | awk 'NF' | sort)" != "$(printf '%s\n' "$after" | awk 'NF' | sort)" ]]; then
@@ -155,17 +185,33 @@ mods_summary() {
 
 # ── 부수효과 (양 끝) ─────────────────────────────────────────────────────────
 
-# read_state → stdout 첫 줄 present(0|1), 이후 "<mod> <version>" 줄들. 실패 시 1.
+# plugin_lines <claude plugin list --json 출력> <고르기> <지금 폴더(줄바꿈으로 여럿)> → "<이름> <버전> <범위|->" 줄들
+#   고르기: "=<id>" 는 그 id 하나, "@<마켓>" 은 그 마켓의 플러그인 전부.
+#   project · local 범위 설치본은 그 프로젝트 폴더가 지금 폴더(또는 그 윗 폴더)일 때만 싣는다 — 목록에는 다른 프로젝트의
+#   설치본도 함께 나오지만(2.1.322 에서 확인) 명령줄이 닿는 것은 지금 프로젝트뿐이다. 지금 폴더는 here_dirs 가 낸다.
+#   /scv:update 의 엔진(update.sh)도 이 함수를 쓴다.
+plugin_lines() {
+  printf '%s' "$1" | jq -r --arg pick "$2" --arg here "$3" '
+    (if type == "object" then .installed else . end) // []
+    | .[] | (.id // "") as $id
+    | select(if ($pick | startswith("=")) then $id == ($pick | ltrimstr("=")) else ($id | endswith($pick)) end)
+    | (.scope // "") as $s | (.projectPath // "") as $pp
+    | select(((($s == "project") or ($s == "local")) | not) or ($pp == "")
+             or any($here | split("\n")[]; . == $pp or startswith($pp + "/")))
+    | "\($id | sub("@.*$"; "")) \(.version // "unknown") \(if $s == "" then "-" else $s end)"' 2>/dev/null
+}
+
+# here_dirs → 지금 폴더를 적힌 그대로와 실제 경로(심볼릭 링크를 푼 것)로 한 줄씩 — 설치 기록은 어느 쪽으로도 적힐 수 있다.
+here_dirs() { printf '%s\n%s' "$PWD" "$(pwd -P)"; }
+
+# read_state → stdout 첫 줄 present(0|1), 이후 "<mod> <version> <범위|->" 줄들. 실패 시 1.
 read_state() {
   local mk inst
   mk="$("$CLAUDE_BIN" plugin marketplace list --json 2>/dev/null)" || return 1
   inst="$("$CLAUDE_BIN" plugin list --json 2>/dev/null)" || return 1
   printf '%s' "$mk" | jq -e 'type == "array"' >/dev/null 2>&1 || return 1
   if printf '%s' "$mk" | jq -e --arg n "$MKT_NAME" 'any(.[]; .name == $n)' >/dev/null 2>&1; then echo 1; else echo 0; fi
-  printf '%s' "$inst" | jq -r --arg n "$MKT_NAME" '
-    (if type == "object" then .installed else . end) // []
-    | .[] | select((.id // "") | endswith("@" + $n))
-    | "\(.id | sub("@.*$"; "")) \(.version // "unknown")"' 2>/dev/null
+  plugin_lines "$inst" "@$MKT_NAME" "$(here_dirs)"
 }
 
 # read_catalog → 받아 둔 마켓 목록의 "plugin <name>" · "rename <old> <new>" 줄들 (읽기만 — 못 읽으면 빈 출력)
@@ -186,7 +232,10 @@ read_available() {
 
 # print_list <present> <installed_lines> → MOD: 줄들
 print_list() {
-  printf '%s\n' "$2" | awk 'NF { print "MOD: " $1 " installed " $2 }'
+  MODS_LINES="$2" awk 'BEGIN { n = split(ENVIRON["MODS_LINES"], L, "\n")
+      for (i = 1; i != n + 1; i++) { split(L[i], f, " "); if (f[1] != "") c[f[1]]++ }
+      for (i = 1; i != n + 1; i++) { split(L[i], f, " "); if (f[1] == "") continue
+        print "MOD: " f[1] " installed " f[2] ((c[f[1]] != 1 && f[3] != "" && f[3] != "-") ? " [" f[3] "]" : "") } }'
   if [[ $1 -eq 1 ]]; then read_available | awk 'NF { print "MOD: " $1 " available" }'
   else echo "NEXT: 모드 마켓이 아직 없다 — 설치: /scv:mods-install"; fi
 }
@@ -234,7 +283,7 @@ main() {
     if out="$("$CLAUDE_BIN" plugin marketplace update "$MKT_NAME" 2>&1)"; then echo "STEP: marketplace update $MKT_NAME ok"
     else echo "STEP: marketplace update $MKT_NAME fail"; mods_summary "$op" "$mod" "$before" "" "marketplace update $MKT_NAME" "$out"; return 1; fi
     split="$(mods_split "$before" "$(read_catalog)")"
-    kept="$(printf '%s\n' "$split" | awk '$1 == "keep" { print $2 " " $3 }')"
+    kept="$(printf '%s\n' "$split" | awk '$1 == "keep" { sub(/^keep /, ""); print }')"
     if [[ -n "$mod" ]] && ! printf '%s\n' "$kept" | awk -v m="$mod" '$1 == m { f = 1 } END { exit !f }'; then
       split="$(printf '%s\n' "$split" | awk -v m="$mod" '$2 == m')"
     fi
