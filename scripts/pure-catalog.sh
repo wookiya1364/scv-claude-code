@@ -318,6 +318,16 @@ if [[ -n "$SAME_TEXT" ]]; then
   done <<< "$SAME_TEXT")"
 fi
 [[ -n "$TEXT_DUPS" ]] && CONFIRMED="$(printf '%s\n%s' "$CONFIRMED" "$TEXT_DUPS" | LC_ALL=C awk 'NF')"
+# 0.95.0+ — 셸 아닌 함수(TS/JS · 파이썬 · 러스트)는 같은 언어 짝을 서로의 예시 입력으로 실제로 돌려 본다(pure-run.sh).
+# 예시 글이 달라도 같은 일을 하면 잡힌다. 돌려 보지 못한 함수 · 도구가 없는 언어는 알리기만 한다. 끄기: SCV_PURE_RUN=off.
+RUN_NOTE=""
+if [[ -n "$PC_TEXT" && "${SCV_PURE_RUN:-on}" != off && -f "$SCRIPT_DIR/pure-run.sh" ]]; then
+  RUN_OUT="$(printf '%s\n' "$PC_TEXT" | bash "$SCRIPT_DIR/pure-run.sh" --root "$BASE" 2>/dev/null || true)"
+  RUN_DUPS="$(printf '%s\n' "$RUN_OUT" | LC_ALL=C awk -F'\t' '$1 == "dup" { print $2 "\t" $3 }')"
+  [[ -n "$RUN_DUPS" ]] && CONFIRMED="$(printf '%s\n%s' "$CONFIRMED" "$RUN_DUPS" | LC_ALL=C awk 'NF && !seen[$0]++')"
+  RUN_NOTE="$(printf '%s\n' "$RUN_OUT" | LC_ALL=C awk -F'\t' '$1 == "unrun" { u = u (u ? ", " : "") $2 } $1 == "notool" { t = t (t ? ", " : "") $2 }
+    END { if (u) print "돌려 보지 못함(함수): " u; if (t) print "돌려 보지 못함(도구 없음): " t }')"
+fi
 DUPS="$(pc_allowed_filter "$CONFIRMED" "$ALLOWED")"
 if [[ -n "$DUPS" ]]; then
   while IFS=$'\t' read -r a b c; do
@@ -352,6 +362,7 @@ if [[ $NO_HOME -eq 0 && -f "$CATALOG/undeclared-baseline" ]]; then
   _pd_out="$(bash "$SCRIPT_DIR/pure-declare.sh" "${_pd_args[@]}" 2>&1)" || report "${_pd_out}"
 fi
 
+[[ -n "$RUN_NOTE" ]] && printf '%s\n' "$RUN_NOTE"
 if [[ $FAILS -eq 0 ]]; then
   if [[ $N_TEXT -gt 0 ]]; then
     echo "OK  catalog: ${COUNT}개 함수(예시 실행 ${N_RUN} · 칸만 ${N_TEXT}) · 중복 의심 0 · $HOME_NOTE"

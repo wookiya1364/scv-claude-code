@@ -72,6 +72,8 @@ source "$SCRIPT_DIR/lib/pure-bench.sh"
 source "$SCRIPT_DIR/lib/settings.sh" 2>/dev/null || true
 # shellcheck source=lib/pr-flow.sh
 source "$SCRIPT_DIR/lib/pr-flow.sh" 2>/dev/null || true
+# shellcheck source=lib/comment-flag.sh
+source "$SCRIPT_DIR/lib/comment-flag.sh" 2>/dev/null || true
 
 # @effect read_catalog
 # 이유: 사전 파일을 읽는다 — 파이프라인의 입구(차례 파일은 뺀다)
@@ -394,6 +396,50 @@ pb_before_ref() {
   git -C "$root" rev-parse --verify --quiet HEAD 2>/dev/null
 }
 
+# @effect pb_comment_alert
+# 이유: git 으로 이 일을 시작한 뒤의 변경(추적 파일 diff + 새 파일)을 읽어 새 임시방편 주석 알림을 찍는다 — 종료 코드는 바꾸지 않는다
+pb_comment_alert() {
+  local root="$1" ref="$2" d="" f note
+  [[ -n "$ref" ]] || return 0
+  declare -F scv_added_comment_lines >/dev/null 2>&1 || return 0
+  d="$(git -C "$root" diff -U0 --no-color "$ref" -- . ':(exclude)scv' 2>/dev/null || true)"
+  while IFS= read -r f; do
+    [[ -n "$f" && -f "$root/$f" ]] || continue
+    d+=$'\n'"+++ b/$f"$'\n'"@@ -0,0 +1 @@"$'\n'"$(sed 's/^/+/' "$root/$f" 2>/dev/null)"
+  done <<< "$(git -C "$root" ls-files --others --exclude-standard -- . ':(exclude)scv' 2>/dev/null)"
+  note="$(scv_workaround_note "$(scv_flag_workaround "$(scv_added_comment_lines "$d")")")"
+  [[ -n "$note" ]] && { printf '%s\n\n' "$note"; }
+  return 0
+}
+
+# @effect pb_touched_pure
+# 이유: git 으로 이 일을 시작한 뒤 바뀐 파일(추적 diff + 새 파일)을 읽어, 순수 함수 표식이 든 파일이 있으면 1 을 낸다
+pb_touched_pure() {
+  local root="$1" ref="$2" f
+  while IFS= read -r f; do
+    [[ -n "$f" && -f "$root/$f" ]] || continue
+    grep -Eq '@(pure|deterministic)([^A-Za-z]|$)' "$root/$f" 2>/dev/null && { printf '1'; return 0; }
+  done <<< "$( { [[ -n "$ref" ]] && git -C "$root" diff --name-only "$ref" -- . ':(exclude)scv' 2>/dev/null; git -C "$root" ls-files --others --exclude-standard -- . ':(exclude)scv' 2>/dev/null; } )"
+  printf '0'
+}
+
+# @effect pb_catalog_gate
+# 이유: 프로젝트의 순수 함수 사전 검사(중복 · 예시 · 낡음)를 돌려 결과를 찍는다 — 실패면 1 을 돌려 계획 끝 검사를 막는다
+pb_catalog_gate() {
+  local root="$1" out rc
+  [[ "$(pb_setting SCV_CATALOG_GATE on)" != off ]] || { echo "사전 검사: 꺼져 있음 (SCV_CATALOG_GATE=off)"; return 0; }
+  if [[ -f "$root/core/scripts/pure-catalog.sh" && -f "$root/core/contracts/purity.md" ]]; then
+    out="$(cd "$root" && bash core/scripts/pure-catalog.sh check 2>&1)"; rc=$?
+  elif [[ -d "$root/scv/core/catalog/pure" ]]; then
+    out="$(cd "$root" && bash "$SCRIPT_DIR/pure-catalog.sh" check --project 2>&1)"; rc=$?
+  else
+    echo "사전 검사: 이 프로젝트에는 순수 함수 사전이 없다 — 검사 안 함"; return 0
+  fi
+  printf '사전 검사: %s\n' "$( (( rc == 0 )) && echo 통과 || echo '실패 — 같은 일을 하는 함수는 재사용하거나, 다르면 중복 예외 파일에 이유를 적어라')"
+  printf '%s\n\n' "$out"
+  return "$rc"
+}
+
 # @effect pb_gate
 # 이유: 고친 파일들에서 달라진 사전 함수와 그것을 부르는 엮은 함수를 찾아 앞뒤를 견준다 — 턴 끝(빠르게)과 계획 끝(꼼꼼히)이 함께 쓴다
 pb_gate() {
@@ -561,9 +607,18 @@ case "$CMD" in
     SK="$(grep -c '| 재지 못함 |' <<< "$PB_GATE_OUT" || true)"; [[ "${SK:-0}" == 0 ]] || echo "PURE_BENCH_NOTE: 시간이 모자라거나 잴 수 없어 ${SK}개를 재지 못함"
     exit 0 ;;
   plan-end)
-    [[ "$(pb_setting SCV_PURE_BENCH on)" != off ]] || { echo "재는 검사: 꺼져 있음 (SCV_PURE_BENCH=off)"; exit 0; }
     ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)"
-    REF="$(pb_before_ref "$ROOT")" || { echo "재는 검사: git 저장소가 아니라 견줄 앞 코드가 없다 — 재지 못함"; exit 0; }
+    REF="$(pb_before_ref "$ROOT")" || REF=""
+    pb_comment_alert "$ROOT" "$REF"   # 0.95.0+ — 새 임시방편 주석 알림(막지 않음, 재는 검사를 꺼도 나온다)
+    # 0.95.0+ — 이 일이 바꾼 파일 가운데 순수 함수 표식이 든 파일이 있으면 사전 검사를 자동으로 돌린다
+    # (중복 · 틀린 예시 · 낡은 사전이면 막음). 순수 함수를 건드리지 않은 일은 검사하지 않는다.
+    if [[ "$(pb_touched_pure "$ROOT" "$REF")" == 1 ]]; then
+      pb_catalog_gate "$ROOT" || exit 1
+    else
+      echo "사전 검사: 이 일이 순수 함수 표식이 든 파일을 바꾸지 않았다 — 검사 안 함"
+    fi
+    [[ "$(pb_setting SCV_PURE_BENCH on)" != off ]] || { echo "재는 검사: 꺼져 있음 (SCV_PURE_BENCH=off)"; exit 0; }
+    [[ -n "$REF" ]] || { echo "재는 검사: git 저장소가 아니라 견줄 앞 코드가 없다 — 재지 못함"; exit 0; }
     PB_GATE_OUT=""; PB_GATE_N=0
     pb_gate full "$ROOT" "$( { git -C "$ROOT" diff --name-only "$REF" 2>/dev/null; git -C "$ROOT" ls-files --others --exclude-standard 2>/dev/null; } | sort -u)" > "$PB_TMP/gate.line"; RC=$?
     if [[ -z "$PB_GATE_OUT" ]]; then echo "재는 검사: 이 일을 시작한 뒤 달라진 사전 함수가 없다 — 잰 함수 0"; exit 0; fi
