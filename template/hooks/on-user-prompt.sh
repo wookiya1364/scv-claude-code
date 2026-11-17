@@ -212,6 +212,17 @@ _scv_tc_sh="$CORE_HOME/scripts/turn-check.sh"
 if [[ "$_scv_kind" != "auto" && -f "$_scv_tc_sh" ]] && command -v jq >/dev/null 2>&1; then
   _scv_tcp="$(printf '%s' "$INPUT" | jq -r 'try (if (.prompt | type) == "string" then .prompt else "" end) catch ""' 2>/dev/null | head -c 4000 || true)"
   if [[ "$_scv_tcp" == *[![:space:]]* ]]; then
+    # 0.95.0+ — 고쳐 달라는 턴이면 검사로 남길지 묻게 하는 한 줄(lib/correction-check.sh). 새 턴 사진을 찍기 전에 앞 턴의
+    # 끝 표시와 바꾼 파일 수를 읽는다. 설정 SCV_CORRECTION_CHECK=off 면 싣지 않는다.
+    _scv_cclib="$CORE_HOME/scripts/lib/correction-check.sh"
+    if [[ -f "$_scv_cclib" && "$(_scv_read SCV_CORRECTION_CHECK | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]')" != off ]] \
+       && source "$_scv_cclib" 2>/dev/null && declare -F scv_show_real_is_correction >/dev/null 2>&1; then
+      _scv_ccs="$_scv_tdir/.turn-plan"; _scv_cce=0; [[ -e "$_scv_ccs/ended" ]] && _scv_cce=1
+      _scv_ccn="$(grep -c . "$_scv_ccs/changed" 2>/dev/null || true)"
+      _scv_ccl="$(scv_correction_notice "$(scv_show_real_is_correction "$_scv_tcp")" "$_scv_cce" "${_scv_ccn:-0}" \
+        "$(_scv_read SCV_LANG | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]')" 2>/dev/null || true)"
+      [[ -n "$_scv_ccl" ]] && printf '%s\n' "$_scv_ccl"
+    fi
     printf '%s' "$_scv_tcp" | bash "$_scv_tc_sh" start --dir "$_scv_tdir" >/dev/null 2>&1 || true
   fi
 fi
