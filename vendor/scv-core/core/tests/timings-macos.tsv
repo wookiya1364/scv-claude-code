@@ -9,6 +9,7 @@ core/tests/test-attachments-scope.sh	3
 core/tests/test-autosync.sh	17
 core/tests/test-channel.sh	0
 core/tests/test-check-privacy.sh	1
+core/tests/test-checks-not-comments.sh	26
 core/tests/test-choice-questions-a.sh	21
 core/tests/test-choice-questions-b.sh	36
 core/tests/test-choice-questions-c.sh	123
