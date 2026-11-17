@@ -323,14 +323,14 @@ scv_finish_note() {
 # @pure
 # 역할: 매 턴 맨 앞에 실을 확인 범위 안내 한 줄을 설정 언어로 만든다
 # 종류: 조립
-# 예: korean → "[SCV 확인 범위] 도구를 쓴 턴은 끝 보고 끝에 '확인한 것 · 확인 못 한 것 · 제가 대신 정한 것'(기록 · 질문만 쓴 턴은 '확인 범위:' 한 줄). '없음'엔 이유, 실패를 못 본 시험은 '확인 못 한 것'에. 본문: contracts/finish-report.md"
-# 예: english → "[SCV verification scope] A turn that used tools ends its final report with Verified · Not verified · Decided for you (only SCV records or questions: one 'Verification scope:' line). 'none' needs a reason; a test never seen failing goes under Not verified. Body: contracts/finish-report.md"
-# 예: "" → "[SCV verification scope] A turn that used tools ends its final report with Verified · Not verified · Decided for you (only SCV records or questions: one 'Verification scope:' line). 'none' needs a reason; a test never seen failing goes under Not verified. Body: contracts/finish-report.md"
+# 예: korean → "[SCV 확인 범위] 도구를 쓴 턴은 끝 보고 끝에 '확인한 것 · 확인 못 한 것 · 제가 대신 정한 것'(기록 · 질문만 쓴 턴은 '확인 범위:' 한 줄). 본문: contracts/finish-report.md"
+# 예: english → "[SCV verification scope] A turn that used tools ends its final report with Verified · Not verified · Decided for you (only SCV records or questions: one 'Verification scope:' line). Body: contracts/finish-report.md"
+# 예: "" → "[SCV verification scope] A turn that used tools ends its final report with Verified · Not verified · Decided for you (only SCV records or questions: one 'Verification scope:' line). Body: contracts/finish-report.md"
 # <언어> → 한 줄. korean 이 아니면 english 문구.
 scv_finish_rule_line() {
   case "${1:-}" in
-    korean|ko) printf '%s\n' "[SCV 확인 범위] 도구를 쓴 턴은 끝 보고 끝에 '확인한 것 · 확인 못 한 것 · 제가 대신 정한 것'(기록 · 질문만 쓴 턴은 '확인 범위:' 한 줄). '없음'엔 이유, 실패를 못 본 시험은 '확인 못 한 것'에. 본문: contracts/finish-report.md" ;;
-    *) printf '%s\n' "[SCV verification scope] A turn that used tools ends its final report with Verified · Not verified · Decided for you (only SCV records or questions: one 'Verification scope:' line). 'none' needs a reason; a test never seen failing goes under Not verified. Body: contracts/finish-report.md" ;;
+    korean|ko) printf '%s\n' "[SCV 확인 범위] 도구를 쓴 턴은 끝 보고 끝에 '확인한 것 · 확인 못 한 것 · 제가 대신 정한 것'(기록 · 질문만 쓴 턴은 '확인 범위:' 한 줄). 본문: contracts/finish-report.md" ;;
+    *) printf '%s\n' "[SCV verification scope] A turn that used tools ends its final report with Verified · Not verified · Decided for you (only SCV records or questions: one 'Verification scope:' line). Body: contracts/finish-report.md" ;;
   esac
 }
 
