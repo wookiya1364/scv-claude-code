@@ -27,30 +27,49 @@ scv_tc_receipt() {
   fi
 }
 
-# @pure
+# 큰 목록에서 줄마다 긴 글 전체를 훑으면 길이의 제곱으로 느려진다(바뀐 파일 2,000개 · 9초, 쓴 파일 목록 44만 줄 · 수 분 —
+# 계획 20261119-wookiya1364-turn-check-fast-end). 그래서 아래 비교들은 awk 로 집합을 만들어 한 번만 훑는다.
+# 두 글은 표준 입력으로 넘기고 사이에 \036 한 글자 줄을 둔다(경로에 들어가지 않는 글자).
+_SCV_TC_AWK_DIFF='part == 0 && $0 == "\036" { part = 1; next }
+    part == 0 { if ($0 != "") { s[$0] = 1; p = $0; sub(/\t.*/, "", p); sp[p] = 1 }; next }
+    $0 != "" { p = $0; sub(/\t.*/, "", p); ep[p] = 1; if (!($0 in s)) out[p] = 1 }
+    END { for (k in sp) if (!(k in ep)) out[k] = 1; for (k in out) print k }'
+_SCV_TC_AWK_MINE='part == 0 && $0 == "\036" { part = 1; next }
+    part == 0 { if ($0 != "") m[$0] = 1; next }
+    $0 != "" && ($0 in m) { print }'
+_SCV_TC_AWK_ABS='$0 != "" { print ENVIRON["SCV_TC_ROOT"] "/" $0 }'
+# 작은 입력은 셸 반복이 더 빠르다(awk 를 띄우는 값이 더 크다) — 글 길이가 이 바이트 수보다 작으면 옛 셸 방식으로 돈다.
+_SCV_TC_SMALL=8000
+_SCV_TC_AWK_JOIN='NR > 1 { printf "\n" } { printf "%s", $0 }'   # 줄들을 끝 줄바꿈 없이 잇는다(옛 함수 출력과 같게)
+
+# @deterministic
 # 역할: 시작 사진과 끝 사진("경로<TAB>지문" 줄들)을 견줘 이번 턴에 바뀐 경로만 낸다 — 새로 생김 · 지문이 바뀜 · 사라짐
 # 종류: 비교
 # 예: $'a\t1\nb\t2' $'a\t1\nb\t3\nc\t9' → $'b\nc'
 # 예: $'a\t1\nb\t2' $'a\t1' → "b"
 # 예: $'a\t1' $'a\t1' → ""
 scv_tc_diff() {
-  local start="${1:-}" end="${2:-}" line path out="" seen=$'\n'
-  while IFS= read -r line; do
-    [[ -n "$line" ]] || continue
-    if [[ $'\n'"$start"$'\n' != *$'\n'"$line"$'\n'* ]]; then
+  if (( ${#1} + ${#2} < _SCV_TC_SMALL )); then
+    local start="${1:-}" end="${2:-}" line path out="" seen=$'\n'
+    while IFS= read -r line; do
+      [[ -n "$line" ]] || continue
+      if [[ $'\n'"$start"$'\n' != *$'\n'"$line"$'\n'* ]]; then
+        path="${line%%$'\t'*}"
+        [[ "$seen" == *$'\n'"$path"$'\n'* ]] || { seen+="$path"$'\n'; out+="$path"$'\n'; }
+      fi
+    done <<< "${end%$'\n'}"
+    while IFS= read -r line; do
+      [[ -n "$line" ]] || continue
       path="${line%%$'\t'*}"
-      [[ "$seen" == *$'\n'"$path"$'\n'* ]] || { seen="$seen$path"$'\n'; out="$out$path"$'\n'; }
-    fi
-  done <<< "${end%$'\n'}"
-  while IFS= read -r line; do
-    [[ -n "$line" ]] || continue
-    path="${line%%$'\t'*}"
-    if [[ $'\n'"$end" != *$'\n'"$path"$'\t'* ]]; then
-      [[ "$seen" == *$'\n'"$path"$'\n'* ]] || { seen="$seen$path"$'\n'; out="$out$path"$'\n'; }
-    fi
-  done <<< "${start%$'\n'}"
-  out="${out%$'\n'}"
-  [[ -z "$out" ]] || printf '%s' "$out" | LC_ALL=C sort
+      if [[ $'\n'"$end" != *$'\n'"$path"$'\t'* ]]; then
+        [[ "$seen" == *$'\n'"$path"$'\n'* ]] || { seen+="$path"$'\n'; out+="$path"$'\n'; }
+      fi
+    done <<< "${start%$'\n'}"
+    out="${out%$'\n'}"
+    [[ -z "$out" ]] || printf '%s' "$out" | LC_ALL=C sort
+    return 0
+  fi
+  printf '%s\n\036\n%s\n' "${1:-}" "${2:-}" | LC_ALL=C awk "$_SCV_TC_AWK_DIFF" | LC_ALL=C sort   # 끝 줄바꿈까지 옛 출력과 같게
 }
 
 # @pure
@@ -60,21 +79,22 @@ scv_tc_diff() {
 # 예: $'graft/x.md\n.scv-pr-artifacts/a.png\nconf/a.toml' "conf/*" → ""
 # 예: "" "" → ""
 scv_tc_filter() {
-  local paths="${1:-}" extra="${2:-}" p g out="" skip
+  local paths="${1:-}" extra="${2:-}" p g out="" skip globs=()
+  # 뺄 글롭은 한 번만 나눠 둔다 — 경로마다 다시 나누면 경로 수만큼 임시 입력을 만들어 느렸다.
+  if [[ -n "$extra" ]]; then
+    while IFS= read -r g; do [[ -n "$g" ]] && globs+=("$g"); done <<< "${extra//:/$'\n'}"
+  fi
   while IFS= read -r p; do
     [[ -n "$p" ]] || continue
     case "$p" in
       scv/*|*/scv/*|graft/*|*/graft/*|.scv-pr-artifacts/*) continue ;;
     esac
     skip=0
-    if [[ -n "$extra" ]]; then
-      while IFS= read -r g; do
-        [[ -n "$g" ]] || continue
-        # shellcheck disable=SC2053
-        if [[ "$p" == $g || "$p" == *:$g ]]; then skip=1; break; fi
-      done <<< "${extra//:/$'\n'}"
-    fi
-    (( skip )) || out="$out$p"$'\n'
+    for g in ${globs[@]+"${globs[@]}"}; do
+      # shellcheck disable=SC2053
+      if [[ "$p" == $g || "$p" == *:$g ]]; then skip=1; break; fi
+    done
+    (( skip )) || out+="$p"$'\n'
   done <<< "$paths"
   printf '%s' "${out%$'\n'}"
 }
@@ -110,30 +130,34 @@ scv_tc_tool_kind() {
   else printf 'read'; fi
 }
 
-# @pure
+# @deterministic
 # 역할: 저장소 맨 위 경로와 그 안의 상대 경로 줄들을 이어 절대 경로 줄들로 바꾼다
 # 종류: 변환
 # 예: "/r" $'a.ts\nsrc/b.ts' → $'/r/a.ts\n/r/src/b.ts'
 # 예: "/r" "" → ""
 scv_tc_abs_paths() {
-  local root="${1%/}" paths="${2:-}" p out=""
-  while IFS= read -r p; do
-    [[ -n "$p" ]] && out="$out$root/$p"$'\n'
-  done <<< "$paths"
-  printf '%s' "${out%$'\n'}"
+  [[ -n "${2:-}" ]] || return 0
+  if (( ${#2} < _SCV_TC_SMALL )); then
+    local root="${1%/}" p out=""
+    while IFS= read -r p; do [[ -n "$p" ]] && out+="$root/$p"$'\n'; done <<< "$2"
+    printf '%s' "${out%$'\n'}"; return 0
+  fi
+  printf '%s\n' "$2" | SCV_TC_ROOT="${1%/}" awk "$_SCV_TC_AWK_ABS" | awk "$_SCV_TC_AWK_JOIN"
 }
 
-# @pure
+# @deterministic
 # 역할: 경로 줄들 중 '이 세션이 쓴 파일' 목록에 있는 것만 남긴다 — 다른 세션이 같은 폴더에서 고친 파일을 뺀다
 # 종류: 고르기
 # 예: $'/r/a\n/r/b' $'/r/b\n/x/c' → "/r/b"
 # 예: "/r/a" "" → ""
 scv_tc_mine_only() {
-  local paths="${1:-}" mine=$'\n'"${2:-}"$'\n' p out=""
-  while IFS= read -r p; do
-    [[ -n "$p" && "$mine" == *$'\n'"$p"$'\n'* ]] && out="$out$p"$'\n'
-  done <<< "$paths"
-  printf '%s' "${out%$'\n'}"
+  [[ -n "${1:-}" && -n "${2:-}" ]] || return 0
+  if (( ${#1} + ${#2} < _SCV_TC_SMALL )); then
+    local mine=$'\n'"$2"$'\n' p out=""
+    while IFS= read -r p; do [[ -n "$p" && "$mine" == *$'\n'"$p"$'\n'* ]] && out+="$p"$'\n'; done <<< "$1"
+    printf '%s' "${out%$'\n'}"; return 0
+  fi
+  printf '%s\n\036\n%s\n' "$2" "$1" | LC_ALL=C awk "$_SCV_TC_AWK_MINE" | awk "$_SCV_TC_AWK_JOIN"
 }
 
 # @pure
@@ -477,38 +501,43 @@ scv_tc_block_msg() {
   esac
 }
 
-# @pure
+# 계획 글이 길면(긴 턴에 보관한 계획이 여럿) 줄마다 긴 글을 고쳐 쓰는 방식이 길이의 제곱으로 느렸다 — 한 번 훑기로.
+_SCV_TC_AWK_PLANL='index($0, "- **") == 1 || index($0, "  - ") == 1 { print }'
+_SCV_TC_AWK_NEWL='part == 0 && $0 == "\036" { part = 1; next }
+    part == 0 { if ($0 != "") c[$0]++; next }
+    $0 != "" { if (c[$0] > 0) c[$0]--; else print }'
+
+# @deterministic
 # 역할: 계획 글 여러 개의 이력 · 단계 줄을 모아 정렬한 묶음으로 만든다 — 시작 · 끝 묶음의 차이가 '새로 생긴 줄'
 # 종류: 변환
 # 예: $'# a\n- **2026-11-09 진행** — 1단계: x\n본문\n  - 요청: y (요청 ab)' → $'  - 요청: y (요청 ab)\n- **2026-11-09 진행** — 1단계: x'
 # 예: "본문만" → ""
 scv_tc_plan_lines() {
-  local text="${1:-}" l out=""
-  while IFS= read -r l; do
-    case "$l" in
-      "- **"*|"  - "*) out="$out$l"$'\n' ;;
-    esac
-  done <<< "$text"
-  [[ -z "$out" ]] || printf '%s' "${out%$'\n'}" | LC_ALL=C sort
+  [[ -n "${1:-}" ]] || return 0
+  if (( ${#1} < _SCV_TC_SMALL )); then
+    local l out=""
+    while IFS= read -r l; do case "$l" in "- **"*|"  - "*) out+="$l"$'\n' ;; esac; done <<< "$1"
+    [[ -z "$out" ]] || printf '%s' "${out%$'\n'}" | LC_ALL=C sort
+    return 0
+  fi
+  printf '%s\n' "$1" | LC_ALL=C awk "$_SCV_TC_AWK_PLANL" | LC_ALL=C sort   # 끝 줄바꿈까지 옛 출력과 같게
 }
 
-# @pure
+# @deterministic
 # 역할: 정렬된 두 묶음에서 뒤 묶음에만 있는 줄을 낸다 — 같은 줄이 늘어난 것도 센다
 # 종류: 비교
 # 예: $'a\nb' $'a\nb\nc' → "c"
 # 예: $'a' $'a\na' → "a"
 # 예: $'a\nb' $'a' → ""
 scv_tc_new_lines() {
-  local before="${1:-}" after="${2:-}" l rest out=""
-  [[ -n "$after" ]] || return 0
-  rest=$'\n'"$before"$'\n'
-  while IFS= read -r l; do
-    [[ -n "$l" ]] || continue
-    if [[ "$rest" == *$'\n'"$l"$'\n'* ]]; then
-      rest="${rest/$'\n'"$l"$'\n'/$'\n'}"
-    else
-      out="$out$l"$'\n'
-    fi
-  done <<< "$after"
-  printf '%s' "${out%$'\n'}"
+  [[ -n "${2:-}" ]] || return 0
+  if (( ${#1} + ${#2} < _SCV_TC_SMALL )); then
+    local rest=$'\n'"${1:-}"$'\n' l out=""
+    while IFS= read -r l; do
+      [[ -n "$l" ]] || continue
+      if [[ "$rest" == *$'\n'"$l"$'\n'* ]]; then rest="${rest/$'\n'"$l"$'\n'/$'\n'}"; else out+="$l"$'\n'; fi
+    done <<< "$2"
+    printf '%s' "${out%$'\n'}"; return 0
+  fi
+  printf '%s\n\036\n%s\n' "${1:-}" "$2" | LC_ALL=C awk "$_SCV_TC_AWK_NEWL" | awk "$_SCV_TC_AWK_JOIN"
 }

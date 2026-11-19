@@ -116,3 +116,4 @@ tests/test-promote-wait.sh	41
 tests/test-release-verify.sh	1
 tests/test-state-index.sh	9
 tests/test-sync-dry-run.sh	0
+core/tests/test-turn-check-fast-end.sh	11
