@@ -106,6 +106,8 @@ fi
 # 사람 턴만 본다. 판단할 수 없으면(스크립트 · jq 없음) 막지 않는다.
 _scv_tc_sh="$_scv_core/scripts/turn-check.sh"
 if [[ "$_scv_human" == 1 && -f "$_scv_tc_sh" ]]; then
+  # '멈춤 시작' 표시를 판정보다 먼저 남긴다 — 이 훅이 한도 시간에 끊겨도 다음 말이 새 턴으로 열린다(계획 turn-check-fast-end).
+  bash "$_scv_tc_sh" stop-begin --dir "$_scv_tdir" >/dev/null 2>&1 || true
   # 대화 기록 자리도 넘긴다(0.93.2) — 단계 보고 도구에 도구 앞 훅이 닿지 않는 호스트에서, 막을 참일 때만 그 호출을 대화 기록에서 센다.
   _scv_tco="$(bash "$_scv_tc_sh" end --dir "$_scv_tdir" ${TRANSCRIPT:+--transcript "$TRANSCRIPT"} 2>/dev/null || true)"
   if grep -qx 'TURN_PLAN: block' <<<"$_scv_tco"; then

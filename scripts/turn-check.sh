@@ -5,6 +5,7 @@
 #   turn-check.sh start   --dir <턴 폴더> | --session <세션>            (표준 입력: 이번 턴 사용자 원문)
 #   turn-check.sh touch   --dir <턴 폴더> [--kind write|shell|read] <경로>…  (도구 앞: 쓴 파일 · 셸 앞 모습을 적음)
 #   turn-check.sh receipt --dir <턴 폴더>            (표준 입력: 도구가 돌릴 명령 글)
+#   turn-check.sh stop-begin --dir <턴 폴더>   (종료 훅 맨 처음: '멈춤 시작' 표시 — 판정 전에 끊겨도 다음 말은 새 턴, 0.95.1+)
 #   turn-check.sh end     --dir <턴 폴더> [--transcript <대화 기록 파일>]   → TURN_PLAN: pass|block|pass-unrecorded|off · TURN_PLAN_REASON: …
 #   turn-check.sh choice  --question <질문> --answer <답>
 #   turn-check.sh step    --dir <턴 폴더> --tool <도구 이름>   (도구 앞: 단계 보고 도구면 표시)
@@ -231,11 +232,23 @@ settle() {
       h0="$(cat "$S/phead.$k" 2>/dev/null)"; h1="$(head_of "$root")"
       [[ -n "$h0" && "$h0" != "$h1" ]] && d="$d"$'\n'"$(git -C "$root" diff --name-only "$h0" "$h1" 2>/dev/null)"
       d="$(scv_tc_abs_paths "$root" "$d")"
-      [[ -n "$d" ]] && printf '%s\n' "$d" >> "$S/mine"
+      add_mine "$d"
     fi
     rm -f "$S/pend.$k" "$S/phead.$k"
   done < "$S/pend-roots"
   rm -f "$S/pend-roots"
+}
+
+# 목록에 아직 없는 줄만 내보낸다 — \036 한 글자 줄 앞은 지금 목록, 뒤는 새 줄들.
+_SCV_TC_AWK_NEWMINE='part == 0 && $0 == "\036" { part = 1; next }
+    part == 0 { m[$0] = 1; next }
+    $0 != "" && !($0 in m) { m[$0] = 1; print }'
+
+# @effect add_mine
+# 이유: '내 파일' 목록 파일에 아직 없는 경로만 덧붙인다 — 쓸 때마다 같은 경로가 쌓여 한 세션에 44만 줄이 된 일을 막는다
+add_mine() {
+  [[ -n "${1:-}" ]] || return 0
+  { [[ -f "$S/mine" ]] && cat "$S/mine"; printf '\036\n%s\n' "$1"; } | LC_ALL=C awk "$_SCV_TC_AWK_NEWMINE" >> "$S/mine" 2>/dev/null || true
 }
 
 # @effect state_dir
@@ -295,13 +308,16 @@ case "$CMD" in
     # 새로 시작하면 그 앞의 기록이 '앞 턴 것'이 되고, 그 턴에 보관한 계획은 시작 표시보다 옛것이 되어 읽히지 않는다.
     HAS_ID=0; [[ -s "$S/id" ]] && HAS_ID=1
     HAS_END=0; [[ -e "$S/ended" ]] && HAS_END=1
+    # 종료 훅이 돌기 시작했는데 판정을 못 낸 채 죽었으면(시간 초과) '멈춤 시작' 표시만 남는다 — 앞 턴은 끝난 것으로 본다.
+    # 막힌 뒤 이어지는 턴은 막을 때 이 표시를 지우므로 그대로 이어진다(계획 20261119-wookiya1364-turn-check-fast-end).
+    [[ -e "$S/stopping" ]] && HAS_END=1
     if [[ "$(scv_tc_start_mode "$HAS_ID" "$HAS_END")" == continue ]]; then
       CUR="$(cat "$S/req" 2>/dev/null; printf x)"; CUR="${CUR%x}"
       printf '%s' "$(scv_tc_req_join "$CUR" "$REQ" 4000)" > "$S/req"
       mkdir -p "$JDIR" 2>/dev/null && printf '%s\n' "$(cd "$DIR" && pwd -P)" > "$JDIR/.turn-latest" 2>/dev/null
       exit 0
     fi
-    rm -f "$S"/snap.* "$S"/head.* "$S"/pend.* "$S"/phead.* "$S/pend-roots" "$S/mine" "$S/roots" "$S/receipts" "$S/blocks" "$S/exempt" "$S/steps" "$S/ended" 2>/dev/null
+    rm -f "$S"/snap.* "$S"/head.* "$S"/pend.* "$S"/phead.* "$S/pend-roots" "$S/mine" "$S/roots" "$S/receipts" "$S/blocks" "$S/exempt" "$S/steps" "$S/ended" "$S/stopping" 2>/dev/null
     printf '%s' "$REQ" > "$S/req"
     od -An -N4 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n' > "$S/id"
     [[ -s "$S/id" ]] || printf '%08x' "$$" > "$S/id"
@@ -328,7 +344,7 @@ case "$CMD" in
           a="$(real_path "$p")"; r="$(root_of "$a")"
           [[ -z "$r" && "$a" == "$PROJECT"/* ]] && r="$PROJECT"
           [[ -n "$r" ]] && take_snap "$r"
-          printf '%s\n' "$a" >> "$S/mine"
+          add_mine "$a"
         done ;;
       shell)
         # 셸 명령: 이 프로젝트 · 이미 찍은 저장소(작업 공간 포함) · cd · -C 대상 저장소를 대기 사진으로 찍는다
@@ -381,17 +397,29 @@ case "$CMD" in
     exit 0
     ;;
 
+  stop-begin)
+    # 종료 훅이 맨 처음 부른다 — 판정 전에 죽어도 다음 말이 새 턴으로 열리게(start 가 이 표시를 본다).
+    enabled || exit 0
+    state_dir "$DIR" || exit 0
+    [[ -f "$S/id" ]] && : > "$S/stopping" 2>/dev/null
+    exit 0
+    ;;
+
   end)
     enabled || { echo "TURN_PLAN: off"; exit 0; }
     state_dir "$DIR" || { echo "TURN_PLAN: pass"; exit 0; }
     [[ -f "$S/id" ]] || { echo "TURN_PLAN: pass"; exit 0; }
     ID="$(cat "$S/id")"
+    # 시간 예산 — 종료 훅의 한도(60초)보다 먼저 스스로 끝낸다. 넘으면 통과시키고 '확인 생략'을 남기며 끝 표시를 쓴다.
+    BUDGET="$(setting SCV_TURN_CHECK_BUDGET 30)"; [[ "$BUDGET" =~ ^[0-9]+$ ]] || BUDGET=30
+    OVER=0
     settle
-    MINE="$(cat "$S/mine" 2>/dev/null)"
+    MINE="$(LC_ALL=C sort -u "$S/mine" 2>/dev/null)"   # 옛 버전이 쌓은 중복도 여기서 한 번 걷힌다
     RREC="$(record_roots)"
     CHANGED=""
     while IFS= read -r root; do
       [[ -n "$root" ]] || continue
+      (( SECONDS < BUDGET )) || { OVER=1; break; }
       k="$(key_of "$root")"
       start_snap="$(cat "$S/snap.$k" 2>/dev/null)"
       grep -q '^@too-many' <<< "$start_snap" && continue
@@ -409,7 +437,14 @@ case "$CMD" in
       [[ -n "$d" ]] || continue
       pre=""; [[ "$root" == "$PROJECT" ]] || pre="$(basename "$root"):"
       while IFS= read -r f; do [[ -n "$f" ]] && CHANGED="$CHANGED$pre$f"$'\n'; done <<< "$d"
-    done < "$S/roots"
+    done < <(LC_ALL=C sort -u "$S/roots" 2>/dev/null)   # 옛 버전은 같은 저장소를 두 번 적기도 했다
+    (( SECONDS < BUDGET )) || OVER=1
+    if (( OVER )); then
+      : > "$S/ended" 2>/dev/null || true
+      printf '%s\n' "$(date +%Y-%m-%dT%H:%M:%S) 확인 생략 · 시간 예산 ${BUDGET}초 넘음 · $(scv_tc_req_tag "$ID" "$(cat "$S/req" 2>/dev/null)")" >> "$JDIR/.turn-plan.log" 2>/dev/null || true
+      echo "TURN_PLAN: pass"
+      exit 0
+    fi
     CHANGED="$(printf '%s' "$CHANGED" | LC_ALL=C sort -u | sed '/^$/d')"
     printf '%s\n' "$CHANGED" > "$S/changed" 2>/dev/null || true   # 재는 검사(pure-bench.sh turn-end)가 읽는다
     NCH=0; [[ -n "$CHANGED" ]] && NCH="$(printf '%s\n' "$CHANGED" | wc -l | tr -d ' ')"
@@ -446,6 +481,7 @@ case "$CMD" in
         fi
         ;;
       block*)
+        rm -f "$S/stopping" 2>/dev/null   # 막힌 턴은 이어진다 — 이 표시가 남으면 다음 말이 새 턴으로 열린다
         printf '%s' "$((BL + 1))" > "$S/blocks"
         echo "TURN_PLAN: block"
         slug="$(printf '%s\n' "$ACT" | head -n 1)"
