@@ -118,7 +118,7 @@ an answer breaks the answer shape (`SCV_HELP_LOAD_ONCE`,
 
 - **Plain language** — answers lead with a bold topic line, then short
   bullets with the result first, and show code values only when asked
-  (`SCV_PLAIN_LANGUAGE`, `SCV_PLAIN_MAX_SENTENCES`). The stop hook checks the
+  (`SCV_PLAIN_LANGUAGE`). The stop hook checks the
   answer's shape (`SCV_ANSWER_LINT`).
 - **Per-model prompting** — when a wrapper ships a model's official prompting
   guide (a verbatim offline copy), help reads it once per context and rewrites
