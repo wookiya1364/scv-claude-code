@@ -82,6 +82,7 @@ flowchart LR
 | `action:mods-install` | SCV mod を一つインストール | ラッパー |
 | `action:mods-remove` | SCV mod を一つ削除 | ラッパー |
 | `action:channel` | 開発 · ステージング · 本番チャンネル入れ替え — リリース前に新作業確認 | ラッパー |
+| `action:ask-mode` | 最初と最後だけ尋ねる ↔ 毎回尋ねる | Core |
 
 ### ループ
 

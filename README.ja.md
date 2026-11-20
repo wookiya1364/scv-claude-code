@@ -175,6 +175,7 @@ bash "$CORE/scripts/metrics.sh"                                 # プロセス�
 | `/scv:update` · `/scv:set-models` · `/scv:install-deps` | プラグイン・モッド更新 · モデルポリシー · CLI 依存 |
 | `/scv:mods` · `/scv:mods-install` · `/scv:mods-remove` | SCV モッド更新 + 一覧 · 一つインストール · 一つ削除 |
 | `/scv:channel` | SCV 開発·ステージング·本番の切替 — リリース前に新作業を確認 |
+| `/scv:ask-mode` | 最初と最後だけ尋ねる ↔ 毎回尋ねる |
 
 ## ガードレール
 

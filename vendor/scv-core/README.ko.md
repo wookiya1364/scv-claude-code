@@ -83,6 +83,7 @@ flowchart LR
 | `action:mods-install` | SCV 모드 하나 설치 | 래퍼 |
 | `action:mods-remove` | SCV 모드 하나 삭제 | 래퍼 |
 | `action:channel` | 개발 · 스테이징 · 운영 채널 바꾸기 — 릴리스 전 새 작업 확인 | 래퍼 |
+| `action:ask-mode` | 처음과 끝에만 묻기 ↔ 매번 묻기 | Core |
 
 ### 루프
 

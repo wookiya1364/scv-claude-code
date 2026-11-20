@@ -175,6 +175,7 @@ bash "$CORE/scripts/metrics.sh"                                 # 과정 숫자
 | `/scv:update` · `/scv:set-models` · `/scv:install-deps` | 플러그인 · 모드 업데이트 · 모델 정책 · CLI 의존성 |
 | `/scv:mods` · `/scv:mods-install` · `/scv:mods-remove` | SCV 모드 업데이트 + 목록 · 하나 설치 · 하나 삭제 |
 | `/scv:channel` | SCV 개발·스테이징·운영 전환 — 릴리스 전 새 작업 확인 |
+| `/scv:ask-mode` | 처음과 끝에만 묻기 ↔ 매번 묻기 |
 
 ## 가드레일
 

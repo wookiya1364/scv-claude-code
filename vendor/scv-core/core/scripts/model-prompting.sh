@@ -144,6 +144,13 @@ _harm_channel() {  # → choice | text | none. 읽기(호스트 프로필 · 환
   fi
   if declare -F scv_show_real_channel >/dev/null 2>&1; then scv_show_real_channel "$t" "$u" human; else printf 'text'; fi
 }
+# @effect _lean
+# 이유: 설정을 읽어 가벼운 루프(SCV_LEAN_LOOP, 기본 꺼짐)가 켜졌는지 본다
+_lean() {
+  declare -F scv_delegate_switch >/dev/null 2>&1 || source "$SCRIPT_DIR/lib/force-help.sh" 2>/dev/null || return 1
+  [[ "$(scv_delegate_switch "$(_setting SCV_LEAN_LOOP)")" == "on" ]]   # 기본 꺼짐 — on 만 켠다(같은 규칙의 스위치를 다시 쓴다)
+}
+
 # @effect _principle_block
 # 이유: 이 세션의 원칙 실음 표시 파일(.principle-seen)을 쓴다
 _principle_block() {
@@ -461,7 +468,13 @@ case "$cmd" in
       (( _okr )) && _rec="$_reb"
     fi
     # v0.62.0+: 매 턴(모든 메시지) 새 표를 쓰고 다시 쓰기 · 등록 블록을 싣는다 — 가이드 색인이 있는 호스트에서만.
-    if (( _haslist )); then
+    if (( _haslist )) && _lean; then
+      # 0.97.0+ 가벼운 루프(계획 lean-loop): help 를 부른 것으로 적고, 쓰기 거절(등록 전)을 풀 자리표시 등록을 둔다.
+      # 진짜 등록은 종료 훅이 답 맨 위 인용으로 한다 — 모델은 help · 등록 명령을 부르지 않는다.
+      _put "$HELPED_FILE" "$_tok"
+      _put "$REG_FILE" "$(printf '%s\x1f%s\x1f%s' "$_tok" "$(scv_mp_normalize_id "${_lm%%$'\n'*}")" "$(_token_new)")"$'\n'"scope | - | (가벼운 루프 — 답 맨 위 인용으로 등록)"$'\n'"rewrite | - | (가벼운 루프 — 아직 인용 없음)"
+      echo "[SCV 가벼운 루프] help 를 부르거나 등록 명령을 돌리지 않는다 — 훅이 한다. 이 턴 요청을 이 모델의 프롬프팅 가이드대로 다시 써 답 첫 줄에 '> **다시 쓴 요청**: …'으로 보여라(종료 훅이 그 인용을 등록한다). 대화 기록도 훅이 남긴다."
+    elif (( _haslist )); then
       scv_mp_turn_block "$SWITCH" "$_tok" "$_lm" "$SCRIPT_DIR/model-prompting.sh" "$SKEY"
     fi
     scv_mp_first_turn_lines "$SWITCH" "$_read" "$_warned" "$_rec"
@@ -475,12 +488,17 @@ case "$cmd" in
     # 0.96.0+ — 매 턴 규칙 글을 이 지문에 한 번만(계획 rules-once-no-caps). 매 턴 훅이 부른다 — full | short 한 단어.
     # 끄면(SCV_RULES_ONCE=off) 늘 full — 이 기능 전과 같다. 판단할 수 없으면(턴 폴더 · 지문 없음) full 이고 표시를 쓰지 않는다.
     if [[ "$(scv_mp_switch "$(_setting SCV_RULES_ONCE)")" != "on" ]]; then echo full; exit 0; fi
+    # 세션의 첫 턴에는 턴 폴더가 아직 없다(이 훅 뒤에 prompt 가 만든다) — 먼저 만들어 둬야 첫 턴의 표시가 남는다.
+    [[ -n "$TDIR" && ! -e "$TDIR" && ! -L "$(dirname "$TDIR")" ]] && mkdir -p "$TDIR" 2>/dev/null
     _rf=""; [[ -n "$TDIR" && -d "$TDIR" && ! -L "$TDIR" ]] && _rf="$TDIR/.rules-seen"
     _rseen=""; [[ -n "$_rf" && -f "$_rf" && ! -L "$_rf" ]] && _rseen="$(_first_line "$_rf")"
     _rwarn=0
     for _rw in "$WARN_FILE" "$JOURNAL_DIR/.help-warn"; do [[ -s "$_rw" && ! -L "$_rw" ]] && _rwarn=1; done
     _rm="$(scv_mp_rules_show "$_rseen" "$NONCE" "$_rwarn")"
     [[ "$_rm" == "full" && -n "$_rf" && -n "$NONCE" && ! -L "$_rf" ]] && printf '%s\n' "$NONCE" > "$_rf" 2>/dev/null
+    # 전문을 실은 턴은 표시를 남긴다 — 이 턴에 규약을 다시 읽으면(help mark) 지문이 새로 생기므로, 턴 끝(stop)이 그 새 지문을
+    # '본 것'으로 다시 적는다. 그러지 않으면 다음 턴이 옛 지문을 보고 전문을 한 번 더 싣는다(0.96.0 실제 세션에서 발견).
+    [[ "$_rm" == "full" && -n "$_rf" && ! -L "$TDIR/.rules-full" ]] && : > "$TDIR/.rules-full" 2>/dev/null
     echo "$_rm"; exit 0 ;;
   human)
     # v0.65.0+ — 사람 입력(매 턴 훅이 자동 입력 밖의 모든 입력에 부른다): 자동 턴 표시를 지우고(이 기능 전에는 훅이 직접 지웠다),
@@ -590,6 +608,7 @@ case "$cmd" in
     [[ -z "$AGENT_ARG" ]] || exit 0
     _hsw=on
     [[ "$(scv_mp_switch "$(_setting SCV_ALWAYS_ON)")" == off || "$(scv_mp_switch "$(_setting SCV_FORCE_HELP)")" == off ]] && _hsw=off
+    _lean && _hsw=off   # 0.97.0+ 가벼운 루프 — help 표시는 매 턴 훅이 쓴다
     _h=1; if (( SESSION_SET )) && [[ -n "$SKEY" && ! -f "$HUMAN_FILE" ]]; then _h=0; fi
     _tok="$(_first_line "$TOKEN_FILE")"
     [[ "$(scv_mp_help_needed "$_tok" "$(_first_line "$HELPED_FILE")" "$(_first_line "$AUTO_FILE")" "$_h" "$_hsw")" == 1 ]] || exit 0
@@ -638,6 +657,12 @@ case "$cmd" in
     ;;
   stop)
     ANSWER="$(head -c 65536 2>/dev/null || true)"
+    # 이번 턴에 규칙 글을 전문으로 실었으면, 지금(턴 끝)의 지문을 본 것으로 적는다 — 이 턴 도중 규약을 다시 읽어 지문이 바뀌었어도
+    # 다음 턴은 한 줄이다(계획 rules-once-no-caps 7단계). 표시는 한 번 쓰고 지운다.
+    if [[ -n "$TDIR" && -f "$TDIR/.rules-full" && ! -L "$TDIR/.rules-full" ]]; then
+      [[ -n "$NONCE" && ! -L "$TDIR/.rules-seen" ]] && printf '%s\n' "$NONCE" > "$TDIR/.rules-seen" 2>/dev/null
+      rm -f "$TDIR/.rules-full" 2>/dev/null
+    fi
     _effort_settle "$ANSWER" ""   # 0.89.2+ — 이번 턴에 effort 줄을 실었으면, 답에 그 질문이 있었는지 본다
     # v0.62.0+ — 매 턴 등록 판정: 이번 턴 표가 있고(매 턴 훅이 씀) 가이드 색인이 있을 때만. ok | block | warn.
     if _on; then
@@ -647,6 +672,19 @@ case "$cmd" in
       # v0.65.0+ — 매 턴 훅을 거치지 않는 자동 입력(다른 세션이 보낸 메시지)이 이 턴을 열었고(종료 훅이 대화 기록에서 판별해 넘긴다)
       # 지난 사람 턴이 이미 끝났으면(끝난 턴 표 = 지금 표) 자동 턴과 같다. 사람 턴이 막힌 채 이어지는 중이면 지금처럼 판정한다.
       if [[ -n "$_tok" && "$OPENED_AUTO" == "1" && "$(_first_line "$DONE_FILE")" == "$_tok" ]]; then echo "STOP_GATE: auto"; _tok=""; fi
+      # 0.97.0+ 가벼운 루프 — 답 맨 위 인용을 이번 턴 등록으로 적는다(모델이 등록 명령을 부르지 않는다). 인용이 없으면
+      # 자리표시 등록만 남아 '인용을 보이지 않았다'로 판정된다.
+      if [[ -n "$_tok" ]] && _lean; then
+        _lq="$(scv_mp_quote_rewrite "${ANSWER%%$'\x1d'*}")"
+        [[ -n "$_lq" ]] || _lq="$(scv_mp_quote_rewrite "${ANSWER#*$'\x1d'}")"
+        if [[ -n "$_lq" ]]; then
+          _lrt="$(_first_line "$REG_FILE")"
+          [[ "${_lrt%%$'\x1f'*}" == "$_tok" ]] || _lrt="$(printf '%s\x1f%s\x1f%s' "$_tok" "$(scv_mp_normalize_id "$(_last_model)")" "$(_token_new)")"
+          _lsub="$(printf 'scope | - | (가벼운 루프)\nrewrite | - | %s' "$_lq")"
+          [[ -f "$SCRIPT_DIR/journal-append.sh" ]] && _lsub="$(printf '%s' "$_lsub" | bash "$SCRIPT_DIR/journal-append.sh" --redact-only 2>/dev/null || printf '%s' "$_lsub")"
+          _put "$REG_FILE" "$_lrt"$'\n'"$_lsub"
+        fi
+      fi
       if [[ -n "$_tok" ]]; then
         _rt="$(_first_line "$REG_FILE")"; _reg=0; [[ "${_rt%%$'\x1f'*}" == "$_tok" ]] && _reg=1
         _rw=""; (( _reg )) && _rw="$(scv_mp_register_rewrite "$(head -c 16384 "$REG_FILE" 2>/dev/null | tail -n +2)")"

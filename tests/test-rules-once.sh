@@ -65,4 +65,19 @@ Os2="$(hook "$P" s2)"
 if is_short "$Os1" && is_full "$Os2"; then ok "T7 s1 은 한 줄인 때 처음 온 s2 는 전문"
 else bad "T7 s1short=$(is_short "$Os1" && echo y) s2full=$(is_full "$Os2" && echo y)"; fi
 
+# ---------- T8 — 규약을 다시 읽어도 전문 턴은 하나 (턴 끝이 새 지문을 본 것으로 적는다) ----------
+MP="$CORE/scripts/model-prompting.sh"
+endturn() { ( cd "$1" && printf '' | CLAUDE_PLUGIN_ROOT="$CORE" bash "$MP" stop --session "$2" >/dev/null 2>&1 ); }
+P="$(mkproj t8)"
+# 실제 턴의 순서: 훅(전문 판단) → help 가 규약을 다시 읽음(mark, 새 지문) → 턴 끝(stop)
+hook "$P" s1 >/dev/null; mark "$P"; endturn "$P" s1
+Oa="$(hook "$P" s1)"; endturn "$P" s1
+Ob="$(hook "$P" s1)"; endturn "$P" s1
+mark "$P"                     # 10턴마다 같은 '다시 읽기'
+Oc="$(hook "$P" s1)"; mark "$P"; endturn "$P" s1
+Od="$(hook "$P" s1)"; endturn "$P" s1
+if is_short "$Oa" && is_short "$Ob" && is_full "$Oc" && is_short "$Od" && [[ ! -e "$P/scv/journal/.help-turns/s1/.rules-full" ]]; then
+  ok "T8 다시 읽은 턴 하나만 전문, 바로 다음 턴부터 한 줄 · 표시는 지워짐"
+else bad "T8 a=$(is_short "$Oa" && echo s || echo f) b=$(is_short "$Ob" && echo s || echo f) c=$(is_full "$Oc" && echo f || echo s) d=$(is_short "$Od" && echo s || echo f)"; fi
+
 exit "$fail"
