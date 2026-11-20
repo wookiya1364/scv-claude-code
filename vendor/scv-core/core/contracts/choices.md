@@ -57,6 +57,15 @@ turns included:
 Information is not a decision. Tables that report — the solution table of the rewrite principle, result
 tables, the help item table — stay as text.
 
+## Ask only at the ends (`SCV_ASK_MODE=ends`, 0.97.0+)
+
+Set in the settings file or as an environment variable; the default (`all`) changes nothing. With
+`ends`, a person is asked only at the start (requirements, the plan outline), at the end (verification
+shown as video or e2e evidence), and before an act that cannot be undone (deploy, delete, sending
+something out). Every other decision — mid-work choices, the first-run check, archiving — takes the
+recommended option, goes on, and is listed in the end report under the decisions made on the person's
+behalf. The per-turn line says so in this mode.
+
 ## When the host names none
 
 Nothing changes: a decision is asked as before — a numbered table with a recommendation on every row,

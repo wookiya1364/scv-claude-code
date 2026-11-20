@@ -96,7 +96,7 @@ fi
 
 [[ ! -e commands ]] || fail "legacy commands/ still present — skills/<action>/SKILL.md is the only layout (core 0.47.0+)"
 for action in \
-  channel codegen deck dreams handoff help install-deps mods mods-install mods-remove promote \
+  ask-mode channel codegen deck dreams handoff help install-deps mods mods-install mods-remove promote \
   regression report routine set-models status sync update work workspace; do
   [[ -f "skills/$action/SKILL.md" ]] || fail "missing skills/$action/SKILL.md"
   grep -q "^name: $action\$" "skills/$action/SKILL.md" || fail "skills/$action/SKILL.md lacks name: $action (without it the skill is named after the install directory)"

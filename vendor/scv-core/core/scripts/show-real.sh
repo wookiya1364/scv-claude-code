@@ -48,7 +48,12 @@ case "${1:-}" in
       [[ -n "$_gt" ]] || _tool="$(bash "$SCRIPT_DIR/choice-gate.sh" tool 2>/dev/null || true)"
       [[ -n "$_gu" ]] || _un="$(bash "$SCRIPT_DIR/choice-gate.sh" unattended 2>/dev/null || true)"
     fi
-    scv_show_real_rule "$_sw" "$(scv_show_real_channel "$_tool" "$_un" "$_kind")"
+    _ch="$(scv_show_real_channel "$_tool" "$_un" "$_kind")"
+    # 0.97.0+ 처음과 끝만 묻기(SCV_ASK_MODE=ends) — 첫 실행 확인은 묻지 않는 자리다(묻는 통로일 때만 바꾼다).
+    _am=""; declare -F settings_get >/dev/null 2>&1 && _am="$(settings_get SCV_ASK_MODE 2>/dev/null || true)"
+    _am="$(printf '%s' "$_am" | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]')"
+    [[ "$_am" == "ends" && "$_ch" != "none" ]] && _ch="ends"
+    scv_show_real_rule "$_sw" "$_ch"
     ;;
   *) echo "usage: show-real.sh line" >&2 ;;
 esac

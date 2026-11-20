@@ -117,4 +117,5 @@ tests/test-release-verify.sh	1
 tests/test-state-index.sh	9
 tests/test-sync-dry-run.sh	0
 core/tests/test-turn-check-fast-end.sh	11
+core/tests/test-lean-loop.sh	13
 core/tests/test-rules-once.sh	8

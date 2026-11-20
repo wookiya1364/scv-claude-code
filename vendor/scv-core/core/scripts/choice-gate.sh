@@ -34,6 +34,8 @@ _sw="$(printf '%s' "$_sw" | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:l
 _off="${SCV_CHOICE_OFF_WHEN:-}"; _offname="${_off%%=*}"
 # 호스트가 이 실행에서 도구를 빼는 조건(사람이 답할 수 없는 헤드리스 등) — 도구가 없는 것과 같다: 안내도 막기도 없다.
 # (v0.66.0+) 조건은 도구 · 스위치와 따로 판단해 둔다 — 실체 보여 주기가 이 실행에 사람이 있는지를 묻는다(unattended).
+# 0.97.0+ 묻기 모드(SCV_ASK_MODE=ends — 처음과 끝만 묻기, 계획 lean-loop). 설정 파일 · 환경 변수 어느 쪽이든(settings_get 이 환경 변수를 먼저 본다).
+ASKMODE="all"; declare -F settings_get >/dev/null 2>&1 && ASKMODE="$(scv_ask_mode "$(settings_get SCV_ASK_MODE 2>/dev/null || true)")"
 OFFRUN=0
 if [[ "$_off" == *=* && "$_offname" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
   [[ "$(scv_choice_off_when "$_off" "${!_offname:-}")" == "1" ]] && OFFRUN=1
@@ -43,7 +45,7 @@ JOURNAL_DIR="${SCV_JOURNAL_DIR:-scv/journal}"
 
 case "${1:-}" in
   line)
-    scv_choice_line "$TOOL"
+    scv_choice_line "$TOOL" "$ASKMODE"
     ;;
   tool)
     # (v0.66.0+) 이번 실행에 쓸 선택지 도구 이름 — 위에서 스위치와 사람 없는 실행 조건을 반영한 값(없으면 아무것도 내지 않는다).
@@ -57,7 +59,7 @@ case "${1:-}" in
     # 매 턴 훅이 한 번에 받는다: 첫 줄 'CG_STATE<TAB><tool 값><TAB><unattended 값>', 그 뒤는 line 과 바이트까지 같은 출력.
     # 셋을 따로 부르면 이 스크립트를 세 번 띄운다(같은 판단을 세 번).
     printf 'CG_STATE\t%s\t%s\n' "$TOOL" "$OFFRUN"
-    scv_choice_line "$TOOL"
+    scv_choice_line "$TOOL" "$ASKMODE"
     ;;
   stop)
     shift
