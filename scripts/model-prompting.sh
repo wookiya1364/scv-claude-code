@@ -172,7 +172,7 @@ case "$cmd" in
     if (( SESSION_SET )); then
       SKEY="$(scv_mp_session_key "$SESSION_ARG")"
       case "$cmd" in
-        prompt|human) ;;
+        prompt|human|rules) ;;
         *) if [[ -n "$SKEY" && ! -f "$(scv_mp_turn_dir "$JOURNAL_DIR" "$SKEY")/.help-human" ]] && ! _any_human; then SKEY=""; fi ;;
       esac
     else
@@ -471,6 +471,17 @@ case "$cmd" in
       _effort_block "$(scv_mp_normalize_id "${_lm%%$'\n'*}")" "$_etr"
     fi
     ;;
+  rules)
+    # 0.96.0+ — 매 턴 규칙 글을 이 지문에 한 번만(계획 rules-once-no-caps). 매 턴 훅이 부른다 — full | short 한 단어.
+    # 끄면(SCV_RULES_ONCE=off) 늘 full — 이 기능 전과 같다. 판단할 수 없으면(턴 폴더 · 지문 없음) full 이고 표시를 쓰지 않는다.
+    if [[ "$(scv_mp_switch "$(_setting SCV_RULES_ONCE)")" != "on" ]]; then echo full; exit 0; fi
+    _rf=""; [[ -n "$TDIR" && -d "$TDIR" && ! -L "$TDIR" ]] && _rf="$TDIR/.rules-seen"
+    _rseen=""; [[ -n "$_rf" && -f "$_rf" && ! -L "$_rf" ]] && _rseen="$(_first_line "$_rf")"
+    _rwarn=0
+    for _rw in "$WARN_FILE" "$JOURNAL_DIR/.help-warn"; do [[ -s "$_rw" && ! -L "$_rw" ]] && _rwarn=1; done
+    _rm="$(scv_mp_rules_show "$_rseen" "$NONCE" "$_rwarn")"
+    [[ "$_rm" == "full" && -n "$_rf" && -n "$NONCE" && ! -L "$_rf" ]] && printf '%s\n' "$NONCE" > "$_rf" 2>/dev/null
+    echo "$_rm"; exit 0 ;;
   human)
     # v0.65.0+ — 사람 입력(매 턴 훅이 자동 입력 밖의 모든 입력에 부른다): 자동 턴 표시를 지우고(이 기능 전에는 훅이 직접 지웠다),
     # 세션이 있으면 사람 메시지를 받았다는 표시와 대화 기록 경로를 남긴다 — 하위 세션(사람 메시지를 받지 않은 팀원 · 하위 에이전트)을

@@ -45,40 +45,53 @@ _scv_read() {  # <KEY> — 라이브러리가 없으면 기본값으로 간다.
   settings_get "$1" 2>/dev/null || true
 }
 
+# 표준입력은 여기서 한 번만 읽는다(0.96.0+ 맨 앞으로 옮김 — 아래 규칙 글 판단이 세션 id 를 쓴다). 저널 기록은 이 값을 그대로 쓴다.
+INPUT="$(cat 2>/dev/null || true)"
+# 0.96.0+ — 매 턴 규칙 글(언어 · 확인 범위 · 답 모양 · 선택 · 실물 보여 주기)은 규약 지문마다 한 번만 전문으로 싣고, 그 밖의 턴은
+# 한 줄로 줄인다(계획 rules-once-no-caps). 같은 글이 매 턴 쌓이면 조심 규칙이 불어난다(Fable 5.2 가이드). 지문은 첫 턴 · 대화 요약
+# 뒤 · 규약을 다시 읽는 턴(SCV_HELP_RELOAD_EVERY)마다 바뀌고, 직전 답에 경고가 남은 턴도 전문이다. 판단은 model-prompting.sh rules
+# (원칙 글의 한 번만 싣기와 같은 지문). 판단할 수 없으면 full — 이 기능 전과 같다. 끄기: SCV_RULES_ONCE=off.
+_scv_rules="full"
+_scv_mp0="${SCV_CORE_ROOT:-$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.." 2>/dev/null && pwd )}/scripts/model-prompting.sh"
+if [[ -f "$_scv_mp0" && -n "$INPUT" ]] && command -v jq >/dev/null 2>&1; then
+  _scv_rsid="$(printf '%s' "$INPUT" | jq -r 'try (.session_id // empty)' 2>/dev/null || true)"
+  if [[ -n "$_scv_rsid" ]]; then
+    _scv_rules="$(bash "$_scv_mp0" rules --session "$_scv_rsid" 2>/dev/null || true)"
+    [[ "$_scv_rules" == "short" ]] || _scv_rules="full"
+  fi
+fi
+
 # 0.79.0+ — 설정 언어 규칙 한 줄을 맨 앞에(계획 lang-enforce-079): 긴 작업 중 중간 보고가 다른 언어로 흐르던 일(2026-11-03 slay
 # 세션, 영어 최대 35줄). 언어가 없거나 english 면 아무것도 싣지 않는다 — 이 구간을 지운 훅과 출력이 같다.
 _scv_langlib="${SCV_CORE_ROOT:-$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.." 2>/dev/null && pwd )}/scripts/lib/lang-enforce.sh"
-if [[ -f "$_scv_langlib" ]]; then
+if [[ "$_scv_rules" == "full" && -f "$_scv_langlib" ]]; then
   # shellcheck disable=SC1090
   source "$_scv_langlib" 2>/dev/null && scv_lang_rule_line "$(_scv_read SCV_LANG | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]')" 2>/dev/null || true
 fi
 # 0.82.0+ — 끝 보고 확인 범위 안내 한 줄(계획 finish-report-evidence, 본문 contracts/finish-report.md). 종료 훅이 빠진 줄을 한 턴에
 # 한 번 막는다 — 미리 알려 막힘을 줄인다. 설정 SCV_FINISH_REPORT=off 면 싣지 않는다(이 구간을 지운 훅과 출력이 같다).
 _scv_frlib="$(dirname "$_scv_langlib")/finish-report.sh"
-if [[ -f "$_scv_frlib" && "$(_scv_read SCV_FINISH_REPORT | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]')" != off ]]; then
+if [[ "$_scv_rules" == "full" && -f "$_scv_frlib" && "$(_scv_read SCV_FINISH_REPORT | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]')" != off ]]; then
   # shellcheck disable=SC1090
   source "$_scv_frlib" 2>/dev/null && scv_finish_rule_line "$(_scv_read SCV_LANG | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]')" 2>/dev/null || true
 fi
 
 _scv_plain="$(_scv_read SCV_PLAIN_LANGUAGE | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]' || true)"
-if [[ "${_scv_plain:-on}" != "off" ]]; then
-  # Sentence cap (v0.31.0+): .env SCV_PLAIN_MAX_SENTENCES=<n>, positive integer
-  # only — absent or anything else means 2. Caps a prose paragraph (0.76.0+).
-  _scv_cap="$(_scv_read SCV_PLAIN_MAX_SENTENCES | tr -d '"[:space:]' | tr -d "'" || true)"
-  [[ "$_scv_cap" =~ ^[1-9][0-9]*$ ]] || _scv_cap=2
-  if [[ "$_scv_cap" == "1" ]]; then _scv_first="one sentence"; else _scv_first="1–${_scv_cap} sentences"; fi
+if [[ "${_scv_plain:-on}" != "off" && "$_scv_rules" == "short" ]]; then
+  echo "[SCV 규칙] 이 세션에 실은 규칙(언어 · 확인 범위 · 답 모양 · 선택 · 실물 보여 주기 · 원칙)이 그대로 유효하다 — 경고가 있거나 규약을 다시 읽는 턴에 전문을 다시 싣는다."
+elif [[ "${_scv_plain:-on}" != "off" ]]; then
+  # 0.96.0+ — 문장 수 · 길이 상한 없음(숫자로 박은 길이 규칙은 글을 뚝뚝 끊는다 — 계획 rules-once-no-caps).
   cat <<PLAIN
-[SCV plain language] Answer shape: (1) a **bold topic** line, the result lines —
-${_scv_first}, no bullet — then bullets: connected reasoning (A, so B, so C) in one
+[SCV plain language] Answer shape: (1) a **bold topic** line, the result first in a
+short lead, no bullet — then bullets: connected reasoning (A, so B, so C) in one
 short-paragraph bullet (the user reads on a phone — one screen), separate items one
-short bullet each, a list-only topic needs no result lines; no prose paragraph over
-${_scv_first} outside bullets; (2) result lines and bullets end in noun form
+short bullet each, a list-only topic needs no result lines; keep prose outside
+bullets short (no sentence count); (2) result lines and bullets end in noun form
 (Korean ~함 · ~임), a question stays a question; (3) everyday words, the user's own — explain a new term on the line it
 first appears; (4) no code values (paths, variable names, versions, settings) before
 the user asks. Identifiers the user needs to act on stay exact. Body:
 contracts/writing.md. A step rule of the action being executed comes before this
-always-on text (resolution order: scv/SCV.md Top-level rules). Switches: scv/scv_settings.json SCV_PLAIN_LANGUAGE=off (silence),
-SCV_PLAIN_MAX_SENTENCES=<n> (prose-paragraph sentence cap, default 2).
+always-on text (resolution order: scv/SCV.md Top-level rules). Switch: scv/scv_settings.json SCV_PLAIN_LANGUAGE=off (silence).
 PLAIN
 fi
 
@@ -90,8 +103,7 @@ _scv_always="$(_scv_read SCV_ALWAYS_ON | tr -d '"[:space:]' | tr -d "'" | tr '[:
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" 2>/dev/null && pwd )" || exit 0
 CORE_HOME="${SCV_CORE_ROOT:-$SCRIPT_DIR/../..}"
 JOURNAL_APPEND="$CORE_HOME/scripts/journal-append.sh"
-# 표준입력은 여기서 한 번만 읽는다. 저널 기록은 아래에서 이 값을 그대로 쓴다.
-INPUT="$(cat 2>/dev/null || true)"
+# (표준입력은 맨 앞에서 이미 읽었다 — INPUT.)
 
 # v0.64.0+ — 고르게 할 때 규칙(contracts/choices.md): 호스트 설정에 선택지 도구가 있으면 매 턴(자동 알림 턴 포함) 한 줄로
 # 알린다 — 사용자에게 고르게 하는 것은 그 도구로 묻는다. 도구가 없으면(기본 · 코덱스) 아무것도 싣지 않는다.
@@ -105,9 +117,9 @@ if [[ -f "$_scv_cgs" ]]; then
   if [[ "$_scv_cg_head" == "CG_STATE"$'\t'*$'\t'* && "$_scv_cg_out" == *$'\n'* ]]; then
     _scv_cg_ok=1; _scv_cg_head="${_scv_cg_head#CG_STATE$'\t'}"
     _scv_cg_tool="${_scv_cg_head%%$'\t'*}"; _scv_cg_un="${_scv_cg_head#*$'\t'}"
-    printf '%s' "${_scv_cg_out#*$'\n'}"
+    [[ "$_scv_rules" == "full" ]] && printf '%s' "${_scv_cg_out#*$'\n'}"
   else
-    bash "$_scv_cgs" line 2>/dev/null || true
+    [[ "$_scv_rules" == "full" ]] && { bash "$_scv_cgs" line 2>/dev/null || true; }
   fi
 fi
 
@@ -133,7 +145,7 @@ _scv_sr_kind="$_scv_kind"
 # 통로가 그 규칙의 판단과 같다). 자동 알림 턴 · 사람 없는 실행에는 묻지 않는 문구다 — 위에서 구한 판별 · 선택 창 상태를 넘긴다.
 # 막는 검사는 없다. 설정 SCV_SHOW_REAL=off 면 아무것도 싣지 않는다 — 이 구간을 지운 훅과 바이트 단위로 같다(test-show-real 이 견준다).
 _scv_srs="$CORE_HOME/scripts/show-real.sh"
-if [[ -f "$_scv_srs" ]]; then
+if [[ "$_scv_rules" == "full" && -f "$_scv_srs" ]]; then
   if [[ -n "$_scv_cg_ok" ]]; then
     bash "$_scv_srs" line --kind "${_scv_sr_kind:-human}" --tool "$_scv_cg_tool" --unattended "$_scv_cg_un" < /dev/null 2>/dev/null || true
   else

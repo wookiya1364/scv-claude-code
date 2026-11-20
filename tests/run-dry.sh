@@ -3820,9 +3820,10 @@ done
 # v0.31.0 — the rule is an answer shape, not style coaching: fixed anchors, the
 # section sits right after the language section, the old coaching body is gone,
 # and help's conversation loop carries the per-turn rhythm.
-for a in "SCV_PLAIN_LANGUAGE=off" "1–2 sentences" "bold topic" \
+# 0.96.0+: the lead is "short", with no sentence or length count (rules-once-no-caps).
+for a in "SCV_PLAIN_LANGUAGE=off" "short lead" "bold topic" \
          "No code values before the user asks" "stay exact, after the plain summary" \
-         "Bad:" "Good:" "SCV_PLAIN_MAX_SENTENCES"; do
+         "Bad:" "Good:" "no sentence or length count"; do
   miss=$(printf '%s\n' "$PLAIN_TARGETS" | while read -r f; do grep -qF -- "$a" "$f" || echo "$f"; done)
   [[ -z "$miss" ]] && pass "plain-language: anchor [$a] in every protocol" \
     || fail "plain-language: anchor [$a] missing in: $(echo $miss)"
@@ -3853,12 +3854,14 @@ grep -q '"SCV_PLAIN_LANGUAGE"' "$PL_TPL/scv/scv_settings.example.json" \
   && pass "plain-language: settings example documents SCV_PLAIN_LANGUAGE (default on)" \
   || fail "plain-language: settings example lacks the SCV_PLAIN_LANGUAGE block"
 grep -q '"SCV_PLAIN_MAX_SENTENCES"' "$PL_TPL/scv/scv_settings.example.json" \
-  && pass "plain-language: settings example documents SCV_PLAIN_MAX_SENTENCES (default 2)" \
-  || fail "plain-language: settings example lacks the SCV_PLAIN_MAX_SENTENCES line"
-assert_contains "$PL_TPL/scv/SCV.md" "SCV_PLAIN_MAX_SENTENCES"
+  && fail "plain-language: settings example still documents the removed sentence cap (0.96.0+)" \
+  || pass "plain-language: settings example has no sentence cap (0.96.0+)"
+# why: the template must say the lead has no sentence count, so a project does not keep an old cap habit
+assert_contains "$PL_TPL/scv/SCV.md" "no sentence or length count"
 assert_contains "$PL_TPL/scv/SCV.md" "## How SCV talks to you"
 assert_contains "$PL_TPL/scv/SCV.md" "SCV_PLAIN_LANGUAGE"
-assert_contains "$PL_TPL/scv/SCV.md" "1–2 sentences"
+# why: the template's lead wording must match the protocols' "short lead" anchor above
+assert_contains "$PL_TPL/scv/SCV.md" "short lead"
 # The root copy exists only in the scv-core checkout and the exported payload;
 # a wrapper that materializes the payload at its own root has no parent copy
 # (a wrapper's core-sync validation ran this section there and failed

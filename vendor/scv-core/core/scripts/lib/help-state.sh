@@ -342,12 +342,15 @@ scv_lint_lang_turn() {
 # 역할: 답 본문의 골격(다시 쓴 요청 위치 · 줄글 문단 길이 · 결론 줄과 불릿의 어미 · 긴 불릿 · 첫 내용의 코드값 · 결정표 추천 칸)이 계약을 벗어난 줄들을 낸다
 # 종류: 판정/answer
 # 예: $'> **다시 쓴 요청**: x\n\n**주제**\n- 결과임\n- 풀이함\n' → ""
+# 예: $'결론이다. 둘째. 셋째.\n' → ""
 # 예: $'결론이다. 둘째. 셋째.\n' 2 → "prose-long=3>2"
 # 예: $'결론이다.\n\n> **다시 쓴 요청**: x\n' → "rewrite-not-top"
 # 예: $'**주제**\n\n결론임.\n\n- 첫 문장임. 그래서 둘째 문장임.\n  이어 쓴 셋째 문장임.\n' 2 "" 6 → ""
-# 답 본문 + 줄글 문단 문장 상한 [+ 설정 언어] [+ 불릿 문장 기준] → 위반 줄들 (없으면 빈 출력). 골격만 본다 — 내용은 판정하지 않는다. 본문: contracts/writing.md.
+# 답 본문 [+ 줄글 문단 문장 상한] [+ 설정 언어] [+ 불릿 문장 기준] → 위반 줄들 (없으면 빈 출력). 골격만 본다 — 내용은 판정하지 않는다. 본문: contracts/writing.md.
 #   rewrite-not-top           다시 쓴 요청 인용이 있는데 답 맨 위가 아님
-#   prose-long=<n>><cap>      목록 · 표 · 제목 · 인용 · 굵은 주제가 아닌 줄글 문단의 문장 수가 상한 초과(첫 문단 하나만 알림)
+#   prose-long=<n>><cap>      줄글 문단의 문장 수가 둘째 인자(상한)를 넘음(첫 문단 하나만 알림) — 상한을 안 주면 보지 않는다.
+#                             훅들은 0.96.0 부터 상한을 넘기지 않는다: 숫자로 박은 길이 규칙은 글을 뚝뚝 끊는다(Fable 5.2 가이드,
+#                             계획 20261120-wookiya1364-rules-once-no-caps). 기능은 남겨 둔다(이 함수를 직접 부르는 쪽이 쓸 수 있게).
 #   bullet-polite=<개수>      '~습니다' · '~해요' 로 끝나는 불릿 수(개조식 '~함 · ~임' 이 아님, 물음은 예외) — 문단 불릿은 그 끝을 본다
 #   bullet-long=<n>><기준>    불릿 한 개의 문장 수가 넷째 인자(기준)를 넘음(첫 불릿 하나만 알림) — 기준을 안 주면 보지 않는다
 #   lead-polite=<개수>        굵은 주제 바로 아래 결론 줄이 '~습니다' · '~해요' 로 끝남(물음은 예외)
@@ -357,9 +360,9 @@ scv_lint_lang_turn() {
 # 코드 블록 안은 보지 않는다. 근사이며, 오탐의 비용은 재읽기 한 번이다.
 # 불릿 아래로 이어 쓴 줄(빈 줄 없이 이어진 줄, 빈 줄 뒤 들여 쓴 줄)은 그 불릿의 것으로 센다 — 줄글 문단이 아니다(0.94.0+).
 scv_answer_lint() {
-  local text="${1:-}" cap="${2:-2}" lang="${3:-}" bcap="${4:-0}" prose="" pl line t infence=0 seen=0 inquote=0 para="" first="" n polite=0 prose_done=0
+  local text="${1:-}" cap="${2:-0}" lang="${3:-}" bcap="${4:-0}" prose="" pl line t infence=0 seen=0 inquote=0 para="" first="" n polite=0 prose_done=0
   local intable=0 is_decision=0 row c1 c3 bt='`' gt=$'\x3e' pat_code pat_num rest tok bul="" bctx=0 afterbold=0 lead=0 blong_done=0 ends
-  [[ "$cap" =~ ^[1-9][0-9]*$ ]] || cap=2
+  [[ "$cap" =~ ^[1-9][0-9]*$ ]] || cap=0
   [[ "$bcap" =~ ^[1-9][0-9]*$ ]] || bcap=0
   pat_code="${bt}([^${bt}]+)${bt}(.*)\$"
   pat_num='^[0-9]+[.)][[:space:]]'
@@ -381,7 +384,7 @@ scv_answer_lint() {
       [[ "$(scv_lint_bullet_polite "$para")" == "1" ]] && lead=$((lead + 1))
       afterbold=0
     fi
-    if (( ! prose_done )); then
+    if (( cap > 0 && ! prose_done )); then
       n="$(scv_lint_sentences "$para")"
       (( n > cap )) && { printf "prose-long=%s${gt}%s\n" "$n" "$cap"; prose_done=1; }
     fi

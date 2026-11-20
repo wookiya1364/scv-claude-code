@@ -14,17 +14,17 @@ HOOK="$CORE/template/hooks/on-user-prompt.sh"
 fail=0
 ok() { echo "ok $1"; }
 bad() { echo "✖ $1" >&2; fail=1; }
-lint() { scv_answer_lint "$1" "${2:-2}"; }
+lint() { scv_answer_lint "$1" "${2:-0}"; }   # 0.96.0+ 훅들은 문장 상한을 넘기지 않는다
 
 # T1 — 굵은 주제 + 불릿 답은 통과(예전 lead-missing 없음)
 v="$(lint $'> **다시 쓴 요청**: 정리해 줘\n\n**주제**\n- 결과임\n- 풀이함\n')"
 [[ -z "$v" ]] && ok "T1 bold topic + bullets pass" || bad "T1 got [$v]"
 
-# T2 — 긴 줄글 문단은 위반
+# T2 — 0.96.0+: 줄글 문장 수는 세지 않는다(숫자 상한 없음). 상한을 직접 주면 그 기능은 그대로.
 v="$(lint $'> **다시 쓴 요청**: x\n\n결론이다. 둘째 문장이다. 셋째 문장이다.\n')"
-[[ "$v" == *"prose-long=3>2"* ]] && ok "T2 long prose flagged" || bad "T2 got [$v]"
-v="$(lint $'결론이다. 둘째. 셋째.\n' 3)"
-[[ "$v" != *prose-long* ]] && ok "T2 cap follows the sentence setting" || bad "T2 cap 3 got [$v]"
+[[ "$v" != *prose-long* ]] && ok "T2 long prose not counted by default" || bad "T2 got [$v]"
+v="$(lint $'결론이다. 둘째. 셋째.\n' 2)"
+[[ "$v" == *"prose-long=3>2"* ]] && ok "T2 an explicit cap still counts" || bad "T2 cap 2 got [$v]"
 
 # T3 — 서술형 불릿은 위반, 물음은 예외
 v="$(lint $'> **다시 쓴 요청**: x\n\n**만든 것**\n- 통과했습니다.\n- 이대로 쓸까요?\n- 남은 일 없음\n')"
@@ -68,7 +68,7 @@ v="$(lint $'> **다시 쓴 요청**: x\n\n```\n긴 문장. 둘. 셋. 넷.\n- 했
 # shellcheck source=../scripts/lib/writing.sh
 source "$CORE/scripts/lib/writing.sh"
 BCAP="$(scv_writing_bullet_cap 2>/dev/null || true)"
-lintb() { scv_answer_lint "$1" "${2:-2}" "" "$BCAP"; }
+lintb() { scv_answer_lint "$1" "${2:-0}" "" "$BCAP"; }
 RWQ=$'> **다시 쓴 요청**: x\n\n'
 
 # P1 — 새 모양(결론 줄 2문장 + 3문장 문단 불릿 둘)은 위반 없음
@@ -76,9 +76,9 @@ NEW="${RWQ}"$'**능력을 제한하는지**\n\n생각 · 문제 풀이는 제한
 v="$(lintb "$NEW")"
 [[ -z "$v" ]] && ok "P1 lead lines + paragraph bullets pass" || bad "P1 got [$v]"
 
-# P2 — 결론 줄이 3문장이면 지금처럼 알림
+# P2 — 0.96.0+: 결론 줄 문장 수는 세지 않는다
 v="$(lintb "${RWQ}"$'**주제**\n\n결론임. 둘째 문장임. 셋째 문장임.\n\n- 풀이함\n')"
-[[ "$v" == *"prose-long=3>2"* ]] && ok "P2 three-sentence lead flagged" || bad "P2 got [$v]"
+[[ "$v" != *prose-long* ]] && ok "P2 three-sentence lead not counted" || bad "P2 got [$v]"
 
 # P3 — 불릿 아래로 이어 쓴 줄은 그 불릿의 것 (들여 쓴 줄 · 들이지 않은 줄 · 빈 줄 뒤 들여 쓴 줄)
 v="$(lintb "${RWQ}"$'**주제**\n\n결론임.\n\n- 첫 문장임. 둘째 문장임.\n  셋째 문장임. 넷째 문장임. 다섯째 문장임.\n')"
@@ -88,7 +88,7 @@ v="$(lintb "${RWQ}"$'**주제**\n\n결론임.\n\n- 첫 문장임. 둘째 문장�
 v="$(lintb "${RWQ}"$'**주제**\n\n결론임.\n\n- 첫 문장임.\n\n  이어지는 문단임. 둘째임. 셋째임.\n')"
 [[ "$v" != *prose-long* ]] && ok "P3 indented paragraph after a blank line belongs to the bullet" || bad "P3 blank got [$v]"
 v="$(lintb "${RWQ}"$'**주제**\n\n- 불릿임\n\n들이지 않은 줄글임. 둘째임. 셋째임.\n')"
-[[ "$v" == *"prose-long=3>2"* ]] && ok "P3 unindented paragraph after a blank line is still prose" || bad "P3 prose got [$v]"
+[[ "$v" != *prose-long* ]] && ok "P3 unindented paragraph is prose but not counted (0.96.0+)" || bad "P3 prose got [$v]"
 
 # P4 — 기준을 넘는 불릿만 알림 (기준 숫자는 lib/writing.sh 한 곳)
 [[ "$BCAP" == 6 ]] && ok "P4 bullet cap comes from one function (6)" || bad "P4 cap [$BCAP]"
