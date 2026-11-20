@@ -3,7 +3,7 @@ name: plain-language-audit
 cadence: 1w
 guardrails:
   - "판정 대상은 scv/journal/ 의 assistant 턴만 — user 턴과 코드 블록은 제외"
-  - "기준은 답의 모양 네 가지(먼저 1~2문장 · 예시 하나 · 묻기 전 코드값 금지 · 자세한 건 원할 때)만 — 문체 취향으로 지적하지 않는다"
+  - "기준은 답의 모양 네 가지(결론 먼저 · 예시 하나 · 묻기 전 코드값 금지 · 자세한 건 원할 때)만 — 문체 취향으로 지적하지 않는다"
   - "파일을 고치거나 지우지 않는다 — 보고만 한다 (journal 은 append-only)"
   - ".env 에 SCV_PLAIN_LANGUAGE=off 인 프로젝트에서는 실행하지 않는다"
 exit:

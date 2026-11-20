@@ -115,7 +115,7 @@ flowchart LR
 （`SCV_HELP_LOAD_ONCE`、`SCV_HELP_RELOAD_EVERY`）。
 
 - **やさしい言葉** — 答えは太字の主題行のあと、結果を先に置く短い箇条書きで書き、コードの値は
-  聞かれたときだけ見せます（`SCV_PLAIN_LANGUAGE`、`SCV_PLAIN_MAX_SENTENCES`）。
+  聞かれたときだけ見せます（`SCV_PLAIN_LANGUAGE`）。
   終了フックが答えの形を検査します（`SCV_ANSWER_LINT`）。
 - **モデル別プロンプティング** — ラッパーがあるモデルの公式プロンプティングガイド
   （原文そのままのオフライン写し）を同梱していれば、help はコンテキストごとに

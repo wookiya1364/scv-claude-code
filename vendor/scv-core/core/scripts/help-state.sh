@@ -129,13 +129,13 @@ case "$cmd" in
           fi
           printf '%s\n' "$json" ;;
   stop)   # 인자: --echo on|off · --lint on|off · --cap N · --now ISO · --src host|transcript|none. stdin = 직전 답 본문(없으면 린트 생략).
-          _esw=on; _lsw=on; _cap=2; _now=""; _src=""; _lang=""; _ltf=""
+          _esw=on; _lsw=on; _cap=0; _now=""; _src=""; _lang=""; _ltf=""
           while [[ $# -gt 0 ]]; do
             case "$1" in
               --src)  _src="${2:-}"; shift 2 ;;   # v0.51.0+: 본문 출처 host|transcript|none — 드리프트 줄 끝에 남긴다
               --echo) _esw="$(scv_hstate_switch "${2:-}")"; shift 2 ;;
               --lint) _lsw="$(scv_hstate_switch "${2:-}")"; shift 2 ;;
-              --cap)  _cap="${2:-2}"; shift 2 ;;
+              --cap)  _cap="${2:-0}"; shift 2 ;;
               --lang) _lang="${2:-}"; shift 2 ;;   # 0.77.0+: 설정 SCV_LANG — 답 언어 검사
               --lang-text) _ltf="${2:-}"; shift 2 ;;   # 0.78.0+: 이번 턴 글 전체가 든 파일 — 언어 검사는 중간 보고까지 본다
               --now)  _now="${2:-}"; shift 2 ;;
@@ -151,10 +151,8 @@ case "$cmd" in
           _echo="$(scv_echo_check "$_got" "${_n:-}" "${_p:-0}" "$_app")"
           _viol=""
           if [[ "$_lsw" == "on" && "$_text" == *[![:space:]]* ]]; then
-            # 0.94.0+ — 불릿 문장 기준은 lib/writing.sh 한 곳에서 온다. 못 읽으면 긴 불릿은 보지 않는다(이 기능 전과 같다).
+            # 0.96.0+ — 불릿 길이 기준을 넘기지 않는다(숫자 상한 없음, 계획 rules-once-no-caps).
             _bcap=""
-            # shellcheck source=lib/writing.sh
-            source "$SCRIPT_DIR/lib/writing.sh" 2>/dev/null && _bcap="$(scv_writing_bullet_cap 2>/dev/null || true)"
             if [[ -n "$_lang" && -n "$_ltf" && -f "$_ltf" && ! -L "$_ltf" ]]; then
               _viol="$(scv_answer_lint "$_text" "$_cap" "" "$_bcap")"
               _lv="$(scv_lint_lang_turn "$_text" "$(head -c 65536 "$_ltf" 2>/dev/null)" "$_lang")"

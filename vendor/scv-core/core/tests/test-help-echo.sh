@@ -91,6 +91,7 @@ append() {  # <proj> <n> <지문|''>
 }
 GOOD=$'네, 됩니다. 이렇게요.\n\n- 항목 하나.\n'
 BAD4=$'하나다. 둘이다. 셋이다. 넷이다.\n\n- 항목.\n'
+BADP=$'**주제**\n\n결론입니다.\n\n- 항목\n'   # 0.96.0+ 위반 예시('~습니다' 결론 줄) — 문장 수는 세지 않는다
 BADTBL=$'결론이다.\n\n| # | 질문 | 추천 |\n|---|---|---|\n| 1 | 무엇 | |\n'
 have_jq=1; command -v jq >/dev/null 2>&1 || have_jq=0
 
@@ -126,13 +127,13 @@ O="$(hook "$P" A)"; ! grep -q '\[SCV 규약 지문\]' <<<"$O" && ok "읽기 전(
 echo "── [T4] 답 모양 린트 — 위반이면 다음 턴 경고 + load ──"
 P=$(mkproj t4); hook "$P" A >/dev/null; mark "$P" >/dev/null; N="$(nonce_of "$P")"
 append "$P" 1 "$N"; stop "$P" "$BAD4" >/dev/null
-O="$(hook "$P" A)"; grep -q '\[SCV 답 모양\]' <<<"$O" && grep -q 'prose-long=4>2' <<<"$O" && [[ "$(wc_line "$P")" == "PROTOCOL: load" ]] && ok "(a) 결론 4문장 → 경고(위반 포함) + load" || fail "(a): $(wc_line "$P")"
-mark "$P" >/dev/null; N="$(nonce_of "$P")"; append "$P" 2 "$N"; stop "$P" "$BADTBL" >/dev/null
+O="$(hook "$P" A)"; ! grep -q '\[SCV 답 모양\]' <<<"$O" && [[ "$(wc_line "$P")" == "PROTOCOL: loaded" ]] && ok "(a) 결론 4문장 → 0.96.0+ 문장 수는 세지 않아 경고 없음" || fail "(a): $(wc_line "$P")"
+N="$(nonce_of "$P")"; append "$P" 2 "$N"; stop "$P" "$BADTBL" >/dev/null
 O="$(hook "$P" A)"; grep -q '\[SCV 답 모양\]' <<<"$O" && grep -q 'decision-no-reco=1' <<<"$O" && [[ "$(wc_line "$P")" == "PROTOCOL: load" ]] && ok "(b) 추천 열 없는 결정표 → 경고 + load" || fail "(b)"
 mark "$P" >/dev/null; N="$(nonce_of "$P")"; append "$P" 3 "$N"; stop "$P" "$GOOD" >/dev/null
 O="$(hook "$P" A)"; ! grep -q '\[SCV 답 모양\]' <<<"$O" && ! grep -q '\[SCV 규약 지문\]' <<<"$O" && [[ "$(wc_line "$P")" == "PROTOCOL: loaded" ]] && ok "(c) 정상 답 → 아무 것도 없음" || fail "(c)"
 P=$(mkproj t4c '{"SCV_PLAIN_MAX_SENTENCES":"4"}'); hook "$P" A >/dev/null; mark "$P" >/dev/null; N="$(nonce_of "$P")"; append "$P" 1 "$N"; stop "$P" "$BAD4" >/dev/null
-O="$(hook "$P" A)"; ! grep -q '\[SCV 답 모양\]' <<<"$O" && ok "문장 상한 설정(4)을 린트도 따른다" || fail "상한 설정 무시"
+O="$(hook "$P" A)"; ! grep -q '\[SCV 답 모양\]' <<<"$O" && ok "옛 문장 상한 설정이 있어도 경고 없음" || fail "상한 설정에 경고"
 
 echo "── [T5] 실패·스위치 — 이전 동작 ──"
 P=$(mkproj t5); hook "$P" A >/dev/null; mark "$P" >/dev/null; N="$(nonce_of "$P")"; append "$P" 1 ""
@@ -160,7 +161,7 @@ for i in $(seq 1 10); do
   hook "$P" S >/dev/null
   if [[ "$(wc_line "$P")" == "PROTOCOL: load" ]]; then loads="$loads$i "; mark "$P" >/dev/null; N="$(nonce_of "$P")"; fi
   case "$i" in 4|8) append "$P" "$i" "" ;; *) append "$P" "$i" "$N" ;; esac
-  case "$i" in 6) stop "$P" "$BAD4" >/dev/null ;; *) stop "$P" "$GOOD" >/dev/null ;; esac
+  case "$i" in 6) stop "$P" "$BADP" >/dev/null ;; *) stop "$P" "$GOOD" >/dev/null ;; esac
 done
 [[ "$loads" == "1 5 7 9 " ]] && ok "load 턴 = 1 5 7 9" || fail "load 턴: $loads"
 DL="$P/scv/journal/.help-drift"
