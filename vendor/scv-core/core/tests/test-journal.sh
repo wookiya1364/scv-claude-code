@@ -188,7 +188,7 @@ PL="$WORK/plainproj"; mkdir -p "$PL/scv"
 run_pl() { (cd "$1" && printf '{"prompt":"hello"}' | env "${GIT_ISOLATE[@]}" GIT_AUTHOR_NAME="Hook User" bash "$HOOK_PROMPT"); }
 OUT="$(run_pl "$PL")"; RC=$?
 eq "reminder: exit 0" "0" "$RC"
-grep -qF "1–2 sentences" <<<"$OUT" && ok "reminder printed when .env is absent (default on)" || fail "reminder missing with no .env"
+grep -qF "short lead" <<<"$OUT" && ok "reminder printed when .env is absent (default on)" || fail "reminder missing with no .env"
 grep -qF "SCV_PLAIN_LANGUAGE" <<<"$OUT" && ok "reminder names the off switch" || fail "reminder lacks the switch name"
 # 이 상한은 훅이 매 턴 컨텍스트에 붓는 양을 묶어 둔다. 0.40.0 에서 preflight 가
 # 세 번째 블록으로 붙어(진단 주입) 옛 24줄로는 잴 수 없다 — 실측 59줄. 상한 자체는
@@ -196,7 +196,7 @@ grep -qF "SCV_PLAIN_LANGUAGE" <<<"$OUT" && ok "reminder names the off switch" ||
 # 그것은 결정으로 내려야지 눈치채지 못한 채 새면 안 된다.
 [[ "$(grep -c . <<<"$OUT")" -le 80 ]] && ok "hook stdout stays within 80 lines (plain + always-on + preflight)" || fail "hook stdout longer than 80 lines"
 [[ -d "$PL/scv/journal" ]] && ok "reminder path still journals the prompt" || fail "reminder path skipped journaling"
-grep -rqF "1–2 sentences" "$PL/scv/journal" && fail "reminder leaked into the journal" || ok "reminder never enters the journal"
+grep -rqF "short lead" "$PL/scv/journal" && fail "reminder leaked into the journal" || ok "reminder never enters the journal"
 # off 는 자기 블록만 끈다 (v0.35.0+: always-on 블록은 별도 스위치 SCV_ALWAYS_ON)
 _no_plain() { ! grep -qF "[SCV plain language]" <<<"$(run_pl "$1")"; }
 write_settings "$PL" '{"SCV_PLAIN_LANGUAGE": "off"}'
@@ -209,20 +209,15 @@ _no_plain "$PL" && ok "quoted off: plain block silent" || fail "quoted off: stil
 write_settings "$PL" '{"SCV_PLAIN_LANGUAGE": "off", "SCV_ALWAYS_ON": "off", "SCV_SHOW_REAL": "off", "SCV_FINISH_REPORT": "off"}'
 [[ -z "$(run_pl "$PL")" ]] && ok "every block switch off: fully silent" || fail "every block switch off: still printed"
 write_settings "$PL" '{"SCV_PLAIN_LANGUAGE": "maybe"}'
-grep -qF "1–2 sentences" <<<"$(run_pl "$PL")" && ok "unknown value = on" || fail "unknown value silenced the reminder"
+grep -qF "short lead" <<<"$(run_pl "$PL")" && ok "unknown value = on" || fail "unknown value silenced the reminder"
 write_settings "$PL" '{"OTHER": "1", "SCV_PLAIN_LANGUAGE": "off"}'
 _no_plain "$PL" && ok "off on a later line: plain block silent" || fail "off on a later line: still printed"
-# sentence cap (v0.31.0+): positive integer → rendered; anything else → 2; off wins
+# 0.96.0+ — 문장 수 상한 설정은 더는 읽지 않는다: 어떤 값이어도 같은 안내, 숫자 없음
 write_settings "$PL" '{"SCV_PLAIN_MAX_SENTENCES": "4"}'
-grep -qF "1–4 sentences" <<<"$(run_pl "$PL")" && ok "cap 4 → 1–4 sentences" || fail "cap 4 not rendered"
-write_settings "$PL" '{"SCV_PLAIN_MAX_SENTENCES": "1"}'
-grep -qF "one sentence" <<<"$(run_pl "$PL")" && ok "cap 1 → one sentence" || fail "cap 1 not rendered"
-for bad in abc 0 -3 2.5 ""; do
-  write_settings "$PL" "{\"SCV_PLAIN_MAX_SENTENCES\": \"$bad\"}"
-  grep -qF "1–2 sentences" <<<"$(run_pl "$PL")" && ok "cap [$bad] → default 2" || fail "cap [$bad] did not fall back to 2"
-done
+_o="$(run_pl "$PL")"
+grep -qF "short lead" <<<"$_o" && ! grep -qE "1–[0-9]+ sentences|one sentence" <<<"$_o" && ok "old sentence cap setting is ignored — no count in the reminder" || fail "sentence cap still rendered"
 write_settings "$PL" '{"SCV_PLAIN_LANGUAGE": "off", "SCV_PLAIN_MAX_SENTENCES": "4"}'
-_no_plain "$PL" && ok "off wins over a cap" || fail "cap printed despite off"
+_no_plain "$PL" && ok "off still silences the block" || fail "printed despite off"
 rm -f "$PL/.env"
 [[ -z "$(cd "$NOSCV" && bash "$HOOK_PROMPT" <<< '{"prompt":"hi"}')" ]] && ok "no scv/: no reminder" || fail "reminder printed outside an SCV project"
 (cd "$PL" && bash "$HOOK_PROMPT" <<< 'not json' >/dev/null); eq "reminder path: invalid JSON still exit 0" "0" "$?"

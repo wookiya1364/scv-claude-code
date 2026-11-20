@@ -152,8 +152,7 @@ if [[ "$_scv_human" == 1 && -f "$_scv_hs" && -f "$_scv_hslib" ]]; then
   # 규약을 매 턴 읽는 프로젝트(SCV_HELP_LOAD_ONCE=off)에서는 지문이 무의미 — 메아리만 끈다.
   [[ "$(_scv_sw "$(_scv_get SCV_HELP_LOAD_ONCE)")" == "off" ]] && _scv_echo="off"
   if [[ "$_scv_echo" == "on" || "$_scv_lint" == "on" ]]; then   # 둘 다 off 면 읽지도 쓰지도 않는다 (0.49 와 같음)
-    _scv_cap="$(printf '%s' "$(_scv_get SCV_PLAIN_MAX_SENTENCES)" | tr -d '"[:space:]' | tr -d "'")"
-    [[ "$_scv_cap" =~ ^[1-9][0-9]*$ ]] || _scv_cap=2
+    _scv_cap=0   # 0.96.0+ — 문장 수 상한 없음(숫자로 박은 길이 규칙은 글을 뚝뚝 끊는다 — 계획 rules-once-no-caps)
     _scv_last=""; _scv_src="none"
     if [[ "$_scv_lint" == "on" ]] && declare -F scv_turn_slice >/dev/null 2>&1 && declare -F scv_stop_pick_source >/dev/null 2>&1; then
       _scv_host="$(printf '%s' "$INPUT" | jq -r 'try (.last_assistant_message // empty)' 2>/dev/null | head -c 65536 || true)"

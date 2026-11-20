@@ -116,7 +116,7 @@ flowchart LR
 `SCV_HELP_RELOAD_EVERY`).
 
 - **쉬운 말** — 답은 굵은 주제 줄 다음 결과가 먼저 오는 짧은 불릿으로 쓰고, 코드 값은
-  물어볼 때만 보입니다(`SCV_PLAIN_LANGUAGE`, `SCV_PLAIN_MAX_SENTENCES`).
+  물어볼 때만 보입니다(`SCV_PLAIN_LANGUAGE`).
   종료 훅이 답의 모양을 검사합니다(`SCV_ANSWER_LINT`).
 - **모델별 프롬프팅** — 래퍼가 어떤 모델의 공식 프롬프팅 가이드(원문 그대로의
   오프라인 사본)를 싣고 있으면, help 는 컨텍스트마다 한 번 그 원문을 읽고 요청을
