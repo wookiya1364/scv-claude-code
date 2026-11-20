@@ -239,6 +239,7 @@ Skills
   /scv:update     Claude Code marketplace update guide
   action:mods       Update the installed SCV mods and list them (mods-install / mods-remove pick one)
   action:channel    Switch the installed SCV between dev / stage / prod (try new work before a release)
+  action:ask-mode   Ask only at the start and the end (ends) or everywhere (all) — no argument flips
   /scv:set-models Explain Claude Code session-level model selection compatibility
 
 EOF

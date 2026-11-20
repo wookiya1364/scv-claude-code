@@ -274,8 +274,14 @@ elif [[ "${_scv_always:-on}" != "off" ]] && declare -F scv_force_routing >/dev/n
   _scv_pre="$(scv_force_switch "$(_scv_read SCV_FORCE_HELP)")"
   # 지시가 먼저, 진단이 나중이다. 0.40.0 은 반대였고 명령이 40줄 뒤에 묻혀
   # 무시됐다. 읽는 쪽에서 명령은 맨 앞에 와야 한다.
-  scv_force_routing
-  printf '\n'
+  # 0.97.0+ 가벼운 루프(SCV_LEAN_LOOP=on, 계획 lean-loop) — help 를 부르라는 지시 대신 훅이 help 몫을 한다:
+  # 규약 전문은 읽을 차례에만 아래에서 싣고 읽음 표시도 훅이 쓴다. 꺼져 있으면 지금과 같다.
+  _scv_lean="$(_scv_read SCV_LEAN_LOOP | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]')"
+  [[ "$_scv_lean" == "on" ]] || _scv_lean="off"
+  if [[ "$_scv_lean" != "on" ]]; then
+    scv_force_routing
+    printf '\n'
+  fi
   # v0.50.0+ — 종료 훅이 예약한 경고(규약 지문 없음 · 답 모양 위반)를 지시 바로 뒤에 한 번 싣고 지운다.
   # 표식은 이미 protocol=0 이라 이번 help 호출이 규약 전체를 다시 읽는다 — 이 줄은 그 이유를 말할 뿐이다.
   _scv_warn="$_scv_tdir/.help-warn"   # v0.65.0+ — 이 세션의 경고(다른 세션의 경고를 싣지 않는다)
@@ -288,6 +294,12 @@ elif [[ "${_scv_always:-on}" != "off" ]] && declare -F scv_force_routing >/dev/n
     _scv_psid="$(printf '%s' "$INPUT" | jq -r 'try (.session_id // empty)' 2>/dev/null || true)"
     # 상한 8KB(0.85.2+, 이전 4KB · 2KB): 등록 블록(약 1.6KB) · 첫 턴 가이드 안내 뒤에 낱말 목록 전문(약 2.7KB, 지문마다 한 번)이 잘리지 않게.
     _scv_guide_first="$(bash "$CORE_HOME/scripts/model-prompting.sh" prompt --session "$_scv_psid" --transcript "$_scv_tr0" 2>/dev/null | head -c 8192 || true)"
+    # 가벼운 루프: help 를 부르지 않으니 쓰기 전 안전장치의 '이 세션에서 SCV 액션이 돌았다' 표시도 훅이 남긴다 — help 를 부른 것과 같은 표시.
+    # 없으면 계획 없는 첫 쓰기가 막힌다(헤드리스 비교 2026-11-20 에서 잡힘).
+    if [[ "${_scv_lean:-off}" == "on" && -n "$_scv_psid" && -f "$SCRIPT_DIR/guard.sh" ]]; then
+      jq -cn --arg s "$_scv_psid" --arg c "$PWD" '{session_id:$s,cwd:$c,tool_input:{skill:"scv:help"}}' 2>/dev/null \
+        | SCV_GUARD_MODE=mint SCV_GUARD_SCRIPTS="$CORE_HOME/scripts" bash "$SCRIPT_DIR/guard.sh" >/dev/null 2>&1 || true
+    fi
   fi
   # v0.65.0+ — 세션 자리를 쓰는 턴이면 공용 자리에 남은 경고(세션 id 를 모르던 종료가 남긴 것 · 업그레이드 전의 것)도 함께 싣는다 —
   # 주인이 없는 경고라 이 기능 전처럼 다음 사람 턴이 받는다.
@@ -348,7 +360,13 @@ except Exception:
         if [[ -n "$_scv_sid" ]]; then
           _scv_every="$(_scv_read SCV_HELP_RELOAD_EVERY | tr -d '"[:space:]' | tr -d "'" || true)"
           [[ "$_scv_every" =~ ^[0-9]+$ ]] || _scv_every=10
-          bash "$_scv_hs_sh" prompt "$_scv_sid" "$_scv_every" >/dev/null 2>&1 || true
+          _scv_hs_json="$(bash "$_scv_hs_sh" prompt "$_scv_sid" "$_scv_every" 2>/dev/null || true)"
+          # 가벼운 루프: 규약을 읽을 차례(새 세션 · 요약 뒤 · N 턴마다)면 전문을 여기서 싣고 읽음 표시를 쓴다.
+          if [[ "${_scv_lean:-off}" == "on" && -f "$CORE_HOME/protocols/help/full.md" ]] \
+             && [[ "$(scv_hstate_protocol_line "$(scv_hstate_parse "$(head -c 4096 "${SCV_JOURNAL_DIR:-scv/journal}/.help-state" 2>/dev/null | head -1)")" on)" == "PROTOCOL: load" ]]; then
+            printf '[SCV 규약 — 이 세션에 한 번 싣는다]\n'; head -c 16384 "$CORE_HOME/protocols/help/full.md" 2>/dev/null; printf '\n'
+            bash "$_scv_hs_sh" mark >/dev/null 2>&1 || true
+          fi
           _scv_dm="$(printf '%s' "$_scv_diag" | bash "$_scv_hs_sh" diag "$(date +%H:%M 2>/dev/null || printf '?')" 2>/dev/null || printf 'full')"
           [[ "$_scv_dm" == brief* ]] && _scv_diag_mode="brief" && _scv_diag_at="${_scv_dm#brief }"
         fi

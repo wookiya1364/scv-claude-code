@@ -151,6 +151,8 @@ if [[ "$_scv_human" == 1 && -f "$_scv_hs" && -f "$_scv_hslib" ]]; then
   _scv_echo="$(_scv_sw "$(_scv_get SCV_HELP_ECHO)")"; _scv_lint="$(_scv_sw "$(_scv_get SCV_ANSWER_LINT)")"
   # 규약을 매 턴 읽는 프로젝트(SCV_HELP_LOAD_ONCE=off)에서는 지문이 무의미 — 메아리만 끈다.
   [[ "$(_scv_sw "$(_scv_get SCV_HELP_LOAD_ONCE)")" == "off" ]] && _scv_echo="off"
+  # 0.97.0+ 가벼운 루프 — 대화 기록(Turn 의 protocol: 지문)은 훅의 일지가 대신하므로 지문 되새김 검사를 하지 않는다.
+  [[ "$(_scv_get SCV_LEAN_LOOP | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]')" == "on" ]] && _scv_echo="off"
   if [[ "$_scv_echo" == "on" || "$_scv_lint" == "on" ]]; then   # 둘 다 off 면 읽지도 쓰지도 않는다 (0.49 와 같음)
     _scv_cap=0   # 0.96.0+ — 문장 수 상한 없음(숫자로 박은 길이 규칙은 글을 뚝뚝 끊는다 — 계획 rules-once-no-caps)
     _scv_last=""; _scv_src="none"

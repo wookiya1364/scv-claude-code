@@ -82,6 +82,7 @@ rules are resolved; every protocol defers to it.
 | `action:mods-install` | Install one SCV mod | wrapper |
 | `action:mods-remove` | Remove one SCV mod | wrapper |
 | `action:channel` | Swap SCV dev · stage · prod — try new work before release | wrapper |
+| `action:ask-mode` | Ask only at the start and the end, or everywhere | Core |
 
 ### The loop
 

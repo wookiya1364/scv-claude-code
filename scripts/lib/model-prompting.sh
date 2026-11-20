@@ -749,6 +749,27 @@ scv_mp_principle_show() {
 }
 
 # @pure
+# 역할: 답 맨 위의 다시 쓴 요청 인용('> **다시 쓴 요청**: …' 또는 영어 '> **Rewritten request**: …')에서 인용 글을 꺼낸다
+# 종류: 꺼내기
+# 예: $'> **다시 쓴 요청**: 버튼을 고친다.\n\n**주제**' → "버튼을 고친다."
+# 예: $'\n> **Rewritten request**: fix it\n' → "fix it"
+# 예: $'**주제**\n> **다시 쓴 요청**: x' → ""
+# 가벼운 루프(SCV_LEAN_LOOP=on, 0.97.0+)에서 종료 훅이 이 글로 등록한다 — 모델이 등록 명령을 따로 부르지 않는다. 첫 내용 줄만 본다.
+scv_mp_quote_rewrite() {
+  local line t q=$'\x3e' ko en
+  ko="$q **다시 쓴 요청**: "; en="$q **Rewritten request**: "
+  while IFS= read -r line; do
+    t="${line#"${line%%[![:space:]]*}"}"
+    [[ -n "$t" ]] || continue
+    case "$t" in
+      "$ko"*) printf '%s' "${t#"$ko"}" ;;
+      "$en"*) printf '%s' "${t#"$en"}" ;;
+    esac
+    return 0
+  done <<< "${1:-}"
+}
+
+# @pure
 # 역할: 매 턴 규칙 글(언어 · 확인 범위 · 답 모양 · 선택 · 실물 보여 주기)을 이번 턴에 전문으로 실을지(full) 한 줄로 줄일지(short) 정한다
 # 종류: 판정
 # 예: "n1" "n1" 0 → "short"
