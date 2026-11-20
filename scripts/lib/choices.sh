@@ -11,13 +11,65 @@
 # 꺾쇠 글자는 쓰지 않는다 — 순수성 검사가 리다이렉션으로 본다(인용 표시는 \x3e 로 만든다).
 
 # @pure
+# 역할: 묻기 모드 설정 값을 all · ends 로 가른다 — ends(대소문자 무관)만 ends, 없거나 다른 값은 all(기본, 지금과 같음)
+# 종류: 판정/ask
+# 예: "ends" → "ends"
+# 예: " ENDS " → "ends"
+# 예: "" → "all"
+# 예: "start" → "all"
+scv_ask_mode() {
+  local v="${1:-}"; v="${v//[[:space:]\"\']/}"
+  case "$v" in [Ee][Nn][Dd][Ss]) printf 'ends' ;; *) printf 'all' ;; esac
+}
+
+# @pure
+# 역할: 묻기 모드와 묻는 자리로 이 자리에서 물을지(ask) 추천대로 정할지(recommend)를 고른다
+# 종류: 판정/ask
+# 예: all mid → "ask"
+# 예: ends outline → "ask"
+# 예: ends verify → "ask"
+# 예: ends irreversible → "ask"
+# 예: ends mid → "recommend"
+# 예: ends first-run → "recommend"
+# <all|ends> <outline|verify|irreversible|mid|first-run|archive> → ask | recommend. ends 는 처음(요구 · 계획 개요)과 끝(영상 · e2e 검증),
+# 되돌릴 수 없는 일(배포 · 삭제 · 밖으로 보내기)만 묻는다 — 계획 20261120-wookiya1364-lean-loop. 모르는 자리는 묻는다.
+scv_ask_policy() {
+  local mode="${1:-all}" place="${2:-}"
+  [[ "$mode" == "ends" ]] || { printf 'ask'; return 0; }
+  case "$place" in mid|first-run|archive) printf 'recommend' ;; *) printf 'ask' ;; esac
+}
+
+# @pure
+# 역할: 지금 묻기 모드와 명령 인자로 바꿀 모드를 고른다 — 인자가 ends · all 이면 그 값, 비었으면 뒤집기, 그 밖은 빈 값(잘못된 인자)
+# 종류: 판정/ask
+# 예: all "" → "ends"
+# 예: ends "" → "all"
+# 예: ends all → "all"
+# 예: all ENDS → "ends"
+# 예: all "maybe" → ""
+scv_ask_mode_next() {
+  local cur arg="${2:-}"
+  cur="$(scv_ask_mode "${1:-}")"; arg="${arg//[[:space:]]/}"
+  case "$arg" in
+    "") [[ "$cur" == "ends" ]] && printf 'all' || printf 'ends' ;;
+    [Ee][Nn][Dd][Ss]) printf 'ends' ;;
+    [Aa][Ll][Ll]) printf 'all' ;;
+    *) return 0 ;;
+  esac
+}
+
+# @pure
 # 역할: 선택지 도구 이름으로 매 턴 싣는 안내 한 줄을 만든다 (도구 이름이 비면 아무것도 내지 않는다; 전문은 도구 이름을 넣은 긴 한 줄)
 # 종류: 조립
 # 예: "" → ""
 # <도구 이름> → 매 턴 안내 한 줄. 도구가 없으면 아무것도 내지 않는다(이 기능 전과 같은 출력).
 scv_choice_line() {
-  local tool="${1:-}"
+  local tool="${1:-}" mode="${2:-all}"
   [[ -n "$tool" ]] || return 0
+  if [[ "$mode" == "ends" ]]; then
+    printf '%s\n' "[SCV choices · ends] Ask with $tool only at the start (requirements, plan outline), at the end (video/e2e verification) and before irreversible acts (deploy, delete, send): recommended option first. Every other decision, first-run check included: take your recommendation, go on, and list it in the end report's decisions-I-made (contracts/choices.md)."
+    return 0
+  fi
   # 매 턴 실리는 줄 — 래퍼(요구 항목 블록 약 1.5KB)와 함께 매 턴 스택 상한(test-help-budget T12, 12,000B) 안. 요지만, 전문은 규칙 문서.
   printf '%s\n' "[SCV choices] Ask decisions with $tool, never in text: recommended option first; each option: how it avoids its own problems; over 4 questions, split; over 4 options, two steps; names, suggested values; cancelled, stop. Next step is no decision (bar first-run check): unblocked, go on; work done, state it unasked. Summary box: recap only. Text asks are blocked (contracts/choices.md)."
 }

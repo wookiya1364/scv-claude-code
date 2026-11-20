@@ -465,6 +465,21 @@ case "$CMD" in
     fi
     ORPH="$(orphan_return)"
     V="$(scv_tc_judge "$NCH" "$NRC" "$NST" "$NRQ" "$EX" "$NPL" "$BL" "$NEED" "$NSTEP" "$ORPH")"
+    # 0.97.0+ 가벼운 루프(SCV_LEAN_LOOP=on) — 이 검사는 턴을 막지 않는다. 막을 일이었던 것은 기록 · 계획 이력에 남기고
+    # 통과로 끝낸다(사람이 처음과 끝에만 있게 — 계획 lean-loop). 바로 고칠 수 있는 어김(인용 · 언어)은 다른 검사가 막는다.
+    if [[ "$V" == block* && "$(setting SCV_LEAN_LOOP off | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')" == on ]]; then
+      : > "$S/ended" 2>/dev/null || true
+      line="$(date +%Y-%m-%dT%H:%M:%S) 가벼운 루프 · 막지 않음(${V#block }) · 파일 ${NCH}개 · $(scv_tc_req_tag "$ID" "$(cat "$S/req" 2>/dev/null)")"
+      printf '%s\n' "$line" >> "$JDIR/.turn-plan.log" 2>/dev/null || true
+      slug="$(printf '%s\n' "$ACT" | head -n 1)"
+      if [[ -n "$slug" && -f "$PROMOTE/$slug/PLAN.md" ]]; then
+        t="$(cat "$PROMOTE/$slug/PLAN.md"; printf x)"; t="${t%x}"
+        n="$(scv_plan_history_add "$t" "**${SCV_TODAY:-$(date +%Y-%m-%d)} 막지 않음(${V#block })** — 가벼운 루프에서 파일 ${NCH}개를 바꾼 턴이 그대로 끝남"$'\n'"$(scv_tc_req_tag "$ID" "$(cat "$S/req" 2>/dev/null)")"; printf x)"
+        printf '%s' "${n%x}" > "$PROMOTE/$slug/PLAN.md"
+      fi
+      echo "TURN_PLAN: pass-unrecorded"
+      exit 0
+    fi
     # 통과를 내면 이 턴은 끝난 것이다 — 다음에 오는 사람의 말은 새 턴으로 시작한다. 막힘이면 턴이 이어진다.
     case "$V" in pass|pass-unrecorded) : > "$S/ended" 2>/dev/null || true ;; esac
     case "$V" in

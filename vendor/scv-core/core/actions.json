@@ -141,6 +141,13 @@
       "execution_class": "economy",
       "protocol": "protocols/channel.md",
       "entrypoint": null
+    },
+    {
+      "id": "ask-mode",
+      "owner": "core",
+      "execution_class": "economy",
+      "protocol": "protocols/ask-mode.md",
+      "entrypoint": "scripts/ask-mode.sh"
     }
   ]
 }

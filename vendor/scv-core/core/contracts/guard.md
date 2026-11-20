@@ -86,6 +86,7 @@ mods
 mods-install
 mods-remove
 channel
+ask-mode
 ```
 
 Six of these (`update`, `set-models`, `mods`, `mods-install`, `mods-remove`, `channel`) have `entrypoint: null` in
@@ -135,6 +136,7 @@ write, or the guard blocks the action it exists to protect. Verified by hand on
 | dreams | 51 | no — its only writes (scv/dreams/) are made by the minting script itself |
 | handoff | 62 | no — its writes target a temp dir, outside the working tree |
 | help | 64 (`settings-set.sh`) | no — the settings write *is* the first script call |
+| ask-mode | 45 | no — its only write (the settings file) is made by the minting script itself |
 | install-deps | 36 | no |
 | promote | 12 | no |
 | regression | 45 | no |
