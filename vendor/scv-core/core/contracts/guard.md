@@ -87,6 +87,7 @@ mods-install
 mods-remove
 channel
 ask-mode
+catalog-source
 ```
 
 Six of these (`update`, `set-models`, `mods`, `mods-install`, `mods-remove`, `channel`) have `entrypoint: null` in
@@ -136,6 +137,7 @@ write, or the guard blocks the action it exists to protect. Verified by hand on
 | dreams | 51 | no — its only writes (scv/dreams/) are made by the minting script itself |
 | handoff | 62 | no — its writes target a temp dir, outside the working tree |
 | help | 64 (`settings-set.sh`) | no — the settings write *is* the first script call |
+| catalog-source | 46 | no — its writes (settings, catalog, the moved code) are made by the minting script itself |
 | ask-mode | 45 | no — its only write (the settings file) is made by the minting script itself |
 | install-deps | 36 | no |
 | promote | 12 | no |
@@ -264,3 +266,8 @@ edit adds no new undeclared one. No opinion for a language it cannot read (sh, t
 test file or an excluded folder, when `SCV_PURE_DECLARE=off`, when the payload cannot be rebuilt (a patch that
 updates a file), or when `python3` is missing. It applies inside subagents too. `SCV_GUARD_RULE_D=off`
 disables this rule alone. Full rule: `contracts/purity.md`.
+
+In a project whose catalog is the source (v0.98.0+, `scv/core/catalog/pure/SOURCE` exists), the same rebuilt
+before/after pair is checked twice: `scripts/code-comments.py gate` refuses an edit that adds comment lines (strings,
+regular expressions and here-documents are not comments), and `pure-declare.sh gate` asks whether each new function
+has a catalog entry for that file and name (rust functions included) instead of a comment marker.

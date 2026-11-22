@@ -36,10 +36,28 @@ pd_skip_path() {
   return 1
 }
 
+# 0.98.0+ — 사전이 원본인 프로젝트(scv/core/catalog/pure/SOURCE): 선언은 코드 주석이 아니라 사전(순수 항목 · effects.md)에
+# 있다. PD_SRC_ROOT 가 그 저장소, PD_SRC_REL 이 판정하는 파일의 저장소 기준 경로다.
+PD_SRC_ROOT=""; PD_SRC_REL=""
+
+# @effect pd_catalog_names
+# 이유: 사전 파일을 읽어 한 파일(저장소 기준 경로)에 선언된 함수 이름들을 낸다
+pd_catalog_names() {  # <root> <rel>
+  local cat="$1/scv/core/catalog/pure" f
+  for f in "$cat"/*.md; do
+    [[ -f "$f" ]] || continue
+    case "$(basename "$f")" in INDEX.md|notes.md) continue ;; esac
+    LC_ALL=C awk -v rel="$2" '/^### /{n=substr($0,5)} /^- 위치: /{v=$0; sub(/^- 위치: /,"",v); split(v,p," · "); if (p[1] == rel) print n}' "$f"
+  done
+}
+
 # @effect pd_missing_in
 # 이유: 파일을 읽어 그 파일의 선언 없는 함수 이름을 낸다
 pd_missing_in() {  # <언어> <파일>
   local text; text="$(cat "$2" 2>/dev/null || true)"
+  if [[ -n "$PD_SRC_ROOT" ]]; then
+    scv_rc_allowed_out "$(scv_pd_functions "$1" "$text")" "$(pd_catalog_names "$PD_SRC_ROOT" "$PD_SRC_REL")"; return 0
+  fi
   scv_rc_allowed_out "$(scv_pd_functions "$1" "$text")" "$(scv_pd_declared "$1" "$text")"
 }
 
@@ -49,7 +67,7 @@ pd_files() {  # <root> <project 0|1> → 절대 경로들
   local root="$1" f
   if [[ "$2" == 1 ]]; then
     git -C "$root" ls-files 2>/dev/null | LC_ALL=C sort | while IFS= read -r f; do
-      [[ -n "$(scv_pd_lang "$f")" ]] || continue
+      [[ -n "$(scv_pd_lang "$f" "$PD_RS")" ]] || continue
       pd_skip_path "$f" || printf '%s\n' "$root/$f"
     done
   else
@@ -65,12 +83,22 @@ pd_scan() {  # <root> <project 0|1>
   local root="$1" f n=0 name rel
   while IFS= read -r f; do
     rel="${f#"$root"/}"
+    [[ -n "$PD_SRC_ROOT" ]] && PD_SRC_REL="$rel"
     while IFS= read -r name; do
       [[ -n "$name" ]] || continue
       printf '%s\t%s\n' "$rel" "$name"; n=$((n + 1))
-    done < <(pd_missing_in "$(scv_pd_lang "$f")" "$f")
+    done < <(pd_missing_in "$(scv_pd_lang "$f" "$PD_RS")" "$f")
   done < <(pd_files "$root" "$2")
   printf 'UNDECLARED: %s\n' "$n"
+}
+
+PD_RS=""
+# @effect pd_source_mode
+# 이유: 저장소에 사전 원본 표시가 있는지 본다 — 있으면 선언은 사전에서 읽고 러스트도 판정한다
+pd_source_mode() {  # <저장소 안 아무 경로>
+  local top; top="$(git -C "$1" rev-parse --show-toplevel 2>/dev/null)" || return 1
+  [[ -f "$top/scv/core/catalog/pure/SOURCE" ]] || return 1
+  PD_SRC_ROOT="$top"; PD_RS=on
 }
 
 MODE="${1:-}"; shift || true
@@ -93,10 +121,18 @@ case "$MODE" in
     [[ -n "$FILE" && -f "$AFTER" ]] || exit 0
     _sw="$(declare -F settings_get >/dev/null 2>&1 && settings_get SCV_PURE_DECLARE 2>/dev/null | tr -d '"[:space:]' | tr '[:upper:]' '[:lower:]')"
     [[ "$_sw" == off ]] && exit 0
-    _lang="$(scv_pd_lang "$FILE")"; [[ -n "$_lang" ]] || exit 0
+    pd_source_mode "." && PD_SRC_REL="$FILE"
+    _lang="$(scv_pd_lang "$FILE" "$PD_RS")"; [[ -n "$_lang" ]] || exit 0
     pd_skip_path "$FILE" && exit 0
     _after="$(pd_missing_in "$_lang" "$AFTER")"
     _before=""; [[ -n "$BEFORE" && -f "$BEFORE" ]] && _before="$(pd_missing_in "$_lang" "$BEFORE")"
+    if [[ -n "$PD_SRC_ROOT" ]]; then
+      _new="$(scv_pd_write_verdict "$_before" "$_after")"
+      [[ -n "$_new" ]] || exit 0
+      printf '[SCV 함수 선언] %s 에 사전에 없는 함수가 생긴다: %s — 이 프로젝트는 사전이 원본이다. scv/core/catalog/pure 의 알맞은 종류 파일에 항목(### 이름 · 역할 · 위치 · 예)을, 부수효과면 effects.md 에 이유를 먼저 적고 다시 써라(코드에는 주석 없이).\n' \
+        "$FILE" "$(printf '%s' "$_new" | tr '\n' ',' | sed 's/,$//; s/,/, /g')"
+      exit 0
+    fi
     _new="$(scv_pd_write_verdict "$_before" "$_after")"
     [[ -n "$_new" ]] || exit 0
     printf '[SCV 함수 선언] %s 에 선언 없는 함수가 생긴다: %s — 함수마다 바로 위 주석에 @pure(역할 · 종류 · 예) 또는 @effect(이유: 바깥을 바꾸는 이유 한 줄)를 달아 다시 써라(contracts/purity.md).\n' \
@@ -104,13 +140,13 @@ case "$MODE" in
     ;;
   scan)
     ROOT="$(cd "$ROOT" 2>/dev/null && pwd)" || exit 2
-    (( PROJECT )) && { ROOT="$(git -C "$ROOT" rev-parse --show-toplevel 2>/dev/null)" || exit 2; }
+    (( PROJECT )) && { ROOT="$(git -C "$ROOT" rev-parse --show-toplevel 2>/dev/null)" || exit 2; pd_source_mode "$ROOT" || true; }
     pd_scan "$ROOT" "$PROJECT"
     ;;
   baseline)
     [[ -n "$BASELINE" ]] || { echo "pure-declare.sh baseline: --baseline FILE" >&2; exit 2; }
     ROOT="$(cd "$ROOT" 2>/dev/null && pwd)" || exit 2
-    (( PROJECT )) && { ROOT="$(git -C "$ROOT" rev-parse --show-toplevel 2>/dev/null)" || exit 2; }
+    (( PROJECT )) && { ROOT="$(git -C "$ROOT" rev-parse --show-toplevel 2>/dev/null)" || exit 2; pd_source_mode "$ROOT" || true; }
     _out="$(pd_scan "$ROOT" "$PROJECT")"
     _n="$(printf '%s\n' "$_out" | sed -n 's/^UNDECLARED: //p')"
     _base=""; [[ -f "$BASELINE" ]] && _base="$(head -1 "$BASELINE" | tr -cd '0-9')"
