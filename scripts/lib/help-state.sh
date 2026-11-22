@@ -276,6 +276,22 @@ scv_lint_lang_verdict() {
   return 0
 }
 
+# @pure scv_lang_script
+# 역할: 설정 언어 이름을 그 언어 글자의 UTF-8 첫 바이트 범위(16진 '시작-끝')로 바꾼다 — 글자로 가를 수 없는 언어는 빈 값
+# 종류: 고르기
+# 예: korean → "ea-ed"
+# 예: japanese → "e3-e9"
+# 예: zh → "e4-e9"
+# 예: english → ""
+# 예: spanish → ""
+scv_lang_script() {
+  case "${1:-}" in
+    korean|ko) printf 'ea-ed' ;;
+    japanese|ja) printf 'e3-e9' ;;
+    chinese|zh) printf 'e4-e9' ;;
+  esac
+}
+
 # @pure
 # 역할: 마지막 답과 이번 턴 글 전체에서, 한국어 설정인데 거의 영어인 줄이 몇 개인지 위반 줄로 낸다(중간 보고까지 본다)
 # 종류: 판정/answer
@@ -290,10 +306,17 @@ scv_lint_lang_verdict() {
 # 영어로 샜는데 마지막 답만 보는 검사가 놓쳤다).
 scv_lint_lang_turn() {
   local LC_ALL="${LC_ALL-}" last="${1:-}" turn="${2:-}" lang="${3:-}" line t pl infence=0 n=0
-  local c x i len h l h4 l4 letters step=40
+  local c x i len h l h4 l4 letters step=40 lo hi
   local re_link='^(.*)\[[^]]*\]\([^)]*\)(.*)$' re_url='^(.*)https?://[^[:space:]]*(.*)$'
   local -a pls=()
-  [[ "$lang" == korean || "$lang" == ko ]] || return 0
+  # 0.99.0+ — 설정 언어의 글자(UTF-8 첫 바이트 범위)로 가른다: 한국어 한글 · 일본어 가나와 한자 · 중국어 한자(계획 lang-follow-setting).
+  #   하위 셸 없이 고른다 — 이 함수는 줄마다 불린다(scv_lang_script 와 같은 범위).
+  case "$lang" in
+    korean|ko) lo=$'\xea'; hi=$'\xed' ;;
+    japanese|ja) lo=$'\xe3'; hi=$'\xe9' ;;
+    chinese|zh) lo=$'\xe4'; hi=$'\xe9' ;;
+    *) return 0 ;;
+  esac
   # 1) 줄을 다듬는다 — 글자 단위로(지금 로캘). 정규식은 맞을 수 있는 줄에서만 돌린다.
   while IFS= read -r line || [[ -n "$line" ]]; do
     t="${line#"${line%%[![:space:]]*}"}"
@@ -324,7 +347,7 @@ scv_lint_lang_turn() {
     while [[ $i -lt $len ]]; do
       [[ $i -ge 4000 && $letters -ge 15 ]] && break
       c="${pl:i:step}"
-      x="${c//[^$'\xea'-$'\xed']/}"; h=${#x}
+      x="${c//[^$lo-$hi]/}"; h=${#x}
       x="${c//[^A-Za-z]/}"; l=${#x}
       letters=$((letters + h + l))
       if [[ $i -lt 4000 ]]; then h4=$((h4 + h)); l4=$((l4 + l)); fi
