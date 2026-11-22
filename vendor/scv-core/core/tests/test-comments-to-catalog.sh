@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# test-comments-to-catalog.sh — 코드 주석을 없애고 순수 함수 사전에만 (계획 20261122-wookiya1364-comments-to-catalog · TESTS.md T1 ~ T7).
+# test-comments-to-catalog.sh — 코드 주석을 없애고 순수 함수 사전에만 (계획 20261122-wookiya1364-comments-to-catalog · TESTS.md T1 ~ T8, 계획 comments-strip-safety T9 ~ T12).
 #
 # 사전이 원본인 프로젝트(사전 폴더의 SOURCE)에서 사전 검사 · 선언 검사 · 쓰기 전 안전장치가 사전을 보는지, 옮기기가 잃는 것 없이
 # 주석을 사전으로 옮기고 코드 뜻을 바꾸지 않는지, 설정을 켠 프로젝트가 다음 사람 턴에 한 번 옮기는지, 끈 프로젝트는 그대로인지 본다.
@@ -116,5 +116,57 @@ if [[ "$k1" == *"CATALOG_SOURCE: off -> on"* && "$k1" == *"MIGRATED: now"* && "$
    && -f "$R8/scv/core/catalog/pure/SOURCE" ]]; then
   ok "T8 catalog-source: 뒤집기로 켜면 바로 옮김 · 끄면 주석 허용(사전은 원본 그대로) · 다시 켜면 막기 · 잘못된 인자 exit 2"
 else bad "T8 [$k1] 남은=$left8 [$k2] off편집=[${e_off:0:60}] [$k3] on편집=[${e_on:0:60}] r=$r8"; fi
+
+# ---------- T9 — 겹친 따옴표 · 치환 · 이스케이프: 문자열 안 # 는 남기고 진짜 주석만 (계획 comments-strip-safety) ----------
+printf '%s\n' 'x="$(echo ab | tr -d '"'"'"[:space:]'"'"')"' "echo '(### b)'" 'y="${v:-"q"}" # c' 'z=$(echo "a)b" # in' ')' \
+  'if true; then' '  echo a\ #b' 'fi' 'w=`echo "#q"` # d' > "$WORK/t9.sh"
+s9="$(python3 -I "$CC" strip "$WORK/t9.sh")"
+if grep -qF "echo '(### b)'" <<<"$s9" && grep -qF 'echo a\ #b' <<<"$s9" && grep -qF '"#q"' <<<"$s9" \
+   && ! grep -qE '# (c|in|d)$' <<<"$s9" && bash -n <(printf '%s\n' "$s9"); then
+  ok "T9 큰따옴표 안 \$( ) 속 따옴표 · \${ } 안 따옴표 · 이스케이프된 공백 뒤 # 는 남김 · \$( ) · 역따옴표 뒤 주석만 지움 · 문법 그대로"
+else bad "T9 [$s9]"; fi
+
+# ---------- T10 — 지운 뒤 문법이 깨지는 파일은 건드리지 않음 ----------
+R10="$(mkrepo t10)"; before10="$(cat "$R10/src/a.sh")"
+( cd "$R10" && bash "$CM" files > "$WORK/l10" )
+o10="$(python3 -I - "$CC" "$R10" "$WORK/l10" <<'PY'
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location('cc', sys.argv[1]); m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+orig = m.strip_comments
+m.strip_comments = lambda t, l: (orig(t, l) + '\nfi\n') if l == 'sh' else orig(t, l)
+m.main(['migrate', '--root', sys.argv[2], '--list', sys.argv[3], '--catalog', sys.argv[2] + '/scv/core/catalog/pure', '--entries-out', sys.argv[2] + '/e.tsv', '--write'])
+PY
+)"
+if [[ "$(cat "$R10/src/a.sh")" == "$before10" && "$o10" == *"skipped=1"* ]] && ! grep -q '^# @pure add' "$R10/src/b.ts"; then
+  ok "T10 지운 뒤 bash -n 이 깨지는 셸 파일은 그대로 두고 skipped=1 로 보고 · 다른 파일은 옮김"
+else bad "T10 [$o10] a.sh 바뀜=$([[ "$(cat "$R10/src/a.sh")" == "$before10" ]] || echo 예)"; fi
+
+# ---------- T11 — 사전 쓰기가 실패하면 코드 · 사전을 옮기기 전으로 되돌림(커밋 안 한 편집 포함) ----------
+R11="$(mkrepo t11)"; printf 'echo dirty  # 편집 중\n' >> "$R11/src/a.sh"
+snap11="$(cd "$R11" && cat src/* | shasum | cut -c1-12)"
+BR="$WORK/broken"; cp -R "$CORE/scripts" "$BR"
+printf '%s\n' '[[ "${1:-}" == import ]] && exit 1' "exec bash \"$CORE/scripts/pure-catalog.sh\" \"\$@\"" > "$BR/pure-catalog.sh"
+o11="$(cd "$R11" && bash "$BR/comments-migrate.sh" run 2>&1)"; r11=$?
+snap11b="$(cd "$R11" && cat src/* | shasum | cut -c1-12)"
+if [[ $r11 == 1 && "$snap11" == "$snap11b" && ! -e "$R11/scv/core/catalog/pure/SOURCE" && ! -e "$R11/scv/core/catalog/pure/notes.md" && "$o11" == *"되돌림"* ]]; then
+  ok "T11 사전 쓰기 실패 → exit 1 · 코드 파일 바이트까지 그대로(커밋 안 한 편집 포함) · 사전 표시 없음"
+else bad "T11 r=$r11 같음=$([[ "$snap11" == "$snap11b" ]] && echo 예) [$o11]"; fi
+
+# ---------- T12 — 예시 속 표식 · 칸 이름은 글 · 옮기기 전 항목이 하나라도 빠지면 멈춤 ----------
+R12="$(mkrepo t12)"
+printf '%s\n' '# @pure f2' '# 역할: 고른다' '# 종류: 고르기' "# 예: \$'# @pure g\\n# 종류: 뭐' → \"g\"" 'f2() { :; }' >> "$R12/src/a.sh"
+( cd "$R12" && git add -A && git commit -qm t12 )
+o12="$(cd "$R12" && bash "$CM" run 2>&1)"
+k12="$(grep -A3 '^### f2$' "$R12"/scv/core/catalog/pure/select.md 2>/dev/null | grep -c '고른다')"
+g12="$(grep -rc '^### g$' "$R12"/scv/core/catalog/pure/*.md 2>/dev/null | awk -F: '{s+=$2} END {print s+0}')"
+R12b="$(mkrepo t12b)"; snap12="$(cd "$R12b" && cat src/* | shasum | cut -c1-12)"
+BR2="$WORK/broken2/scripts"; mkdir -p "$WORK/broken2"; cp -R "$CORE/." "$WORK/broken2/"
+printf '%s\n' 'import subprocess, sys' "r = subprocess.run([sys.executable, '-I', '$CORE/scripts/code-comments.py'] + sys.argv[1:]).returncode" \
+  "sys.argv.count('--write-entries-only') and open(sys.argv[sys.argv.index('--entries-out') + 1], 'w').write('')" 'sys.exit(r)' > "$BR2/code-comments.py"
+o12b="$(cd "$R12b" && bash "$BR2/comments-migrate.sh" run 2>&1)"; r12b=$?
+snap12b="$(cd "$R12b" && cat src/* | shasum | cut -c1-12)"
+if [[ "$k12" == 1 && "$g12" == 0 && $r12b == 1 && "$snap12" == "$snap12b" && "$o12b" == *"옮긴 결과에 없다"* ]]; then
+  ok "T12 예시 속 @pure · 종류: 는 글로 읽음(가짜 항목 없음 · 종류 그대로) · 옮기기 전 항목이 빠지면 코드 그대로 두고 멈춤"
+else bad "T12 f2역할=$k12 가짜g=$g12 r=$r12b 같음=$([[ "$snap12" == "$snap12b" ]] && echo 예) [$o12] [$o12b]"; fi
 
 exit "$fail"
