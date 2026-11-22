@@ -184,6 +184,19 @@ R3="$(new_repo t14c korean)"; TR3="$WORK/t14c.jsonl"; { jl_user "이번 답은 �
 [[ "$a1" == "$(scv_lang_remind_line korean)" && -n "$a1" && -z "$a2" && "$a3" == *"japanese"* && -z "$a4" ]] \
   && ok "T14 도구 뒤 알림(글 없음 → 한 줄 · 마지막 글이 설정 언어 → 없음 · japanese · 다른 언어 요청이면 없음)" || bad "T14 [$a1] [$a2] [$a3] [$a4]"
 
+# T15 — 생각 항목에 남은 중간 보고(계획 lang-remind-progress-notes): 이 환경에서 도구 사이 중간 보고는 글이 아니라 생각(thinking) 항목으로
+#   남는다 — 마지막으로 쓴 묶음(글 · 생각)에 설정 언어 글이 있으면 알림 없음. 실제 세션(2026-11-22)에서 한국어 중간 보고 뒤에도 알림이 붙었다.
+jl_think() { jq -cn --arg t "$1" --arg u "$2" '{type:"assistant",uuid:$u,message:{content:[{type:"thinking",thinking:$t,signature:"x"}]}}'; }
+KO="결과를 보고 다음 시험을 돌리는 중임 — 한국어로 쓴 중간 보고"
+R="$(new_repo t15 korean)"; TR="$WORK/t15.jsonl"; { jl_user "만들어 줘"; jl_asst "$EN1" p0; jl_tool; jl_think "$KO" p1; jl_tool; } > "$TR"
+s1="$(lang_hook "$R" "$TR")"; s1="$(lang_hook "$R" "$TR")"
+R2="$(new_repo t15b korean)"; TR2="$WORK/t15b.jsonl"; { jl_user "만들어 줘"; jl_think "$EN2" p2; jl_tool; } > "$TR2"
+s2="$(jq -r '.hookSpecificOutput.additionalContext // empty' <<<"$(lang_hook "$R2" "$TR2")" 2>/dev/null)"
+R3="$(new_repo t15c korean)"; TR3="$WORK/t15c.jsonl"; { jl_user "만들어 줘"; jl_think "$KO" p3; jl_tool; jl_tool; } > "$TR3"
+s3="$(lang_hook "$R3" "$TR3")"
+[[ -z "$s1" && "$s2" == "$(scv_lang_remind_line korean)" && -z "$s3" ]] \
+  && ok "T15 생각 항목에 남은 중간 보고(한국어 → 알림 없음 · 영어 → 알림 · 한국어 뒤 도구 둘 연달아 → 알림 없음)" || bad "T15 [$s1] [$s2] [$s3]"
+
 # 순수 함수 직접 확인
 [[ "$(scv_lang_stop_decide 2 0)" == block && "$(scv_lang_stop_decide 2 1)" == ok && -z "$(scv_lang_rule_line english)" ]] \
   && ok "판정 함수(막기 한 번 · english 무동작)" || bad "판정 함수"
