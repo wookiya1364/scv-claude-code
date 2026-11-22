@@ -60,9 +60,15 @@ _scv_list="$(_scv_turn_texts 400 | tail -c 65536)"
 #   쓴 뒤에 고치는 교정만으로는 한 세션에서 약 99번 경고하고도 영어가 다시 나왔다(2026-11-22, 계획 lang-follow-setting).
 _scv_remind() {
   [[ "$(scv_lang_user_other "$(_scv_turn_prompt_wide)")" == 1 ]] && return 0
-  local _l="" _r
+  local _l="" _r _n
   [[ -n "$_scv_list" ]] && { _l="$(printf '%s\n' "$_scv_list" | tail -n 1)"; _l="${_l#*$'\x1f'}"; _l="${_l//$'\x1e'/$'\n'}"; }
   [[ "$(scv_lang_text_ok "$_l" "$_scv_lang")" == 1 ]] && return 0
+  # 0.99.1+ — 마지막으로 쓴 묶음(글 · 생각 항목)에 설정 언어 항목이 하나라도 있으면 싣지 않는다: 이 환경은 도구 사이 중간 보고를 생각
+  #   항목으로 남겨, 글 항목만 보면 한국어 중간 보고 뒤에도 알림이 붙었다(2026-11-22, 계획 lang-remind-progress-notes). 묶음만으로 판정하지
+  #   않는 까닭: 묶음에는 사용자에게 안 보이는 영어 생각도 섞여, 그것만 보면 알림이 오히려 늘었다(재생 19% → 38%).
+  while IFS= read -r _n; do
+    [[ -n "$_n" && "$(scv_lang_text_ok "${_n//$'\x1e'/$'\n'}" "$_scv_lang")" == 1 ]] && return 0
+  done <<<"$(scv_lang_last_notes "$(_scv_turn_events 400 | tail -c 65536)")"
   _r="$(scv_lang_remind_line "$_scv_lang")"; [[ -n "$_r" ]] || return 0
   jq -cn --arg c "$_r" '{hookSpecificOutput:{hookEventName:"PostToolUse",additionalContext:$c}}' 2>/dev/null || true
 }
