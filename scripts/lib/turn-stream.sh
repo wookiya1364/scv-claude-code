@@ -59,6 +59,27 @@ _scv_turn_texts() {  # [원본 끝에서 읽을 줄 수 — 기본 400]
                | if $i == null then $s[] else $s[($i + 1):][] end' 2>/dev/null || true
 }
 
+# 0.99.1+ — 이번 턴의 글 · 생각 항목과 도구 호출 순서(계획 lang-remind-progress-notes). 일부 모델 · 호스트에서는 도구 사이 중간 보고가
+#   글(text)이 아니라 생각(thinking) 항목으로 남는다 — 도구 뒤 언어 알림이 '방금 쓴 중간 보고'를 보려면 둘 다 봐야 한다.
+# @effect _scv_turn_events
+# 이유: 원본(transcript) 파일을 읽는다
+_scv_turn_events() {  # [원본 끝에서 읽을 줄 수 — 기본 400] → 줄마다 "T" 또는 "N\x1f글(줄바꿈은 \x1e)"
+  tail -n "${1:-400}" "$TRANSCRIPT" 2>/dev/null \
+    | jq -Rrn '[inputs | fromjson? | if .type? == "user" then
+                  (if (.isMeta? == true) or (.sourceToolUseID? != null) then empty
+                   elif ((.message.content|type) == "string")
+                      or ((.message.content|type) == "array" and any(.message.content[]?; .type? == "text"))
+                   then "U" else empty end)
+                elif .type? == "assistant" then
+                  (.message.content[]? | if .type? == "tool_use" then "T"
+                     elif (.type? == "text" or .type? == "thinking") then ((.text // .thinking // "") as $x
+                       | if ($x | length) == 0 then empty else ("N\u001f" + ($x | gsub("\n"; "\u001e"))) end)
+                     else empty end)
+                else empty end] as $s
+               | ([range(0; $s | length) | select($s[.] == "U")] | last) as $i
+               | if $i == null then $s[] else $s[($i + 1):][] end' 2>/dev/null || true
+}
+
 # 0.79.0+ — 이번 턴을 연 사람 글(마지막 사람 프롬프트의 글). 내부 메시지 · 도구 결과는 빼고, 못 찾으면 빈 값.
 _scv_turn_prompt() {  # [원본 끝에서 읽을 줄 수 — 기본 400]
   tail -n "${1:-400}" "$TRANSCRIPT" 2>/dev/null | jq -Rr 'fromjson? | select(.type? == "user") | select((.isMeta? != true) and (.sourceToolUseID? == null))

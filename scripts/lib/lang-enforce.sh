@@ -11,6 +11,7 @@
 #   scv_lang_drop_machine <글>                    → 기계 글 블록(알림 · 시스템 안내 · 명령 기록)을 뺀 글 (0.81.5)
 #   scv_lang_text_ok <글> <언어>                  → 1(설정 언어로 쓴 글) | 0 (0.99.0)
 #   scv_lang_remind_line <언어>                   → 도구 결과 뒤 짧은 알림 한 줄 | 빈 값 (0.99.0)
+#   scv_lang_last_notes <차례 목록>               → 마지막으로 쓴 글 · 생각 묶음 (0.99.1)
 #
 # 판정 자체(다른 언어 줄 세기)는 lib/help-state.sh 의 scv_lint_lang_turn 이 한다 — 여기서 다시 만들지 않는다.
 # 꺾쇠 글자는 쓰지 않는다 — 순수성 검사가 리다이렉션으로 본다.
@@ -133,6 +134,26 @@ scv_lang_text_ok() {
   lo="$(printf "\\x${rng%%-*}")"; hi="$(printf "\\x${rng#*-}")"
   x="$(LC_ALL=C; t="${text:0:4000}"; t="${t//[^$lo-$hi]/}"; printf '%s' "${#t}")"
   if (( x >= 5 )) && [[ -z "$(scv_lint_lang_turn "" "$text" "$lang")" ]]; then printf '1'; else printf '0'; fi
+}
+
+# @pure
+# 역할: 이번 턴 차례 목록(도구 호출 T · 글 N)에서 마지막으로 쓴 글 묶음(이어진 N)을 항목마다 한 줄로 낸다(항목 안 줄바꿈은 \x1e 그대로)
+# 종류: 꺼내기
+# 예: $'N\x1f가\nT\nN\x1f나\nN\x1f다\nT\nT' → $'나\n다'
+# 예: $'T\nT' → ""
+# 예: "" → ""
+# <차례 목록> → 줄들 | 빈 값. 도구 호출만 이어진 끝은 건너뛰고, 그 앞의 이어진 글 · 생각을 모은다(0.99.1, 계획 lang-remind-progress-notes).
+scv_lang_last_notes() {
+  local list="${1:-}" us=$'\x1f' line out="" seen=0 i
+  local -a ls=()
+  [[ -n "$list" ]] || return 0
+  while IFS= read -r line; do ls[${#ls[@]}]="$line"; done <<<"$list"
+  for (( i = ${#ls[@]} - 1; i >= 0; i-- )); do
+    line="${ls[i]}"
+    if [[ "$line" == N"$us"* ]]; then seen=1; out="${line#N"$us"}${out:+$'\n'$out}"
+    elif (( seen )); then break; fi
+  done
+  printf '%s' "$out"
 }
 
 # @pure
