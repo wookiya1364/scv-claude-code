@@ -15,6 +15,10 @@
 # Usage:
 #   pure-catalog.sh build [--root DIR] [--catalog DIR]   사전을 다시 만든다
 #   pure-catalog.sh check [--root DIR] [--catalog DIR]   검사만 한다 (파일을 바꾸지 않는다)
+#   pure-catalog.sh import --project [DIR] --entries FILE  (0.98.0+) 옮기기가 코드 표식에서 뽑은 항목을 사전에 합치고
+#                                                          사전을 원본으로 둔다(사전 폴더의 SOURCE 표시)
+#   사전이 원본인 프로젝트(SOURCE 표시 · --project): 항목은 사전 파일에서 읽고, 낡음은 '항목의 함수가 코드에 있나',
+#   코드에 남은 주석 줄도 위반으로 센다(계획 comments-to-catalog).
 #   --root 에 파일 하나를 주면 그 파일만 본다 (사전 낡음 판정은 전체 기준이라 무시할 것).
 #   공통: --base DIR (위치 표시의 기준, 기본 core) · --contract FILE · --limit N (기본 400)
 #
@@ -25,18 +29,20 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 CORE_DIR="$( cd "$SCRIPT_DIR/.." && pwd )"
 # shellcheck source=lib/pure-catalog.sh
 source "$SCRIPT_DIR/lib/pure-catalog.sh"
+# shellcheck source=lib/settings.sh
+source "$SCRIPT_DIR/lib/settings.sh" 2>/dev/null || true
 
 MODE="${1:-}"; shift || true
 case "$MODE" in
-  build|check) : ;;
+  build|check|import) : ;;
   -h|--help|"") sed -n '2,21p' "$0"; [[ -n "$MODE" ]] && exit 0; exit 2 ;;
-  *) echo "pure-catalog.sh: unknown mode: $MODE (build | check)" >&2; exit 2 ;;
+  *) echo "pure-catalog.sh: unknown mode: $MODE (build | check | import)" >&2; exit 2 ;;
 esac
 
 # 사전은 저장소의 scv/core/ 아래 — 커밋되는 자리라 기기 · 협업자가 같은 사전을 본다.
 # 래퍼 설치본(코어 사본)에는 scv/ 가 없다: 그때는 사전 낡음 · 크기 검사를 건너뛰고 예시 · 중복만 본다.
 ROOT="$CORE_DIR/scripts"; CATALOG="$( cd "$CORE_DIR/.." && pwd )/scv/core/catalog/pure"; BASE="$CORE_DIR"
-CATALOG_GIVEN=0; PROJECT=""
+CATALOG_GIVEN=0; PROJECT=""; IMPORT_FILE=""
 CONTRACT="$CORE_DIR/contracts/purity.md"; LIMIT=400
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -45,6 +51,7 @@ while [[ $# -gt 0 ]]; do
     --base) BASE="$2"; shift 2 ;;
     --contract) CONTRACT="$2"; shift 2 ;;
     --limit) LIMIT="$2"; shift 2 ;;
+    --entries) IMPORT_FILE="$2"; shift 2 ;;
     --project)
       # 프로젝트 모드: 그 저장소의 추적 파일 중 표식이 든 것 — 언어 상관없이 — 을 읽어
       # 그 저장소의 scv/core/catalog/pure 에 사전을 둔다(기기 · 협업자가 같은 사전을 본다).
@@ -86,7 +93,28 @@ while IFS= read -r f; do
   ENTRIES+="$(pc_extract_entries "$rel" < "$f")"$'\n'
 done < <(_pc_files)
 ENTRIES="$(printf '%s' "$ENTRIES" | LC_ALL=C awk 'NF')"
+# 0.98.0+ — 사전이 원본인 프로젝트: 항목을 사전 파일에서 읽는다(코드에는 주석이 없다). 옮기기(import)는 지금 사전과
+# 옮기기가 뽑은 항목을 합친다 — 같은 (파일, 이름)은 옮기기가 뽑은 것이 이긴다. 원본 표시: 사전 폴더의 SOURCE.
+SRC=0
+[[ -n "$PROJECT" && ( -f "$CATALOG/SOURCE" || "$MODE" == import ) ]] && SRC=1
+# @effect _pc_catalog_text
+# 이유: 사전 폴더의 md 파일들을 읽어 '@@FILE 이름' 줄로 이어 낸다
+_pc_catalog_text() {
+  local f
+  for f in "$CATALOG"/*.md; do [[ -f "$f" ]] && { printf '@@FILE %s\n' "$(basename "$f")"; cat "$f"; printf '\n'; }; done
+}
+if [[ $SRC -eq 1 ]]; then
+  _PC_FROM_CAT="$(pc_entries_from_catalog "$(_pc_catalog_text)")"
+  if [[ "$MODE" == import ]]; then
+    [[ -n "$IMPORT_FILE" && -f "$IMPORT_FILE" ]] || { echo "✖ import: --entries FILE 이 필요하다" >&2; exit 2; }
+    _PC_NEW="$(LC_ALL=C awk 'NF' "$IMPORT_FILE")"
+    ENTRIES="$(printf '%s\n%s\n%s\n' "$_PC_NEW" "$_PC_FROM_CAT" "$ENTRIES" | LC_ALL=C awk -F'\t' 'NF >= 3 && !seen[$1 FS $3]++')"
+  else
+    ENTRIES="$_PC_FROM_CAT"
+  fi
+fi
 COUNT="$(printf '%s' "$ENTRIES" | LC_ALL=C awk 'NF' | wc -l | tr -d ' ')"
+[[ $SRC -eq 1 ]] && export PC_SOURCE=1
 # 예시를 실제로 돌리는 것은 셸 함수만 — 다른 언어는 칸만 보고 예시 글끼리 중복을 견준다.
 PC_ALL="$(printf '%s\n' "$ENTRIES" | LC_ALL=C awk -F'\t' '$1 ~ /\.sh$/')"
 PC_TEXT="$(printf '%s\n' "$ENTRIES" | LC_ALL=C awk -F'\t' 'NF && $1 !~ /\.sh$/')"
@@ -259,19 +287,21 @@ _pc_file_text() { printf '%s\n' "$RENDERED" | LC_ALL=C awk -v f="$1" '/^@@FILE /
 
 # ---------------------------------------------------------------- 출구: build
 
-if [[ "$MODE" == "build" ]]; then
+if [[ "$MODE" == "build" || "$MODE" == "import" ]]; then
   if [[ $NO_HOME -eq 1 ]]; then
     echo "✖ 사전 자리가 없다: $( dirname "$( dirname "$( dirname "$CATALOG" )" )" ) — 저장소(scv/ 가 있는 곳)에서 만든다" >&2; exit 2
   fi
   mkdir -p "$CATALOG"
   for old in "$CATALOG"/*.md; do
     [[ -e "$old" ]] || continue
+    case "$(basename "$old")" in effects.md|notes.md) continue ;; esac   # 원본 사전의 부수효과 · 메모는 렌더하지 않는다
     _pc_files_in_render | grep -qxF "$(basename "$old")" || rm -f "$old"
   done
   while IFS= read -r f; do
     _pc_file_text "$f" > "$CATALOG/$f"
   done < <(_pc_files_in_render)
-  echo "OK  catalog: ${COUNT}개 함수 → $(_pc_files_in_render | wc -l | tr -d ' ')개 파일 ($CATALOG)"
+  [[ "$MODE" == import ]] && printf 'catalog\n' > "$CATALOG/SOURCE"
+  echo "OK  catalog: ${COUNT}개 함수 → $(_pc_files_in_render | wc -l | tr -d ' ')개 파일 ($CATALOG)$([[ $SRC -eq 1 ]] && printf ' · 사전이 원본')"
   # 0.81.0+ — 선언 없는 함수(@pure · @deterministic · @effect 어느 것도 없음)의 기준선: 줄면 내리고, 늘리지는 않는다.
   _pd_args=(baseline update --baseline "$CATALOG/undeclared-baseline" --root "$ROOT"); [[ -n "$PROJECT" ]] && _pd_args+=(--project)
   bash "$SCRIPT_DIR/pure-declare.sh" "${_pd_args[@]}" 2>/dev/null | sed 's/^/    /' || true
@@ -352,9 +382,27 @@ STALE=""
 done < <(_pc_files_in_render)
 [[ $NO_HOME -eq 1 ]] || for old in "$CATALOG"/*.md; do
   [[ -e "$old" ]] || continue
+  case "$(basename "$old")" in effects.md|notes.md) continue ;; esac
   _pc_files_in_render | grep -qxF "$(basename "$old")" || STALE+=" $(basename "$old")"
 done
-[[ -z "$STALE" ]] || report "✖ 사전이 낡았다:$STALE — 다시 만들기: bash core/scripts/pure-catalog.sh build"
+# 0.98.0+ — 사전이 원본: 항목의 함수가 코드에 없으면 낡음(지워졌거나 이름이 바뀜), 코드에 남은 주석은 위반.
+if [[ $SRC -eq 1 ]]; then
+  while IFS=$'\t' read -r _f _t _n _rest; do
+    [[ -n "$_n" ]] || continue
+    if [[ ! -f "$BASE/$_f" ]] || ! grep -qw -- "$_n" "$BASE/$_f" 2>/dev/null; then report "✖ 사전 항목의 함수가 코드에 없다: $_n ($_f) — 지웠거나 이름이 바뀌었으면 사전을 고쳐라"; fi
+  done <<< "$ENTRIES"
+  _cs_sw=""; declare -F settings_get >/dev/null 2>&1 && _cs_sw="$(cd "$BASE" && settings_get SCV_CATALOG_SOURCE 2>/dev/null | tr -d '"[:space:]' | tr '[:upper:]' '[:lower:]')"
+  # 끄면(off) 남은 주석을 세지 않는다 — 주석 막기만 풀린다(사전은 원본 그대로).
+  if [[ "$_cs_sw" != off ]] && command -v python3 >/dev/null 2>&1 && [[ -f "$SCRIPT_DIR/code-comments.py" ]]; then
+    _cc_out="$(cd "$BASE" && bash "$SCRIPT_DIR/comments-migrate.sh" files --root "$BASE" | python3 -I "$SCRIPT_DIR/code-comments.py" count-stdin 2>/dev/null)"
+    _cc_n="$(printf '%s\n' "$_cc_out" | sed -n 's/^TOTAL\t//p')"
+    if [[ "${_cc_n:-0}" -gt 0 ]]; then
+      report "✖ 코드에 주석 ${_cc_n}줄 — 이 프로젝트는 사전이 원본이다. 옮기기: bash $SCRIPT_DIR/comments-migrate.sh run --root $BASE"
+      printf '%s\n' "$_cc_out" | grep -v '^TOTAL' | head -5 | sed 's/^/      /' >&2
+    fi
+  fi
+fi
+[[ -z "$STALE" ]] || report "✖ 사전이 낡았다:$STALE — 다시 만들기: bash core/scripts/pure-catalog.sh build$([[ $SRC -eq 1 ]] && printf ' --project')"
 
 # 0.81.0+ — 선언 없는 함수 수가 기준선보다 늘면 실패(사전 자리가 있을 때만 — 설치본에는 기준선이 없다).
 if [[ $NO_HOME -eq 0 && -f "$CATALOG/undeclared-baseline" ]]; then

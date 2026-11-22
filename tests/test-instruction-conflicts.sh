@@ -80,7 +80,7 @@ has "$C/finish-report.md" '결론 줄 없이 불릿만' || miss+=" [끝 보고 �
 # 15개 규약(0.97.0 ask-mode 더함)의 글 모양 절은 글자까지 같다 — 한 곳만 고치면 두 가지 지시가 생긴다.
 kinds="$(for f in "$P"/*.md; do awk '/^## Plain language first/{f=1;next} f&&/^## /{exit} f' "$f" | cksum; done | sort -u | wc -l | tr -d " ")"
 with="$( { grep -lF -- 'the result first in a short lead without a bullet' "$P"/*.md 2>/dev/null || true; } | wc -l | tr -d " ")"
-[[ "$with" == 15 && "$kinds" -le 2 ]] && ok "T9 15개 규약의 글 모양 절이 같은 글자" || bad "T9 글 모양 절: 새 문구 ${with}곳 · 서로 다른 본문 ${kinds}종"
+[[ "$with" == 16 && "$kinds" -le 2 ]] && ok "T9 16개 규약의 글 모양 절이 같은 글자" || bad "T9 글 모양 절: 새 문구 ${with}곳 · 서로 다른 본문 ${kinds}종"
 # 불릿 문장 기준 숫자는 lib/writing.sh 한 곳 — 문구에는 이유만 적는다.
 num="$( { grep -nE 'bullet[^.;]*[0-9]+ sentences|불릿[^.]*[0-9]+ ?문장' "$H/on-user-prompt.sh" "$P"/*.md "$C/writing.md" 2>/dev/null || true; } | { grep -vE '1[~–]2|_scv_first' || true; } | wc -l | tr -d " ")"
 # shellcheck source=../scripts/lib/writing.sh

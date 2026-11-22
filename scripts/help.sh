@@ -240,6 +240,7 @@ Skills
   action:mods       Update the installed SCV mods and list them (mods-install / mods-remove pick one)
   action:channel    Switch the installed SCV between dev / stage / prod (try new work before a release)
   action:ask-mode   Ask only at the start and the end (ends) or everywhere (all) — no argument flips
+  action:catalog-source  No comments in code — the pure-function catalog is the source (on moves them now; off lifts the ban)
   /scv:set-models Explain Claude Code session-level model selection compatibility
 
 EOF

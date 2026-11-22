@@ -23,7 +23,11 @@ declare -F scv_rc_allowed_out >/dev/null 2>&1 || source "${BASH_SOURCE[0]%/*}/ru
 # 예: lib/x.sh → "sh"
 # 예: app/m.py → "py"
 # 예: README.md → ""
+# 예: src/a.rs on → "rs"
+# 예: src/a.rs → ""
+# 두 번째 값이 on 이면 러스트도 판정한다(0.98.0+ — 사전이 원본인 프로젝트만: 옛 프로젝트의 기준선이 갑자기 늘지 않게).
 scv_pd_lang() {
+  [[ "${2:-}" == on && "${1:-}" == *.rs ]] && { printf 'rs'; return 0; }
   case "${1:-}" in
     *.sh|*.bash) printf 'sh' ;;
     *.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs|*.mts|*.cts) printf 'js' ;;
@@ -41,6 +45,7 @@ scv_pd_lang() {
 # 예: js "const pick = (a, b) => a" → "pick"
 # 예: py "    def _helper(self, x):" → "_helper"
 # 예: go "func (s *S) Run() error {" → "Run"
+# 예: rs "    pub fn grade_affixes(g: u8) -> u8 {" → "grade_affixes"
 # 예: js "return fn(x)" → ""
 scv_pd_line_function() {
   local lang="${1:-}" l="${2:-}"
@@ -51,11 +56,13 @@ scv_pd_line_function() {
   local re_js2='^[[:space:]]*(export[[:space:]]+)?(const|let|var)[[:space:]]+([A-Za-z_$][A-Za-z0-9_$]*)[[:space:]]*(:[^=]*)?=[[:space:]]*(async[[:space:]]*)?(function|(\([^)]*\)|[A-Za-z_$][A-Za-z0-9_$]*)[[:space:]]*(:[^=]*)?=['"$gt"'])'
   local re_py='^[[:space:]]*(async[[:space:]]+)?def[[:space:]]+([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*\('
   local re_go='^func[[:space:]]+(\([^)]*\)[[:space:]]*)?([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*[(\[]'
+  local re_rs='^[[:space:]]*(pub(\([^)]*\))?[[:space:]]+)?((const|async|unsafe)[[:space:]]+)*fn[[:space:]]+([A-Za-z_][A-Za-z0-9_]*)'
   case "$lang" in
     sh) if [[ "$l" =~ $re_sh ]]; then printf '%s' "${BASH_REMATCH[2]}"; elif [[ "$l" =~ $re_sh2 ]]; then printf '%s' "${BASH_REMATCH[1]}"; fi ;;
     js) if [[ "$l" =~ $re_js1 ]]; then printf '%s' "${BASH_REMATCH[4]}"; elif [[ "$l" =~ $re_js2 ]]; then printf '%s' "${BASH_REMATCH[3]}"; fi ;;
     py) [[ "$l" =~ $re_py ]] && printf '%s' "${BASH_REMATCH[2]}" ;;
     go) [[ "$l" =~ $re_go ]] && printf '%s' "${BASH_REMATCH[2]}" ;;
+    rs) [[ "$l" =~ $re_rs ]] && printf '%s' "${BASH_REMATCH[5]}" ;;
   esac
   return 0
 }
@@ -71,7 +78,7 @@ scv_pd_functions() {
   [[ -n "$lang" ]] || return 0
   while IFS= read -r line || [[ -n "$line" ]]; do
     # 0.81.1+ — 함수 선언일 수 있는 줄만 판정한다(줄마다 판정을 부르면 340개 함수 저장소에서 25초 — 맥 CI 143초).
-    [[ "$line" == *"()"* || "$line" == *function* || "$line" == *"$arrow"* || "$line" == *"def "* || "$line" == func* ]] || continue
+    [[ "$line" == *"()"* || "$line" == *function* || "$line" == *"$arrow"* || "$line" == *"def "* || "$line" == func* || "$line" == *"fn "* ]] || continue
     n="$(scv_pd_line_function "$lang" "$line")"
     [[ -n "$n" ]] && out="${out:+$out$'\n'}$n"
   done <<< "$text"

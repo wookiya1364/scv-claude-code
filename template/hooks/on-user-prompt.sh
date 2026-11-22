@@ -49,7 +49,7 @@ _scv_read() {  # <KEY> — 라이브러리가 없으면 기본값으로 간다.
 INPUT="$(cat 2>/dev/null || true)"
 # 0.96.0+ — 매 턴 규칙 글(언어 · 확인 범위 · 답 모양 · 선택 · 실물 보여 주기)은 규약 지문마다 한 번만 전문으로 싣고, 그 밖의 턴은
 # 한 줄로 줄인다(계획 rules-once-no-caps). 같은 글이 매 턴 쌓이면 조심 규칙이 불어난다(Fable 5.2 가이드). 지문은 첫 턴 · 대화 요약
-# 뒤 · 규약을 다시 읽는 턴(SCV_HELP_RELOAD_EVERY)마다 바뀌고, 직전 답에 경고가 남은 턴도 전문이다. 판단은 model-prompting.sh rules
+# 뒤 · 비움 · 재개 때 다시 전문이다(0.97.1+ 맥락 표시 — 지문 아님), 직전 답에 규칙 어김 경고가 남은 턴도 전문이다. 판단은 model-prompting.sh rules
 # (원칙 글의 한 번만 싣기와 같은 지문). 판단할 수 없으면 full — 이 기능 전과 같다. 끄기: SCV_RULES_ONCE=off.
 _scv_rules="full"
 _scv_mp0="${SCV_CORE_ROOT:-$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.." 2>/dev/null && pwd )}/scripts/model-prompting.sh"
@@ -78,7 +78,7 @@ fi
 
 _scv_plain="$(_scv_read SCV_PLAIN_LANGUAGE | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]' || true)"
 if [[ "${_scv_plain:-on}" != "off" && "$_scv_rules" == "short" ]]; then
-  echo "[SCV 규칙] 이 세션에 실은 규칙(언어 · 확인 범위 · 답 모양 · 선택 · 실물 보여 주기 · 원칙)이 그대로 유효하다 — 경고가 있거나 규약을 다시 읽는 턴에 전문을 다시 싣는다."
+  echo "[SCV 규칙] 이 세션에 실은 규칙(언어 · 확인 범위 · 답 모양 · 선택 · 실물 보여 주기 · 원칙)이 그대로 유효하다 — 경고가 있거나 대화가 요약 · 재개된 턴에 전문을 다시 싣는다."
 elif [[ "${_scv_plain:-on}" != "off" ]]; then
   # 0.96.0+ — 문장 수 · 길이 상한 없음(숫자로 박은 길이 규칙은 글을 뚝뚝 끊는다 — 계획 rules-once-no-caps).
   cat <<PLAIN
@@ -370,6 +370,12 @@ except Exception:
           _scv_dm="$(printf '%s' "$_scv_diag" | bash "$_scv_hs_sh" diag "$(date +%H:%M 2>/dev/null || printf '?')" 2>/dev/null || printf 'full')"
           [[ "$_scv_dm" == brief* ]] && _scv_diag_mode="brief" && _scv_diag_at="${_scv_dm#brief }"
         fi
+      fi
+      # 0.98.0+ — 코드 주석 없이 사전이 원본(SCV_CATALOG_SOURCE, 기본 on — 키가 없으면 on, 적힌 off 는 그대로)인데 아직 옮기지
+      # 않았으면, 코드 주석을 사전으로 옮기고 지운 뒤 보고 한 줄을 싣는다(한 번만 — 사전 폴더의 SOURCE 표시). off 이거나 이미
+      # 옮긴 프로젝트는 도구를 띄우지 않는다.
+      if [[ ! -f scv/core/catalog/pure/SOURCE && "$(_scv_read SCV_CATALOG_SOURCE | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]')" != off && -f "$CORE_HOME/scripts/comments-migrate.sh" ]]; then
+        bash "$CORE_HOME/scripts/comments-migrate.sh" auto --root "$PWD" 2>/dev/null | head -c 1024 || true
       fi
       if [[ "$_scv_diag_mode" == "brief" ]]; then
         printf '%s\n' "$(scv_hstate_brief_line "$_scv_diag_at")"
