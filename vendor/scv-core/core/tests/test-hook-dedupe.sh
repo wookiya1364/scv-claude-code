@@ -6,6 +6,8 @@
 #   - 훅 출력 안에 이어서 = choice-gate.sh line + show-real.sh line(스스로 구한 것)
 #   - 훅이 부르는 model-prompting.sh kind 1번, choice-gate.sh 1번
 set -uo pipefail
+# 0.97.1+ 규칙 글은 맥락마다 한 번(SCV_RULES_ONCE) — 이 시험은 같은 세션에서 훅을 여러 번 부르며 매 턴 글 전체를 견주므로 끈다.
+export SCV_RULES_ONCE=off
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CORE="$(cd "$HERE/.." && pwd)"
 LIB="$CORE/scripts/lib"

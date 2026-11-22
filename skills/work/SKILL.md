@@ -372,6 +372,11 @@ displace:
   file-internal helpers included. A write that adds a function declaring neither is refused
   (`core/contracts/guard.md` Rule D), and `pure-catalog.sh check` fails when the count of
   undeclared functions rises above the baseline.
+  **A project whose catalog is the source (0.98.0+, `scv/core/catalog/pure/SOURCE` exists — on by default —
+  `SCV_CATALOG_SOURCE`, off only when the settings file says `off`):** its code holds no comments at all. Write the new function's entry in the
+  catalog first — `### <name>` with `- 역할:` · `- 위치: <file> · @pure · <lang>` · `- 예:` in the kind file, or
+  its `이유:` in `effects.md`; other notes go in `notes.md` — then the code without a comment. A write that
+  adds a comment line, or a function the catalog does not name, is refused (`core/contracts/guard.md`).
 - Choose the simplest implementation that fully satisfies the current requirement.
   Build for what is asked, not for a future that has not been specified.
 - Keep components modular with one clear concern, and boundaries a reader can name.

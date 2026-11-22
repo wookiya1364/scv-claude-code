@@ -15,7 +15,8 @@
 #   pc_lang_of              파일 경로 → 언어 표시(확장자)
 #   pc_text_duplicates      항목들 → 예시 글이 같은 짝 + 같은/다른 언어
 #   pc_allowed_filter       짝 + 예외 목록 → 남는 짝 · 이유 없는 예외
-#   pc_render_catalog       항목 + 종류 표 → 사전 파일 글들
+#   pc_render_catalog       항목 + 종류 표 → 사전 파일 글들 (PC_SOURCE=1 이면 '원본' 머리글)
+#   pc_entries_from_catalog 사전 파일 글들 → 함수 항목 (사전이 원본일 때의 입구)
 #   pc_oversize_files       사전 파일 글들 + 한도 → 한도를 넘은 파일
 #
 # 항목 한 줄은 탭으로 나뉜다: 파일 · 층 · 이름 · 역할 · 종류 · 예시들(\x1f 로 이음)
@@ -124,7 +125,8 @@ _PC_AWK_PC_RENDER_CATALOG='
       print "@@FILE INDEX.md"
       print "# 순수함수 사전 — 차례"
       print ""
-      print "> 생성물 — 손으로 고치지 말 것. 다시 만들기: `bash core/scripts/pure-catalog.sh build`"
+      if (ENVIRON["PC_SOURCE"] == "1") print "> 원본 — 함수 설명은 여기에만 둔다(코드에는 주석이 없다). 종류 파일을 고친 뒤 차례 다시 만들기: `pure-catalog.sh build --project`"
+      else print "> 생성물 — 손으로 고치지 말 것. 다시 만들기: `bash core/scripts/pure-catalog.sh build`"
       print ">"
       print "> 새 함수를 만들기 전에: 아래에서 종류를 고르고, 그 종류 파일 하나만 연다."
       print ""
@@ -149,11 +151,31 @@ _PC_AWK_PC_RENDER_CATALOG='
           for (x = 1; x <= n; x++) for (y = x + 1; y <= n; y++) if (key[y] < key[x]) { t = key[x]; key[x] = key[y]; key[y] = t; t = val[x]; val[x] = val[y]; val[y] = t }
           print "@@FILE " f
           printf "# %s — %s\n\n", flabel[f], ((flabel[f] in desc) ? desc[flabel[f]] : desc[order[o]])
-          printf "> 생성물 — 원본은 각 함수 위 주석(역할 · 종류 · 예). %d개.\n", n
+          if (ENVIRON["PC_SOURCE"] == "1") printf "> 원본 — 이 파일이 함수 설명의 원본이다(역할 · 위치 · 예). %d개.\n", n
+          else printf "> 생성물 — 원본은 각 함수 위 주석(역할 · 종류 · 예). %d개.\n", n
           for (x = 1; x <= n; x++) { print ""; print val[x] }
         }
       }
     }
+'
+
+_PC_AWK_PC_ENTRIES_FROM_CATALOG='
+    # "@@FILE 이름" 줄로 나뉜 사전 글 — 종류 파일의 머리 "# 종류 — 하는 일" 에서 종류를, "### 이름" 마다 항목 하나를 만든다.
+    function flush(z) {
+      if (name != "" && file != "") printf "%s\t%s\t%s\t%s\t%s\t%s\n", file, tier, name, role, kind, exs
+      name = ""; role = ""; file = ""; tier = ""; exs = ""
+    }
+    /^@@FILE / { flush(); kind = ""; skip = 0; f = substr($0, 8); if (f == "INDEX.md" || f == "effects.md" || f == "notes.md") skip = 1; next }
+    skip { next }
+    /^# / && kind == "" { k = substr($0, 3); i = index(k, " — "); kind = (i > 0 ? substr(k, 1, i - 1) : k); next }
+    /^### / { flush(); name = substr($0, 5); next }
+    /^- 역할: / { role = $0; sub(/^- 역할: /, "", role); next }
+    /^- 위치: / {
+      v = $0; sub(/^- 위치: /, "", v); n = split(v, part, " · ")
+      file = part[1]; tier = (n >= 2 ? part[2] : "@pure"); sub(/^@/, "", tier); next
+    }
+    /^- 예: / { e = $0; sub(/^- 예: /, "", e); sub(/^`/, "", e); sub(/`$/, "", e); exs = (exs == "" ? e : exs sep e); next }
+    END { flush() }
 '
 
 _PC_AWK_PC_TEXT_DUPLICATES='
@@ -412,6 +434,15 @@ pc_allowed_filter() {
 pc_render_catalog() {
   local entries="${1:-}" kinds="${2:-}" twins="${3:-}"
   printf '%s\n' "$entries" | PC_KINDS="$kinds" PC_TWINS="$twins" LC_ALL=C awk -F'\t' -v sep="$PC_SEP" "$_PC_AWK_PC_RENDER_CATALOG"
+}
+
+# @deterministic
+# 역할: 사전 파일 글들(@@FILE 줄로 나뉨)을 거꾸로 읽어 함수 항목 줄로 낸다 — 사전이 원본인 프로젝트(코드에 주석 없음)의 입구
+# 종류: 꺼내기/catalog
+# 예: $'@@FILE count.md\n# 세기 — 센다\n\n### f\n- 역할: 센다\n- 위치: lib/a.sh · @pure · sh\n- 예: `"a" → "1"`' → $'lib/a.sh\tpure\tf\t센다\t세기\t"a" → "1"'
+# 예: $'@@FILE INDEX.md\n# 차례\n### x\n- 위치: a.sh · @pure · sh' → ""
+pc_entries_from_catalog() {
+  printf '%s\n' "${1:-}" | LC_ALL=C awk -v sep="$PC_SEP" "$_PC_AWK_PC_ENTRIES_FROM_CATALOG"
 }
 
 # @deterministic
