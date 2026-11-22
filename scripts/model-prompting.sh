@@ -490,15 +490,20 @@ case "$cmd" in
     if [[ "$(scv_mp_switch "$(_setting SCV_RULES_ONCE)")" != "on" ]]; then echo full; exit 0; fi
     # 세션의 첫 턴에는 턴 폴더가 아직 없다(이 훅 뒤에 prompt 가 만든다) — 먼저 만들어 둬야 첫 턴의 표시가 남는다.
     [[ -n "$TDIR" && ! -e "$TDIR" && ! -L "$(dirname "$TDIR")" ]] && mkdir -p "$TDIR" 2>/dev/null
+    # 0.97.1+ — 판단 근거는 규약 지문이 아니라 '이 맥락에 규칙 전문을 실었다'는 표시(.rules-seen)다. 지문은 답 모양 어김(종료 훅의
+    # 다시 읽기) · 대화 요약 · 재개 때 지워지고 모델이 규약 표시(help mark)를 해야 다시 생기는데, 실제 긴 세션에서 모델이 표시를
+    # 건너뛰면 지문이 빈 채라 매 턴 전문이 실렸다(0.97.0 사람 턴 73 중 한 줄 3). 표시는 세션 시작 훅의 초기화(요약 · 비움 · 재개 — 규칙이 맥락에서 사라질 때)만 지운다.
     _rf=""; [[ -n "$TDIR" && -d "$TDIR" && ! -L "$TDIR" ]] && _rf="$TDIR/.rules-seen"
-    _rseen=""; [[ -n "$_rf" && -f "$_rf" && ! -L "$_rf" ]] && _rseen="$(_first_line "$_rf")"
+    _rseen=""; [[ -n "$_rf" && -s "$_rf" && ! -L "$_rf" ]] && _rseen="ctx"
+    # 직전 답이 규칙을 어긴 경고가 있으면 전문 — 가이드 원문 읽기 안내만 남은 경고는 규칙 어김이 아니라 세지 않는다.
     _rwarn=0
-    for _rw in "$WARN_FILE" "$JOURNAL_DIR/.help-warn"; do [[ -s "$_rw" && ! -L "$_rw" ]] && _rwarn=1; done
-    _rm="$(scv_mp_rules_show "$_rseen" "$NONCE" "$_rwarn")"
-    [[ "$_rm" == "full" && -n "$_rf" && -n "$NONCE" && ! -L "$_rf" ]] && printf '%s\n' "$NONCE" > "$_rf" 2>/dev/null
-    # 전문을 실은 턴은 표시를 남긴다 — 이 턴에 규약을 다시 읽으면(help mark) 지문이 새로 생기므로, 턴 끝(stop)이 그 새 지문을
-    # '본 것'으로 다시 적는다. 그러지 않으면 다음 턴이 옛 지문을 보고 전문을 한 번 더 싣는다(0.96.0 실제 세션에서 발견).
-    [[ "$_rm" == "full" && -n "$_rf" && ! -L "$TDIR/.rules-full" ]] && : > "$TDIR/.rules-full" 2>/dev/null
+    for _rw in "$WARN_FILE" "$JOURNAL_DIR/.help-warn"; do
+      [[ -s "$_rw" && ! -L "$_rw" ]] || continue
+      _rwt="$(head -c 4096 "$_rw" 2>/dev/null)"; _rwk="$(scv_mp_warn_keep "$_rwt")"
+      [[ "${_rwt//[[:space:]]/}" == "${_rwk//[[:space:]]/}" ]] || _rwarn=1
+    done
+    _rm="$(scv_mp_rules_show "$_rseen" "$_rseen" "$_rwarn")"
+    [[ "$_rm" == "full" && -n "$_rf" && ! -L "$_rf" ]] && printf 'ctx\n' > "$_rf" 2>/dev/null
     echo "$_rm"; exit 0 ;;
   human)
     # v0.65.0+ — 사람 입력(매 턴 훅이 자동 입력 밖의 모든 입력에 부른다): 자동 턴 표시를 지우고(이 기능 전에는 훅이 직접 지웠다),
@@ -657,12 +662,8 @@ case "$cmd" in
     ;;
   stop)
     ANSWER="$(head -c 65536 2>/dev/null || true)"
-    # 이번 턴에 규칙 글을 전문으로 실었으면, 지금(턴 끝)의 지문을 본 것으로 적는다 — 이 턴 도중 규약을 다시 읽어 지문이 바뀌었어도
-    # 다음 턴은 한 줄이다(계획 rules-once-no-caps 7단계). 표시는 한 번 쓰고 지운다.
-    if [[ -n "$TDIR" && -f "$TDIR/.rules-full" && ! -L "$TDIR/.rules-full" ]]; then
-      [[ -n "$NONCE" && ! -L "$TDIR/.rules-seen" ]] && printf '%s\n' "$NONCE" > "$TDIR/.rules-seen" 2>/dev/null
-      rm -f "$TDIR/.rules-full" 2>/dev/null
-    fi
+    # 0.97.1+ — 규칙 글 판단은 지문을 보지 않는다(rules 참고). 0.97.0 이 남긴 턴 끝 표시가 있으면 지운다.
+    [[ -n "$TDIR" && -f "$TDIR/.rules-full" && ! -L "$TDIR/.rules-full" ]] && rm -f "$TDIR/.rules-full" 2>/dev/null
     _effort_settle "$ANSWER" ""   # 0.89.2+ — 이번 턴에 effort 줄을 실었으면, 답에 그 질문이 있었는지 본다
     # v0.62.0+ — 매 턴 등록 판정: 이번 턴 표가 있고(매 턴 훅이 씀) 가이드 색인이 있을 때만. ok | block | warn.
     if _on; then

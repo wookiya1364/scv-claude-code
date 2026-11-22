@@ -150,7 +150,7 @@ store_deny_reason() {
   printf 'SCV guard: the receipt store at %s cannot be written, so no action can record itself and every guarded write is refused. This is a machine problem, not a workflow one — fix the directory permissions or point SCV_GUARD_STATE at a writable path.' "$STATE_DIR"
 }
 
-ACTIONS_RE="${SCV_GUARD_ACTIONS:-help|status|promote|work|codegen|deck|update|regression|report|sync|install-deps|workspace|handoff|set-models|routine|dreams|mods-install|mods-remove|mods|channel|ask-mode}"
+ACTIONS_RE="${SCV_GUARD_ACTIONS:-help|status|promote|work|codegen|deck|update|regression|report|sync|install-deps|workspace|handoff|set-models|routine|dreams|mods-install|mods-remove|mods|channel|ask-mode|catalog-source}"
 
 # ---------- help mark (0.80.0+) ---------------------------------------------
 # Rule H needs to know that this person's turn has called help (or carried another SCV action).
@@ -425,6 +425,13 @@ with open(os.path.join(out, "jobs.tsv"), "w") as j:
         while IFS=$'\t' read -r _rel _bf _af; do
           [[ -n "$_rel" ]] || continue
           _a=(gate --file "$_rel" --after "$_af"); [[ "$_bf" != "-" ]] && _a+=(--before "$_bf")
+          # 0.98.0+ — 사전이 원본인 프로젝트(사전 폴더의 SOURCE): 코드에 주석을 넣는 편집은 거절한다(계획 comments-to-catalog).
+          # 끄기(action:catalog-source off · SCV_CATALOG_SOURCE=off)는 주석 막기만 푼다 — 사전은 원본(SOURCE) 그대로.
+          if [[ -f "$PROJECT_ROOT/scv/core/catalog/pure/SOURCE" && -f "$_scv_mp_dir/code-comments.py" ]] \
+             && [[ "$(cd "$PROJECT_ROOT" && bash "$_scv_mp_dir/settings-set.sh" --get SCV_CATALOG_SOURCE 2>/dev/null | tr -d '"[:space:]' | tr '[:upper:]' '[:lower:]')" != off ]]; then
+            _w="$(python3 -I "$_scv_mp_dir/code-comments.py" "${_a[@]}" 2>/dev/null | head -c 2048)"
+            [[ -n "$_w" ]] && { _scv_pdwhy="$_w"; break; }
+          fi
           _w="$(cd "$PROJECT_ROOT" && bash "$_scv_pd" "${_a[@]}" 2>/dev/null | head -c 2048)"
           [[ -n "$_w" ]] && { _scv_pdwhy="$_w"; break; }
         done < "$_scv_pdw/jobs.tsv"

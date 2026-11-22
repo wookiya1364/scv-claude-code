@@ -180,6 +180,7 @@ You never need this table — conversation routes for you. For explicit control:
 | `/scv:mods` · `/scv:mods-install` · `/scv:mods-remove` | Update + list SCV mods · install one · remove one |
 | `/scv:channel` | Switch SCV dev · stage · prod — try new work pre-release |
 | `/scv:ask-mode` | Ask only at the start and the end, or everywhere |
+| `/scv:catalog-source` | No comments in code — the catalog is the source |
 
 ## Guardrails
 

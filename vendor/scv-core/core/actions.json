@@ -148,6 +148,13 @@
       "execution_class": "economy",
       "protocol": "protocols/ask-mode.md",
       "entrypoint": "scripts/ask-mode.sh"
+    },
+    {
+      "id": "catalog-source",
+      "owner": "core",
+      "execution_class": "economy",
+      "protocol": "protocols/catalog-source.md",
+      "entrypoint": "scripts/catalog-source.sh"
     }
   ]
 }
