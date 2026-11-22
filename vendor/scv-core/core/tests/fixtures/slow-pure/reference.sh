@@ -57,9 +57,10 @@ ref_scv_plan_conflict_before() {
 
 # 원래 자리: scripts/lib/help-state.sh
 ref_scv_lint_lang_turn() {
-  local last="${1:-}" turn="${2:-}" lang="${3:-}" line t pl infence=0 n=0 letters
+  local last="${1:-}" turn="${2:-}" lang="${3:-}" line t pl infence=0 n=0 letters lo hi h l
   local re_link='^(.*)\[[^]]*\]\([^)]*\)(.*)$' re_url='^(.*)https?://[^[:space:]]*(.*)$'
-  [[ "$lang" == korean || "$lang" == ko ]] || return 0
+  # 0.99.0+ — 설정 언어의 글자 범위로(계획 lang-follow-setting): 한국어 · 일본어 · 중국어.
+  case "$lang" in korean|ko) lo=$'\xea'; hi=$'\xed' ;; japanese|ja) lo=$'\xe3'; hi=$'\xe9' ;; chinese|zh) lo=$'\xe4'; hi=$'\xe9' ;; *) return 0 ;; esac
   while IFS= read -r line || [[ -n "$line" ]]; do
     t="${line#"${line%%[![:space:]]*}"}"
     if [[ "$t" == '```'* ]]; then infence=$(( 1 - infence )); continue; fi
@@ -69,9 +70,10 @@ ref_scv_lint_lang_turn() {
     # 0.79.0+ — 링크([글](주소))와 맨 주소는 이름이다 — 세지 않는다(15자로 낮추자 'PR을 열었음: [저장소#420](https://…)' 가 걸렸다).
     while [[ "$pl" =~ $re_link ]]; do pl="${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"; done
     while [[ "$pl" =~ $re_url ]]; do pl="${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"; done
-    letters="$(LC_ALL=C; printf '%s' "${pl//[^A-Za-z$'\xea'-$'\xed']/}")"
+    letters="$(LC_ALL=C; printf '%s' "${pl//[^A-Za-z$lo-$hi]/}")"
     (( ${#letters} >= 15 )) || continue
-    [[ "$(ref_scv_lint_hangul_ratio "$pl")" -lt 20 ]] && n=$((n + 1))
+    h="$(LC_ALL=C; x="${pl:0:4000}"; x="${x//[^$lo-$hi]/}"; printf '%s' "${#x}")"; l="$(LC_ALL=C; x="${pl:0:4000}"; x="${x//[^A-Za-z]/}"; printf '%s' "${#x}")"
+    if (( h + l == 0 )) || (( h * 100 / (h + l) < 20 )); then n=$((n + 1)); fi
   done <<< "$turn"$'\n'"$last"
   (( n > 0 )) && printf 'lang-mismatch-lines=%s\n' "$n"
   return 0
