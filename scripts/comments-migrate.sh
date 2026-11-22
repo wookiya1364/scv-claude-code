@@ -67,6 +67,31 @@ cm_catalog_keys() {
   done
 }
 
+# @effect cm_backup
+# 이유: 옮길 코드 파일들과 사전 폴더를 임시 폴더로 복사한다
+cm_backup() {
+  local list="$1" bak="$2" f rel
+  mkdir -p "$bak/files" || return 1
+  while IFS= read -r f; do
+    [[ -f "$f" ]] || continue
+    rel="${f#"$ROOT"/}"
+    mkdir -p "$bak/files/$(dirname "$rel")" && cp -p "$f" "$bak/files/$rel" || return 1
+  done < "$list"
+  if [[ -d "$CATALOG" ]]; then cp -Rp "$CATALOG" "$bak/catalog" || return 1; fi
+  return 0
+}
+
+# @effect cm_restore
+# 이유: 임시 폴더의 복사본으로 코드 파일과 사전 폴더를 되돌린다
+cm_restore() {
+  local bak="$1"
+  ( cd "$bak/files" && find . -type f ) | while IFS= read -r rel; do
+    cp -p "$bak/files/${rel#./}" "$ROOT/${rel#./}"
+  done
+  rm -rf "$CATALOG"
+  if [[ -d "$bak/catalog" ]]; then cp -Rp "$bak/catalog" "$CATALOG"; fi
+}
+
 # @effect cm_run
 # 이유: 사전 파일을 쓰고 코드 파일에서 주석을 지운다
 cm_run() {
@@ -75,9 +100,15 @@ cm_run() {
   tmp="$(mktemp -d "${TMPDIR:-/tmp}/scv-cm.XXXXXX")" || return 1
   list="$tmp/files"; ents="$tmp/entries.tsv"
   cm_files > "$list"
+  if (( ! DRY )); then
+    # 쓰기 전 복사본 — 사전 쓰기까지 끝나지 못하면 코드 · 사전을 옮기기 전 그대로 되돌린다(커밋 안 한 편집 포함).
+    cm_backup "$list" "$tmp/bak" || { echo "✖ 복사본을 만들지 못해 옮기지 않음" >&2; rm -rf "$tmp"; return 1; }
+  fi
   # 옮기기 전 사전 — 아직 원본이 아니면 코드 표식에서 한 번 만들어 둔다(잃는 항목 비교의 기준).
   [[ -f "$CATALOG/SOURCE" ]] || bash "$SCRIPT_DIR/pure-catalog.sh" build --project "$ROOT" >/dev/null 2>&1 || true
-  before="$(cm_catalog_keys | LC_ALL=C sort -u | grep -c . || true)"
+  sed "s|^$ROOT/||" "$list" > "$tmp/rel"
+  cm_catalog_keys | LC_ALL=C awk -F'\t' 'NR == FNR { f[$0] = 1; next } ($1 in f)' "$tmp/rel" - | LC_ALL=C sort -u > "$tmp/keys-before"
+  before="$(grep -c . "$tmp/keys-before" || true)"
   if (( DRY )); then
     summary="$(python3 -I "$SCRIPT_DIR/code-comments.py" migrate --root "$ROOT" --list "$list" --catalog "$CATALOG" --entries-out "$ents")"
     printf '%s\tcatalog_before=%s\tdry_run=1\n' "$summary" "${before:-0}"
@@ -85,15 +116,21 @@ cm_run() {
   fi
   # 잃는 항목이 없는지 먼저 본다: 쓰지 않고 뽑기만 해서 합친 수를 세고, 적으면 코드를 건드리지 않는다.
   python3 -I "$SCRIPT_DIR/code-comments.py" migrate --root "$ROOT" --list "$list" --catalog "$tmp/probe" --entries-out "$ents" --write-entries-only >/dev/null
-  merged="$( { LC_ALL=C awk -F'\t' 'NF >= 3 { print $1 "\t" $3 }' "$ents" 2>/dev/null; cm_catalog_keys; } | LC_ALL=C sort -u | grep -c . || true)"
-  if [[ "${merged:-0}" -lt "${before:-0}" ]]; then
-    echo "✖ 옮긴 뒤 사전 항목($merged)이 옮기기 전($before)보다 적다 — 코드를 건드리지 않고 멈춘다" >&2
+  LC_ALL=C awk -F'\t' 'NF >= 3 && $4 != "" { print $1 "\t" $3 }' "$ents" 2>/dev/null | LC_ALL=C sort -u > "$tmp/keys-new"
+  merged="$(LC_ALL=C comm -23 "$tmp/keys-before" "$tmp/keys-new" | grep -c . || true)"
+  if [[ "${merged:-0}" -gt 0 ]]; then
+    cm_restore "$tmp/bak"
+    echo "✖ 옮기기 전 사전에 있던 함수 ${merged}개가 옮긴 결과에 없다($(LC_ALL=C comm -23 "$tmp/keys-before" "$tmp/keys-new" | cut -f2 | head -5 | tr '\n' ' ')) — 코드를 건드리지 않고 멈춘다" >&2
     rm -rf "$tmp"; return 1
   fi
-  summary="$(python3 -I "$SCRIPT_DIR/code-comments.py" migrate --root "$ROOT" --list "$list" --catalog "$CATALOG" --entries-out "$ents" --write)"
-  bash "$SCRIPT_DIR/pure-catalog.sh" import --project "$ROOT" --entries "$ents" >/dev/null 2>&1 || { echo "✖ 사전 쓰기 실패" >&2; rm -rf "$tmp"; return 1; }
+  if ! summary="$(python3 -I "$SCRIPT_DIR/code-comments.py" migrate --root "$ROOT" --list "$list" --catalog "$CATALOG" --entries-out "$ents" --write)" \
+     || ! bash "$SCRIPT_DIR/pure-catalog.sh" import --project "$ROOT" --entries "$ents" >/dev/null 2>&1; then
+    cm_restore "$tmp/bak"
+    echo "✖ 사전 쓰기 실패 — 코드 · 사전을 옮기기 전으로 되돌림" >&2; rm -rf "$tmp"; return 1
+  fi
   after="$(cm_catalog_keys | LC_ALL=C sort -u | grep -c . || true)"
-  printf '%s\tcatalog_before=%s\tcatalog_after=%s\n' "$summary" "${before:-0}" "${after:-0}"
+  printf '%s\tcatalog_before=%s\tcatalog_after=%s\n' "$(printf '%s\n' "$summary" | grep '^MIGRATE' | tail -1)" "${before:-0}" "${after:-0}"
+  printf '%s\n' "$summary" | grep '^SKIPPED' || true
   rm -rf "$tmp"
 }
 
@@ -108,6 +145,8 @@ case "$MODE" in
     _l="$(printf '%s\n' "$_out" | grep '^MIGRATE' | tail -1)"
     printf '[SCV 주석 옮김] 코드 파일 %s개에서 주석 %s줄을 지우고 사전(scv/core/catalog/pure)으로 옮김 — 순수 함수 %s개 · 부수효과 %s개 · 메모 %s개. 사전이 이제 원본이다. 커밋은 직접(되돌리기: git checkout -- .).\n' \
       "$(cm_field "$_l" files)" "$(cm_field "$_l" comment_lines)" "$(cm_field "$_l" catalog_after)" "$(cm_field "$_l" effects)" "$(cm_field "$_l" notes)"
+    _sk="$(cm_field "$_l" skipped)"
+    [[ -n "$_sk" && "$_sk" != 0 ]] && printf '[SCV 주석 옮김] 지우면 문법이 깨지는 파일 %s개는 그대로 둠: %s\n' "$_sk" "$(printf '%s\n' "$_out" | awk -F'\t' '/^SKIPPED/ {print $2}' | head -5 | tr '\n' ' ')"
     ;;
   *) sed -n '2,15p' "$0" >&2; exit 2 ;;
 esac
