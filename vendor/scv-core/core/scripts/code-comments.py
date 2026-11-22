@@ -20,6 +20,7 @@ return values; only main() reads files and writes output.
 import json
 import os
 import re
+import subprocess
 import sys
 
 LANGS = {
@@ -31,6 +32,7 @@ LANGS = {
 }
 MARK_RE = re.compile(r'@(pure|deterministic|effect)\b[ \t]*([A-Za-z_$][A-Za-z0-9_$:.-]*)?')
 FIELD_RE = re.compile(r'(?:(?<=\s)|^)(역할|종류|예|이유)\s*:\s*')
+EX_RE = re.compile(r'(?:(?<=\s)|^)예\s*:\s*')
 DIRECTIVE_RE = re.compile(
     r'^(#!|shellcheck\b|eslint[- ]|@ts-|type:\s*ignore|noqa\b|pylint:|prettier-ignore|go:|nolint\b|'
     r'istanbul\b|c8\b|jshint\b|jscs:|tslint:|biome-ignore|deno-lint|@jsx|@flow|@refresh|#\s*sourceMappingURL)')
@@ -157,16 +159,17 @@ def _spans_py(text):
     return spans
 
 
-# @pure _spans_sh
-# 역할: 셸 글에서 주석 구간을 찾는다 — 따옴표 · $'…' · 여기 문서 · $# 는 건너뜀
+# @pure _sh_scan
+# 역할: 셸 글을 한 자리부터 끝 표시(맨 바깥 · 큰따옴표 · $( ) · ${ } · 역따옴표)까지 따라가며 주석 구간을 모으고 끝난 뒤 자리를 낸다
 # 종류: 꺼내기
-# 예: _spans_sh("echo $# # a") → [(8, 11)]
-def _spans_sh(text):
-    spans, i, n = [], 0, len(text)
-    heredocs = []
+# 예: _sh_scan('a"$(b)"', 0, None, [], []) → 7
+def _sh_scan(text, i, end, spans, heredocs):
+    n, depth, esc_end = len(text), 0, -1
+    code = end in (None, ')', '`')
     while i < n:
         c = text[i]
-        if c == '\n' and heredocs:
+        nx = text[i + 1] if i + 1 < n else ''
+        if code and c == '\n' and heredocs:
             j = i + 1
             while heredocs and j < n:
                 tag, strip_tabs = heredocs[0]
@@ -177,43 +180,60 @@ def _spans_sh(text):
                 j = e + 1
             i = j; continue
         if c == '\\':
-            i += 2; continue
+            i += 2; esc_end = i; continue
+        if end == '"' and c == '"':
+            return i + 1
+        if end == '}' and c == '}':
+            return i + 1
+        if end == '`' and c == '`':
+            return i + 1
+        if end == ')' and c == ')':
+            if depth == 0:
+                return i + 1
+            depth -= 1; i += 1; continue
+        if end == ')' and c == '(':
+            depth += 1; i += 1; continue
+        if c == '$' and nx == '{':
+            i = _sh_scan(text, i + 2, '}', spans, heredocs); continue
+        if c == '$' and nx == '(':
+            i = _sh_scan(text, i + 2, ')', spans, heredocs); continue
+        if c == '`' and end != '`':
+            i = _sh_scan(text, i + 1, '`', spans, heredocs); continue
+        if end == '"':
+            i += 1; continue
+        if c == '"':
+            i = _sh_scan(text, i + 1, '"', spans, heredocs); continue
         if c == "'":
             j = text.find("'", i + 1); i = n if j < 0 else j + 1; continue
-        if c == '$' and i + 1 < n and text[i + 1] == "'":
+        if end == '}':
+            i += 1; continue
+        if c == '$' and nx == "'":
             j = i + 2
             while j < n and text[j] != "'":
                 j += 2 if text[j] == '\\' else 1
             i = j + 1; continue
-        if c == '$' and i + 1 < n and text[i + 1] in '#{(':
-            if text[i + 1] == '#':
-                i += 2; continue
-            close = '}' if text[i + 1] == '{' else ')'
-            depth, j = 1, i + 2
-            while j < n and depth:
-                if text[j] == text[i + 1]:
-                    depth += 1
-                elif text[j] == close:
-                    depth -= 1
-                elif text[j] in '"\'':
-                    k = text.find(text[j], j + 1); j = n if k < 0 else k
-                j += 1
-            i = j; continue
-        if c == '"':
-            j = i + 1
-            while j < n and text[j] != '"':
-                j += 2 if text[j] == '\\' else 1
-            i = j + 1; continue
+        if c == '$' and nx == '#':
+            i += 2; continue
         if c == '<' and text.startswith('<<', i) and not text.startswith('<<<', i):
             m = re.match(r'<<(-?)[ \t]*(["\']?)([A-Za-z_][A-Za-z0-9_]*)\2', text[i:])
             if m:
                 heredocs.append((m.group(3), m.group(1) == '-')); i += len(m.group(0)); continue
-        if c == '#':
-            before = text[i - 1] if i else '\n'
-            if before in ' \t\n;|&()':
-                j = text.find('\n', i); j = n if j < 0 else j
-                spans.append((i, j)); i = j; continue
+        if c == '#' and i != esc_end and (i == 0 or text[i - 1] in ' \t\n;|&()'):
+            j = text.find('\n', i); j = n if j < 0 else j
+            if end == '`':
+                k = text.find('`', i, j); j = j if k < 0 else k
+            spans.append((i, j)); i = j; continue
         i += 1
+    return n
+
+
+# @pure _spans_sh
+# 역할: 셸 글에서 주석 구간을 찾는다 — 따옴표 · $'…' · $( ) · ${ } · 역따옴표가 겹쳐도 bash 처럼 따라가고, 여기 문서 · $# · 이스케이프된 공백 뒤 # 는 건너뜀
+# 종류: 꺼내기
+# 예: _spans_sh("echo $# # a") → [(8, 11)]
+def _spans_sh(text):
+    spans = []
+    _sh_scan(text, 0, None, spans, [])
     return spans
 
 
@@ -360,20 +380,24 @@ def comment_blocks(text, lang):
 
 
 # @pure parse_markers
-# 역할: 주석 덩어리 글에서 표식(@pure · @deterministic · @effect)마다 이름 · 역할 · 종류 · 예 · 이유와 남는 글을 뽑는다
+# 역할: 주석 덩어리 글에서 표식(@pure · @deterministic · @effect)마다 이름 · 역할 · 종류 · 예 · 이유와 남는 글을 뽑는다 — 표식은 줄 맨 앞에서만, 예: 뒤 글은 통째로 예시(예시 속 표식 · 칸 이름은 글)
 # 종류: 꺼내기
 # 예: parse_markers("@pure f 역할: 센다 종류: 세기 예: f(1) → 1")[0][0]["role"] → "센다"
 def parse_markers(text):
     out, rest = [], []
     cur = None
     for line in text.split('\n'):
-        m = MARK_RE.search(line)
+        m = MARK_RE.match(line.lstrip())
         if m:
             cur = {'tier': m.group(1), 'name': m.group(2) or '', 'role': '', 'kind': '', 'examples': [], 'reason': '', 'note': []}
             out.append(cur)
-            line = line[m.end():]
+            line = line.lstrip()[m.end():]
         if cur is None:
             rest.append(line); continue
+        em = EX_RE.search(line)
+        if em:
+            cur['examples'].append(line[em.end():].strip())
+            line = line[:em.start()]
         parts = FIELD_RE.split(line)
         lead = parts[0].strip()
         if lead:
@@ -524,6 +548,23 @@ def render_notes(records):
     return '\n'.join(out).rstrip('\n') + '\n', n
 
 
+# @effect syntax_ok
+# 이유: 셸 글은 bash -n 을 실행해 문법을 본다(파이썬 글은 compile 로 보고, 그 밖의 언어는 검사하지 않고 통과)
+def syntax_ok(text, lang):
+    if lang == 'sh':
+        try:
+            return subprocess.run(['bash', '-n'], input=text.encode('utf-8'), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+        except OSError:
+            return True
+    if lang == 'py':
+        try:
+            compile(text, '<strip>', 'exec')
+            return True
+        except (SyntaxError, ValueError):
+            return False
+    return True
+
+
 # @effect main
 # 이유: 파일을 읽고 쓰고, 표준 출력 · 종료 코드로 결과를 낸다
 def main(argv):
@@ -588,22 +629,28 @@ def main(argv):
             else:
                 opt[args[k]] = '1'; k += 1
         files = [l.strip() for l in open(opt['--list'], encoding='utf-8') if l.strip()]
-        records, texts = [], {}
+        records, texts, skipped = [], {}, []
         for p in files:
             lang = lang_of(p)
             if not lang or not os.path.isfile(p):
                 continue
             text = open(p, encoding='utf-8', errors='replace').read()
-            texts[p] = (text, lang)
             rel = os.path.relpath(p, opt['--root']) if opt.get('--root') else p
+            new = strip_comments(text, lang)
+            if new != text and not syntax_ok(new, lang) and syntax_ok(text, lang):
+                skipped.append(rel)
+                continue
+            texts[p] = (text, lang, new)
             records += scan_text(text, lang, rel)
         cat = opt['--catalog']
         eff, ne = render_effects(records)
         notes, nn = render_notes(records)
         ents = entries_tsv(records)
-        changed = sum(1 for p, (tx, lg) in texts.items() if strip_comments(tx, lg) != tx)
-        lines = sum(count_comment_lines(tx, lg) for tx, lg in texts.values())
-        print('MIGRATE\tfiles=%d\tcomment_lines=%d\tpure=%d\teffects=%d\tnotes=%d' % (changed, lines, len([e for e in ents.split('\n') if e]), ne, nn))
+        changed = sum(1 for tx, lg, nw in texts.values() if nw != tx)
+        lines = sum(count_comment_lines(tx, lg) for tx, lg, nw in texts.values())
+        print('MIGRATE\tfiles=%d\tcomment_lines=%d\tpure=%d\teffects=%d\tnotes=%d\tskipped=%d' % (changed, lines, len([e for e in ents.split('\n') if e]), ne, nn, len(skipped)))
+        for rel in skipped:
+            print('SKIPPED\t%s\t지우면 문법이 깨져 그대로 둠' % rel)
         if opt.get('--write-entries-only'):
             open(opt['--entries-out'], 'w', encoding='utf-8').write(ents + ('\n' if ents else ''))
             return 0
@@ -612,8 +659,7 @@ def main(argv):
             open(os.path.join(cat, 'effects.md'), 'w', encoding='utf-8').write(eff)
             open(os.path.join(cat, 'notes.md'), 'w', encoding='utf-8').write(notes)
             open(opt['--entries-out'], 'w', encoding='utf-8').write(ents + ('\n' if ents else ''))
-            for p, (tx, lg) in texts.items():
-                new = strip_comments(tx, lg)
+            for p, (tx, lg, new) in texts.items():
                 if new != tx:
                     open(p, 'w', encoding='utf-8').write(new)
         return 0
