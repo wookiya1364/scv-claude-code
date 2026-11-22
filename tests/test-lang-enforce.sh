@@ -57,7 +57,8 @@ c="$(jq -r '.hookSpecificOutput.additionalContext // empty' <<<"$o" 2>/dev/null)
 o="$(lang_hook "$R" "$TR")"
 { jl_asst "$EN1" a3; jl_tool; } >> "$TR"; o2="$(lang_hook "$R" "$TR")"
 c2="$(jq -r '.hookSpecificOutput.additionalContext // empty' <<<"$o2" 2>/dev/null)"
-[[ -z "$o" && "$c2" == *"1줄이"* ]] && ok "T3 본 글은 다시 안 봄 · 새 글 1줄만" || bad "T3 [$o] [$o2]"
+c0="$(jq -r '.hookSpecificOutput.additionalContext // empty' <<<"$o" 2>/dev/null)"
+[[ "$c0" == "$(scv_lang_remind_line korean)" && "$c2" == *"1줄이"* ]] && ok "T3 본 글은 다시 교정하지 않음(마지막 글이 영어라 짧은 알림만, 0.99.0) · 새 글 1줄만" || bad "T3 [$o] [$o2]"
 
 # T4 — 최종 답이 어긋나면 막는다, 한 턴에 한 번만
 R="$(new_repo t4 korean)"; TR="$WORK/t4.jsonl"; FINAL="**결과**"$'\n'"- $EN1"$'\n'"- $EN2"$'\n'"- $EN3"
@@ -153,6 +154,35 @@ A58="abcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefgh"
    && -z "$(scv_lang_first_other "모두 한국어로 씀" korean)" && -z "$(scv_lang_first_other "$EN1" english)" \
    && "$(scv_lang_fix_note korean 1 mid "")" == "[SCV 언어] 방금 쓴 글 중 1줄이 한국어가 아니다 — 다음 글부터 한국어로 써라(중간 보고 포함)." ]] \
   && ok "T11 걸린 줄 꺼내기(자를 때 한글 조각 뗌 · 코드 블록 건너뜀 · 한국어 · english 는 빈 값 · 예 없으면 옛 문구)" || bad "T11 꺼내기"
+
+# T12 — 한 줄 규칙 턴에도 설정 언어 줄(계획 lang-follow-setting T1): 둘째 턴(규칙 한 줄)에도 언어 줄, 설정 없음 · english 는 없음
+prompt_twice() {  # <저장소> → 둘째 사람 턴 훅 출력
+  (cd "$1" && for _k in 1 2; do printf '{"prompt":"x","session_id":"s12"}' | CLAUDE_PLUGIN_ROOT="$CORE" bash "$PROMPT_HOOK" 2>/dev/null; echo "@@TURN"; done) | awk '/^@@TURN/{n++; next} n==1'
+}
+q1="$(prompt_twice "$(new_repo t12a korean)")"; q2="$(prompt_twice "$(new_repo t12b japanese)")"
+q3="$(prompt_twice "$(new_repo t12c "")")"; q4="$(prompt_twice "$(new_repo t12d english)")"
+[[ "$q1" == *"[SCV 규칙]"* && "$q1" == *"[SCV 언어] 사용자에게"* && "$q2" == *"[SCV language] Write every message in japanese"* \
+   && "$q3" != *"[SCV 언어]"* && "$q3" != *"[SCV language]"* && "$q4" != *"[SCV language]"* ]] \
+  && ok "T12 한 줄 규칙 턴에도 설정 언어 줄(korean · japanese) · 설정 없음 · english 는 없음" || bad "T12 [$q1] [$q2] [$q3] [$q4]"
+
+# T13 — 여러 언어 판정(계획 lang-follow-setting T2): 글자로 구별되는 설정 언어에서 다른 언어 줄만 센다
+JA="次のテストを実行して、結果を確認してから設定を直します。"; ZH="现在运行下一组测试，然后检查结果并修正设置。"
+[[ "$(scv_lint_lang_turn "" "$EN1" japanese)" == "lang-mismatch-lines=1" && -z "$(scv_lint_lang_turn "" "$JA" japanese)" \
+   && "$(scv_lint_lang_turn "" "$EN1" chinese)" == "lang-mismatch-lines=1" && -z "$(scv_lint_lang_turn "" "$ZH" zh)" \
+   && "$(scv_lint_lang_turn "" "$EN1" korean)" == "lang-mismatch-lines=1" && -z "$(scv_lint_lang_turn "" "$EN1" english)" \
+   && -z "$(scv_lint_lang_turn "" "$EN1" spanish)" && "$(scv_lang_fix_note japanese 2 mid "x")" == *"[SCV language] 2 line(s) you just wrote are not in japanese"* ]] \
+  && ok "T13 여러 언어 판정(japanese · chinese · korean 은 영어 줄을 셈 · english · 글자로 못 가르는 언어는 세지 않음 · 교정 문구는 언어 이름)" \
+  || bad "T13 ja=[$(scv_lint_lang_turn "" "$EN1" japanese)] ja2=[$(scv_lint_lang_turn "" "$JA" japanese)] zh=[$(scv_lint_lang_turn "" "$EN1" chinese)] note=[$(scv_lang_fix_note japanese 2 mid x)]"
+
+# T14 — 도구 뒤 알림(계획 lang-follow-setting T3): 이번 턴에 글이 없거나 마지막 글이 설정 언어가 아니면 짧은 알림, 설정 언어면 없음
+R="$(new_repo t14 korean)"; TR="$WORK/t14.jsonl"; { jl_user "만들어 줘"; jl_tool; } > "$TR"
+a1="$(jq -r '.hookSpecificOutput.additionalContext // empty' <<<"$(lang_hook "$R" "$TR")" 2>/dev/null)"
+{ jl_asst "결과를 보고 다음 시험을 돌리는 중임 — 한국어로 쓴 중간 보고" k1; jl_tool; } >> "$TR"; a2="$(lang_hook "$R" "$TR")"
+R2="$(new_repo t14b japanese)"; TR2="$WORK/t14b.jsonl"; { jl_user "作って"; jl_tool; } > "$TR2"
+a3="$(jq -r '.hookSpecificOutput.additionalContext // empty' <<<"$(lang_hook "$R2" "$TR2")" 2>/dev/null)"
+R3="$(new_repo t14c korean)"; TR3="$WORK/t14c.jsonl"; { jl_user "이번 답은 영어로 써 줘"; jl_tool; } > "$TR3"; a4="$(lang_hook "$R3" "$TR3")"
+[[ "$a1" == "$(scv_lang_remind_line korean)" && -n "$a1" && -z "$a2" && "$a3" == *"japanese"* && -z "$a4" ]] \
+  && ok "T14 도구 뒤 알림(글 없음 → 한 줄 · 마지막 글이 설정 언어 → 없음 · japanese · 다른 언어 요청이면 없음)" || bad "T14 [$a1] [$a2] [$a3] [$a4]"
 
 # 순수 함수 직접 확인
 [[ "$(scv_lang_stop_decide 2 0)" == block && "$(scv_lang_stop_decide 2 1)" == ok && -z "$(scv_lang_rule_line english)" ]] \

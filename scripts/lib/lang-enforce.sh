@@ -9,6 +9,8 @@
 #   scv_lang_stop_decide <최종 답 줄 수> <이미 전달 0|1> → block | ok
 #   scv_lang_user_other <이번 턴 사용자 글>              → 1(사용자가 다른 언어를 요청하거나 다른 언어로 씀) | 0
 #   scv_lang_drop_machine <글>                    → 기계 글 블록(알림 · 시스템 안내 · 명령 기록)을 뺀 글 (0.81.5)
+#   scv_lang_text_ok <글> <언어>                  → 1(설정 언어로 쓴 글) | 0 (0.99.0)
+#   scv_lang_remind_line <언어>                   → 도구 결과 뒤 짧은 알림 한 줄 | 빈 값 (0.99.0)
 #
 # 판정 자체(다른 언어 줄 세기)는 lib/help-state.sh 의 scv_lint_lang_turn 이 한다 — 여기서 다시 만들지 않는다.
 # 꺾쇠 글자는 쓰지 않는다 — 순수성 검사가 리다이렉션으로 본다.
@@ -67,6 +69,7 @@ scv_lang_new_text() {
 # 예: korean 2 final → "[SCV 언어] 최종 답 중 2줄이 한국어가 아니다 — 그 줄만 한국어로 고쳐 다시 써라."
 # 예: korean 1 mid "Next I'll run the tests." → "[SCV 언어] 방금 쓴 글 중 1줄이 한국어가 아니다(예: “Next I'll run the tests.”) — 다음 글부터 한국어로 써라(중간 보고 포함)."
 # 예: korean 0 mid → ""
+# 예: japanese 2 mid → "[SCV language] 2 line(s) you just wrote are not in japanese — write the next message in japanese, progress notes included."
 # <언어> <줄 수> <mid|final> [<걸린 줄>] → 한 줄 | 빈 값(줄 수 0 · 언어 없음).
 # 걸린 줄을 싣는 까닭(0.82.0): 줄 수만 말하면 모델이 '이미 한국어로 썼다'고 믿고 헛경고로 넘긴다 — 2026-11-05 한 세션에서
 # 중간 보고 영어 줄을 10번 넘게 잡았는데 한 번도 고쳐지지 않았다.
@@ -74,6 +77,16 @@ scv_lang_fix_note() {
   local lang="${1:-}" n="${2:-0}" where="${3:-mid}" ex="${4:-}" name eg=""
   [[ "$n" =~ ^[0-9]+$ ]] && (( n > 0 )) || return 0
   case "$lang" in korean|ko) name="한국어" ;; ""|english|en) return 0 ;; *) name="$lang" ;; esac
+  if [[ "$name" != 한국어 ]]; then
+    # 0.99.0+ — 한국어가 아닌 설정 언어는 규칙 줄처럼 영어 문장에 언어 이름을 넣는다(계획 lang-follow-setting).
+    [[ -n "$ex" ]] && eg=" (e.g. “${ex}”)"
+    if [[ "$where" == final ]]; then
+      printf '%s\n' "[SCV language] ${n} line(s) of the final answer are not in ${name}${eg} — rewrite only those lines in ${name}."
+    else
+      printf '%s\n' "[SCV language] ${n} line(s) you just wrote are not in ${name}${eg} — write the next message in ${name}, progress notes included."
+    fi
+    return 0
+  fi
   [[ -n "$ex" ]] && eg="(예: “${ex}”)"
   if [[ "$where" == final ]]; then
     printf '%s\n' "[SCV 언어] 최종 답 중 ${n}줄이 ${name}가 아니다${eg} — 그 줄만 ${name}로 고쳐 다시 써라."
@@ -103,6 +116,40 @@ scv_lang_first_other() {
     printf '%s' "$cut"
     return 0
   done <<< "$text"
+}
+
+# @pure
+# 역할: 글이 설정 언어로 쓰였다고 판정되면 1 을 낸다 — 설정 언어 글자가 다섯 개 이상이고 다른 언어 줄이 없을 때
+# 종류: 판정
+# 예: "결과를 보고 다음 시험을 돌리는 중임" korean → "1"
+# 예: "Now running the next test suite." korean → "0"
+# 예: "확인" korean → "0"
+# 예: "" korean → "0"
+# <글> <언어> → 1 | 0. 글자로 가를 수 없는 언어는 0(판정 못 함). 다른 언어 줄은 scv_lint_lang_turn 에 맡긴다.
+scv_lang_text_ok() {
+  local text="${1:-}" lang="${2:-}" rng lo hi x
+  rng="$(scv_lang_script "$lang")"
+  [[ -n "$text" && -n "$rng" ]] || { printf '0'; return 0; }
+  lo="$(printf "\\x${rng%%-*}")"; hi="$(printf "\\x${rng#*-}")"
+  x="$(LC_ALL=C; t="${text:0:4000}"; t="${t//[^$lo-$hi]/}"; printf '%s' "${#t}")"
+  if (( x >= 5 )) && [[ -z "$(scv_lint_lang_turn "" "$text" "$lang")" ]]; then printf '1'; else printf '0'; fi
+}
+
+# @pure
+# 역할: 도구 결과 뒤에 실을 짧은 설정 언어 알림 한 줄을 만든다 — 다음 글을 쓰기 전에 보게
+# 종류: 조립/lang
+# 예: korean → "[SCV 언어] 다음 글(중간 보고 포함)도 한국어로."
+# 예: japanese → "[SCV language] Next message (progress notes too) in japanese."
+# 예: english → ""
+# 예: spanish → ""
+# <언어> → 한 줄 | 빈 값. 글자로 가를 수 없는 언어는 빈 값 — 직전 글이 그 언어인지 몰라 도구마다 붙게 되므로.
+scv_lang_remind_line() {
+  local lang="${1:-}"
+  [[ -n "$(scv_lang_script "$lang")" ]] || return 0
+  case "$lang" in
+    korean|ko) printf '%s\n' "[SCV 언어] 다음 글(중간 보고 포함)도 한국어로." ;;
+    *) printf '%s\n' "[SCV language] Next message (progress notes too) in $lang." ;;
+  esac
 }
 
 # @pure

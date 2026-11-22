@@ -30,7 +30,8 @@ for _scv_f in settings.sh help-state.sh lang-enforce.sh turn-stream.sh; do
 done
 
 _scv_lang="$(settings_get SCV_LANG 2>/dev/null | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]' || true)"
-[[ "$_scv_lang" == korean || "$_scv_lang" == ko ]] || exit 0
+# 0.99.0+ — 글자로 가를 수 있는 설정 언어면 모두 본다(한국어 · 일본어 · 중국어, 계획 lang-follow-setting).
+[[ -n "$(scv_lang_script "$_scv_lang")" ]] || exit 0
 _scv_lint="$(settings_get SCV_ANSWER_LINT 2>/dev/null | tr -d '"[:space:]' | tr '[:upper:]' '[:lower:]' || true)"
 [[ "$_scv_lint" == off ]] && exit 0
 
@@ -55,17 +56,27 @@ _scv_seen=""
 [[ -f "$_scv_seen_file" && ! -L "$_scv_seen_file" ]] && _scv_seen="$(head -c 256 "$_scv_seen_file" 2>/dev/null | head -n 1)"
 
 _scv_list="$(_scv_turn_texts 400 | tail -c 65536)"
-[[ -n "$_scv_list" ]] || exit 0
+# 0.99.0+ — 쓰기 전에 막기: 이번 턴에 아직 글이 없거나 마지막 글이 설정 언어로 판정되지 않으면 짧은 알림을 싣는다(교정할 새 글이 없을 때).
+#   쓴 뒤에 고치는 교정만으로는 한 세션에서 약 99번 경고하고도 영어가 다시 나왔다(2026-11-22, 계획 lang-follow-setting).
+_scv_remind() {
+  [[ "$(scv_lang_user_other "$(_scv_turn_prompt_wide)")" == 1 ]] && return 0
+  local _l="" _r
+  [[ -n "$_scv_list" ]] && { _l="$(printf '%s\n' "$_scv_list" | tail -n 1)"; _l="${_l#*$'\x1f'}"; _l="${_l//$'\x1e'/$'\n'}"; }
+  [[ "$(scv_lang_text_ok "$_l" "$_scv_lang")" == 1 ]] && return 0
+  _r="$(scv_lang_remind_line "$_scv_lang")"; [[ -n "$_r" ]] || return 0
+  jq -cn --arg c "$_r" '{hookSpecificOutput:{hookEventName:"PostToolUse",additionalContext:$c}}' 2>/dev/null || true
+}
+[[ -n "$_scv_list" ]] || { _scv_remind; exit 0; }
 _scv_new="$(scv_lang_new_text "$_scv_list" "$_scv_seen")"
-[[ -n "$_scv_new" ]] || exit 0
+[[ -n "$_scv_new" ]] || { _scv_remind; exit 0; }
 _scv_lastid="${_scv_new%%$'\x1f'*}"; _scv_text="${_scv_new#*$'\x1f'}"
 if [[ "$_scv_lastid" != "$_scv_seen" && ! -L "$_scv_seen_file" ]] && mkdir -p "$_scv_tdir" 2>/dev/null; then
   printf '%s\n' "$_scv_lastid" > "$_scv_seen_file" 2>/dev/null || true
 fi
-[[ "$_scv_text" == *[![:space:]]* ]] || exit 0
+[[ "$_scv_text" == *[![:space:]]* ]] || { _scv_remind; exit 0; }
 
 _scv_n="$(scv_lint_lang_turn "" "$_scv_text" "$_scv_lang" | sed -n 's/^lang-mismatch-lines=//p')"
-[[ "${_scv_n:-0}" =~ ^[1-9][0-9]*$ ]] || exit 0
+[[ "${_scv_n:-0}" =~ ^[1-9][0-9]*$ ]] || { _scv_remind; exit 0; }
 # 사용자가 이 턴에 다른 언어를 요청했거나 다른 언어로 썼으면 교정하지 않는다(SCV.md Top-level rules 7조).
 # 어긋난 줄이 있을 때만 찾는다 — 긴 턴에서 넓혀 찾는 비용은 이때만 든다(0.81.2+).
 [[ "$(scv_lang_user_other "$(_scv_turn_prompt_wide)")" == 1 ]] && exit 0

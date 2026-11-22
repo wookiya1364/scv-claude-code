@@ -61,10 +61,11 @@ if [[ -f "$_scv_mp0" && -n "$INPUT" ]] && command -v jq >/dev/null 2>&1; then
   fi
 fi
 
-# 0.79.0+ — 설정 언어 규칙 한 줄을 맨 앞에(계획 lang-enforce-079): 긴 작업 중 중간 보고가 다른 언어로 흐르던 일(2026-11-03 slay
+# 0.79.0+ — 설정 언어 규칙 한 줄을 맨 앞에(계획 lang-enforce-079): 긴 작업 중 중간 보고가 다른 언어로 흐르던 일(2026-11-03 다른 프로젝트
 # 세션, 영어 최대 35줄). 언어가 없거나 english 면 아무것도 싣지 않는다 — 이 구간을 지운 훅과 출력이 같다.
 _scv_langlib="${SCV_CORE_ROOT:-$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.." 2>/dev/null && pwd )}/scripts/lib/lang-enforce.sh"
-if [[ "$_scv_rules" == "full" && -f "$_scv_langlib" ]]; then
+# 0.99.0+ — 규칙이 한 줄인 턴에도 싣는다: 한 줄만 실린 턴에 긴 답이 통째로 영어로 나왔다(2026-11-22 다른 프로젝트 세션, 계획 lang-follow-setting).
+if [[ -f "$_scv_langlib" ]]; then
   # shellcheck disable=SC1090
   source "$_scv_langlib" 2>/dev/null && scv_lang_rule_line "$(_scv_read SCV_LANG | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]')" 2>/dev/null || true
 fi
