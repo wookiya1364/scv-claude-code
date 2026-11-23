@@ -181,6 +181,7 @@ You never need this table — conversation routes for you. For explicit control:
 | `/scv:channel` | Switch SCV dev · stage · prod — try new work pre-release |
 | `/scv:ask-mode` | Ask only at the start and the end, or everywhere |
 | `/scv:catalog-source` | No comments in code — the catalog is the source |
+| `/scv:gear` | Run or make gears — reusable work units in `scv/gears/` |
 
 ## Guardrails
 

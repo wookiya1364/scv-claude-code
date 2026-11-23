@@ -267,7 +267,7 @@ else:
 expected = {
     "channel", "codegen", "deck", "dreams", "handoff", "help", "install-deps", "promote",
     "mods", "mods-install", "mods-remove", "regression", "report", "routine",
-    "set-models", "status", "sync", "update", "work", "workspace", "ask-mode", "catalog-source",
+    "set-models", "status", "sync", "update", "work", "workspace", "ask-mode", "catalog-source", "gear",
 }
 if set(action_items) != expected:
     raise SystemExit(

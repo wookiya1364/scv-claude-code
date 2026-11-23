@@ -29,13 +29,13 @@ set -euo pipefail
 PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMMANDS_DIR="$PLUGIN_ROOT/skills"
 
-COMMANDS=(status report update install-deps set-models sync help promote codegen regression work workspace handoff deck routine dreams mods mods-install mods-remove channel ask-mode catalog-source)
+COMMANDS=(status report update install-deps set-models sync help promote codegen regression work workspace handoff deck routine dreams mods mods-install mods-remove channel ask-mode catalog-source gear)
 
 # recommended policy mapping (single source of truth)
 recommended_for() {
   case "$1" in
     status|report|update|install-deps|set-models|workspace|dreams|mods|mods-install|mods-remove|channel|ask-mode|catalog-source) echo "haiku" ;;
-    sync|help|promote|codegen|regression|work|handoff|deck|routine) echo "opus" ;;
+    sync|help|promote|codegen|regression|work|handoff|deck|routine|gear) echo "opus" ;;
     *) echo "" ;;
   esac
 }
