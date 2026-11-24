@@ -100,3 +100,27 @@ _scv_turn_prompt_wide() {
   done
   return 0
 }
+
+# @effect _scv_turn_tool_count
+# 이유: 대화 기록 파일의 끝 쪽을 읽어, 마지막 사람 프롬프트 뒤에 주어진 이름의 도구를 부른 횟수를 낸다 — 창 안에서 턴 경계를 못 찾으면 아무것도 내지 않는다(모름)
+_scv_turn_tool_count() {  # <도구 이름>
+  local n s="" total
+  [[ -n "${1:-}" && -n "${TRANSCRIPT:-}" && -f "$TRANSCRIPT" ]] || return 0
+  total="$(wc -l < "$TRANSCRIPT" 2>/dev/null | tr -d ' ')"; [[ "$total" =~ ^[0-9]+$ ]] || total=0
+  for n in 400 4000 40000; do
+    s="$(tail -n "$n" "$TRANSCRIPT" 2>/dev/null \
+      | jq -Rrn --arg t "$1" '[inputs | fromjson? | if .type? == "user" then
+                  (if (.isMeta? == true) or (.sourceToolUseID? != null) then empty
+                   elif ((.message.content|type) == "string")
+                      or ((.message.content|type) == "array" and any(.message.content[]?; .type? == "text"))
+                   then "U" else empty end)
+                elif .type? == "assistant" then
+                  ([.message.content[]? | select(.type? == "tool_use" and .name? == $t)] | length)
+                else empty end] as $s
+               | ([range(0; $s | length) | select($s[.] == "U")] | last) as $i
+               | if $i == null then empty else ([$s[($i + 1):][] | select(type == "number")] | add // 0) end' 2>/dev/null || true)"
+    [[ -n "$s" ]] && { printf '%s' "$s"; return 0; }
+    (( total <= n )) && break
+  done
+  return 0
+}

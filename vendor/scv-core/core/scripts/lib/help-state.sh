@@ -484,6 +484,66 @@ scv_answer_lint() {
 }
 
 # @pure
+# 역할: 답 글이 "긴 순서 글"인지 가린다 — 번호 순서가 4줄 이상 이어지거나, 화살표(→ · ->)가 하나만 든 줄이 3줄 이상. 코드 블록 · 표 · 인용 줄은 보지 않는다
+# 종류: 판정/answer
+# 예: $'1. 가\n2. 나\n3. 다\n4. 라' → "yes"
+# 예: $'1. 가\n2. 나\n3. 다' → "no"
+# 예: $'- 읽기 → 나누기\n- 나누기 → 묶기\n- 묶기 → 쓰기' → "yes"
+# 예: $'```\n1. a\n2. b\n3. c\n4. d\n```' → "no"
+# 예: "통과함." → "no"
+scv_hs_seq_prose() {
+  local text="${1:-}" line t rest incode=0 run=0 best=0 arrows=0 n pat_num='^[0-9]+[.)][[:space:]]' quote=$'\x3e' ascii=$'-\x3e'
+  while IFS= read -r line; do
+    t="${line#"${line%%[![:space:]]*}"}"
+    if [[ "$t" == '```'* ]]; then incode=$((1 - incode)); continue; fi
+    (( incode )) && continue
+    [[ "$t" == "|"* || "${t:0:1}" == "$quote" ]] && continue
+    if [[ "$t" =~ $pat_num ]]; then
+      run=$((run + 1)); (( run <= best )) || best=$run
+    elif [[ -n "$t" && "$line" == "$t" ]]; then
+      run=0
+    fi
+    rest="${t//$ascii/→}"; n=0
+    while [[ "$rest" == *→* ]]; do n=$((n + 1)); rest="${rest#*→}"; done
+    (( n == 1 )) && arrows=$((arrows + 1))
+  done <<< "$text"
+  if (( 4 <= best || 3 <= arrows )); then printf 'yes'; else printf 'no'; fi
+}
+
+# @pure
+# 역할: 답 글에 그림을 대신하는 것이 있는지 가린다 — 화살표가 둘 이상인 한 줄(A → B → C), 또는 표(| 줄 아래 |--- 줄)
+# 종류: 판정/answer
+# 예: $'흐름: 읽기 → 나누기 → 쓰기' → "yes"
+# 예: $'| 항목 | 값 |\n|---|---|\n| a | 1 |' → "yes"
+# 예: $'읽기 → 나누기\n그다음 쓰기' → "no"
+# 예: "" → "no"
+scv_hs_picture_shown() {
+  local text="${1:-}" line t rest n prev="" ascii=$'-\x3e'
+  while IFS= read -r line; do
+    t="${line#"${line%%[![:space:]]*}"}"
+    rest="${t//$ascii/→}"; n=0
+    while [[ "$rest" == *→* ]]; do n=$((n + 1)); rest="${rest#*→}"; done
+    (( 2 <= n )) && { printf 'yes'; return 0; }
+    [[ "$prev" == "|"* && "$t" == "|"*-* && "${t//[|:[:space:]-]/}" == "" ]] && { printf 'yes'; return 0; }
+    prev="$t"
+  done <<< "$text"
+  printf 'no'
+}
+
+# @pure
+# 역할: 그림이 있어야 했는데 없었는지 정한다 — 긴 순서 글이고, 그 턴에 그림 도구를 0번 불렀고, 그림을 대신하는 것도 없을 때만 picture=1. 도구 호출 수를 모르면(빈 값) 잡지 않는다
+# 종류: 판정/answer
+# 예: yes 0 no → "picture=1"
+# 예: yes 1 no → ""
+# 예: yes 0 yes → ""
+# 예: no 0 no → ""
+# 예: yes "" no → ""
+scv_hs_picture_due() {
+  [[ "${1:-}" == yes && "${2:-}" == 0 && "${3:-}" == no ]] && printf 'picture=1'
+  return 0
+}
+
+# @pure
 # 역할: 메아리 판정 · 린트 위반 · 스위치로 규약을 다시 실을지(1|0)와 다음 턴 경고 줄을 정한다
 # 종류: 판정/gate
 # 예: missing "" on on → $'1\x1f[SCV 규약 지문] 직전 턴 기록에 이 세션의 규약 지문이 없다 — 규약이 컨텍스트에서 빠진 것으로 보고 이번 턴에 다시 싣는다.'
