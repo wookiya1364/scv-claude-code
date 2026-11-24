@@ -122,3 +122,5 @@ core/tests/test-lean-loop.sh	13
 core/tests/test-rules-once.sh	8
 core/tests/test-gear-run.sh	40
 core/tests/test-picture-rule.sh	27
+core/tests/test-choice-block.sh	16
+core/tests/test-gear-turn.sh	30

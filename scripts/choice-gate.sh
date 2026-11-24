@@ -7,6 +7,7 @@ declare -F settings_preload >/dev/null 2>&1 && { settings_preload 2>/dev/null ||
 #   choice-gate.sh tool                         (v0.66.0+) 실체 보여 주기가 부른다: 이번 실행에 쓸 선택지 도구 이름(없으면 아무것도)
 #   choice-gate.sh unattended                   (v0.66.0+) 실체 보여 주기가 부른다: 사람 없는 실행 조건(SCV_CHOICE_OFF_WHEN)이 맞으면 1, 아니면 0
 #   choice-gate.sh state                        매 턴 훅이 부른다: tool · unattended 값과 line 출력을 한 번에(첫 줄 CG_STATE<TAB>tool<TAB>unattended)
+#   choice-gate.sh summary                      (v0.102.0+) 가드가 부른다: 닫는 요약 도구에 질문을 넣은 호출을 거절할 이유 한 줄(도구가 없으면 아무것도)
 #   choice-gate.sh stop [--active 0|1] [--turn-dir <폴더>] < 마지막 답  종료 훅이 부른다: 글로 묻거나 번호로 고르게 하면서 끝났으면
 #                                                 CHOICE_GATE: block + CHOICE_REASON: <이유>. --active 1(v0.64.2+ 종료 훅이
 #                                                 주는 "이 검사가 이번 턴에 이미 이유를 냄", 그 전에는 "이미 계속 중")이면
@@ -61,6 +62,11 @@ case "${1:-}" in
     printf 'CG_STATE\t%s\t%s\n' "$TOOL" "$OFFRUN"
     scv_choice_line "$TOOL" "$ASKMODE"
     ;;
+  summary)
+    # (0.102.0+) 가드 Rule S 가 부른다: 닫는 요약 도구에 질문이 실렸을 때 거절할 이유. 선택지 도구가 없으면(호스트에 없음 ·
+    # 스위치 off · 사람 없는 실행) 아무것도 내지 않는다 — 그러면 가드는 그 호출을 그대로 통과시킨다.
+    [[ -n "$TOOL" ]] && scv_summary_ask_reason "$TOOL"
+    ;;
   stop)
     shift
     ACTIVE=0; TDIR_ARG=""
@@ -91,6 +97,6 @@ case "${1:-}" in
       fi
     fi
     ;;
-  *) echo "usage: choice-gate.sh line | tool | unattended | state | stop [--active 0|1] [--turn-dir <dir>]" >&2 ;;
+  *) echo "usage: choice-gate.sh line | tool | unattended | state | summary | stop [--active 0|1] [--turn-dir <dir>]" >&2 ;;
 esac
 exit 0

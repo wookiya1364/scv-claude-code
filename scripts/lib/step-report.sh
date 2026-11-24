@@ -23,13 +23,29 @@ scv_step_active_plan() {
 }
 
 # @pure
-# 역할: 단계 보고 도구 이름과 구현 중인 계획 이름으로 매 턴 안내 한 줄을 만든다 — 둘 중 하나라도 비면 아무것도 내지 않는다
+# 역할: "계획<TAB>상태" 줄들 중 구현 중(in_progress · testing)인 계획이 몇 개인지 센다
+# 종류: 세기
+# 예: $'20260101-a-x\ttesting\n20260103-a-z\tin_progress\n20260104-a-w\tplanned' → "2"
+# 예: $'20260101-a-x\tplanned' → "0"
+# 예: "" → "0"
+scv_step_active_count() {
+  local line n=0
+  while IFS= read -r line; do
+    case "${line#*$'\t'}" in in_progress|testing) [[ "$line" == *$'\t'* ]] && n=$((n + 1)) ;; esac
+  done <<< "${1:-}"
+  printf '%s' "$n"
+}
+
+# @pure
+# 역할: 단계 보고 도구 이름 · 구현 중인 계획 이름 · 구현 중인 계획 수로 매 턴 안내 한 줄을 만든다 — 도구나 계획이 비면 아무것도 내지 않는다. 그 계획의 단계를 다루는 턴에만 알리게 한다
 # 종류: 조립
-# 예: "demo_step" "20260102-a-y" → "[SCV 단계] 구현 중: 20260102-a-y — 이 세션에 demo_step 도구가 있으면, 단계를 시작할 때 · 끝낼 때(증거: 만든 파일 · 명령 출력) · 막혔을 때(이유 한 줄) 바로 알려라(plan=20260102-a-y, step=번호, state=doing|done|blocked). 본문: protocols/work.md 'Step progress'"
+# 예: "demo_step" "20260102-a-y" → "[SCV 단계] 구현 중: 20260102-a-y — 이 턴이 그 계획의 단계를 다룰 때, 이 세션에 demo_step 도구가 있으면 단계를 시작할 때 · 끝낼 때(증거: 만든 파일 · 명령 출력) · 막혔을 때(이유 한 줄) 바로 알려라(plan=계획 이름, step=번호, state=doing|done|blocked). 본문: protocols/work.md 'Step progress'"
+# 예: "demo_step" "20260102-a-y" 3 → "[SCV 단계] 구현 중: 20260102-a-y 외 2개 — 이 턴이 그 계획의 단계를 다룰 때, 이 세션에 demo_step 도구가 있으면 단계를 시작할 때 · 끝낼 때(증거: 만든 파일 · 명령 출력) · 막혔을 때(이유 한 줄) 바로 알려라(plan=계획 이름, step=번호, state=doing|done|blocked). 본문: protocols/work.md 'Step progress'"
 # 예: "" "20260102-a-y" → ""
 # 예: "demo_step" "" → ""
 scv_step_line() {
-  local tool="${1:-}" plan="${2:-}"
+  local tool="${1:-}" plan="${2:-}" count="${3:-1}" more=""
   [[ -n "$tool" && -n "$plan" ]] || return 0
-  printf "[SCV 단계] 구현 중: %s — 이 세션에 %s 도구가 있으면, 단계를 시작할 때 · 끝낼 때(증거: 만든 파일 · 명령 출력) · 막혔을 때(이유 한 줄) 바로 알려라(plan=%s, step=번호, state=doing|done|blocked). 본문: protocols/work.md 'Step progress'" "$plan" "$tool" "$plan"
+  [[ "$count" =~ ^[0-9]+$ ]] && (( count > 1 )) && more=" 외 $((count - 1))개"
+  printf "[SCV 단계] 구현 중: %s%s — 이 턴이 그 계획의 단계를 다룰 때, 이 세션에 %s 도구가 있으면 단계를 시작할 때 · 끝낼 때(증거: 만든 파일 · 명령 출력) · 막혔을 때(이유 한 줄) 바로 알려라(plan=계획 이름, step=번호, state=doing|done|blocked). 본문: protocols/work.md 'Step progress'" "$plan" "$more" "$tool"
 }

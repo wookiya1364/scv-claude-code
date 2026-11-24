@@ -26,6 +26,8 @@
 #   SCV_HELP_FIRST_ALLOW <regex>   tool names Rule H lets through before help (host tools — the
 #                                  wrapper names them; core never does)
 #   SCV_GUARD_RULE_D    off        skip the function-declaration check (Rule D, 0.81.0+)
+#   SCV_SUMMARY_ASK     <tool>=<field>  the host's closing-summary tool and the input field that carries
+#                                  a question for the user (Rule S, 0.102.0+ — gate-any only)
 #
 # Failure policy: open on two inputs, and only those two — an empty payload, and no
 # JSON reader on the machine. Both print one line to stderr and allow. The host
@@ -293,6 +295,21 @@ if [[ "$MODE" == "gate-any" ]]; then
   _scv_cmd="$(field '.tool_input.command')"
   if [[ -n "$_scv_cmd" ]] && is_action_script "$_scv_cmd"; then help_mark; allow; fi
   _scv_tool="$(field '.tool_name')"
+  # ---------- Rule S (0.102.0+): a question goes to the choice tool, not the closing-summary tool ----
+  # Some hosts give the model a closing-summary tool that can carry a question with reply buttons. In one
+  # real session 12 turns ended by asking in text, and 10 of them had put that question into the summary
+  # tool instead of the choice tool. This is the moment before the closing text is written, so refusing
+  # here costs no wait and repeats no answer. The wrapper names the tool and its question field in
+  # SCV_SUMMARY_ASK="<tool>=<field>" (core names neither). No choice tool for this run — none on the
+  # host, the project switch off, or nobody to answer — means no opinion: the call passes.
+  _scv_sa="${SCV_SUMMARY_ASK:-}"
+  if [[ -n "$_scv_tool" && "$_scv_sa" == "$_scv_tool="* && "${_scv_sa#*=}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+    _scv_sq="$(field ".tool_input.${_scv_sa#*=}")"
+    if [[ "$_scv_sq" == *[![:space:]]* && -f "$_scv_mp_dir/choice-gate.sh" && -d "$PROJECT_ROOT" ]]; then
+      _scv_swhy="$( (cd "$PROJECT_ROOT" && bash "$_scv_mp_dir/choice-gate.sh" summary 2>/dev/null | head -c 2048) || true)"
+      [[ -n "${_scv_swhy//[[:space:]]/}" ]] && deny "$_scv_swhy"
+    fi
+  fi
   if [[ -n "${SCV_HELP_FIRST_ALLOW:-}" && -n "$_scv_tool" ]] && printf '%s' "$_scv_tool" | grep -qxE -- "${SCV_HELP_FIRST_ALLOW}"; then
     allow
   fi
