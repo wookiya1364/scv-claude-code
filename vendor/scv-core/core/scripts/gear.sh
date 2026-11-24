@@ -6,19 +6,25 @@
 #
 #   gear.sh list                         기어와 톱니를 보여 준다(없으면 "기어 없음" 한 줄)
 #   gear.sh new <이름> --kind tooth [--does "<하는 일>"] [--mark pure|effect|outward] [--in <받는 값>] [--out <돌려주는 값>]
-#                      [--example '<입력 표기> → <출력 표기>']
+#                      [--arg '<이름>=<기본값> — <설명>']… [--example '[<이름>=<값>…] <입력 표기> → <출력 표기>']
 #   gear.sh new <이름> --kind gear --flow "<톱니> | <톱니> | @ | <톱니>" [--does "<하는 일>"] [--words "<낱말들>"]
-#                                        뼈대 파일을 쓰고 사전을 다시 만든다 (@ 는 이 기어의 글 — 판단 단계)
+#                      [--in <받는 값>] [--out <돌려주는 값>] [--arg <이름>=<값>]… [--example '…']
+#                                        뼈대 파일을 쓰고 사전을 다시 만든다 (@ 는 이 기어의 글 — 판단 단계).
+#                                        기어의 --in · --out 을 안 주면 첫 · 끝 톱니의 값 이름으로 채운다
 #   gear.sh index                        톱니 사전과 기어 글에서 사전(INDEX.tsv)을 다시 만든다
 #   gear.sh check                        사전 · 파일 · 흐름 · 순수 톱니의 예시 · 표시 없는 위험 명령을 검사한다
-#   gear.sh run <이름>                    기어나 톱니를 돌린다 — 처음 입력은 표준 입력
-#   gear.sh resume <표>                   멈춘 실행을 잇는다 — 판단 단계 뒤에는 그 단계의 결과를 표준 입력으로
+#   gear.sh run <이름> [<인자>=<값>]…      기어나 톱니를 돌린다 — 처음 입력은 표준 입력, 조절 값은 이름 붙은 인자
+#   gear.sh resume <표>                   멈춘 실행을 잇는다 — 판단 단계 뒤에는 그 단계의 결과를 표준 입력으로(인자는 처음 준 그대로)
 #   gear.sh confirm --question <글> --answer <글>
 #                                        선택 답 훅이 부른다 — 질문에 [기어 확인 <표>] 가 있고 답이 "실행"이면 확인으로 적는다
 #
 # 자리:  scv/gears/teeth/<톱니>.sh      톱니 본문 — 표준 입력 → 표준 출력, 한 가지 일만. 주석 없이 본문만 둔다
 #        scv/gears/teeth/TEETH.md       톱니 사전(원본) — 톱니마다 역할 · 표시 · 값 · 예시
-#        scv/gears/<기어>/GEAR.md        기어 — 맨 위 flow · does · words 줄, 그 아래 판단 단계의 글
+#        scv/gears/<기어>/GEAR.md        기어 — 맨 위 flow · in · out · arg · 예 · does · words 줄, 그 아래 판단 단계의 글
+# 인자:  톱니 사전의 "- 인자: 이름=기본값" → 기어 글의 "arg: 이름=값"(바깥 기어가 안쪽을 이긴다) → 실행할 때 준 값. 뒤가 이긴다.
+#        톱니는 자기가 선언한 인자만 같은 이름의 환경 변수로 받는다. 어느 톱니도 선언하지 않은 이름을 주면 돌리지 않는다(2).
+# 값:    기어 글의 in · out 은 값의 종류 이름(고정된 값이 아니다), 예 는 "이 입력이면 이 출력"의 한 가지 경우다.
+#        순수 톱니로만 된 기어의 예시는 검사가 실제로 돌려 맞춰 보고, 판단 단계나 순수하지 않은 톱니가 있으면 보기용으로 둔다.
 #        scv/gears/INDEX.tsv            만든 사전 — 이 스크립트가 쓴다(손으로 고치지 않는다)
 # 실행: 톱니는 앞 단계의 출력을 입력으로 받아 바로 돈다. 판단 단계(@)에서는 그 기어의 글 · 앞 결과 · 이어가기 표만 내고
 #       멈춘다(종료 코드 10). 밖으로 표시(outward) 톱니 앞에서는 돌리지 않고 멈춘다(11) — 사용자의 "실행" 답이 적힌 뒤에만 잇는다.
@@ -43,7 +49,7 @@ SELF="bash \"$SCRIPT_DIR/gear.sh\""
 # @effect usage
 # 이유: 쓰는 법을 표준 오류에 쓰고 종료 코드 2 로 끝낸다
 usage() {
-  sed -n '6,17p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2
+  sed -n '6,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2
   exit 2
 }
 
@@ -55,41 +61,79 @@ die() { printf 'GEAR_ERROR: %s\n' "$2" >&2; exit "$1"; }
 # 이유: 톱니 사전 파일을 읽는다(없으면 빈 값)
 teeth_text() { [[ -f "$TDICT" ]] && cat "$TDICT"; return 0; }
 
-# @effect flat_flow
-# 이유: 기어 글 파일들을 읽어 흐름을 펼친다 — 톱니는 그대로, @ 는 그 기어의 글, 다른 기어 이름은 그 기어의 흐름으로(되돌아오거나 8단을 넘으면 오류 줄)
-flat_flow() {
-  local g="$1" tidx="$2" depth="$3" seen="$4" text tok
+# @effect flat_walk
+# 이유: 기어 글 파일들을 읽어 흐름을 펼친다 — 톱니는 그대로, @ 는 그 기어의 글, 다른 기어 이름은 그 기어의 흐름으로(되돌아오거나 8단을 넘으면 오류 줄). 톱니 줄의 셋째 칸은 그 단계에 걸린 기어들의 arg 줄(바깥 기어가 안쪽을 이긴다 — 줄 사이는 \037)
+flat_walk() {
+  local g="$1" tidx="$2" depth="$3" seen="$4" ov="${5:-}" text tok own ovcol
   (( depth <= 8 )) || { printf 'error\t%s — 흐름이 너무 깊다(8단 넘음)\n' "$g"; return 0; }
   case " $seen " in *" $g "*) printf 'error\t%s — 흐름이 자기 자신으로 돌아온다\n' "$g"; return 0 ;; esac
   [[ -f "$GDIR/$g/GEAR.md" ]] || { printf 'unknown\t%s\n' "$g"; return 0; }
   text="$(cat "$GDIR/$g/GEAR.md")"
   [[ -n "$(scv_gear_flow_parse "$(scv_gear_front_get "$text" flow)")" ]] || { printf 'error\t%s — 맨 위에 flow 줄이 없다\n' "$g"; return 0; }
+  # 인자 줄이 하나도 없으면(대부분의 기어) 합치는 프로그램을 띄우지 않는다
+  own=""; [[ "$text" != *$'\n'"arg:"* ]] || own="$(scv_gear_front_all "$text" arg)"
+  [[ -z "$own" ]] || ov="$(scv_gear_args_merge "$own" "$ov")"
+  ovcol=""; [[ -z "$ov" ]] || ovcol="$(printf '%s' "$ov" | tr '\n' '\037')"
   while IFS= read -r tok; do
     [[ -n "$tok" ]] || continue
     if [[ "$tok" == "@" ]]; then printf 'text\t%s\n' "$g"
-    elif [[ -n "$(scv_gear_index_get "$tidx" "$tok" kind)" ]]; then printf 'tooth\t%s\n' "$tok"
-    elif [[ "$(scv_gear_name_ok "$tok")" == yes && -f "$GDIR/$tok/GEAR.md" ]]; then flat_flow "$tok" "$tidx" $((depth + 1)) "$seen $g"
+    elif [[ -n "$(scv_gear_index_get "$tidx" "$tok" kind)" ]]; then printf 'tooth\t%s\t%s\n' "$tok" "$ovcol"
+    elif [[ "$(scv_gear_name_ok "$tok")" == yes && -f "$GDIR/$tok/GEAR.md" ]]; then flat_walk "$tok" "$tidx" $((depth + 1)) "$seen $g" "$ov"
     else printf 'unknown\t%s\n' "$tok"
     fi
   done <<< "$(scv_gear_flow_parse "$(scv_gear_front_get "$text" flow)")"
   return 0
 }
 
+# @effect flat_flow
+# 이유: 기어 글 파일들을 읽어 펼친 흐름(종류 · 이름 두 칸)을 낸다
+flat_flow() { flat_walk "$1" "$2" "$3" "$4" "" | cut -f1,2; }
+
+# @effect step_ov
+# 이유: 펼친 흐름(flat_walk 의 출력)에서 한 단계에 걸린 기어들의 인자 줄들을 꺼낸다(글을 읽기만 한다)
+step_ov() { printf '%s\n' "$1" | sed -n "${2}p" | cut -s -f3 | tr '\037' '\n'; }
+
+# @effect flow_decl
+# 이유: 톱니 사전 글에서, 펼친 흐름의 톱니들이 선언한 인자 줄들을 모은다(같은 이름은 처음 것) — 글을 읽기만 한다
+flow_decl() {
+  local steps="$1" dict="$2" line acc=""
+  [[ "$dict" == *인자* ]] || return 0
+  while IFS= read -r line; do
+    [[ "$line" == tooth$'\t'* ]] || continue
+    line="${line#*$'\t'}"
+    acc="$(scv_gear_args_merge "$(scv_gear_args_parse "$dict" "${line%%$'\t'*}")" "$acc")"
+  done <<< "$steps"
+  printf '%s' "$acc"
+}
+
 # @effect gear_lines
 # 이유: 기어 글 파일들을 읽어 기어의 사전 줄들을 낸다 — 받는 값 · 돌려주는 값은 펼친 흐름의 첫 톱니 · 끝 톱니에서
 gear_lines() {
-  local tidx="$1" f d name text flat first last gin gout
+  local tidx="$1" light="${2:-}" f d name text walk flat first last gin gout dict i line acc T=$'\t'
+  dict="$(teeth_text)"
   for f in "$GDIR"/*/GEAR.md; do
     [[ -f "$f" ]] || continue
     d="${f%/GEAR.md}"; name="${d##*/}"
     [[ "$name" != teeth ]] || continue
     text="$(cat "$f")"
-    flat="$(flat_flow "$name" "$tidx" 1 "")"
+    walk="$(flat_walk "$name" "$tidx" 1 "" "")"; flat="$(printf '%s\n' "$walk" | cut -f1,2)"
     first="$(printf '%s\n' "$flat" | sed -n $'s/^tooth\t//p' | head -n 1)"
     last="$(printf '%s\n' "$flat" | sed -n $'s/^tooth\t//p' | tail -n 1)"
-    gin="$(scv_gear_index_get "$tidx" "$first" in)"; gout="$(scv_gear_index_get "$tidx" "$last" out)"
-    printf '%s\tgear\t-\t%s\t%s\t%s\t%s\n' "$name" "${gin:-*}" "${gout:-*}" \
-      "$(scv_gear_one_line "$(scv_gear_front_get "$text" does)")" "$(scv_gear_one_line "$(scv_gear_front_get "$text" words)")"
+    # 기어 글에 적은 값 이름이 먼저다 — 없으면 첫 · 끝 톱니에서
+    gin="$(scv_gear_sig_name "$(scv_gear_front_get "$text" in)")"; gout="$(scv_gear_sig_name "$(scv_gear_front_get "$text" out)")"
+    [[ -n "$gin" ]] || gin="$(scv_gear_index_get "$tidx" "$first" in)"
+    [[ -n "$gout" ]] || gout="$(scv_gear_index_get "$tidx" "$last" out)"
+    # 인자: 흐름의 톱니들이 선언한 것에 기어들의 arg 줄을 얹은 값(보는 용도)
+    acc=""; i=0
+    while IFS= read -r line; do
+      [[ -z "$light" && "$dict" == *인자* ]] || break
+      i=$((i + 1)); [[ "$line" == tooth$'\t'* ]] || continue
+      line="${line#*$'\t'}"
+      acc="$(scv_gear_args_merge "$acc" "$(scv_gear_args_apply "$(scv_gear_args_parse "$dict" "${line%%$'\t'*}")" "$(step_ov "$walk" "$i")")")"
+    done <<< "$walk"
+    acc="${acc//$'\n'/; }"; acc="$(scv_gear_one_line "$acc")"
+    printf '%s\tgear\t-\t%s\t%s\t%s\t%s%s\n' "$name" "${gin:-*}" "${gout:-*}" \
+      "$(scv_gear_one_line "$(scv_gear_front_get "$text" does)")" "$(scv_gear_one_line "$(scv_gear_front_get "$text" words)")" "${acc:+$T$acc}"
   done
   return 0
 }
@@ -98,7 +142,7 @@ gear_lines() {
 # 이유: 톱니 사전과 기어 글 파일들을 읽어 지금의 사전 글을 만든다(파일은 쓰지 않는다)
 built_index() {
   local tidx; tidx="$(scv_gear_teeth_parse "$(teeth_text)")"
-  scv_gear_index_build "$(printf '%s\n%s' "$tidx" "$(gear_lines "$tidx")")"
+  scv_gear_index_build "$(printf '%s\n%s' "$tidx" "$(gear_lines "$tidx" "${1:-}")")"
 }
 
 # @effect write_index
@@ -120,13 +164,17 @@ new_token() {
 # @effect tooth_block
 # 이유: 톱니 파일을 읽어, 이 톱니를 돌리면 안 되는 까닭을 한 줄로 낸다(돌려도 되면 빈 값) — 이름 · 사전의 중복 · 표시 · 파일 · 위험 명령 · 순수 톱니에 둘 수 없는 명령
 tooth_block() {
-  local tidx="$1" s="$2" m c r body
+  local tidx="$1" s="$2" m c r body a
   [[ "$(scv_gear_name_ok "$s")" == yes ]] || { printf '쓸 수 없는 톱니 이름'; return 0; }
   c="$(printf '%s\n' "$tidx" | LC_ALL=C awk -F'\t' -v n="$s" '$1 == n' | grep -c .)"
   [[ "$c" == 1 ]] || { printf '톱니 사전에 %s번 적혀 있다(한 번만 적는다)' "$c"; return 0; }
   m="$(scv_gear_index_get "$tidx" "$s" mark)"
   case "$m" in pure|effect|outward) ;; *) printf '표시가 pure · effect · outward 중 하나가 아니다(지금: %s)' "$m"; return 0 ;; esac
   [[ -f "$TDIR/$s.sh" ]] || { printf '톱니 파일이 없다'; return 0; }
+  while IFS= read -r a; do
+    [[ -n "$a" ]] || continue
+    [[ "$(scv_gear_arg_name_ok "${a%%=*}")" == yes ]] || { printf "쓸 수 없는 인자 이름 '%s'(영문 소문자로 시작 · 소문자 · 숫자 · 밑줄, _proxy 로 끝나면 안 됨)" "${a%%=*}"; return 0; }
+  done <<< "$(scv_gear_args_parse "$(teeth_text)" "$s")"
   body="$(cat "$TDIR/$s.sh")"
   if [[ "$m" != outward ]]; then
     r="$(scv_gear_risk_scan "$body")"
@@ -139,11 +187,25 @@ tooth_block() {
   return 0
 }
 
+# @effect tooth_run
+# 이유: 톱니를 돌린다 — 그 톱니에 들어갈 인자 줄들(파일)만 환경 변수로 넘기고, 흐름의 다른 톱니가 선언한 이름(파일)은 환경에서 지운다
+tooth_run() {
+  local f="$1" infile="$2" outfile="$3" errfile="$4" argsfile="${5:-}" namesfile="${6:-}" line
+  local -a e=()
+  if [[ -n "$namesfile" && -f "$namesfile" ]]; then
+    while IFS= read -r line || [[ -n "$line" ]]; do [[ -z "$line" ]] || e+=(-u "$line"); done < "$namesfile"
+  fi
+  if [[ -n "$argsfile" && -f "$argsfile" ]]; then
+    while IFS= read -r line || [[ -n "$line" ]]; do [[ -z "$line" ]] || e+=("$line"); done < "$argsfile"
+  fi
+  env ${e[@]+"${e[@]}"} bash "$f" < "$infile" > "$outfile" 2> "$errfile"
+}
+
 # @effect run_example
-# 이유: 톱니를 예시 입력으로 실제로 돌려 출력 파일에 받는다 — 정한 시간(초)을 넘기면 죽이고 124 를 낸다
+# 이유: 톱니를 예시 입력으로 실제로 돌려 출력 파일에 받는다(인자 줄 파일이 있으면 그 값으로) — 정한 시간(초)을 넘기면 죽이고 124 를 낸다
 run_example() {
-  local f="$1" infile="$2" outfile="$3" pid w rc
-  bash "$f" < "$infile" > "$outfile" 2>/dev/null & pid=$!
+  local f="$1" infile="$2" outfile="$3" argsfile="${4:-}" pid w rc
+  tooth_run "$f" "$infile" "$outfile" /dev/null "$argsfile" "" & pid=$!
   ( sleep "$EXSECS"; kill -9 "$pid" 2>/dev/null ) >/dev/null 2>&1 & w=$!
   wait "$pid" 2>/dev/null; rc=$?
   if kill "$w" 2>/dev/null; then wait "$w" 2>/dev/null; else rc=124; fi
@@ -153,7 +215,7 @@ run_example() {
 # @effect lint_teeth
 # 이유: 톱니 파일들을 읽고 · 문법을 검사하고 · 순수 톱니를 예시 입력으로 실제로 돌려 문제 줄들을 낸다(알림은 GEAR_WARN)
 lint_teeth() {
-  local tidx="$1" dict line name mark f body r ex k parts in_lit out_lit want got rc why tmp seen=" " out=""
+  local tidx="$1" dict line name mark f body r ex k parts in_lit out_lit want got rc why tmp seen=" " out="" decl ea exargs u
   dict="$(teeth_text)"
   tmp="$(mktemp -d 2>/dev/null)" || tmp=""
   while IFS= read -r line; do
@@ -183,16 +245,21 @@ lint_teeth() {
     ex="$(scv_gear_tooth_examples "$dict" "$name")"
     if [[ -z "$ex" ]]; then out+="GEAR_BAD: $name — 예시가 없다(순수 톱니는 '- 예: <입력> → <출력>' 이 하나 이상)"$'\n'; continue; fi
     [[ -n "$tmp" ]] || { out+="GEAR_BAD: $name — 예시를 돌릴 임시 자리를 만들지 못했다"$'\n'; continue; }
+    decl="$(scv_gear_args_parse "$dict" "$name")"
     k=0
     while IFS= read -r line; do
       [[ -n "$line" ]] || continue
       k=$((k + 1))
-      parts="$(scv_gear_example_split "$line")"
+      ea="$(scv_gear_example_args "$line")"; exargs="${ea%%$'\n'*}"; exargs="${exargs// /$'\n'}"
+      parts="$(scv_gear_example_split "${ea#*$'\n'}")"
       if [[ -z "$parts" ]]; then out+="GEAR_EXAMPLE: $name — 예시 $k 의 모양이 '<입력> → <출력>' 이 아니다"$'\n'; continue; fi
+      u="$(scv_gear_args_unknown "$exargs" "$decl")"
+      if [[ -n "$u" ]]; then out+="GEAR_EXAMPLE: $name — 예시 $k: 이 톱니가 선언하지 않은 인자 $(scv_gear_one_line "$u")"$'\n'; continue; fi
       in_lit="${parts%%$'\n'*}"; out_lit="${parts#*$'\n'}"
       want="$(scv_gear_lit_decode "$out_lit")"
       scv_gear_lit_decode "$in_lit" > "$tmp/in"
-      run_example "$f" "$tmp/in" "$tmp/out"; rc=$?
+      scv_gear_args_apply "$decl" "$exargs" > "$tmp/args"
+      run_example "$f" "$tmp/in" "$tmp/out" "$tmp/args"; rc=$?
       got="$(cat "$tmp/out" 2>/dev/null)"
       if (( rc == 124 )); then out+="GEAR_EXAMPLE: $name — 예시 $k: ${EXSECS}초 안에 끝나지 않았다"$'\n'
       elif (( rc != 0 )); then out+="GEAR_EXAMPLE: $name — 예시 $k: 종료 코드 $rc"$'\n'
@@ -212,7 +279,9 @@ lint_teeth() {
 # @effect lint_gears
 # 이유: 기어 폴더들 · 사전 파일을 읽어 문제 줄들을 낸다(알림은 GEAR_WARN)
 lint_gears() {
-  local tidx="$1" idx="$2" d name text flat e line t r out=""
+  local tidx="$1" idx="$2" d name text walk flat e line t r out="" dict decl gin gout first last a exs k ea exargs parts u tmp i s rc nshow want got
+  dict="$(teeth_text)"
+  tmp="$(mktemp -d 2>/dev/null)" || tmp=""
   for d in "$GDIR"/*/; do
     [[ -d "$d" ]] || continue
     name="${d%/}"; name="${name##*/}"
@@ -222,15 +291,71 @@ lint_gears() {
     [[ -z "$(scv_gear_index_get "$tidx" "$name" kind)" ]] || out+="GEAR_BAD: $name — 같은 이름의 톱니가 있다(기어와 톱니는 이름이 달라야 한다)"$'\n'
     text="$(cat "$d/GEAR.md")"
     if [[ -z "$(scv_gear_front_get "$text" flow)" ]]; then out+="GEAR_BAD: $name — 맨 위에 flow 줄이 없다"$'\n'; continue; fi
-    flat="$(flat_flow "$name" "$tidx" 1 "")"
+    walk="$(flat_walk "$name" "$tidx" 1 "" "")"; flat="$(printf '%s\n' "$walk" | cut -f1,2)"
     e="$(scv_gear_flow_check "$flat" "$tidx")"
+    r="$e"
     while IFS= read -r line; do [[ -n "$line" ]] && out+="GEAR_FLOW: $name: $line"$'\n'; done <<< "$e"
+    # 받는 값 · 돌려주는 값: 기어 글에 적은 이름을 첫 · 끝 톱니와 맞춰 본다(흐름의 처음 · 끝이 톱니일 때만)
+    gin="$(scv_gear_sig_name "$(scv_gear_front_get "$text" in)")"; gout="$(scv_gear_sig_name "$(scv_gear_front_get "$text" out)")"
+    first="$(printf '%s\n' "$flat" | head -n 1)"; last="$(printf '%s\n' "$flat" | tail -n 1)"
+    [[ "$first" == tooth$'\t'* ]] && first="$(scv_gear_index_get "$tidx" "${first#*$'\t'}" in)" || first=""
+    [[ "$last" == tooth$'\t'* ]] && last="$(scv_gear_index_get "$tidx" "${last#*$'\t'}" out)" || last=""
+    e="$(scv_gear_sig_check "$gin" "$gout" "$first" "$last")"
+    while IFS= read -r line; do [[ -n "$line" ]] && out+="GEAR_SIG: $name: $line"$'\n'; done <<< "$e"
+    [[ -n "$gin$gout" ]] || out+="GEAR_WARN: $name — in · out 줄이 없다(맨 위에 받는 값 · 돌려주는 값의 이름을 적으면 목록에 보인다)"$'\n'
+    # 기어의 arg 줄: 모양과, 흐름의 톱니가 선언한 이름인지
+    decl="$(flow_decl "$flat" "$dict")"
+    while IFS= read -r a; do
+      [[ -n "$a" ]] || continue
+      if [[ "$a" != *=* || "$(scv_gear_arg_name_ok "${a%%=*}")" != yes ]]; then out+="GEAR_BAD: $name — arg 줄의 모양이 '이름=값' 이 아니다: $(scv_gear_one_line "$a")"$'\n'
+      elif [[ -n "$(scv_gear_args_unknown "$a" "$decl")" ]]; then out+="GEAR_BAD: $name — arg 줄의 인자 ${a%%=*} 을 선언한 톱니가 흐름에 없다"$'\n'; fi
+    done <<< "$(scv_gear_front_all "$text" arg)"
+    # 예시: 순수 톱니로만 된 흐름은 실제로 돌려 맞춰 보고, 그 밖은 보기용으로 센다(돌리지 않는다)
+    exs="$(scv_gear_front_all "$text" 예)"; t="$(scv_gear_front_all "$text" example)"
+    [[ -z "$t" ]] || exs+="${exs:+$'\n'}$t"
+    if [[ -n "$exs" && -z "$r" ]]; then
+      if [[ "$(scv_gear_example_mode "$flat" "$tidx")" == run ]]; then
+        # 돌리면 안 되는 톱니가 하나라도 있으면 예시도 돌리지 않는다(그 톱니는 톱니 검사가 알린다)
+        t=""
+        while IFS= read -r line; do [[ -z "$(tooth_block "$tidx" "${line#*$'\t'}")" ]] || t=blocked; done <<< "$flat"
+        k=0
+        while IFS= read -r line; do
+          [[ -n "$line" && -z "$t" ]] || continue
+          k=$((k + 1))
+          [[ -n "$tmp" ]] || { out+="GEAR_EXAMPLE: $name — 예시를 돌릴 임시 자리를 만들지 못했다"$'\n'; break; }
+          ea="$(scv_gear_example_args "$line")"; exargs="${ea%%$'\n'*}"; exargs="${exargs// /$'\n'}"
+          parts="$(scv_gear_example_split "${ea#*$'\n'}")"
+          if [[ -z "$parts" ]]; then out+="GEAR_EXAMPLE: $name — 예시 $k 의 모양이 '<입력> → <출력>' 이 아니다"$'\n'; continue; fi
+          u="$(scv_gear_args_unknown "$exargs" "$decl")"
+          if [[ -n "$u" ]]; then out+="GEAR_EXAMPLE: $name — 예시 $k: 흐름의 톱니가 선언하지 않은 인자 $(scv_gear_one_line "$u")"$'\n'; continue; fi
+          want="$(scv_gear_lit_decode "${parts#*$'\n'}")"
+          scv_gear_lit_decode "${parts%%$'\n'*}" > "$tmp/data"
+          i=0; rc=0
+          while IFS= read -r s; do
+            i=$((i + 1)); s="${s#*$'\t'}"
+            scv_gear_args_apply "$(scv_gear_args_parse "$dict" "$s")" "$(scv_gear_args_merge "$(step_ov "$walk" "$i")" "$exargs")" > "$tmp/args"
+            run_example "$TDIR/$s.sh" "$tmp/data" "$tmp/next" "$tmp/args"; rc=$?
+            (( rc == 0 )) || break
+            mv "$tmp/next" "$tmp/data"
+          done <<< "$flat"
+          got="$(cat "$tmp/data" 2>/dev/null)"
+          if (( rc == 124 )); then out+="GEAR_EXAMPLE: $name — 예시 $k: ${i}단계 $s 가 ${EXSECS}초 안에 끝나지 않았다"$'\n'
+          elif (( rc != 0 )); then out+="GEAR_EXAMPLE: $name — 예시 $k: ${i}단계 $s 종료 코드 $rc"$'\n'
+          elif [[ "$got" != "$want" ]]; then out+="GEAR_EXAMPLE: $name — 예시 $k: 기대 [$(scv_gear_one_line "${want:0:60}")] 실제 [$(scv_gear_one_line "${got:0:60}")]"$'\n'
+          fi
+        done <<< "$exs"
+      else
+        nshow="$(printf '%s\n' "$exs" | grep -c .)"
+        out+="GEAR_SHOW: $name — 보기용 예시 ${nshow}개(판단 단계나 순수하지 않은 톱니가 있어 돌리지 않는다)"$'\n'
+      fi
+    fi
     e="$(scv_gear_flow_warn "$flat" "$tidx")"
     while IFS= read -r line; do [[ -n "$line" ]] && out+="GEAR_WARN: $name: $line"$'\n'; done <<< "$e"
     if [[ $'\n'"$flat"$'\n' == *$'\n'"text"$'\t'"$name"$'\n'* && -z "$(scv_gear_body "$text")" ]]; then
       out+="GEAR_BAD: $name — flow 에 @ 가 있는데 글이 비었다"$'\n'
     fi
   done
+  [[ -z "$tmp" ]] || rm -rf "$tmp"
   t=""; [[ -f "$GDIR/INDEX.tsv" ]] && t="$(cat "$GDIR/INDEX.tsv")"
   if [[ "$t" != "$idx" ]]; then
     r="$( { printf '%s\n' "$t"; printf '%s\n' "$idx"; } | LC_ALL=C sort | LC_ALL=C uniq -u | LC_ALL=C awk -F'\t' 'NF > 0 && !s[$1]++ { printf "%s%s", (n++ ? " " : ""), $1 }')"
@@ -254,7 +379,7 @@ drive() {
     mode="$(scv_gear_step_mode "$k" "$mark" "$conf")"
     case "$mode" in
       direct)
-        bash "$TDIR/$s.sh" < "$run/data" > "$run/next" 2> "$run/err"; rc=$?
+        tooth_run "$TDIR/$s.sh" "$run/data" "$run/next" "$run/err" "$run/args.$i" "$run/argnames"; rc=$?
         if (( rc != 0 )); then
           printf 'GEAR_ERROR: %s단계 %s — 종료 코드 %s\n' "$i" "$s" "$rc" >&2
           tail -n 5 "$run/err" >&2
@@ -269,7 +394,7 @@ drive() {
       confirm)
         printf '%s' "$i" > "$run/wait"; printf 'confirm' > "$run/kind"
         label="$i/$n $s — $does"
-        scv_gear_confirm_text "${run##*/}" "$label" "$(cat "$TDIR/$s.sh")" "$SELF resume ${run##*/}" "$i"; printf '\n'
+        scv_gear_confirm_text "${run##*/}" "$label" "$(cat "$TDIR/$s.sh")" "$SELF resume ${run##*/}" "$i" "$(cat "$run/args.$i" 2>/dev/null)"; printf '\n'
         exit 11 ;;
       *) printf 'GEAR_ERROR: %s단계 %s — 돌릴 수 없다(종류 %s · 표시 %s)\n' "$i" "$s" "$k" "$mark" >&2; rm -rf "$run"; exit 1 ;;
     esac
@@ -290,17 +415,17 @@ case "$CMD" in
     nt="$(printf '%s\n' "$idx" | LC_ALL=C awk -F'\t' '$2 == "tooth"' | grep -c .)"
     printf '기어 %s개\n' "$ng"
     if (( ng > 0 )); then
-      printf '이름\t하는 일\t흐름\n'
+      printf '이름\t값\t인자\t하는 일\t흐름\n'
       while IFS= read -r line; do
-        [[ "$(scv_gear_index_get "$line" "${line%%$'\t'*}" kind)" == gear ]] || continue
+        [[ -n "$line" ]] || continue
         name="${line%%$'\t'*}"
-        printf '%s\t%s\t%s\n' "$name" "$(scv_gear_index_get "$line" "$name" does)" "$(scv_gear_front_get "$(cat "$GDIR/$name/GEAR.md" 2>/dev/null)" flow)"
-      done <<< "$idx"
+        printf '%s\t%s\n' "$line" "$(scv_gear_front_get "$(cat "$GDIR/$name/GEAR.md" 2>/dev/null)" flow)"
+      done <<< "$(scv_gear_list_rows "$idx" gear)"
     fi
     printf '톱니 %s개\n' "$nt"
     if (( nt > 0 )); then
-      printf '이름\t표시\t값\t하는 일\n'
-      printf '%s\n' "$idx" | LC_ALL=C awk -F'\t' '$2 == "tooth" { printf "%s\t%s\t%s → %s\t%s\n", $1, $3, $4, $5, $6 }'
+      printf '이름\t표시\t값\t인자\t하는 일\n'
+      printf '%s\n' "$(scv_gear_list_rows "$idx" tooth)"
     fi
     exit 0
     ;;
@@ -314,7 +439,7 @@ case "$CMD" in
 
   new)
     NAME="${1:-}"; [[ $# -ge 1 ]] && shift
-    KIND=""; DOES=""; GIN=""; GOUT=""; MARK=""; WORDS=""; FLOW=""; EX=""
+    KIND=""; DOES=""; GIN=""; GOUT=""; MARK=""; WORDS=""; FLOW=""; EX=""; ARGS=""
     while [[ $# -gt 0 ]]; do
       [[ $# -ge 2 ]] || usage
       case "$1" in
@@ -326,9 +451,16 @@ case "$CMD" in
         --words) WORDS="${2:-}"; shift 2 ;;
         --flow) FLOW="${2:-}"; shift 2 ;;
         --example) EX="${2:-}"; shift 2 ;;
+        --arg) ARGS+="${ARGS:+$'\n'}$(scv_gear_one_line "${2:-}")"; shift 2 ;;
         *) usage ;;
       esac
     done
+    # 인자 이름은 파일을 만들기 전에 가린다
+    while IFS= read -r a; do
+      [[ -n "$a" ]] || continue
+      a="${a%% — *}"; a="${a%%=*}"; a="${a%"${a##*[![:space:]]}"}"
+      [[ "$(scv_gear_arg_name_ok "$a")" == yes ]] || die 2 "쓸 수 없는 인자 이름: '$a' (영문 소문자로 시작 · 소문자 · 숫자 · 밑줄, _proxy 로 끝나면 안 됨)"
+    done <<< "$ARGS"
     [[ "$(scv_gear_name_ok "$NAME")" == yes ]] || die 2 "이름은 영문 소문자 · 숫자 · 붙임표만(64자까지, teeth 는 못 씀): '$NAME'"
     tidx="$(scv_gear_teeth_parse "$(teeth_text)")"
     [[ -z "$(scv_gear_index_get "$tidx" "$NAME" kind)" && ! -e "$TDIR/$NAME.sh" ]] || die 1 "이미 있는 톱니: $NAME"
@@ -342,13 +474,35 @@ case "$CMD" in
         mkdir -p "$TDIR" || die 1 "폴더를 만들지 못함: $TDIR"
         printf '#!/usr/bin/env bash\nset -euo pipefail\ncat\n' > "$TDIR/$NAME.sh"
         [[ -f "$TDICT" ]] || printf '# 톱니 사전\n\n톱니마다 역할 · 표시(pure | effect | outward) · 값(받는 값 → 돌려주는 값) · 예시를 적는다.\n순수 톱니의 예시는 gear.sh check 가 실제로 돌려 맞춰 본다.\n' > "$TDICT"
-        printf '\n%s\n' "$(scv_gear_tooth_entry "$NAME" "$(scv_gear_one_line "$DOES")" "$MARK" "$(scv_gear_one_line "${GIN:-*}")" "$(scv_gear_one_line "${GOUT:-*}")" "$(scv_gear_one_line "$EX")")" >> "$TDICT"
+        printf '\n%s\n' "$(scv_gear_tooth_entry "$NAME" "$(scv_gear_one_line "$DOES")" "$MARK" "$(scv_gear_one_line "${GIN:-*}")" "$(scv_gear_one_line "${GOUT:-*}")" "$(scv_gear_one_line "$EX")" "$ARGS")" >> "$TDICT"
         where="$TDIR/$NAME.sh" ;;
       gear)
         [[ -n "$FLOW" ]] || die 2 "--flow 가 필요하다(예: \"a | b | @ | c\")"
+        # 받는 값 · 돌려주는 값을 안 주면 흐름의 첫 · 끝 낱말(톱니나 기어)에서 채운다 — @ 로 시작하거나 끝나면 비워 둔다
+        idx="$(built_index)"; toks="$(scv_gear_flow_parse "$FLOW")"
+        [[ -n "$GIN" ]] || GIN="$(scv_gear_index_get "$idx" "$(printf '%s\n' "$toks" | head -n 1)" in)"
+        [[ -n "$GOUT" ]] || GOUT="$(scv_gear_index_get "$idx" "$(printf '%s\n' "$toks" | tail -n 1)" out)"
+        [[ "$GIN" != "*" ]] || GIN=""
+        [[ "$GOUT" != "*" ]] || GOUT=""
+        # 기어의 인자는 흐름의 톱니가 선언한 것이어야 한다
+        if [[ -n "$ARGS" ]]; then
+          decl=""
+          while IFS= read -r tok; do
+            if [[ -n "$(scv_gear_index_get "$tidx" "$tok" kind)" ]]; then decl="$(scv_gear_args_merge "$decl" "$(scv_gear_args_parse "$(teeth_text)" "$tok")")"
+            elif [[ "$tok" != "@" && -f "$GDIR/$tok/GEAR.md" ]]; then decl="$(scv_gear_args_merge "$decl" "$(flow_decl "$(flat_flow "$tok" "$tidx" 1 "")" "$(teeth_text)")")"; fi
+          done <<< "$toks"
+          while IFS= read -r a; do
+            [[ "$a" == *=* ]] || die 2 "기어의 --arg 는 '이름=값' 모양: '$a'"
+            [[ -z "$(scv_gear_args_unknown "$a" "$decl")" ]] || die 2 "인자 ${a%%=*} 을 선언한 톱니가 흐름에 없다"
+          done <<< "$ARGS"
+        fi
         mkdir -p "$GDIR/$NAME" || die 1 "폴더를 만들지 못함: $GDIR/$NAME"
         {
           printf 'flow: %s\n' "$(scv_gear_one_line "$FLOW")"
+          [[ -z "$GIN" ]] || printf 'in: %s\n' "$(scv_gear_one_line "$GIN")"
+          [[ -z "$GOUT" ]] || printf 'out: %s\n' "$(scv_gear_one_line "$GOUT")"
+          if [[ -n "$ARGS" ]]; then while IFS= read -r a; do printf 'arg: %s\n' "$a"; done <<< "$ARGS"; fi
+          [[ -z "$EX" ]] || printf '예: %s\n' "$(scv_gear_one_line "$EX")"
           printf 'does: %s\n' "$(scv_gear_one_line "$DOES")"
           printf 'words: %s\n' "$(scv_gear_one_line "$WORDS")"
           printf '\n# %s\n' "$NAME"
@@ -368,28 +522,37 @@ case "$CMD" in
     idx="$(built_index)"
     out="$(lint_teeth "$tidx")"; o2="$(lint_gears "$tidx" "$idx")"
     [[ -z "$o2" ]] || out+="${out:+$'\n'}$o2"
-    nf=0; nw=0
+    nf=0; nw=0; ns=0
     if [[ -n "$out" ]]; then
       printf '%s\n' "$out"
-      nf="$(printf '%s\n' "$out" | grep -v '^GEAR_WARN: ' | grep -c .)"
+      nf="$(printf '%s\n' "$out" | grep -v -e '^GEAR_WARN: ' -e '^GEAR_SHOW: ' | grep -c .)"
       nw="$(printf '%s\n' "$out" | grep -c '^GEAR_WARN: ')"
+      ns="$(printf '%s\n' "$out" | sed -n 's/^GEAR_SHOW: .* 보기용 예시 \([0-9]*\)개.*/\1/p' | LC_ALL=C awk '{ s += $1 } END { print s + 0 }')"
     fi
     if (( nf > 0 )); then echo "GEAR_CHECK: 실패 — ${nf}건 · 알림 ${nw}건"; exit 1; fi
     ng="$(printf '%s\n' "$idx" | LC_ALL=C awk -F'\t' '$2 == "gear"' | grep -c .)"
     nt="$(printf '%s\n' "$idx" | LC_ALL=C awk -F'\t' '$2 == "tooth"' | grep -c .)"
-    echo "GEAR_CHECK: 통과 — 기어 ${ng}개 · 톱니 ${nt}개 · 알림 ${nw}건"
+    if (( ns > 0 )); then echo "GEAR_CHECK: 통과 — 기어 ${ng}개 · 톱니 ${nt}개 · 알림 ${nw}건 · 보기용 예시 ${ns}개"
+    else echo "GEAR_CHECK: 통과 — 기어 ${ng}개 · 톱니 ${nt}개 · 알림 ${nw}건"; fi
     exit 0
     ;;
 
   run)
-    NAME="${1:-}"
+    NAME="${1:-}"; [[ $# -ge 1 ]] && shift
     [[ "$(scv_gear_name_ok "$NAME")" == yes ]] || die 2 "기어나 톱니 이름이 필요하다"
-    tidx="$(scv_gear_teeth_parse "$(teeth_text)")"
-    idx="$(built_index)"
-    if [[ -n "$(scv_gear_index_get "$tidx" "$NAME" kind)" ]]; then steps="tooth"$'\t'"$NAME"
-    elif [[ -f "$GDIR/$NAME/GEAR.md" ]]; then steps="$(flat_flow "$NAME" "$tidx" 1 "")"
+    words=""
+    for w in "$@"; do
+      [[ "$w" != *$'\n'* ]] || die 2 "인자 값에는 줄바꿈을 쓸 수 없다"
+      words+="${words:+$'\n'}$w"
+    done
+    dict="$(teeth_text)"
+    tidx="$(scv_gear_teeth_parse "$dict")"
+    idx="$(built_index light)"
+    if [[ -n "$(scv_gear_index_get "$tidx" "$NAME" kind)" ]]; then walk="tooth"$'\t'"$NAME"$'\t'
+    elif [[ -f "$GDIR/$NAME/GEAR.md" ]]; then walk="$(flat_walk "$NAME" "$tidx" 1 "" "")"
     else die 2 "없는 기어 · 톱니: $NAME"
     fi
+    steps="$(printf '%s\n' "$walk" | cut -f1,2)"
     # 한 단계도 돌기 전에 검사한다 — 없는 이름 · 값 이름 불일치 · 빠진 파일 · 표시 없는 위험 명령
     errs="$(scv_gear_flow_check "$steps" "$tidx")"
     if [[ -z "$errs" ]]; then
@@ -406,13 +569,44 @@ case "$CMD" in
         fi
       done <<< "$steps"
     fi
+    # 기어 글의 arg 줄: 모양이 맞고, 흐름의 톱니가 선언한 이름이어야 한다
+    decl="$(flow_decl "$steps" "$dict")"
+    if [[ -z "$errs" && "$walk" == *=* ]]; then
+      i=0
+      while IFS= read -r line; do
+        i=$((i + 1)); [[ "$line" == tooth$'\t'*$'\t'?* ]] || continue
+        while IFS= read -r a; do
+          [[ -n "$a" ]] || continue
+          if [[ "$a" != *=* || "$(scv_gear_arg_name_ok "${a%%=*}")" != yes ]]; then errs+="${errs:+$'\n'}${i}단계 — 기어 글의 arg 줄 모양이 '이름=값' 이 아니다: $a"
+          elif [[ -n "$(scv_gear_args_unknown "$a" "$decl")" ]]; then errs+="${errs:+$'\n'}${i}단계 — 기어 글의 arg 줄의 인자 ${a%%=*} 을 선언한 톱니가 흐름에 없다"; fi
+        done <<< "$(step_ov "$walk" "$i")"
+      done <<< "$walk"
+      [[ -z "$errs" ]] || errs="$(printf '%s\n' "$errs" | LC_ALL=C awk '!s[$0]++')"
+    fi
     if [[ -n "$errs" ]]; then
       while IFS= read -r line; do printf 'GEAR_ERROR: %s: %s\n' "$NAME" "$line" >&2; done <<< "$errs"
       exit 1
     fi
+    # 실행할 때 준 인자: 모양이 틀리거나 어느 톱니도 선언하지 않은 이름이면 한 단계도 돌리지 않는다
+    given="$(scv_gear_args_split "$words")"
+    r="$(printf '%s\n' "$given" | sed -n 's/^!//p')"
+    [[ -z "$r" ]] || die 2 "인자는 '이름=값' 모양이어야 한다(이름은 영문 소문자로 시작 · 소문자 · 숫자 · 밑줄): $(scv_gear_one_line "$r")"
+    names="$(printf '%s\n' "$decl" | sed -n 's/=.*//p')"
+    r="$(scv_gear_args_unknown "$given" "$decl")"
+    [[ -z "$r" ]] || die 2 "모르는 인자: $(scv_gear_one_line "$r") — 쓸 수 있는 인자: $(scv_gear_one_line "${names:-없음}")"
     tok="$(new_token)"; run="$STATE/$tok"
     mkdir -p "$run" || die 1 "실행 상태 폴더를 만들지 못함: $run"
     printf '%s\n' "$idx" > "$run/index"; printf '%s\n' "$tidx" > "$run/teeth"; printf '%s\n' "$steps" > "$run/steps"
+    # 단계마다 들어갈 인자를 적어 둔다 — 멈췄다 이어 가도 같은 값이 쓰인다
+    [[ -z "$names" ]] || printf '%s\n' "$names" > "$run/argnames"
+    i=0
+    while IFS= read -r line; do
+      [[ -n "$decl" ]] || break
+      i=$((i + 1)); [[ "$line" == tooth$'\t'* ]] || continue
+      s="${line#*$'\t'}"; s="${s%%$'\t'*}"
+      a="$(scv_gear_args_apply "$(scv_gear_args_parse "$dict" "$s")" "$(scv_gear_args_merge "$(step_ov "$walk" "$i")" "$given")")"
+      [[ -z "$a" ]] || printf '%s\n' "$a" > "$run/args.$i"
+    done <<< "$walk"
     if [[ -t 0 ]]; then : > "$run/data"; else cat > "$run/data"; fi
     drive "$run" 1
     ;;
@@ -420,6 +614,7 @@ case "$CMD" in
   resume)
     tok="${1:-}"
     [[ "$tok" =~ ^[0-9abcdef]{8}$ ]] || die 2 "이어가기 표가 필요하다(16진 8자)"
+    [[ $# -le 1 ]] || die 2 "이어가기에는 인자를 줄 수 없다 — 처음 준 인자가 그대로 쓰인다"
     run="$STATE/$tok"
     [[ -d "$run" && -f "$run/wait" ]] || die 2 "모르는 표이거나 이미 끝난 실행: $tok"
     i="$(cat "$run/wait")"; k="$(cat "$run/kind" 2>/dev/null)"
@@ -433,7 +628,7 @@ case "$CMD" in
       confirm)
         if [[ ! -f "$run/confirmed.$i" ]]; then
           tidx="$(cat "$run/teeth")"; line="$(sed -n "${i}p" "$run/steps")"; s="${line#*$'\t'}"; n="$(grep -c . "$run/steps")"
-          scv_gear_confirm_text "$tok" "$i/$n $s — $(scv_gear_index_get "$tidx" "$s" does)" "$(cat "$TDIR/$s.sh" 2>/dev/null)" "$SELF resume $tok" "$i"; printf '\n'
+          scv_gear_confirm_text "$tok" "$i/$n $s — $(scv_gear_index_get "$tidx" "$s" does)" "$(cat "$TDIR/$s.sh" 2>/dev/null)" "$SELF resume $tok" "$i" "$(cat "$run/args.$i" 2>/dev/null)"; printf '\n'
           exit 11
         fi
         rm -f "$run/wait" "$run/kind"

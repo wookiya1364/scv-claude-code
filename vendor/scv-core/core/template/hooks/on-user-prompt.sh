@@ -82,6 +82,10 @@ if [[ "${_scv_plain:-on}" != "off" && "$_scv_rules" == "short" ]]; then
   echo "[SCV 규칙] 이 세션에 실은 규칙(언어 · 확인 범위 · 답 모양 · 선택 · 실물 보여 주기 · 원칙)이 그대로 유효하다 — 경고가 있거나 대화가 요약 · 재개된 턴에 전문을 다시 싣는다."
 elif [[ "${_scv_plain:-on}" != "off" ]]; then
   # 0.96.0+ — 문장 수 · 길이 상한 없음(숫자로 박은 길이 규칙은 글을 뚝뚝 끊는다 — 계획 rules-once-no-caps).
+  # 0.101.0+ — 글 대신 그림(contracts/writing.md 10): 그림 도구 이름은 호스트 프로필(SCV_DRAW_TOOL)이 준다. 없으면 화살표 한 줄 · 표.
+  _scv_draw="$( source "${SCV_CORE_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)/../..}/scripts/lib/host-profile.sh" 2>/dev/null; printf '%s' "${SCV_DRAW_TOOL:-}" )"
+  if [[ -n "$_scv_draw" ]]; then _scv_draw="with the ${_scv_draw} tool when this session has it, else as one arrow line (A → B → C) or a short table"
+  else _scv_draw="as one arrow line (A → B → C) or a short table"; fi
   cat <<PLAIN
 [SCV plain language] Answer shape: (1) a **bold topic** line, the result first in a
 short lead, no bullet — then bullets: connected reasoning (A, so B, so C) in one
@@ -90,7 +94,9 @@ short bullet each, a list-only topic needs no result lines; keep prose outside
 bullets short (no sentence count); (2) result lines and bullets end in noun form
 (Korean ~함 · ~임), a question stays a question; (3) everyday words, the user's own — explain a new term on the line it
 first appears; (4) no code values (paths, variable names, versions, settings) before
-the user asks. Identifiers the user needs to act on stay exact. Body:
+the user asks. Identifiers the user needs to act on stay exact; (5) a flow, a structure or a
+comparison of numbers: show a picture first — ${_scv_draw}; one idea per
+picture, do not repeat it in prose, short answers stay text. Body:
 contracts/writing.md. A step rule of the action being executed comes before this
 always-on text (resolution order: scv/SCV.md Top-level rules). Switch: scv/scv_settings.json SCV_PLAIN_LANGUAGE=off (silence).
 PLAIN

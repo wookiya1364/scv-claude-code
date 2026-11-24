@@ -121,4 +121,5 @@ core/tests/test-turn-check-fast-end.sh	12
 core/tests/test-comments-to-catalog.sh	10
 core/tests/test-lean-loop.sh	10
 core/tests/test-rules-once.sh	6
-core/tests/test-gear-run.sh	12
+core/tests/test-gear-run.sh	30
+core/tests/test-picture-rule.sh	20
