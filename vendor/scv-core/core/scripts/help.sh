@@ -241,6 +241,7 @@ Skills
   action:channel    Switch the installed SCV between dev / stage / prod (try new work before a release)
   action:ask-mode   Ask only at the start and the end (ends) or everywhere (all) — no argument flips
   action:catalog-source  No comments in code — the pure-function catalog is the source (on moves them now; off lifts the ban)
+  action:gear       Run, list, check or make gears — the project's own reusable work units in scv/gears/ (small scripts + one judgment step)
   /scv:set-models Explain Claude Code session-level model selection compatibility
 
 EOF

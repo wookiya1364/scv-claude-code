@@ -156,6 +156,65 @@ active_plans() {
   done
 }
 
+# @effect plan_sizes
+# 이유: 계획 파일들을 읽어 "이름<TAB>글 길이(바이트)" 줄들을 낸다 — 턴이 시작될 때 적어 두고, 선택 답이 올 때 견준다
+plan_sizes() {
+  local LC_ALL=C
+  local f d t
+  for f in "$PROMOTE"/*/PLAN.md; do
+    [[ -f "$f" ]] || continue
+    d="${f%/PLAN.md}"; t="$(<"$f")"
+    printf '%s\t%s\n' "${d##*/}" "${#t}"
+  done
+  return 0
+}
+
+# @effect handled_plans
+# 이유: 계획 파일들의 길이 · 고친 시각을 읽어 이번 턴이 다룬 계획 이름을 최근에 고친 것부터 낸다 — 턴 시작 때 없었거나 · 길이가 달라졌거나 · 턴 시작보다 새것
+handled_plans() {
+  local LC_ALL=C
+  local f d t start="@none" newer
+  [[ -f "$S/id" ]] || return 0
+  [[ -f "$S/plan-sizes" ]] && start="$(<"$S/plan-sizes")"
+  for f in $(ls -t "$PROMOTE"/*/PLAN.md 2>/dev/null); do
+    d="${f%/PLAN.md}"; t="$(<"$f")"
+    newer=0; [[ "$f" -nt "$S/id" ]] && newer=1
+    [[ "$(scv_tc_plan_handled "$start" "${d##*/}" "${#t}" "$newer")" == yes ]] && printf '%s\n' "${d##*/}"
+  done
+  return 0
+}
+
+# @effect choice_flush
+# 이유: 들고 있던 선택 답(상태 폴더의 choices)을 이번 턴이 다룬 계획의 변경 이력에 쓰고 비운다. 다룬 계획이 없으면 그대로 두고,
+# 턴이 끝난 때(drop)에는 턴 기록(.turn-plan.log)에 한 줄씩 내려놓는다 — 결과를 CF 에 남긴다(recorded:<계획> · logged · held)
+choice_flush() {
+  local mode="${1:-hold}" slug f t n line tag
+  CF=held
+  [[ -s "$S/choices" ]] || return 0
+  slug="$(scv_tc_choice_target "$(handled_plans)")"
+  if [[ -n "$slug" && -f "$PROMOTE/$slug/PLAN.md" ]]; then
+    f="$PROMOTE/$slug/PLAN.md"
+    t="$(cat "$f"; printf x)"; t="${t%x}"
+    while IFS= read -r line; do
+      [[ -n "$line" ]] || continue
+      n="$(scv_plan_history_add "$t" "${line//$'\x1f'/$'\n'}"; printf x)"; t="${n%x}"
+    done < "$S/choices"
+    printf '%s' "$t" > "$f"
+    rm -f "$S/choices"
+    CF="recorded:$slug"
+  elif [[ "$mode" == drop ]]; then
+    tag="$(scv_tc_req_tag "$(cat "$S/id" 2>/dev/null)" "$(cat "$S/req" 2>/dev/null)")"
+    mkdir -p "$JDIR" 2>/dev/null
+    while IFS= read -r line; do
+      [[ -n "$line" ]] || continue
+      printf '%s\n' "$(scv_tc_choice_log_line "$(date +%Y-%m-%dT%H:%M:%S)" "${line//$'\x1f'/$'\n'}" "$tag")" >> "$JDIR/.turn-plan.log" 2>/dev/null || true
+    done < "$S/choices"
+    rm -f "$S/choices"
+    CF=logged
+  fi
+  return 0
+}
+
 # @effect step_call_lines
 # 이유: 대화 기록 파일의 끝 8 ~ 9MB 에서 단계 보고 도구의 이름과 도구 호출 표시가 함께 든 줄의 끝 쪽(200줄)을 읽는다
 # 끝 쪽만 읽는 것은 이 길이 대시보드를 켠 세션에서 턴마다 돌기 때문이다. 맥에서 30MB 를 통째로 훑으면 0.28초,
@@ -317,7 +376,9 @@ case "$CMD" in
       mkdir -p "$JDIR" 2>/dev/null && printf '%s\n' "$(cd "$DIR" && pwd -P)" > "$JDIR/.turn-latest" 2>/dev/null
       exit 0
     fi
-    rm -f "$S"/snap.* "$S"/head.* "$S"/pend.* "$S"/phead.* "$S/pend-roots" "$S/mine" "$S/roots" "$S/receipts" "$S/blocks" "$S/exempt" "$S/steps" "$S/ended" "$S/stopping" 2>/dev/null
+    # 앞 턴이 들고 있던 선택 답은 그 턴의 것이다 — 번호 · 요청 글을 지우기 전에 내려놓는다(다음 턴의 계획에 섞이지 않게).
+    [[ -s "$S/choices" ]] && choice_flush drop
+    rm -f "$S"/snap.* "$S"/head.* "$S"/pend.* "$S"/phead.* "$S/pend-roots" "$S/mine" "$S/roots" "$S/receipts" "$S/blocks" "$S/exempt" "$S/steps" "$S/ended" "$S/stopping" "$S/choices" "$S/plan-sizes" 2>/dev/null
     printf '%s' "$REQ" > "$S/req"
     od -An -N4 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n' > "$S/id"
     [[ -s "$S/id" ]] || printf '%08x' "$$" > "$S/id"
@@ -326,6 +387,7 @@ case "$CMD" in
     IFS=':' read -r -a WS <<< "$(setting SCV_WORKSPACE_REPOS "")"
     for r in ${WS[@]+"${WS[@]}"}; do [[ "$r" == /* && -d "$r" ]] && take_snap "$r"; done
     plan_texts | { t="$(cat)"; scv_tc_plan_lines "$t"; } > "$S/plans"
+    plan_sizes > "$S/plan-sizes" 2>/dev/null || true   # 선택 답을 적을 때 '이번 턴이 다룬 계획'을 가리는 기준
     mkdir -p "$JDIR" 2>/dev/null && printf '%s\n' "$(cd "$DIR" && pwd -P)" > "$JDIR/.turn-latest" 2>/dev/null
     exit 0
     ;;
@@ -410,6 +472,7 @@ case "$CMD" in
     state_dir "$DIR" || { echo "TURN_PLAN: pass"; exit 0; }
     [[ -f "$S/id" ]] || { echo "TURN_PLAN: pass"; exit 0; }
     ID="$(cat "$S/id")"
+    [[ -s "$S/choices" ]] && choice_flush hold   # 들고 있던 선택 답 — 이 턴이 다룬 계획이 생겼으면 거기에 적는다
     # 시간 예산 — 종료 훅의 한도(60초)보다 먼저 스스로 끝낸다. 넘으면 통과시키고 '확인 생략'을 남기며 끝 표시를 쓴다.
     BUDGET="$(setting SCV_TURN_CHECK_BUDGET 30)"; [[ "$BUDGET" =~ ^[0-9]+$ ]] || BUDGET=30
     OVER=0
@@ -441,6 +504,7 @@ case "$CMD" in
     (( SECONDS < BUDGET )) || OVER=1
     if (( OVER )); then
       : > "$S/ended" 2>/dev/null || true
+      [[ -s "$S/choices" ]] && choice_flush drop
       printf '%s\n' "$(date +%Y-%m-%dT%H:%M:%S) 확인 생략 · 시간 예산 ${BUDGET}초 넘음 · $(scv_tc_req_tag "$ID" "$(cat "$S/req" 2>/dev/null)")" >> "$JDIR/.turn-plan.log" 2>/dev/null || true
       echo "TURN_PLAN: pass"
       exit 0
@@ -469,6 +533,7 @@ case "$CMD" in
     # 통과로 끝낸다(사람이 처음과 끝에만 있게 — 계획 lean-loop). 바로 고칠 수 있는 어김(인용 · 언어)은 다른 검사가 막는다.
     if [[ "$V" == block* && "$(setting SCV_LEAN_LOOP off | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')" == on ]]; then
       : > "$S/ended" 2>/dev/null || true
+      [[ -s "$S/choices" ]] && choice_flush drop
       line="$(date +%Y-%m-%dT%H:%M:%S) 가벼운 루프 · 막지 않음(${V#block }) · 파일 ${NCH}개 · $(scv_tc_req_tag "$ID" "$(cat "$S/req" 2>/dev/null)")"
       printf '%s\n' "$line" >> "$JDIR/.turn-plan.log" 2>/dev/null || true
       slug="$(printf '%s\n' "$ACT" | head -n 1)"
@@ -481,7 +546,7 @@ case "$CMD" in
       exit 0
     fi
     # 통과를 내면 이 턴은 끝난 것이다 — 다음에 오는 사람의 말은 새 턴으로 시작한다. 막힘이면 턴이 이어진다.
-    case "$V" in pass|pass-unrecorded) : > "$S/ended" 2>/dev/null || true ;; esac
+    case "$V" in pass|pass-unrecorded) : > "$S/ended" 2>/dev/null || true; [[ -s "$S/choices" ]] && choice_flush drop ;; esac
     case "$V" in
       pass) echo "TURN_PLAN: pass" ;;
       pass-unrecorded)
@@ -511,19 +576,33 @@ case "$CMD" in
     ;;
 
   choice)
+    # 밖으로 나가는 톱니 앞의 확인 물음에 "실행"으로 답했으면 그 실행에 확인을 적는다 — 그 물음일 때만 띄운다.
+    # 계획 기록 검사를 꺼 두어도 적는다(끄면 밖으로 나가는 톱니를 영영 못 돌리게 된다).
+    [[ "$Q" != *"[기어 확인 "* ]] || bash "$SCRIPT_DIR/gear.sh" confirm --question "$Q" --answer "$A" >/dev/null 2>&1 || true
     enabled || exit 0
     [[ -n "$Q$A" ]] || exit 0
     # 재는 검사의 물음에 "이대로"로 답했으면 받아들인 값으로 적는다(계획이 없어도).
     # 그 물음일 때만 띄운다 — 선택 답마다 띄우면 답 17개에 1초가 더 든다(2026-11-11 시험 T12 가 잡음).
     [[ "$Q" != *"[재는 검사]"* ]] || bash "$SCRIPT_DIR/pure-bench.sh" accept --question "$Q" --answer "$A" >/dev/null 2>&1 || true
-    slug="$(active_plans | head -n 1)"
-    [[ -n "$slug" ]] || exit 0
-    f="$PROMOTE/$slug/PLAN.md"
-    t="$(cat "$f"; printf x)"; t="${t%x}"
+    # 적을 곳은 이번 턴이 다룬 계획이다(계획 20261124-wookiya1364-choice-record-right-plan) — 진행 중이라는 것만으로 적으면 관계없는 계획에 적힌다(2026-11-24, 12건).
+    # 다룬 계획이 아직 없으면 상태 폴더에 들고 있다가 다음 답 · 턴 끝에 다시 보고, 끝까지 없으면 턴 기록에 남긴다.
+    # 세션을 안 넘겨받았으면 가장 최근 턴의 폴더를 쓴다.
+    [[ -n "$SID" || ! -s "$JDIR/.turn-latest" ]] || DIR="$(cat "$JDIR/.turn-latest" 2>/dev/null)"
     e="$(scv_tc_choice_entry "${SCV_TODAY:-$(date +%Y-%m-%d)}" "$(date +%H:%M)" "$Q" "$A")"
-    n="$(scv_plan_history_add "$t" "$e"; printf x)"
-    printf '%s' "${n%x}" > "$f"
-    echo "CHOICE_RECORDED: $slug"
+    e="${e//$'\x1f'/ }"
+    CF=logged
+    if state_dir "$DIR" && [[ -f "$S/id" ]]; then
+      printf '%s\n' "${e//$'\n'/$'\x1f'}" >> "$S/choices"
+      choice_flush hold
+    else
+      mkdir -p "$JDIR" 2>/dev/null
+      printf '%s\n' "$(scv_tc_choice_log_line "$(date +%Y-%m-%dT%H:%M:%S)" "$e" "")" >> "$JDIR/.turn-plan.log" 2>/dev/null || true
+    fi
+    case "$CF" in
+      recorded:*) echo "CHOICE_RECORDED: ${CF#recorded:}" ;;
+      logged) echo "CHOICE_LOGGED" ;;
+      *) echo "CHOICE_HELD" ;;
+    esac
     ;;
 
   *) usage ;;

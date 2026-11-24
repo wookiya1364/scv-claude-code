@@ -131,7 +131,8 @@ if [[ "$v1 $v2 $v3" == "block block pass-unrecorded" ]] && plan | grep -q '기�
 else bad "T11 $v1 $v2 $v3"; fi
 
 # T12 — 선택 답 17개를 이력에 바로 · 1초 안, 훅 입력(JSON) 한 개도
-reset
+# 답은 이번 턴이 다룬 계획에 적힌다 — 그래서 턴을 시작하고 계획에 진행을 먼저 남긴다.
+reset; start; H "bash $PL progress p1 --step 1 --note '버튼 자리 잡음'"
 t0="$(now_ms)"
 i=1; while (( i <= 17 )); do bash "$TC" choice --question "질문 $i" --answer "답 $i" >/dev/null; i=$((i + 1)); done
 t1="$(now_ms)"
@@ -510,6 +511,84 @@ j="$(scv_tc_req_join "$long" "0123456789abcdefghij" 4000)"
   && ok "T42 요청 글 잇기: 빈 쪽은 그대로, 4,000자에서 자름" || bad "T42 잇기 len=${#j}"
 t42="$(scv_tc_session_closes startup)$(scv_tc_session_closes resume)$(scv_tc_session_closes compact)$(scv_tc_session_closes clear)$(scv_tc_session_closes "")"
 [[ "$t42" == "11000" ]] && ok "T42 세션 열기: 새로 열기 · 다시 열기만 앞 턴을 끝냄" || bad "T42 세션 [$t42]"
+
+# T53 ~ T61 — 선택 답은 그 턴이 다룬 계획에만, 글은 글자 경계에서 자른다
+# (계획 20261124-wookiya1364-choice-record-right-plan · TESTS T1 ~ T9. TESTS T10 은 위의 T12 가 본다)
+CH() { bash "$TC" choice --session s1 --question "$1" --answer "$2" >/dev/null; }
+cnt() { local n; n="$(grep -c "$1" "$2" 2>/dev/null)"; printf '%s' "${n:-0}"; }   # 파일이 없으면 0
+held() { cnt . scv/journal/.turn-plan/choices; }
+nsel() { cnt ' 선택\*\* — 답: ' "$1"; }
+logsel() { cnt '선택 답' scv/journal/.turn-plan.log; }
+sum() { cksum < "$1"; }
+mkp2() { mkdir -p scv/promote/p2; printf -- '---\ntitle: 둘째 계획\nslug: p2\nstatus: planned\n---\n\n# 둘째 계획\n\n## Links\n' > scv/promote/p2/PLAN.md; }
+P1=scv/promote/p1/PLAN.md; P2=scv/promote/p2/PLAN.md
+
+# T53 — 다루지 않은 진행 중 계획에는 적지 않고 들고 있는다 (재현 — 고치기 전에는 p1 에 적힌다)
+reset; start; s0="$(sum $P1)"
+CH "기어를 어디에 둘까요?" "scv 안에만"
+[[ "$(sum $P1)" == "$s0" && "$(held)" == 1 ]] && ok "T53 다루지 않은 계획은 그대로, 답 1개를 들고 있음" || bad "T53 p1 바뀜=$([[ "$(sum $P1)" == "$s0" ]] && echo no || echo yes) held=$(held)"
+
+# T54 — 이번 턴에 다룬 계획에는 바로, 보낸 순서대로
+reset; start; H "bash $PL progress p1 --step 1 --note '버튼 자리 잡음'"
+CH "질문 하나" "답 하나"; CH "질문 둘" "답 둘"
+first="$(grep -m1 ' 선택\*\* — 답: ' $P1 | sed 's/.*답: //')"
+[[ "$(nsel $P1)" == 2 && "$first" == "답 하나" && "$(held)" == 0 ]] && ok "T54 다룬 계획에 2줄, 순서 그대로" || bad "T54 n=$(nsel $P1) first=$first held=$(held)"
+
+# T55 — 들고 있던 답은 같은 턴에 다룬 계획이 생기면 그 계획에: (a) 다음 답이 올 때 (b) 턴이 끝날 때
+reset; start; s0="$(sum $P1)"
+CH "질문 하나" "답 하나"; CH "질문 둘" "답 둘"; mkp2; CH "질문 셋" "답 셋"
+first="$(grep -m1 ' 선택\*\* — 답: ' $P2 | sed 's/.*답: //')"
+[[ "$(nsel $P2)" == 3 && "$first" == "답 하나" && "$(sum $P1)" == "$s0" && "$(held)" == 0 ]] && ok "T55 새 계획에 3줄(들고 있던 2 + 새 1), 순서 그대로" || bad "T55a n=$(nsel $P2) first=$first held=$(held)"
+reset; start; s0="$(sum $P1)"
+CH "질문 하나" "답 하나"; CH "질문 둘" "답 둘"; mkp2; verdict >/dev/null
+[[ "$(nsel $P2)" == 2 && "$(sum $P1)" == "$s0" && "$(held)" == 0 ]] && ok "T55 턴이 끝날 때 새 계획에 2줄" || bad "T55b n=$(nsel $P2) held=$(held)"
+
+# T56 — 끝까지 다룬 계획이 없으면 턴 기록에 남는다
+reset; start; s0="$(sum $P1)"
+CH "어느 쪽으로 할까요?" "첫째로"; CH "질문 둘" "답 둘"; v="$(verdict)"
+if [[ "$v" == pass && "$(sum $P1)" == "$s0" && "$(logsel)" == 2 && "$(held)" == 0 ]] && grep -q '답: 첫째로 · 질문: 어느 쪽으로 할까요?' scv/journal/.turn-plan.log; then ok "T56 계획은 그대로, 턴 기록에 2줄"
+else bad "T56 v=$v log=$(logsel) held=$(held)"; fi
+
+# T57 — 죽은 앞 턴의 답은 다음 턴의 계획에 섞이지 않는다
+reset; start; CH "앞 턴 질문" "앞 턴 답"
+bash "$TC" stop-begin --session s1   # 끝 훅이 돌기 시작하고 판정 전에 죽음 → 다음 말은 새 턴
+start "다음 일"; H "bash $PL progress p1 --step 1 --note '다음 턴의 일'"; CH "다음 턴 질문" "다음 턴 답"
+if [[ "$(nsel $P1)" == 1 ]] && grep -q '답: 다음 턴 답' $P1 && ! grep -q '앞 턴 답' $P1 && grep -q '답: 앞 턴 답' scv/journal/.turn-plan.log; then ok "T57 앞 턴의 답은 턴 기록에, 계획에는 다음 턴의 답만"
+else bad "T57 n=$(nsel $P1) log=$(logsel)"; fi
+
+# T58 — 여러 계획을 다뤘으면 가장 최근에 고친 하나에
+reset; mkp2; start
+printf '\n덧붙임\n' >> $P1; touch -t 202601010000 $P1
+printf '\n덧붙임\n' >> $P2; touch -t 202601010001 $P2
+CH "질문 하나" "답 하나"; CH "질문 둘" "답 둘"
+[[ "$(nsel $P2)" == 2 && "$(nsel $P1)" == 0 ]] && ok "T58 가장 최근에 고친 계획 하나에 2줄" || bad "T58 p2=$(nsel $P2) p1=$(nsel $P1)"
+
+# T59 — 글자 경계에서 자른다: 언어 설정이 없어도 한글 130자 → 120자 + … (재현 — 고치기 전에는 설정 없는 쪽이 글자 중간에서 잘린다)
+k130="$(printf '가%.0s' $(seq 1 130))"; k120="$(printf '가%.0s' $(seq 1 120))"
+want="**2026-11-09 10:24 선택** — 답: ${k120}…"$'\n'"질문: ${k120}…"
+t59=""
+for loc in C en_US.UTF-8 C.UTF-8; do
+  got="$(LC_ALL=$loc bash -c 'source "$1"; scv_tc_choice_entry 2026-11-09 10:24 "$2" "$2"' _ "$CORE/scripts/lib/turn-check.sh" "$k130" 2>/dev/null)"
+  [[ "$got" == "$want" ]] || t59="$t59 $loc"
+done
+[[ -z "$t59" ]] && ok "T59 한글 130자 → 120자 + …, 언어 설정 세 가지에서 같은 글" || bad "T59 다른 결과:$t59"
+
+# T60 — 자르기의 경계 값: 딱 120자 · 119자 · 섞인 121자(영문 · 한글 · 4바이트 글자) · 줄바꿈 · 빈 글
+m120="$(printf 'a가😀b%.0s' $(seq 1 30))"; t60=""
+for loc in C en_US.UTF-8; do
+  c() { LC_ALL=$loc bash -c 'source "$1"; scv_tc_choice_entry d t "$2" x' _ "$CORE/scripts/lib/turn-check.sh" "$1" 2>/dev/null | sed -n 's/^질문: //p'; }
+  [[ "$(c "$k120")" == "$k120" ]] || t60="$t60 $loc:120"
+  [[ "$(c "${k120%가}")" == "${k120%가}" ]] || t60="$t60 $loc:119"
+  [[ "$(c "${m120}끝")" == "${m120}…" ]] || t60="$t60 $loc:섞임"
+  [[ "$(c $'두\n줄')" == "두 줄" ]] || t60="$t60 $loc:줄바꿈"
+  [[ "$(c "")" == "" ]] || t60="$t60 $loc:빈글"
+done
+[[ -z "$t60" ]] && ok "T60 경계 값 다섯 가지, 두 설정에서 같은 글" || bad "T60 틀림:$t60"
+
+# T61 — 턴이 시작되지 않았으면 계획은 그대로, 턴 기록에 한 줄
+reset; s0="$(sum $P1)"
+CH "질문 하나" "답 하나"
+[[ "$(sum $P1)" == "$s0" && "$(logsel)" == 1 ]] && ok "T61 턴 상태가 없으면 턴 기록에 1줄" || bad "T61 log=$(logsel)"
 reset
 
 if [[ $fail -ne 0 ]]; then echo "test-turn-plan-check: FAIL" >&2; exit 1; fi

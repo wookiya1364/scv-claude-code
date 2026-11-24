@@ -42,7 +42,8 @@ else
 fi
 
 # ---------- turn plan check (0.87.0+) ----------------------------------------
-# 선택 답을 진행 중 계획의 `## 변경 이력` 에 바로 적는다(질문 · 답) — 폰에서도 계획 파일과 대시보드로 결정이 보이게.
+# 선택 답을 이번 턴이 다룬 계획의 `## 변경 이력` 에 적는다(질문 · 답) — 폰에서도 계획 파일과 대시보드로 결정이 보이게.
+# 다룬 계획이 아직 없으면 턴 검사가 들고 있다가 턴 끝에 적거나 턴 기록에 남긴다(계획 20261124-wookiya1364-choice-record-right-plan) — 그래서 세션을 넘긴다.
 # 답은 tool_response.answers({질문: 답}) 에서, 없으면 글 모양 '"질문"="답"' 에서 꺼낸다. SCV_TURN_PLAN_CHECK=off 면 적지 않는다.
 _scv_tc_sh="${SCV_CORE_ROOT:-$SCRIPT_DIR/../..}/scripts/turn-check.sh"
 if [[ -f "$_scv_tc_sh" ]]; then
@@ -56,7 +57,11 @@ if [[ -f "$_scv_tc_sh" ]]; then
   fi
   while IFS=$'\t' read -r _scv_q _scv_a; do
     [[ -n "$_scv_q$_scv_a" ]] || continue
-    bash "$_scv_tc_sh" choice --question "$_scv_q" --answer "$_scv_a" >/dev/null 2>&1 || true
+    if [[ -n "$_scv_sid" ]]; then
+      bash "$_scv_tc_sh" choice --session "$_scv_sid" --question "$_scv_q" --answer "$_scv_a" >/dev/null 2>&1 || true
+    else
+      bash "$_scv_tc_sh" choice --question "$_scv_q" --answer "$_scv_a" >/dev/null 2>&1 || true
+    fi
   done <<< "$_scv_qa"
 fi
 
