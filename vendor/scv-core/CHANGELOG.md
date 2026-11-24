@@ -2,6 +2,19 @@
 
 All notable changes to SCV Core are documented here.
 
+## [0.102.0] - 2026-11-24
+
+### Added
+- 가드 규칙 S — 닫는 요약 도구에 질문을 넣은 호출은 거절하고 선택 도구부터 부르게 한다. 래퍼가 `SCV_SUMMARY_ASK="<도구>=<질문 칸>"` 으로 요약 도구와 질문 칸을 알려 주면, 그 칸이 찬 호출을 모든 도구 검사(`gate-any`)에서 거절한다. 닫는 글이 나오기 전의 자리라 선택 창이 늦게 뜨지도, 답이 두 번 보이지도 않는다. 실제 세션에서 끝 답이 있는 134턴 중 12턴이 글로 물으며 끝났고, 그중 10턴이 요약 도구에 질문과 버튼을 넣은 턴이었다(요약 도구 호출 121번 중 34번). 선택 도구가 없는 실행(호스트에 없음 · `SCV_CHOICE_GATE=off` · 사람 없는 실행)과 값이 없거나 꼴이 틀린 경우는 0.101.0 과 같다. 본문: `contracts/guard.md` Rule S, `contracts/choices.md` 10조.
+- `gear.sh ask <이름>` — 기어나 톱니를 쓸 때 정해야 할 값을 줄로 낸다: 인자마다 이름 · 지금 값 · 열림(`open`) 또는 기어가 정해 둠(`fixed`) · 설명, 받는 값이 있으면 `input` 줄.
+- 기어 안내 글(`protocols/gear.md`)의 값 안내: 요청에 없는 값은 선택 도구로 하나씩 묻는다. 기본값이 첫 보기이고, 보기는 톱니 사전의 인자 설명에서 만든다. 요청에 이미 있는 값과 기어가 정해 둔 값은 묻지 않고, 사람 없는 실행은 기본값을 쓴다.
+- `core/tests/test-choice-block.sh` S1–S9, `core/tests/test-gear-run.sh` T52–T54.
+
+### Changed
+- 만든 사전(`scv/gears/INDEX.tsv`)의 기어 줄 셋째 칸이 `-` 대신 펼친 흐름에서 가장 센 표시를 담는다: `pure` · `effect` · `outward` · `judge`(판단 단계가 있음). 흐름이 깨졌으면 `-` 그대로다. 톱니 줄은 바뀌지 않는다.
+- 매 턴 선택 줄의 끝 구절: "Summary box: recap only. Box or text asks are refused" (396B, 한도 400B). `ends` 방식의 줄에도 "Summary box: recap only" 를 넣었다.
+- 턴 끝 검사는 0.101.0 그대로다 — 글로 물으며 끝난 답은 다음 턴 안내만 남긴다.
+
 ## [0.101.0] - 2026-11-24
 
 ### Added

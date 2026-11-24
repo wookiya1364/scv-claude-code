@@ -67,11 +67,11 @@ scv_choice_line() {
   local tool="${1:-}" mode="${2:-all}"
   [[ -n "$tool" ]] || return 0
   if [[ "$mode" == "ends" ]]; then
-    printf '%s\n' "[SCV choices · ends] Ask with $tool only at the start (requirements, plan outline), at the end (video/e2e verification) and before irreversible acts (deploy, delete, send): recommended option first. Every other decision, first-run check included: take your recommendation, go on, and list it in the end report's decisions-I-made (contracts/choices.md)."
+    printf '%s\n' "[SCV choices · ends] Ask with $tool only at the start (requirements, plan outline), at the end (video/e2e verification) and before irreversible acts (deploy, delete, send): recommended option first. Every other decision, first-run check included: take your recommendation, go on, and list it in the end report's decisions-I-made. Summary box: recap only (contracts/choices.md)."
     return 0
   fi
   # 매 턴 실리는 줄 — 래퍼(요구 항목 블록 약 1.5KB)와 함께 매 턴 스택 상한(test-help-budget T12, 12,000B) 안. 요지만, 전문은 규칙 문서.
-  printf '%s\n' "[SCV choices] Ask decisions with $tool, never in text: recommended option first; each option: how it avoids its own problems; over 4 questions, split; over 4 options, two steps; names, suggested values; cancelled, stop. Next step is no decision (bar first-run check): unblocked, go on; work done, state it unasked. Summary box: recap only. Text asks are blocked (contracts/choices.md)."
+  printf '%s\n' "[SCV choices] Ask decisions with $tool, never in text: recommended option first; each option: how it avoids its own problems; over 4 questions, split; over 4 options, two steps; names, suggested values; cancelled, stop. Next step is no decision (bar first-run check): unblocked, go on; work done, state it unasked. Summary box: recap only. Box or text asks are refused (contracts/choices.md)."
 }
 
 # @pure
@@ -248,6 +248,17 @@ scv_choice_gate() {
 scv_choice_reason() {
   local tool="${1:-the choice tool}"
   printf '%s' "[SCV 선택지] 사용자에게 고르게 하거나 묻는 글로 턴을 끝냈다 — $tool 로 다시 물어라: 결정 하나에 질문 하나, 첫 보기가 추천, 보기마다 그 보기가 부를 문제를 막는 방법, 질문이 4개를 넘으면 중요한 것부터 나눠 연달아, 보기가 4개를 넘으면 두 단계로. 고를 것이 아니면 질문 없이 끝내라(contracts/choices.md)."
+}
+
+# @pure
+# 역할: 닫는 요약 도구에 질문을 넣은 호출을 거절할 때 모델에게 보이는 이유 한 줄을 만든다
+# 종류: 조립/choice
+# 예: ChoiceTool → $'[SCV 선택지] 요약 도구에 질문을 넣었다 — 질문은 ChoiceTool 로 한다: 고를 것이면 지금 ChoiceTool 을 먼저 불러라(결정 하나에 질문 하나, 첫 보기가 추천). 답을 받은 뒤 요약 도구는 질문 없이 다시 불러라. 고를 것이 아니거나 이 프로젝트의 묻기 방식이 묻지 않는 결정이면 추천대로 진행하고 질문을 빼고 다시 불러라. 닫는 글에서도 글로 묻지 말 것(contracts/choices.md).'
+# <도구 이름> → 거절 이유 한 줄(0.102.0+, 가드 Rule S). 닫는 글이 나오기 전의 자리라 답이 늦어지지도 두 번 보이지도 않는다 —
+# 실제 세션에서 글로 물으며 끝난 12턴 중 10턴이 요약 도구에 질문과 버튼을 넣은 턴이었다.
+scv_summary_ask_reason() {
+  local tool="${1:-the choice tool}"
+  printf '%s' "[SCV 선택지] 요약 도구에 질문을 넣었다 — 질문은 $tool 로 한다: 고를 것이면 지금 $tool 을 먼저 불러라(결정 하나에 질문 하나, 첫 보기가 추천). 답을 받은 뒤 요약 도구는 질문 없이 다시 불러라. 고를 것이 아니거나 이 프로젝트의 묻기 방식이 묻지 않는 결정이면 추천대로 진행하고 질문을 빼고 다시 불러라. 닫는 글에서도 글로 묻지 말 것(contracts/choices.md)."
 }
 
 # @pure

@@ -11,6 +11,7 @@
 #                      [--in <받는 값>] [--out <돌려주는 값>] [--arg <이름>=<값>]… [--example '…']
 #                                        뼈대 파일을 쓰고 사전을 다시 만든다 (@ 는 이 기어의 글 — 판단 단계).
 #                                        기어의 --in · --out 을 안 주면 첫 · 끝 톱니의 값 이름으로 채운다
+#   gear.sh ask <이름>                    쓸 때 정해야 할 값을 줄로 낸다 — arg<TAB>이름<TAB>지금 값<TAB>open|fixed<TAB>설명, input<TAB>받는 값 (없으면 none)
 #   gear.sh index                        톱니 사전과 기어 글에서 사전(INDEX.tsv)을 다시 만든다
 #   gear.sh check                        사전 · 파일 · 흐름 · 순수 톱니의 예시 · 표시 없는 위험 명령을 검사한다
 #   gear.sh run <이름> [<인자>=<값>]…      기어나 톱니를 돌린다 — 처음 입력은 표준 입력, 조절 값은 이름 붙은 인자
@@ -49,7 +50,7 @@ SELF="bash \"$SCRIPT_DIR/gear.sh\""
 # @effect usage
 # 이유: 쓰는 법을 표준 오류에 쓰고 종료 코드 2 로 끝낸다
 usage() {
-  sed -n '6,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2
+  sed -n '6,21p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2
   exit 2
 }
 
@@ -109,7 +110,7 @@ flow_decl() {
 # @effect gear_lines
 # 이유: 기어 글 파일들을 읽어 기어의 사전 줄들을 낸다 — 받는 값 · 돌려주는 값은 펼친 흐름의 첫 톱니 · 끝 톱니에서
 gear_lines() {
-  local tidx="$1" light="${2:-}" f d name text walk flat first last gin gout dict i line acc T=$'\t'
+  local tidx="$1" light="${2:-}" f d name text walk flat first last gin gout dict i line acc fm T=$'\t'
   dict="$(teeth_text)"
   for f in "$GDIR"/*/GEAR.md; do
     [[ -f "$f" ]] || continue
@@ -132,7 +133,9 @@ gear_lines() {
       acc="$(scv_gear_args_merge "$acc" "$(scv_gear_args_apply "$(scv_gear_args_parse "$dict" "${line%%$'\t'*}")" "$(step_ov "$walk" "$i")")")"
     done <<< "$walk"
     acc="${acc//$'\n'/; }"; acc="$(scv_gear_one_line "$acc")"
-    printf '%s\tgear\t-\t%s\t%s\t%s\t%s%s\n' "$name" "${gin:-*}" "${gout:-*}" \
+    # 0.102.0+ — 셋째 칸: 펼친 흐름에서 가장 센 표시(pure | effect | outward | judge, 깨진 흐름은 -). 가벼운 사전(run)은 재지 않는다
+    fm="-"; [[ -n "$light" ]] || fm="$(scv_gear_flow_mark "$flat" "$tidx")"
+    printf '%s\tgear\t%s\t%s\t%s\t%s\t%s%s\n' "$name" "$fm" "${gin:-*}" "${gout:-*}" \
       "$(scv_gear_one_line "$(scv_gear_front_get "$text" does)")" "$(scv_gear_one_line "$(scv_gear_front_get "$text" words)")" "${acc:+$T$acc}"
   done
   return 0
@@ -201,14 +204,27 @@ tooth_run() {
   env ${e[@]+"${e[@]}"} bash "$f" < "$infile" > "$outfile" 2> "$errfile"
 }
 
+# @effect kill_tree
+# 이유: 프로세스와 그 자식들을 죽인다(자식부터) — 끊긴 톱니가 띄운 명령이 남아 계속 돌지 않게. 자식을 찾는 도구(pgrep)가 없으면 자신만 죽인다
+kill_tree() {
+  local p="$1" c
+  if command -v pgrep >/dev/null 2>&1; then
+    for c in $(pgrep -P "$p" 2>/dev/null); do kill_tree "$c"; done
+  fi
+  kill -9 "$p" 2>/dev/null
+  return 0
+}
+
 # @effect run_example
-# 이유: 톱니를 예시 입력으로 실제로 돌려 출력 파일에 받는다(인자 줄 파일이 있으면 그 값으로) — 정한 시간(초)을 넘기면 죽이고 124 를 낸다
+# 이유: 톱니를 예시 입력으로 실제로 돌려 출력 파일에 받는다(인자 줄 파일이 있으면 그 값으로) — 정한 시간(초)을 넘기면 죽이고 124 를 낸다. 시간을 넘겼는지는 지킴이가 죽이기 전에 남긴 표시 파일로 안다(지킴이가 아직 살아 있는지로 가리면 죽인 직후에 틀린다)
 run_example() {
-  local f="$1" infile="$2" outfile="$3" argsfile="${4:-}" pid w rc
+  local f="$1" infile="$2" outfile="$3" argsfile="${4:-}" pid w rc mark="$3.timeout"
+  rm -f "$mark"
   tooth_run "$f" "$infile" "$outfile" /dev/null "$argsfile" "" & pid=$!
-  ( sleep "$EXSECS"; kill -9 "$pid" 2>/dev/null ) >/dev/null 2>&1 & w=$!
+  ( sleep "$EXSECS"; : > "$mark"; kill_tree "$pid" ) >/dev/null 2>&1 & w=$!
   wait "$pid" 2>/dev/null; rc=$?
-  if kill "$w" 2>/dev/null; then wait "$w" 2>/dev/null; else rc=124; fi
+  kill "$w" 2>/dev/null; wait "$w" 2>/dev/null
+  if [[ -e "$mark" ]]; then rc=124; rm -f "$mark"; fi
   return "$rc"
 }
 
@@ -427,6 +443,28 @@ case "$CMD" in
       printf '이름\t표시\t값\t인자\t하는 일\n'
       printf '%s\n' "$(scv_gear_list_rows "$idx" tooth)"
     fi
+    exit 0
+    ;;
+
+  ask)
+    # 0.102.0+ — 이 기어 · 톱니를 쓸 때 정해야 할 값: 인자(이름 · 지금 값 · 기어가 정해 둠 여부 · 설명)와 받는 값. 읽기만 한다.
+    name="${1:-}"
+    [[ "$(scv_gear_name_ok "$name")" == yes ]] || die 2 "쓸 수 없는 이름: $name"
+    dict="$(teeth_text)"; tidx="$(scv_gear_teeth_parse "$dict")"; idx=""; [[ -d "$GDIR" ]] && idx="$(built_index)"
+    kind="$(scv_gear_index_get "$idx" "$name" kind)"
+    [[ -n "$kind" ]] || die 2 "사전에 없는 기어 · 톱니: $name"
+    if [[ "$kind" == gear ]]; then walk="$(flat_walk "$name" "$tidx" 1 "" "")"; else walk="tooth"$'\t'"$name"; fi
+    acc=""; fixed=""; descs=""; i=0
+    while IFS= read -r line; do
+      i=$((i + 1)); [[ "$line" == tooth$'\t'* ]] || continue
+      t="${line#*$'\t'}"; t="${t%%$'\t'*}"; ov="$(step_ov "$walk" "$i")"
+      acc="$(scv_gear_args_merge "$acc" "$(scv_gear_args_apply "$(scv_gear_args_parse "$dict" "$t")" "$ov")")"
+      fixed="$(scv_gear_args_merge "$fixed" "$ov")"
+      descs+="$(scv_gear_args_desc "$dict" "$t")"$'\n'
+    done <<< "$walk"
+    printf 'GEAR_ASK: %s\n' "$name"
+    rows="$(scv_gear_ask_rows "$acc" "$fixed" "$descs" "$(scv_gear_index_get "$idx" "$name" in)")"
+    if [[ -n "$rows" ]]; then printf '%s\n' "$rows"; else echo "none"; fi
     exit 0
     ;;
 

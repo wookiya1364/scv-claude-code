@@ -275,7 +275,7 @@ printf 'keep\n' > victim.txt; printf 'keep\n' > victim2.txt
 tooth eraser pure text text 'rm victim.txt; cat' '"a" → "a"'
 tooth mover pure text text 'mv victim2.txt gone.txt; cat' '"a" → "a"'
 tooth writer pure text text 'cat > written.txt' '"a" → ""'
-tooth hang pure text text 'sleep 30; cat' '"a" → "a"'
+tooth hang pure text text "sleep 297.$$; cat" '"a" → "a"'
 t0=$SECONDS
 out="$(SCV_GEAR_EXAMPLE_SECONDS=1 bash "$G" check 2>&1)"; rc=$?
 dt=$((SECONDS - t0))
@@ -283,6 +283,11 @@ if [[ $rc != 0 && -f victim.txt && -f victim2.txt && ! -e gone.txt && ! -e writt
    && grep -q '^GEAR_BAD: mover — 순수 톱니에 둘 수 없는 명령(2번째 줄 mv)' <<< "$out" && grep -q '^GEAR_BAD: writer — 순수 톱니에 둘 수 없는 명령(2번째 줄 >)' <<< "$out" \
    && grep -q '^GEAR_EXAMPLE: hang — 예시 1: 1초 안에 끝나지 않았다' <<< "$out"; then ok "T22 지우기 · 옮기기 · 파일로 쓰기는 돌리지 않고 지목, 끝나지 않는 예시는 1초에서 끊음(${dt}초)"
 else bad "T22 rc=$rc dt=$dt"; printf '%s\n' "$out" | head -6 >&2; fi
+# 끊긴 톱니가 띄운 명령이 남아 돌지 않는다(자식을 찾는 도구가 있을 때)
+if command -v pgrep >/dev/null 2>&1; then
+  sleep 1
+  if pgrep -f "sleep 297.$$" >/dev/null 2>&1; then bad "T22b 끊긴 톱니의 명령이 남아 있다"; pkill -9 -f "sleep 297.$$" 2>/dev/null; else ok "T22b 끊긴 톱니가 띄운 명령도 함께 끝남"; fi
+fi
 
 # T23 — 값이 빠진 인자는 끝없이 돌지 않고 쓰는 법(2)으로 끝난다
 lim 10 bash "$G" new zz --kind >/dev/null 2>&1; r1=$?
@@ -487,6 +492,41 @@ printf '#!/usr/bin/env bash\ncat\n' > scv/gears/teeth/px.sh
 bash "$G" index >/dev/null
 out="$(bash "$G" check 2>&1)"; rc=$?
 [[ $t42 == 1 && $rc == 1 ]] && grep -q 'no_proxy' <<< "$out" && ok "T42 인자 이름 — 만들 때 거부(2 · 파일 없음), 검사에서 실패(1)" || bad "T42 t42=$t42 rc=$rc $(tr '\n' '|' <<< "$out")"
+
+# T52 — 사전의 기어 줄 셋째 칸: 펼친 흐름에서 가장 센 표시(순수만 pure · 부작용 effect · 밖으로 outward · 판단 단계 judge), 안에 든 기어도 펼쳐서 본다
+mkproj io-mark
+io_teeth
+bash "$G" new save --kind tooth --mark effect --in lines --out lines --does "파일에 쓴다" >/dev/null
+bash "$G" new send --kind tooth --mark outward --in lines --out lines --does "보낸다" >/dev/null
+bash "$G" new g-pure --kind gear --flow "head-n | upper" --does "앞 줄을 대문자로" >/dev/null
+bash "$G" new g-eff --kind gear --flow "head-n | save" --does "앞 줄을 쓴다" >/dev/null
+bash "$G" new g-out --kind gear --flow "head-n | send" --does "앞 줄을 보낸다" >/dev/null
+bash "$G" new g-judge --kind gear --flow "head-n | @ | upper" --does "앞 줄을 보고 고친다" >/dev/null
+bash "$G" new g-nest --kind gear --flow "g-pure | save" --does "대문자로 바꿔 쓴다" >/dev/null
+bash "$G" index >/dev/null
+m="$(for g in g-pure g-eff g-out g-judge g-nest; do LC_ALL=C awk -F'\t' -v n="$g" '$1 == n { printf "%s ", $3 }' scv/gears/INDEX.tsv; done)"
+tc="$(LC_ALL=C awk -F'\t' '$1 == "upper" { print NF }' scv/gears/INDEX.tsv)"
+[[ "$m" == "pure effect outward judge effect " && "$tc" == 7 ]] && ok "T52 기어 줄의 표시 칸 — pure · effect · outward · judge, 안에 든 기어는 펼쳐서" || bad "T52 [$m] 톱니 칸 수=$tc"
+
+# T53 — gear.sh ask: 인자마다 이름 · 지금 값 · 정해 둠 여부 · 설명, 받는 값이 있으면 input 줄. 없는 이름은 2
+bash "$G" new g-fix --kind gear --flow "head-n | upper" --arg count=2 --does "앞 두 줄을 대문자로" >/dev/null
+bash "$G" index >/dev/null
+a1="$(bash "$G" ask g-pure)"; a2="$(bash "$G" ask g-fix)"; a3="$(bash "$G" ask upper)"
+bash "$G" ask nope >/dev/null 2>&1; rc=$?
+w1=$'GEAR_ASK: g-pure\narg\tcount\t3\topen\t낼 줄 수\ninput\tlines'
+w2=$'GEAR_ASK: g-fix\narg\tcount\t2\tfixed\t낼 줄 수\ninput\tlines'
+w3=$'GEAR_ASK: upper\ninput\tlines'
+[[ "$a1" == "$w1" && "$a2" == "$w2" && "$a3" == "$w3" && $rc == 2 ]] && ok "T53 값 안내 줄 — 열린 인자 · 기어가 정해 둔 인자 · 받는 값, 없는 이름은 2" || bad "T53 rc=$rc [$a1] [$a2] [$a3]"
+
+# T54 — 기어 규약 글에 값 안내 규칙 네 가지가 있다(core 밖에서 도는 사본은 규약 글이 같은 자리에 있다)
+GMD="$CORE/protocols/gear.md"
+if [[ -f "$GMD" ]]; then
+  t54=1
+  for want in 'gear.sh" ask' 'through the choice tool' 'default is the first option' 'already gives' 'nobody can answer'; do
+    grep -qF -- "$want" "$GMD" || { t54=0; echo "  없음: $want" >&2; }
+  done
+  [[ $t54 == 1 ]] && ok "T54 기어 규약 — 빠진 값은 선택 도구로 안내(기본값이 첫 보기 · 준 값은 안 물음 · 사람 없으면 기본값)" || bad "T54 규약 글에 빠진 구절"
+else ok "T54 (규약 글 없음 — 건너뜀)"; fi
 
 if [[ $fail -ne 0 ]]; then echo "test-gear-run: FAIL" >&2; exit 1; fi
 echo "test-gear-run: all passed"

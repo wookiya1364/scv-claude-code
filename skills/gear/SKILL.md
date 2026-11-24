@@ -87,6 +87,20 @@ earlier one only in such a value, pass the argument: do not write a new tooth fo
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/gear.sh" run <name> [<argument>=<value> …]
 ```
 
+**Guide the values first (0.102.0+).** Before running a gear or a tooth, read what it needs:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/gear.sh" ask <name>
+```
+
+Each `arg` line is one argument: its name, its value now, `open` or `fixed` (the gear's own file set it), and what it
+is. An `input` line names the value the flow reads on standard input. For every `open` argument and for the input that
+the request does not already give, ask through the choice tool (`contracts/choices.md`) — one question per value, the
+default is the first option (recommended), and the other options come from the argument's description (`mac · linux`
+becomes two options). A value the user already gives in the request is used as it is, and a `fixed` argument is never
+asked. When nobody can answer (no choice tool for this run), use the defaults and say which ones in the report. More
+than four values: split the questions as that contract says.
+
 An argument's value comes from three places, the later one winning: the default in the tooth dictionary, an `arg:` line
 in the gear's file, the value given to `run`. A name no tooth of the flow declares is refused before any step runs
 (exit 2, with the names that can be used). `resume` takes no arguments — the ones given to `run` stay in force.

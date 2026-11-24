@@ -666,3 +666,83 @@ scv_gear_list_rows() {
     k == "tooth" { printf "%s%s\t%s\t%s → %s\t%s\t%s", (c++ ? "\n" : ""), $1, $3, $4, $5, a, $6; next }
     { printf "%s%s\t%s → %s\t%s\t%s", (c++ ? "\n" : ""), $1, $4, $5, a, $6 }'
 }
+
+# @pure
+# 역할: 펼친 흐름에서 가장 센 표시 하나를 고른다 — 밖으로 나가는 톱니가 있으면 outward, 판단 단계가 있으면 judge, 부작용 톱니가 있으면 effect, 순수 톱니뿐이면 pure, 흐름이 비었거나 모르는 이름이 있으면 -
+# 종류: 판정/gear
+# 예: $'tooth\tup\ntooth\tcount' $'count\ttooth\tpure\ttext\tnumber\t센다\t\nup\ttooth\tpure\ttext\ttext\t대문자\t' → "pure"
+# 예: $'tooth\tup\ntooth\twrite' $'up\ttooth\tpure\t*\t*\t대문자\t\nwrite\ttooth\teffect\t*\t*\t쓴다\t' → "effect"
+# 예: $'tooth\tup\ntext\tg' $'up\ttooth\tpure\ttext\ttext\t대문자\t' → "judge"
+# 예: $'tooth\tsend\ntext\tg' $'send\ttooth\toutward\t*\t*\t보낸다\t' → "outward"
+# 예: $'tooth\tup\nunknown\tnope' $'up\ttooth\tpure\ttext\ttext\t대문자\t' → "-"
+# 예: "" "" → "-"
+scv_gear_flow_mark() {
+  local steps="${1:-}" idx="${2:-}" line k s o=0 j=0 e=0 n=0
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    k="${line%%$'\t'*}"; s="${line#*$'\t'}"; s="${s%%$'\t'*}"
+    case "$k" in
+      text) j=1 ;;
+      tooth)
+        case "$(scv_gear_index_get "$idx" "$s" mark)" in
+          pure) ;;
+          effect) e=1 ;;
+          outward) o=1 ;;
+          *) printf '%s' '-'; return 0 ;;
+        esac ;;
+      *) printf '%s' '-'; return 0 ;;
+    esac
+    n=$((n + 1))
+  done <<< "$steps"
+  if (( n == 0 )); then printf '%s' '-'
+  elif (( o )); then printf 'outward'
+  elif (( j )); then printf 'judge'
+  elif (( e )); then printf 'effect'
+  else printf 'pure'; fi
+}
+
+# @pure
+# 역할: 톱니 사전 글에서 톱니 한 개의 인자 설명들을 꺼낸다 — "- 인자: 이름=기본값 — 설명" 에서 "이름<TAB>설명", 한 줄에 하나(설명이 없으면 빈 설명)
+# 종류: 꺼내기/gear
+# 예: $'### a\n- 인자: count=3 — 낼 줄 수\n- 인자: since\n### b\n- 인자: x=1 — 다른 것' "a" → $'count\t낼 줄 수\nsince\t'
+# 예: $'### a\n- 역할: 그대로' "a" → ""
+scv_gear_args_desc() {
+  local text="${1:-}" want="${2:-}" line cur="" out="" v d re_arg='^-[[:space:]]+인자[[:space:]]*:(.*)$'
+  while IFS= read -r line; do
+    line="${line%$'\r'}"
+    if [[ "$line" == "### "* ]]; then
+      cur="${line#"### "}"; cur="${cur#"${cur%%[![:space:]]*}"}"; cur="${cur%"${cur##*[![:space:]]}"}"
+    elif [[ "$cur" == "$want" && "$line" =~ $re_arg ]]; then
+      v="${BASH_REMATCH[1]}"; d=""
+      [[ "$v" != *" — "* ]] || d="${v#* — }"
+      v="${v%% — *}"; v="${v#"${v%%[![:space:]]*}"}"; v="${v%"${v##*[![:space:]]}"}"
+      [[ -n "$v" ]] || continue
+      d="${d#"${d%%[![:space:]]*}"}"; d="${d%"${d##*[![:space:]]}"}"
+      out+="${out:+$'\n'}${v%%=*}"$'\t'"$d"
+    fi
+  done <<< "$text"
+  printf '%s' "$out"
+}
+
+# @pure
+# 역할: 기어나 톱니를 쓸 때 정해야 할 값을 줄로 만든다 — 인자마다 "arg<TAB>이름<TAB>지금 값<TAB>open|fixed<TAB>설명"(기어가 정해 둔 인자는 fixed), 받는 값이 있으면 끝에 "input<TAB>값 이름"
+# 종류: 조립/gear
+# 예: $'count=5\nsince=' "count=5" $'count\t낼 줄 수\nsince\t어디부터' "lines" → $'arg\tcount\t5\tfixed\t낼 줄 수\narg\tsince\t\topen\t어디부터\ninput\tlines'
+# 예: "os=mac" "" $'os\t돌릴 곳: mac · linux' "none" → $'arg\tos\tmac\topen\t돌릴 곳: mac · linux'
+# 예: "" "" "" "none" → ""
+# 예: "" "" "" "text" → $'input\ttext'
+scv_gear_ask_rows() {
+  local args="${1:-}" fixed="${2:-}" descs="${3:-}" gin="${4:-}" line n v st d dl out="" T=$'\t'
+  while IFS= read -r line; do
+    [[ "$line" == *=* ]] || continue
+    n="${line%%=*}"; v="${line#*=}"; st=open; d=""
+    case $'\n'"$fixed" in *$'\n'"$n="*) st=fixed ;; esac
+    while IFS= read -r dl; do
+      [[ "$dl" == "$n$T"* ]] || continue
+      d="${dl#*"$T"}"; break
+    done <<< "$descs"
+    out+="${out:+$'\n'}arg$T$n$T$v$T$st$T$d"
+  done <<< "$args"
+  case "$gin" in ""|none|"*") ;; *) out+="${out:+$'\n'}input$T$gin" ;; esac
+  printf '%s' "$out"
+}
