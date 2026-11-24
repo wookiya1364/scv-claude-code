@@ -52,7 +52,7 @@ else bad "T44 c1=$c1 c2=$c2 $(grep -E '^(✖|.*T1 per-turn)' "$WORK/diet.out" 2>
 # T45 — 그림 도구가 있는 호스트는 그 도구 이름을, 없는 호스트는 화살표 한 줄 · 표를 말한다. core 글에는 도구 이름이 박혀 있지 않다
 newproj draw '{"SCV_LANG": "korean"}'
 h3="$(hook draw "$WORK/draw.env")"
-if grep -q 'with the DrawTool tool when this session has it' <<< "$h3" && ! grep -q 'DrawTool' <<< "$h1" \
+if grep -q 'if DrawTool is among your tools (loaded or deferred), draw with it — an arrow line or a table does not replace it' <<< "$h3" && ! grep -q 'DrawTool' <<< "$h1" \
    && grep -q 'as one arrow line (A → B → C) or a short table' <<< "$h1" && { [[ ! -f "$CORE/../tests/test-host-neutral.sh" ]] || bash "$CORE/../tests/test-host-neutral.sh" >/dev/null 2>&1; }; then ok "T45 도구 있는 호스트 → 도구 이름, 없는 호스트 → 화살표 한 줄 · 표, 호스트 이름 검사 통과"
 else bad "T45 $(grep -c DrawTool <<< "$h3") $(grep -c 'arrow line' <<< "$h1")"; fi
 
@@ -124,6 +124,24 @@ if [[ -f "$VH" && -f "$MZ" && -f "$FXE" ]]; then
 else
   [[ "$rd" == DrawTool ]] && ok "T51 프로필 새 칸 — 읽기 값 같음(검증 · 내려쓰기 도구가 없는 사본)" || bad "T51 rd=[$rd]"
 fi
+
+# T52 — 0.103.0: 그림 도구가 있는 세션에서 흐름을 화살표 줄로만 보이면 잡는다(계획 20261124-wookiya1364-gear-direct-light-turn).
+#       그 도구를 쓴 적이 없으면(있는지 모름) · 그 턴에 그렸으면 · 짧은 답이면 잡지 않는다. 인용 · 표 · 코드 블록 속 화살표는 세지 않는다
+FLOW=$'**흐름을 정리했음**\n\n받기 → 나누기 → 묶기 → 쓰기 차례로 돎.\n\n'"$(printf -- '- 항목 %s 은 앞 단계의 결과를 받아 다음 단계로 넘김\n' 1 2 3 4 5 6 7 8 9 10 11 12)"
+f1="$(scv_hs_flow_line "$FLOW")"; f2="$(scv_hs_flow_line $'\x3e 요청: a → b → c\n결과만 적음')"; f3="$(scv_hs_flow_line $'| a → b → c | 1 |')"
+f4="$(scv_hs_flow_line $'```\na -\x3e b -\x3e c\n```')"
+FB="$(printf '%s' "$FLOW" | LC_ALL=C wc -c | tr -d '[:space:]')"   # 바이트로 센다 — 글자 수는 지역 설정에 따라 다르다
+d1="$(scv_hs_picture_tool_due yes 0 yes "$FB")"; d2="$(scv_hs_picture_tool_due yes 0 "" "$FB")"
+d3="$(scv_hs_picture_tool_due yes 1 yes "$FB")"; d4="$(scv_hs_picture_tool_due yes 0 yes 120)"
+newproj t-known '{"SCV_LANG": "korean"}'; newproj t-unknown '{"SCV_LANG": "korean"}'
+o1="$(cd "$WORK/t-known" && printf '%s' "$FLOW" | bash "$HS" stop --echo off --lint off --picture on --draw-calls 0 --draw-known yes --now 2026-11-25T00:00:00 2>/dev/null)"
+o2="$(cd "$WORK/t-unknown" && printf '%s' "$FLOW" | bash "$HS" stop --echo off --lint off --picture on --draw-calls 0 --now 2026-11-25T00:00:00 2>/dev/null)"
+g1="$(hook t-known "$WORK/draw.env" | grep -c '^\[SCV 그림\] 직전 답이 흐름을 화살표 줄로만' || true)"
+g2="$(hook t-unknown "$WORK/draw.env" | grep -c '^\[SCV 그림\]' || true)"
+if [[ "$f1 $f2 $f3 $f4" == "yes no no no" && "$d1" == "picture=tool" && -z "$d2$d3$d4" && "$o1" == *"picture=tool"* && "$o2" != *"picture="* && "$g1" == 1 && "$g2" == 0 ]] \
+   && grep -q -- '--draw-known "\$_scv_dk"' "$CORE/template/hooks/on-stop.sh"; then
+  ok "T52 그림 도구가 있는 세션의 화살표 줄 — 알림 1줄, 쓴 적 없음 · 그 턴에 그림 · 짧은 답은 0줄"
+else bad "T52 f=$f1/$f2/$f3/$f4 d=[$d1][$d2][$d3][$d4] o1=$o1 o2=$o2 g=$g1/$g2"; fi
 
 if [[ $fail -ne 0 ]]; then echo "test-picture-rule: FAIL" >&2; exit 1; fi
 echo "test-picture-rule: all passed"

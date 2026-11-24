@@ -72,6 +72,13 @@ h = json.load(open("hooks/hooks.json"))["hooks"]
 cmds = [x.get("command", "") for e in h.get("PreToolUse", []) if "matcher" not in e for x in e.get("hooks", [])]
 assert any("SCV_GUARD_MODE=gate-any" in c and "SCV_HELP_FIRST_ALLOW=" in c and "guard.sh" in c for c in cmds), cmds
 PY
+# Core 0.102.0+: Rule S — the gate-any entry names the app's wrap-up tool and its question field.
+python3 - <<'PY' || fail "hooks.json: the gate-any entry must set SCV_SUMMARY_ASK to the wrap-up tool and its question field"
+import json
+h = json.load(open("hooks/hooks.json"))["hooks"]
+cmds = [x.get("command", "") for e in h.get("PreToolUse", []) if "matcher" not in e for x in e.get("hooks", [])]
+assert any("SCV_GUARD_MODE=gate-any" in c and 'SCV_SUMMARY_ASK="mcp__ccd_turn__wrap_up=ask"' in c for c in cmds), cmds
+PY
 # Core 0.79.0+: language correction after every tool (PostToolUse with no matcher runs on-lang-check.sh).
 python3 - <<'PY' || fail "hooks.json: PostToolUse with no matcher must run on-lang-check.sh"
 import json

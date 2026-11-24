@@ -100,6 +100,13 @@ if [[ -f "$_scv_mp" ]]; then
 fi
 # 하위 에이전트 안의 멈춤(훅 입력의 에이전트 id)도 하위 세션이다 — 지금 래퍼는 그 사건을 걸지 않지만, 걸려도 리드의 검사를 하지 않게.
 [[ -n "$(printf '%s' "$INPUT" | jq -r 'try (.agent_id // empty)' 2>/dev/null)" ]] && _scv_human=0
+# 0.103.0+ — 기어 턴(계획 gear-direct-light-turn): 매 턴 훅이 이 턴을 기어 턴으로 표시했으면(.gear-turn — 기어 이름 한 줄) 가벼운 길이다.
+# 지문 되새김 · 답 모양 · 그림 알림 · 등록과 인용 · 도움말 먼저 · 끝 보고 검사를 하지 않고, 계획 기록 검사는 막지 않는다.
+# 선택지 · 원칙 · 언어 검사와 저널 기록은 그대로 돈다. 표시는 사람 턴에서만 본다.
+_scv_gt=""
+if [[ "$_scv_human" == 1 && -f "$_scv_tdir/.gear-turn" && ! -L "$_scv_tdir/.gear-turn" ]]; then
+  _scv_gt="$(head -c 128 "$_scv_tdir/.gear-turn" 2>/dev/null | head -n 1 | LC_ALL=C tr -cd 'a-z0-9-')"
+fi
 # ---------- turn plan check (0.87.0+) ---------------------------------------
 # 이번 턴에 파일을 바꿨는데 계획 기록(plan-link progress · append · pause · exempt)이 없으면 막는다 — SCV_STOP_MODE 와 따로,
 # SCV_TURN_PLAN_CHECK=on(기본)이면 늘 막는다(사용자 결정 2026-11-09). 2번 막히면 turn-check.sh 가 통과시키고 '기록 없음'을 남긴다.
@@ -109,7 +116,7 @@ if [[ "$_scv_human" == 1 && -f "$_scv_tc_sh" ]]; then
   # '멈춤 시작' 표시를 판정보다 먼저 남긴다 — 이 훅이 한도 시간에 끊겨도 다음 말이 새 턴으로 열린다(계획 turn-check-fast-end).
   bash "$_scv_tc_sh" stop-begin --dir "$_scv_tdir" >/dev/null 2>&1 || true
   # 대화 기록 자리도 넘긴다(0.93.2) — 단계 보고 도구에 도구 앞 훅이 닿지 않는 호스트에서, 막을 참일 때만 그 호출을 대화 기록에서 센다.
-  _scv_tco="$(bash "$_scv_tc_sh" end --dir "$_scv_tdir" ${TRANSCRIPT:+--transcript "$TRANSCRIPT"} 2>/dev/null || true)"
+  _scv_tco="$(SCV_TC_GEAR_TURN="$_scv_gt" bash "$_scv_tc_sh" end --dir "$_scv_tdir" ${TRANSCRIPT:+--transcript "$TRANSCRIPT"} 2>/dev/null || true)"
   if grep -qx 'TURN_PLAN: block' <<<"$_scv_tco"; then
     _scv_tcr="$(sed -n 's/^TURN_PLAN_REASON: //p' <<<"$_scv_tco" | head -n 1)"
     _scv_tcf="$(sed -n 's/^TURN_PLAN_FILES: //p' <<<"$_scv_tco" | head -n 1)"
@@ -157,7 +164,7 @@ if [[ "$_scv_human" == 1 && -f "$_scv_hs" && -f "$_scv_hslib" ]]; then
   # 틀린 알림이었다(2026-11-24 잼, 사용자 결정). 틀려도 다음 턴의 한 줄이고 규약은 다시 싣지 않는다.
   # 답 모양 검사를 끈 프로젝트(SCV_ANSWER_LINT=off)에서는 그림 알림도 끈다 — 그 스위치의 약속은 "답 글을 읽지 않는다"이다.
   _scv_pic="$(_scv_sw "$(_scv_get SCV_PICTURE_NOTICE)")"; [[ "$_scv_lint" == "on" ]] || _scv_pic="off"
-  if [[ "$_scv_echo" == "on" || "$_scv_lint" == "on" || "$_scv_pic" == "on" ]]; then   # 셋 다 off 면 읽지도 쓰지도 않는다 (0.49 와 같음)
+  if [[ -z "$_scv_gt" ]] && [[ "$_scv_echo" == "on" || "$_scv_lint" == "on" || "$_scv_pic" == "on" ]]; then   # 셋 다 off 면 읽지도 쓰지도 않는다 (0.49 와 같음)
     _scv_cap=0   # 0.96.0+ — 문장 수 상한 없음(숫자로 박은 길이 규칙은 글을 뚝뚝 끊는다 — 계획 rules-once-no-caps)
     _scv_last=""; _scv_src="none"
     if [[ "$_scv_lint" == "on" || "$_scv_pic" == "on" ]] && declare -F scv_turn_slice >/dev/null 2>&1 && declare -F scv_stop_pick_source >/dev/null 2>&1; then
@@ -197,7 +204,19 @@ if [[ "$_scv_human" == 1 && -f "$_scv_hs" && -f "$_scv_hslib" ]]; then
       if [[ -z "$_scv_dt" ]]; then _scv_dc=0
       elif declare -F _scv_turn_tool_count >/dev/null 2>&1; then _scv_dc="$(_scv_turn_tool_count "$_scv_dt")"; fi
     fi
-    printf '%s' "$_scv_last" | bash "$_scv_hs" stop --echo "$_scv_echo" --lint "$_scv_lint" --cap "$_scv_cap" --lang "$_scv_lang" ${_scv_ltf:+--lang-text "$_scv_ltf"} --src "$_scv_src" --turn-dir "$_scv_tdir" --picture "$_scv_pic" --draw-calls "$_scv_dc" >/dev/null 2>&1 || true
+    # 0.103.0+ — 이 세션이 그림 도구를 쓴 적이 있는가(그 도구가 있다는 증거). 이번 턴에 썼으면 표시를 남기고, 아니면 답에 화살표가
+    # 둘 이상 있을 때만 표시나 대화 기록에서 찾는다(첫 줄에서 멈추는 글자 찾기 — 찾으면 표시를 남겨 다음부터 기록을 열지 않는다).
+    _scv_dk=""
+    if [[ "$_scv_pic" == "on" && -n "${_scv_dt:-}" && ! -L "$_scv_tdir" && ! -L "$_scv_tdir/.draw-known" ]]; then
+      if [[ "${_scv_dc:-}" =~ ^[1-9] ]]; then mkdir -p "$_scv_tdir" 2>/dev/null && : > "$_scv_tdir/.draw-known" 2>/dev/null || true
+      elif [[ "${_scv_dc:-}" == 0 ]] && { [[ "$_scv_last" == *→*→* ]] || [[ "$_scv_last" == *'->'*'->'* ]]; }; then
+        if [[ -f "$_scv_tdir/.draw-known" ]]; then _scv_dk=yes
+        elif LC_ALL=C grep -m 1 -qF "\"name\":\"$_scv_dt\"" "$TRANSCRIPT" 2>/dev/null; then
+          _scv_dk=yes; mkdir -p "$_scv_tdir" 2>/dev/null && : > "$_scv_tdir/.draw-known" 2>/dev/null || true
+        fi
+      fi
+    fi
+    printf '%s' "$_scv_last" | bash "$_scv_hs" stop --echo "$_scv_echo" --lint "$_scv_lint" --cap "$_scv_cap" --lang "$_scv_lang" ${_scv_ltf:+--lang-text "$_scv_ltf"} --src "$_scv_src" --turn-dir "$_scv_tdir" --picture "$_scv_pic" --draw-calls "$_scv_dc" --draw-known "$_scv_dk" >/dev/null 2>&1 || true
     [[ -n "$_scv_ltf" ]] && rm -f "$_scv_ltf" 2>/dev/null
   fi
 fi
@@ -227,7 +246,7 @@ if [[ -f "$_scv_sgl" ]] && source "$_scv_sgl" 2>/dev/null; then
 fi
 _scv_r_prompt=""; _scv_r_principle=""; _scv_r_choice=""
 _scv_block_reason=""
-if [[ "$_scv_human" == 1 && -f "$_scv_mp" ]]; then
+if [[ "$_scv_human" == 1 && -z "$_scv_gt" && -f "$_scv_mp" ]]; then
   _scv_ans="${_scv_last:-}"   # 린트가 꺼져 본문을 안 골랐으면 호스트가 준 답만 본다
   [[ "$_scv_ans" == *[![:space:]]* ]] || _scv_ans="$(printf '%s' "$INPUT" | jq -r 'try (.last_assistant_message // empty)' 2>/dev/null | head -c 65536 || true)"
   # 호스트가 준 답은 마지막 메시지뿐이다 — 도구를 부르기 전 첫 메시지에 인용을 보였을 수 있으니, 원본에서 이번 턴의
@@ -325,7 +344,7 @@ fi
 # 글만 쓴 턴은 앞에서 막을 자리가 없다 — 그 턴만 여기서 한 번 막는다(판정은 model-prompting.sh help-gate 한 곳).
 _scv_r_help=""
 # 다른 세션이 보낸 메시지로 열린 턴(_scv_open)은 사람이 쓴 턴이 아니다 — help 를 요구하지 않는다.
-if [[ "$_scv_human" == 1 && "${_scv_open:-0}" != 1 && -f "$_scv_mp" ]]; then
+if [[ "$_scv_human" == 1 && -z "$_scv_gt" && "${_scv_open:-0}" != 1 && -f "$_scv_mp" ]]; then
   _scv_d_help="$_scv_active"
   declare -F scv_gates_delivered >/dev/null 2>&1 && _scv_d_help="$(scv_gates_delivered help "$_scv_active" "$_scv_sess" "$_scv_tok" "$_scv_grec")"
   if [[ "$_scv_d_help" != 1 ]]; then
@@ -340,7 +359,7 @@ fi
 # 도구 호출을 못 찾는 원본(다른 호스트 모양)은 보지 않는다. 끄기: 설정 SCV_FINISH_REPORT=off — 이 구간 전과 같다.
 _scv_r_finish=""
 _scv_frlib="$_scv_core/scripts/lib/finish-report.sh"
-if [[ "$_scv_human" == 1 && "${_scv_open:-0}" != 1 && -n "$_scv_lastmsg" && -f "$_scv_frlib" && -f "${TRANSCRIPT:-}" ]] \
+if [[ "$_scv_human" == 1 && -z "$_scv_gt" && "${_scv_open:-0}" != 1 && -n "$_scv_lastmsg" && -f "$_scv_frlib" && -f "${TRANSCRIPT:-}" ]] \
    && declare -F settings_get >/dev/null 2>&1; then
   _scv_fon="$(settings_get SCV_FINISH_REPORT 2>/dev/null | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]' || true)"
   # shellcheck disable=SC1090

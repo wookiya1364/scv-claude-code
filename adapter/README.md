@@ -51,7 +51,10 @@ Adapter-owned behavior:
   matcher (Core 0.80.0+) runs `guard.sh` in `gate-any` mode: in a person's
   turn every tool is refused until help has been called, except the help
   call itself and `SCV_HELP_FIRST_ALLOW` (tool search, the task list, the
-  app's plan and wrap-up tools)
+  app's plan and wrap-up tools). The same entry sets
+  `SCV_SUMMARY_ASK="mcp__ccd_turn__wrap_up=ask"` (Core 0.102.0+, Rule S): a
+  wrap-up call whose `ask` field is filled is refused, so a decision goes
+  through `AskUserQuestion` before the closing text is written
 
 Core-owned behavior:
 

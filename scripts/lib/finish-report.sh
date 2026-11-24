@@ -235,12 +235,13 @@ scv_finish_scan() {
 # 예: "" $'read\x1fa.sh\x1fok\x1fa.sh' "" full → $'missing\x1fverified\nmissing\x1funverified\nmissing\x1fdecided'
 # 예: $'scope\x1f기록만 함' $'scv\x1fhelp\x1fok\x1fhelp' "" short → ""
 # 예: $'verified\x1f언어 시험 실행 → 14개 통과\nunverified\x1f없음\ndecided\x1f이름' $'read\x1fa.sh\x1fok\x1fa.sh' "" full → $'noreason\x1funverified\nunbacked\x1fpass'
+# 예: $'verified\x1f앞 턴에 돌린 검사의 기록을 읽음 → 5개 통과\nunverified\x1f맥 — 아직 도는 중\ndecided\x1f이름' $'read\x1frci.log\x1fok\x1frci.log' "" full → ""
 # <칸 줄들> <근거 목록> <못 본 시험 이름들> <none|short|full> → 문제 줄들 | 빈 값. '확인한 것'이 통과 · pass 를 말하면 이번 턴에
 # 시험 실행이 있어야 하고, 파일 이름(x.sh · x.md …)을 말하면 근거 목록 대상에 그 이름이 있어야 한다. 근거 목록에 실제로 한 일
 # (읽기 · 바꾸기 · 실행 · 시험 · 찾아보기 · 그 밖)이 없는데 무엇을 확인했다고 하면 근거 없음.
 scv_finish_check() {
   local scan="${1:-}" led="${2:-}" untested="${3:-}" need="${4:-none}" us=$'\x1f' nl=$'\n' out=""
-  local v="" u="" d="" s="" hv=0 hu=0 hd=0 hs=0 line slot c low tok base work=0 hastest=0 alltg="" rest
+  local v="" u="" d="" s="" hv=0 hu=0 hd=0 hs=0 line slot c low tok base work=0 hastest=0 alltg="" rest fromlog=0
   local re_file='[A-Za-z0-9_./-]+\.(sh|md|py|ts|tsx|js|jsx|json|ya?ml|go|rs|rb|java|kt|swift|toml)'
   [[ "$need" == short || "$need" == full ]] || return 0
   while IFS= read -r line; do
@@ -267,7 +268,10 @@ scv_finish_check() {
   done
   if (( hv )); then
     case "$v" in 없음*|none*|None*) ;; *)
-      if (( ! hastest )) && [[ "$v" == *통과* || "$v" == *[Pp][Aa][Ss][Ss]* || "$v" == *[Gg][Rr][Ee][Ee][Nn]* ]]; then out+="unbacked${us}pass$nl"; fi
+      # 0.103.0+ — 이번 턴에 돌리지 않고 읽은 결과(앞 턴 · 뒤에서 돈 실행의 기록)는, 읽었다고 밝히고 이번 턴에 한 일이 있으면 통과를 말해도 된다.
+      fromlog=0
+      case "$v" in *읽음*|*읽은*|*"읽어 "*|*"앞 턴"*|*"read from"*|*"earlier run"*) (( work )) && fromlog=1 ;; esac
+      if (( ! hastest && ! fromlog )) && [[ "$v" == *통과* || "$v" == *[Pp][Aa][Ss][Ss]* || "$v" == *[Gg][Rr][Ee][Ee][Nn]* ]]; then out+="unbacked${us}pass$nl"; fi
       rest="$v"
       while [[ "$rest" =~ $re_file ]]; do
         tok="${BASH_REMATCH[0]}"; base="${tok##*/}"

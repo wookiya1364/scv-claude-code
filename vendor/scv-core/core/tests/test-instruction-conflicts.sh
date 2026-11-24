@@ -87,4 +87,36 @@ num="$( { grep -nE 'bullet[^.;]*[0-9]+ sentences|불릿[^.]*[0-9]+ ?문장' "$H/
 source "$CORE/scripts/lib/writing.sh"
 [[ "$num" == 0 && "$(scv_writing_bullet_cap)" == 6 ]] && ok "T9 불릿 기준 숫자는 함수 한 곳(6)" || bad "T9 문구에 불릿 숫자 ${num}곳 · 함수 값 $(scv_writing_bullet_cap)"
 
+# T10 ~ T11 — 0.103.0 정리(계획 20261124-wookiya1364-gear-direct-light-turn · TESTS T17 · T18).
+# T10 — 어긋나는 지시 표의 모든 줄이 처리 칸(없앰 · 다듬음 · 이기는 쪽을 적음)과 근거 칸을 채웠다. 표는 계획 폴더에 있다 — 본체만
+#       옮겨 온 사본(계획 폴더가 없는 곳)에서는 이 항목을 건너뛴다.
+tab=""
+for d in "$REPO/scv/promote" "$REPO/scv/archive"; do
+  [[ -f "$d/20261124-wookiya1364-gear-direct-light-turn/CONFLICTS.md" ]] && tab="$d/20261124-wookiya1364-gear-direct-light-turn/CONFLICTS.md"
+done
+if [[ -n "$tab" ]]; then
+  rows="$(grep -cE '^\| [0-9]+ \|' "$tab" || true)"
+  open="$(grep -E '^\| [0-9]+ \|' "$tab" | awk -F'|' '{ k = $5; gsub(/^ +| +$/, "", k); e = $7; gsub(/^ +| +$/, "", e); if ((k != "없앰" && k != "다듬음" && k != "이기는 쪽을 적음") || e == "") n++ } END { print n + 0 }')"
+  [[ "$rows" -ge 10 && "$open" == 0 ]] && ok "T10 어긋나는 지시 표 ${rows}줄 — 처리 · 근거가 빈 줄 0" || bad "T10 표 ${rows}줄 · 빈 줄 ${open}"
+else ok "T10 건너뜀 — 계획 폴더가 없는 사본"; fi
+
+# T11 — 정리한 지시가 글에 실제로 반영됐다: 옛 문장 0곳, 새 문장이 제자리에
+old=0
+grep -qF 'Box or text asks are refused' "$CORE/scripts/lib/choices.sh" && old=$((old + 1))
+grep -qF '도구가 있으면, 단계를 시작할 때' "$CORE/scripts/lib/step-report.sh" && old=$((old + 1))
+grep -qF 'tool when this session has it, else as one arrow line' "$H/on-user-prompt.sh" && old=$((old + 1))
+miss=""
+line="$(bash -c 'source "$1"; scv_choice_line PickTool' _ "$CORE/scripts/lib/choices.sh")"
+[[ "$line" == *"Box asks refused, text flagged"* ]] || miss+=" [선택 안내 줄]"
+has "$CORE/scripts/lib/step-report.sh" '이 턴이 그 계획의 단계를 다룰 때' || miss+=" [단계 안내 줄]"
+has "$CORE/scripts/lib/force-help.sh" '사용자가 SCV 액션을 직접 친 턴은 그 액션이 이 호출을 대신한다' || miss+=" [도움말 지시]"
+has "$C/finish-report.md" '읽었다고 밝히면 통과를 말해도 된다' || miss+=" [끝 보고 6]"
+has "$C/finish-report.md" '세 줄을 상자에 다시 풀어 쓰지' || miss+=" [마무리 상자]"
+has "$C/finish-report.md" '사용자의 지시를 따른다' || miss+=" [전역 지시]"
+has "$C/writing.md" '기어 턴(매 턴 훅이' || miss+=" [인용 규칙]"
+has "$P/work.md" 'leaves the turn'"'"'s receipt itself' || miss+=" [계획 기록 명령]"
+has "$P/work.md" 'Report only in a turn that works on that plan' || miss+=" [단계 보고 규약]"
+has "$H/on-user-prompt.sh" 'an arrow line or a table does not replace it' || miss+=" [그림 구절]"
+[[ "$old" == 0 && -z "$miss" ]] && ok "T11 옛 문장 0곳 · 새 문장 10곳" || bad "T11 옛 문장 ${old}곳 · 빠진 새 문장:$miss"
+
 exit "$fail"

@@ -162,8 +162,12 @@ bash "$TC" step --session s1 --tool other_tool; vB="$(verdict)"
 bash "$TC" step --session s1 --tool tool_step; vC="$(verdict)"
 printf '{"enabledPlugins": {"dash@m": false}}' > "$ON"
 reset; start; ed; H "bash $PL progress p1 --step 1 --note '결제 버튼'"; vD="$(verdict)"
+# T17b — 0.103.0: 기록이 진행 중 계획에 남지 않은 턴(릴리스 · 동기화 예외만 남긴 턴)은 대시보드가 켜져 있어도 단계 보고를 요구하지 않는다
+printf '{"enabledPlugins": {"dash@m": true}}' > "$ON"
+reset; start "릴리스 해"; ed; H "bash $PL exempt --kind release --why '릴리스 절차'"; vE="$(verdict)"
 unset SCV_STEP_TOOL SCV_STEP_TOOL_ON_FILE SCV_STEP_TOOL_ON_MARK
 [[ "$vA $vB $vC $vD" == "block block pass pass" ]] && ok "T17 켜짐: 보고 없음 block · 다른 도구 block · 보고 pass, 꺼짐: 진행 줄만 pass" || bad "T17 $vA $vB $vC $vD"
+[[ "$vE" == pass ]] && ok "T17b 예외만 남긴 턴은 단계 보고 없이 pass" || bad "T17b $vE"
 
 # T43 ~ T50 — 단계 보고 도구에 도구 앞 훅이 닿지 않는 호스트 (계획 20261113-wookiya1364-step-report-and-bench-before · TESTS T1 ~ T8).
 # 그 도구를 앱의 모드가 직접 처리하면 도구 앞 훅이 돌지 않아 표시가 0 이다(2026-11-13 실제 세션에서 확인: 16번 넘게 불러도 0).

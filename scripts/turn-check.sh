@@ -519,6 +519,13 @@ case "$CMD" in
     ACT="$(active_plans)"; NPL=0; [[ -n "$ACT" ]] && NPL="$(printf '%s\n' "$ACT" | wc -l | tr -d ' ')"
     BL="$(cat "$S/blocks" 2>/dev/null || echo 0)"
     NEED=no; (( NPL > 0 )) && NEED="$(step_needed)"
+    # 0.103.0+ — 이 턴의 기록이 진행 중 계획에 남지 않았으면 단계 보고를 요구하지 않는다: 릴리스 · 동기화 예외만 남긴 턴, 이 턴에 보관한
+    # 계획에만 적은 턴. 단계 도구는 진행 중 계획만 받는다 — 보관한 계획의 단계를 알리라고 막으면 풀 길이 없었다(계획 gear-direct-light-turn).
+    [[ "$EX" == yes ]] && NEED=no   # 릴리스 · 동기화 예외를 남긴 턴은 계획의 단계를 다룬 턴이 아니다
+    if [[ "$NEED" == yes ]]; then
+      NSTA="$(scv_tc_struct_count "$(scv_tc_new_lines "$(cat "$S/plans" 2>/dev/null)" "$(for f in "$PROMOTE"/*/PLAN.md; do [[ -f "$f" ]] && cat "$f" && printf '\n'; done | { t="$(cat)"; scv_tc_plan_lines "$t"; })")")"
+      (( ${NSTA:-0} > 0 )) || NEED=no
+    fi
     NSTEP="$(grep -c . "$S/steps" 2>/dev/null || true)"; NSTEP="${NSTEP:-0}"
     # 단계 보고 도구를 앱이 직접 처리하는 호스트에서는 도구 앞 훅이 돌지 않아 표시가 0 이다(0.93.2). 막을 참일 때만
     # 대화 기록에서 이번 턴의 그 도구 호출을 센다 — 표시가 있거나 보고가 필요 없는 턴은 대화 기록을 열지 않는다.
@@ -529,6 +536,16 @@ case "$CMD" in
     fi
     ORPH="$(orphan_return)"
     V="$(scv_tc_judge "$NCH" "$NRC" "$NST" "$NRQ" "$EX" "$NPL" "$BL" "$NEED" "$NSTEP" "$ORPH")"
+    # 0.103.0+ 기어 턴(계획 gear-direct-light-turn) — 저장해 둔 기어를 돌리라는 턴은 계획 기록 · 단계 보고로 막지 않는다: 기어가 하는 일은
+    # 기어 글에 적혀 있고 실행기가 저널에 한 줄을 남긴다. 막을 일이었던 것은 기록 파일에 한 줄로 남기고 통과로 끝낸다.
+    # 턴 끝 훅이 이 턴의 기어 이름을 환경 변수(SCV_TC_GEAR_TURN)로 준다.
+    if [[ "$V" == block* && "${SCV_TC_GEAR_TURN:-}" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+      : > "$S/ended" 2>/dev/null || true
+      [[ -s "$S/choices" ]] && choice_flush drop
+      printf '%s\n' "$(date +%Y-%m-%dT%H:%M:%S) 기어 턴 · 막지 않음(${V#block }) · 기어 ${SCV_TC_GEAR_TURN} · 파일 ${NCH}개 · $(scv_tc_req_tag "$ID" "$(cat "$S/req" 2>/dev/null)")" >> "$JDIR/.turn-plan.log" 2>/dev/null || true
+      echo "TURN_PLAN: pass"
+      exit 0
+    fi
     # 0.97.0+ 가벼운 루프(SCV_LEAN_LOOP=on) — 이 검사는 턴을 막지 않는다. 막을 일이었던 것은 기록 · 계획 이력에 남기고
     # 통과로 끝낸다(사람이 처음과 끝에만 있게 — 계획 lean-loop). 바로 고칠 수 있는 어김(인용 · 언어)은 다른 검사가 막는다.
     if [[ "$V" == block* && "$(setting SCV_LEAN_LOOP off | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')" == on ]]; then
