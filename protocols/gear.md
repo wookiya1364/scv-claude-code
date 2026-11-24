@@ -57,24 +57,32 @@ Turns are recorded per `core/contracts/recording.md`.
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/gear.sh" list
 ```
 
-It prints the gears (name, what each does, its flow) and the teeth (name, mark, input → output, what each does), or one
-line when the project has none. To verify the whole set — dictionary against files, every flow, the examples of every
+It prints the gears (name, input → output, arguments, what each does, its flow) and the teeth (name, mark,
+input → output, arguments, what each does), or one line when the project has none. The input and output shown are the
+**kind** of value (a name such as `subjects`), not a fixed value; an argument shows as `name=default`. To verify the whole set — dictionary against files, every flow, the examples of every
 pure tooth (they are really run), risky commands without the `outward` mark:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/gear.sh" check
 ```
 
-Exit 1 lists each problem on its own line (`GEAR_BAD` · `GEAR_FLOW` · `GEAR_EXAMPLE` · `GEAR_RISK` ·
-`GEAR_INDEX_STALE`); `GEAR_WARN` lines are notices and do not fail the check. Relay the lines and fix what they name.
+Exit 1 lists each problem on its own line (`GEAR_BAD` · `GEAR_FLOW` · `GEAR_SIG` · `GEAR_EXAMPLE` · `GEAR_RISK` ·
+`GEAR_INDEX_STALE`); `GEAR_WARN` lines are notices and do not fail the check, and `GEAR_SHOW` counts a gear's
+examples that are kept for reading only (its flow has a judgment step or a tooth that is not pure, so they are not run). Relay the lines and fix what they name.
 
 ## Step 2 — Run
 
-The first input, when the gear takes one, goes in on standard input.
+The value to work on goes in on standard input; a setting — how many, which range, which name — goes in as a named
+argument. The same gear gives a different result for a different input or argument, so when a request differs from an
+earlier one only in such a value, pass the argument: do not write a new tooth for it.
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/gear.sh" run <name>
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/gear.sh" run <name> [<argument>=<value> …]
 ```
+
+An argument's value comes from three places, the later one winning: the default in the tooth dictionary, an `arg:` line
+in the gear's file, the value given to `run`. A name no tooth of the flow declares is refused before any step runs
+(exit 2, with the names that can be used). `resume` takes no arguments — the ones given to `run` stay in force.
 
 - **Exit 0** — the flow ran to its end. Standard output is the result: relay it, or use it for what the user asked.
 - **Exit 10 — the judgment step.** The output is one block: `GEAR_HANDOFF: <token>`, the step, the gear's text, the result
@@ -88,7 +96,8 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/gear.sh" run <name>
 
   The remaining teeth run on it. A later tooth may reject it (exit 1 with its reason) — correct the result and run the
   gear again.
-- **Exit 11 — an `outward` tooth is next.** Nothing has run. The block shows the script that would run and a tag,
+- **Exit 11 — an `outward` tooth is next.** Nothing has run. The block shows the script that would run, the arguments
+  that would go into it, and a tag,
   `[기어 확인 <token>:<step>]`. Ask the user through the choice tool (`contracts/choices.md`): say in plain words what will go
   out, put the tag at the end of the question exactly as printed, and offer exactly two options, `실행` and
   `실행하지 않음` (`Run` and `Do not run` are read the same way). Only after the user picks `실행` does `resume <token>` run that tooth — the answer is recorded by the
@@ -111,7 +120,11 @@ When the user asks to turn repeated work into a gear:
    bash "${CLAUDE_PLUGIN_ROOT}/scripts/gear.sh" new <tooth> --kind tooth --does "<one line>" --mark pure --in <name> --out <name> --example '<input> → <output>'
    ```
 
+   A value the work may need to change later is an argument, not a number written into the body: add
+   `--arg '<name>=<default> — <what it is>'` (once per argument) and read it in the body as the variable of that name
+   (`head -n "$count"`). A tooth receives only the arguments it declares.
    An example is two literals, `"…"` or `$'…'` (with `\n` `\t`), joined by ` → `; trailing newlines are not compared.
+   Arguments for an example go in front of it (`count=2 "…" → "…"`).
    The output name of one tooth should be the input name of the next — the check compares them. A `pure` tooth may not
    change files, run other code or differ between runs (`mv`, `>` into a file, `eval`, `git`, `date` …): the check
    refuses such a tooth instead of running it — mark it `effect`, or split the work.
@@ -121,6 +134,13 @@ When the user asks to turn repeated work into a gear:
    bash "${CLAUDE_PLUGIN_ROOT}/scripts/gear.sh" new <gear> --kind gear --flow "<tooth> | <tooth> | @ | <tooth>" --does "<one line>" --words "<words a request for this work would use>"
    ```
 
+   The gear's file starts with its flow, then `in:` and `out:` — the kind of value it takes and gives back, filled
+   from its first and last tooth unless `--in` / `--out` say otherwise — and the check compares them with those teeth.
+   Add `--example '<input> → <output>'` so a reader sees one real case: an example is one case, not the only possible
+   result. `--arg <name>=<value>` fixes an argument for this gear.
+   Keep the tooth that reads (commits, a file) out of a gear meant to be reused: build the gear on the value, and put
+   the reading tooth in a second gear whose flow is `<reading tooth> | <first gear>`. The first gear then takes any
+   input of that kind.
    A gear with no judgment step has no `@` and needs no text.
 4. Run the check (Step 1), then run the gear once and show the user the real output (`contracts/show-real.md`).
 

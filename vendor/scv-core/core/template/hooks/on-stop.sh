@@ -153,10 +153,14 @@ if [[ "$_scv_human" == 1 && -f "$_scv_hs" && -f "$_scv_hslib" ]]; then
   [[ "$(_scv_sw "$(_scv_get SCV_HELP_LOAD_ONCE)")" == "off" ]] && _scv_echo="off"
   # 0.97.0+ 가벼운 루프 — 대화 기록(Turn 의 protocol: 지문)은 훅의 일지가 대신하므로 지문 되새김 검사를 하지 않는다.
   [[ "$(_scv_get SCV_LEAN_LOOP | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]')" == "on" ]] && _scv_echo="off"
-  if [[ "$_scv_echo" == "on" || "$_scv_lint" == "on" ]]; then   # 둘 다 off 면 읽지도 쓰지도 않는다 (0.49 와 같음)
+  # 0.101.0+ 글 대신 그림 알림(끄기: 설정 SCV_PICTURE_NOTICE=off). 기본 켜짐 — 실제 세션 기록 808턴에서 11번 떴고 그중 3번이
+  # 틀린 알림이었다(2026-11-24 잼, 사용자 결정). 틀려도 다음 턴의 한 줄이고 규약은 다시 싣지 않는다.
+  # 답 모양 검사를 끈 프로젝트(SCV_ANSWER_LINT=off)에서는 그림 알림도 끈다 — 그 스위치의 약속은 "답 글을 읽지 않는다"이다.
+  _scv_pic="$(_scv_sw "$(_scv_get SCV_PICTURE_NOTICE)")"; [[ "$_scv_lint" == "on" ]] || _scv_pic="off"
+  if [[ "$_scv_echo" == "on" || "$_scv_lint" == "on" || "$_scv_pic" == "on" ]]; then   # 셋 다 off 면 읽지도 쓰지도 않는다 (0.49 와 같음)
     _scv_cap=0   # 0.96.0+ — 문장 수 상한 없음(숫자로 박은 길이 규칙은 글을 뚝뚝 끊는다 — 계획 rules-once-no-caps)
     _scv_last=""; _scv_src="none"
-    if [[ "$_scv_lint" == "on" ]] && declare -F scv_turn_slice >/dev/null 2>&1 && declare -F scv_stop_pick_source >/dev/null 2>&1; then
+    if [[ "$_scv_lint" == "on" || "$_scv_pic" == "on" ]] && declare -F scv_turn_slice >/dev/null 2>&1 && declare -F scv_stop_pick_source >/dev/null 2>&1; then
       _scv_host="$(printf '%s' "$INPUT" | jq -r 'try (.last_assistant_message // empty)' 2>/dev/null | head -c 65536 || true)"
       _scv_turn=""
       if [[ "$_scv_host" != *[![:space:]]* ]]; then
@@ -186,7 +190,14 @@ if [[ "$_scv_human" == 1 && -f "$_scv_hs" && -f "$_scv_hslib" ]]; then
         _scv_ltf="$(mktemp "${TMPDIR:-/tmp}/scv-turn.XXXXXX" 2>/dev/null)" && printf '%s' "$_scv_turn" > "$_scv_ltf" 2>/dev/null || _scv_ltf=""
       fi
     fi
-    printf '%s' "$_scv_last" | bash "$_scv_hs" stop --echo "$_scv_echo" --lint "$_scv_lint" --cap "$_scv_cap" --lang "$_scv_lang" ${_scv_ltf:+--lang-text "$_scv_ltf"} --src "$_scv_src" --turn-dir "$_scv_tdir" >/dev/null 2>&1 || true
+    # 그림 도구(호스트 프로필 SCV_DRAW_TOOL)가 있으면 이번 턴에 부른 횟수를 대화 기록에서 세고(못 세면 빈 값 — 잡지 않는다), 없으면 0.
+    _scv_dc=""
+    if [[ "$_scv_pic" == "on" ]]; then
+      _scv_dt="$( source "$_scv_core/scripts/lib/host-profile.sh" 2>/dev/null; printf '%s' "${SCV_DRAW_TOOL:-}" )"
+      if [[ -z "$_scv_dt" ]]; then _scv_dc=0
+      elif declare -F _scv_turn_tool_count >/dev/null 2>&1; then _scv_dc="$(_scv_turn_tool_count "$_scv_dt")"; fi
+    fi
+    printf '%s' "$_scv_last" | bash "$_scv_hs" stop --echo "$_scv_echo" --lint "$_scv_lint" --cap "$_scv_cap" --lang "$_scv_lang" ${_scv_ltf:+--lang-text "$_scv_ltf"} --src "$_scv_src" --turn-dir "$_scv_tdir" --picture "$_scv_pic" --draw-calls "$_scv_dc" >/dev/null 2>&1 || true
     [[ -n "$_scv_ltf" ]] && rm -f "$_scv_ltf" 2>/dev/null
   fi
 fi

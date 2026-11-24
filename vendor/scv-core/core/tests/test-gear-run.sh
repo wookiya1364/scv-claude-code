@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # test-gear-run.sh — 기어(스킬 — 맨 위 flow 줄로 톱니를 잇는다)와 톱니(아주 작은 sh)의 실행기(gear.sh)를 본다
-# (계획 20261124-wookiya1364-gears-run · TESTS.md T1 ~ T16. 순수 함수 사전 검사와 사용자 확인은 따로 한다).
+# (계획 20261124-wookiya1364-gears-run · TESTS.md T1 ~ T25 · 계획 20261124-wookiya1364-gears-io-args T26 ~ T43. 순수 함수 사전 검사와 사용자 확인은 따로 한다).
 #
 # 시험용 프로젝트를 임시 폴더에 만든다: 톱니 다섯 · 기어 다섯. 실행 도중의 상태는 프로젝트 밖(SCV_GEAR_STATE_DIR)에 둔다.
 set -uo pipefail
@@ -306,6 +306,187 @@ printf '# inner\n\n글만 있다\n' > "$WORK/inner.md"; mkdir -p scv/gears/inner
 bash "$G" new outer --kind gear --flow "up | inner | up" --does x >/dev/null
 e="$(printf 'a\n' | bash "$G" run outer 2>&1 >/dev/null)"; rc=$?
 [[ $rc == 1 ]] && grep -q 'flow 줄이 없다' <<< "$e" && ok "T25 flow 줄이 없는 품은 기어 → 실행 전 거절" || bad "T25 rc=$rc e=$e"
+
+# ── 인자 · 기어의 in · out · 예 (계획 20261124-wookiya1364-gears-io-args · TESTS.md T26 ~ T43) ──
+# @effect io_teeth
+# 이유: 지금 프로젝트에 인자를 받는 순수 톱니 head-n(앞 count 줄만, 기본값 3)과 순수 톱니 upper 를 만든다
+io_teeth() {
+  bash "$G" new head-n --kind tooth --mark pure --in lines --out lines --does "앞 count 줄만 낸다" --arg "count=3 — 낼 줄 수" \
+    --example "\$'a\\nb\\nc\\nd' → \$'a\\nb\\nc'" >/dev/null
+  printf '#!/usr/bin/env bash\nhead -n "$count"\n' > scv/gears/teeth/head-n.sh
+  printf -- '- 예: %s\n' "count=1 \$'a\\nb' → \"a\"" >> scv/gears/teeth/TEETH.md
+  tooth upper pure lines lines "tr 'a-z' 'A-Z'" '"ab" → "AB"'
+}
+# @effect six
+# 이유: 소문자 여섯 줄을 표준 출력에 쓴다(시험 입력)
+six() { printf 'a\nb\nc\nd\ne\nf\n'; }
+# @effect nlines
+# 이유: 파일의 줄 수를 센다(파일을 읽기만 한다)
+nlines() { grep -c '' "$1" 2>/dev/null || true; }
+
+mkproj io
+io_teeth
+bash "$G" new send --kind tooth --mark outward --in lines --out lines --does "보낸다" --arg "target=dev — 보낼 곳" >/dev/null
+printf '#!/usr/bin/env bash\nprintf "%%s" "$target" > sent.marker; cat\n' > scv/gears/teeth/send.sh
+tooth peek effect lines lines 'printf "[%s]" "${count:-}" > peek.marker; cat'
+bash "$G" new g-hu --kind gear --flow "head-n | upper" --does "앞 줄을 대문자로" >/dev/null
+bash "$G" new g-made --kind gear --flow "head-n | upper" --does "앞 두 줄을 대문자로" --arg count=2 --example "count=2 \$'a\\nb\\nc' → \$'A\\nB'" >/dev/null
+bash "$G" check > "$WORK/c41" 2>&1; rc41=$?
+bash "$G" new g-arg --kind gear --flow "head-n | upper" --does "앞 네 줄" --arg count=4 >/dev/null
+bash "$G" new g-outer --kind gear --flow "g-arg" --does "바깥이 이긴다" --arg count=2 >/dev/null
+bash "$G" new g-outer2 --kind gear --flow "g-arg" --does "안쪽 값 그대로" >/dev/null
+bash "$G" new g-peek --kind gear --flow "head-n | peek" --does "선언 안 한 톱니" >/dev/null
+bash "$G" new g-send --kind gear --flow "upper | send" --does "밖으로 보낸다" >/dev/null
+bash "$G" new g-judge --kind gear --flow "upper | @ | head-n" --does "판단을 거친다" >/dev/null
+printf 'flow: upper | @ | head-n\nin: lines — 글 줄들\nout: lines — 고른 줄들\narg: count=5\n예: "a" → "A"\ndoes: 판단을 거친다\n\nJUDGE-TEXT\n고른 줄만 돌려준다.\n' > scv/gears/g-judge/GEAR.md
+printf 'flow: head-n | upper\nin: lines — 글 줄들\nout: lines — 대문자 줄들\ndoes: 값이 보이는 기어\n\n# g-sig\n' > "$WORK/gsig.md"
+mkdir -p scv/gears/g-sig && cp "$WORK/gsig.md" scv/gears/g-sig/GEAR.md
+bash "$G" index >/dev/null
+
+# T26 — 같은 기어, 다른 인자: 출력이 인자를 따른다
+six | bash "$G" run g-hu count=2 > "$WORK/a2" 2>/dev/null; r1=$?
+six | bash "$G" run g-hu count=5 > "$WORK/a5" 2>/dev/null; r2=$?
+if [[ $r1 == 0 && $r2 == 0 && "$(cat "$WORK/a2")" == $'A\nB' && "$(cat "$WORK/a5")" == $'A\nB\nC\nD\nE' ]]; then ok "T26 같은 기어 · count=2 → 2줄, count=5 → 5줄"
+else bad "T26 r1=$r1 r2=$r2 a2=$(tr '\n' ' ' < "$WORK/a2") a5=$(tr '\n' ' ' < "$WORK/a5")"; fi
+
+# T27 — 인자를 주지 않으면 사전의 기본값(3)
+o="$(six | bash "$G" run g-hu 2>/dev/null)"; rc=$?
+[[ $rc == 0 && "$o" == $'A\nB\nC' ]] && ok "T27 인자 없음 → 사전의 기본값 3줄" || bad "T27 rc=$rc o=$o"
+
+# T28 — 기어 파일의 arg 줄이 기본값을 덮고, 실행 때 준 값이 그것을 덮는다
+o1="$(six | bash "$G" run g-arg 2>/dev/null)"; r1=$?
+o2="$(six | bash "$G" run g-arg count=1 2>/dev/null)"; r2=$?
+[[ $r1 == 0 && $r2 == 0 && "$o1" == $'A\nB\nC\nD' && "$o2" == A ]] && ok "T28 기어 파일 값 4줄, 실행 때 준 값 1줄" || bad "T28 r1=$r1 r2=$r2 o1=$o1 o2=$o2"
+
+# T29 — 안에 든 기어의 인자: 바깥 기어가 안쪽을 이기고, 바깥에 없으면 안쪽 값 그대로
+o1="$(six | bash "$G" run g-outer 2>/dev/null)"; r1=$?
+o2="$(six | bash "$G" run g-outer2 2>/dev/null)"; r2=$?
+[[ $r1 == 0 && $r2 == 0 && "$o1" == $'A\nB' && "$o2" == $'A\nB\nC\nD' ]] && ok "T29 바깥 기어 값 2줄, 바깥에 없으면 안쪽 값 4줄" || bad "T29 r1=$r1 r2=$r2 o1=$o1 o2=$o2"
+
+# T30 — 선언하지 않은 인자 · 모양이 틀린 인자는 한 단계도 돌기 전에 거부한다(2)
+o="$(six | bash "$G" run g-hu nope=1 2> "$WORK/e30")"; rc=$?
+t30=1
+[[ $rc == 2 && -z "$o" ]] && grep -q 'nope' "$WORK/e30" && grep -q 'count' "$WORK/e30" || t30=0
+for w in 'Count=1' '=1' 'count'; do
+  o="$(six | bash "$G" run g-hu "$w" 2>/dev/null)"; rc=$?
+  [[ $rc == 2 && -z "$o" ]] || t30=0
+done
+[[ $t30 == 1 ]] && ok "T30 모르는 인자 · 틀린 모양 → 거부(2), 출력 없음, 오류 글에 모르는 이름과 쓸 수 있는 이름" || bad "T30 $(cat "$WORK/e30")"
+
+# T31 — 선언하지 않은 값은 톱니 안으로 들어가지 않는다(바깥 환경에 같은 이름이 있어도)
+rm -f peek.marker
+o="$(six | count=9 bash "$G" run g-peek count=2 2>/dev/null)"; rc=$?
+[[ $rc == 0 && "$o" == $'a\nb' && "$(cat peek.marker 2>/dev/null)" == "[]" ]] && ok "T31 선언한 톱니만 값을 받음 — 선언 안 한 톱니가 읽은 값은 빈 글" || bad "T31 rc=$rc o=$o peek=$(cat peek.marker 2>/dev/null)"
+
+# T32 — 판단 단계에서 멈췄다 이어 가도 인자가 그대로다. 이어가기에는 인자를 줄 수 없다
+out="$(printf 'a\nb\n' | bash "$G" run g-judge count=2 2>/dev/null)"; r1=$?; tok="$(token_of "$out")"
+o="$(printf 'p\nq\nr\ns\nt\n' | bash "$G" resume "$tok" 2>/dev/null)"; r2=$?
+out="$(printf 'a\nb\n' | bash "$G" run g-judge count=2 2>/dev/null)"; tok="$(token_of "$out")"
+printf 'p\nq\n' | bash "$G" resume "$tok" count=4 >/dev/null 2>&1; r3=$?
+[[ $r1 == 10 && $r2 == 0 && "$o" == $'p\nq' && $r3 == 2 ]] && ok "T32 멈췄다 이어도 count=2 그대로(2줄), 이어가기에 인자 → 거부(2)" || bad "T32 r1=$r1 r2=$r2 o=$o r3=$r3"
+
+# T33 — 인자로는 밖으로 나가는 확인을 건너뛸 수 없고, 확인 글에 인자 값이 보인다
+rm -f sent.marker
+out="$(printf 'hi\n' | bash "$G" run g-send target=stage 2>/dev/null)"; r1=$?; tok="$(token_of "$out")"; tag="$(tag_of "$out")"
+bash "$G" resume "$tok" >/dev/null 2>&1; r2=$?
+m1=no; [[ -e sent.marker ]] && m1=yes
+bash "$G" confirm --question "보낼까요? $tag" --answer "실행" >/dev/null 2>&1
+o="$(bash "$G" resume "$tok" 2>/dev/null)"; r3=$?
+if [[ $r1 == 11 && $r2 == 11 && $m1 == no && $r3 == 0 && "$o" == HI && "$(cat sent.marker 2>/dev/null)" == stage ]] && grep -q 'target=stage' <<< "$out"; then ok "T33 인자를 줘도 확인에서 멈춤(11) · 확인 글에 target=stage · 확인 뒤 stage 로 실행"
+else bad "T33 r1=$r1 r2=$r2 m1=$m1 r3=$r3 o=$o sent=$(cat sent.marker 2>/dev/null)"; fi
+
+# T35 — 같은 입력 + 같은 인자면 출력이 바이트까지 같다
+six | bash "$G" run g-hu count=2 > "$WORK/b1" 2>/dev/null; r1=$?
+six | bash "$G" run g-hu count=2 > "$WORK/b2" 2>/dev/null; r2=$?
+[[ $r1 == 0 && $r2 == 0 ]] && cmp -s "$WORK/b1" "$WORK/b2" && ok "T35 같은 입력 + 같은 인자 → 같은 바이트" || bad "T35 r1=$r1 r2=$r2"
+
+# T36 — 기어 파일의 in · out 과 인자가 목록에 나온다
+o="$(bash "$G" list 2>/dev/null)"; rc=$?
+row="$(grep '^g-sig'$'\t' <<< "$o")"
+[[ $rc == 0 && "$row" == *"lines → lines"* && "$row" == *"count=3"* ]] && ok "T36 목록의 기어 줄에 lines → lines 와 count=3" || bad "T36 rc=$rc row=$row"
+
+# T41 — 기어를 만들 때 in · out 을 첫 · 끝 톱니에서 채우고, --arg · --example 이 맨 위 줄로 들어간다(만든 직후 검사 통과)
+if [[ $rc41 == 0 ]] && grep -q '^in: lines' scv/gears/g-hu/GEAR.md && grep -q '^out: lines' scv/gears/g-hu/GEAR.md \
+   && grep -q '^arg: count=2$' scv/gears/g-made/GEAR.md && grep -q '^예: count=2 ' scv/gears/g-made/GEAR.md; then ok "T41 만들기 — in · out 자동, arg · 예 줄, 만든 직후 검사 통과"
+else bad "T41 rc41=$rc41 $(head -n 5 scv/gears/g-hu/GEAR.md | tr '\n' '|') $(tail -n 3 "$WORK/c41" | tr '\n' '|')"; fi
+
+# T43 — 판단 단계에서 넘기는 글에 맨 위 줄(flow · in · out · 예 · arg)이 실리지 않는다
+out="$(printf 'a\n' | bash "$G" run g-judge 2>/dev/null)"; rc=$?
+if [[ $rc == 10 ]] && grep -q 'JUDGE-TEXT' <<< "$out" && ! grep -qE '^(flow|in|out|예|arg):' <<< "$out"; then ok "T43 넘기는 글에 맨 위 줄 없음"
+else bad "T43 rc=$rc $(grep -E '^(flow|in|out|예|arg):' <<< "$out" | tr '\n' '|')"; fi
+
+# T34 — 인자가 든 예시로 순수 톱니를 검사한다: 틀린 예시의 톱니만 짚고, 고치면 통과
+mkproj io-ex
+io_teeth
+bash "$G" new cut2 --kind tooth --mark pure --in lines --out lines --does "앞 count 줄만" --arg "count=2" --example "count=2 \$'a\\nb\\nc' → \"a\"" >/dev/null
+printf '#!/usr/bin/env bash\nhead -n "$count"\n' > scv/gears/teeth/cut2.sh
+bash "$G" index >/dev/null
+out="$(bash "$G" check 2>&1)"; r1=$?
+sed -i.bak 's/^- 예: count=2 .*/- 예: count=2 $'"'"'a\\nb\\nc'"'"' → $'"'"'a\\nb'"'"'/' scv/gears/teeth/TEETH.md && rm -f scv/gears/teeth/TEETH.md.bak
+out2="$(bash "$G" check 2>&1)"; r2=$?
+if [[ $r1 == 1 && $r2 == 0 ]] && grep -q '^GEAR_EXAMPLE: cut2 ' <<< "$out" && ! grep -q '^GEAR_[A-Z]*: head-n' <<< "$out"; then ok "T34 인자가 든 예시 — 틀린 톱니만 실패(1), 고치면 통과"
+else bad "T34 r1=$r1 r2=$r2 $(tr '\n' '|' <<< "$out") // $(tr '\n' '|' <<< "$out2")"; fi
+
+# T37 — 기어의 in · out 이 첫 · 끝 톱니와 다르면 검사가 잡는다
+mkproj io-sig
+io_teeth
+mkdir -p scv/gears/g-in scv/gears/g-out
+printf 'flow: head-n | upper\nin: number\nout: lines\ndoes: 받는 값이 틀린 기어\n\n# g-in\n' > scv/gears/g-in/GEAR.md
+printf 'flow: head-n | upper\nin: lines\nout: number\ndoes: 돌려주는 값이 틀린 기어\n\n# g-out\n' > scv/gears/g-out/GEAR.md
+bash "$G" index >/dev/null
+out="$(bash "$G" check 2>&1)"; rc=$?
+if [[ $rc == 1 && "$(grep -c '^GEAR_SIG: ' <<< "$out")" == 2 ]] && grep -q '^GEAR_SIG: g-in: in number .*lines' <<< "$out" && grep -q '^GEAR_SIG: g-out: out number .*lines' <<< "$out"; then ok "T37 in · out 이 톱니와 다르면 실패(1) — 기어 · 적은 이름 · 톱니의 이름"
+else bad "T37 rc=$rc $(tr '\n' '|' <<< "$out")"; fi
+
+# T38 — 순수 톱니로만 된 기어의 예시는 실제로 돌려 맞춰 본다
+mkproj io-gex
+io_teeth
+mkdir -p scv/gears/g-ok scv/gears/g-wrong
+printf 'flow: head-n | upper\nin: lines\nout: lines\n예: count=2 $'"'"'a\\nb\\nc'"'"' → $'"'"'A\\nB'"'"'\ndoes: 맞는 예시\n\n# g-ok\n' > scv/gears/g-ok/GEAR.md
+printf 'flow: head-n | upper\nin: lines\nout: lines\n예: $'"'"'a\\nb'"'"' → $'"'"'a\\nb'"'"'\ndoes: 틀린 예시\n\n# g-wrong\n' > scv/gears/g-wrong/GEAR.md
+bash "$G" index >/dev/null
+out="$(bash "$G" check 2>&1)"; rc=$?
+if [[ $rc == 1 && "$(grep -c '^GEAR_EXAMPLE: g-wrong ' <<< "$out")" == 1 ]] && ! grep -q '^GEAR_[A-Z]*: g-ok' <<< "$out"; then ok "T38 기어 예시 — 순수 흐름은 돌려 맞춤, 틀린 기어만 실패(1)"
+else bad "T38 rc=$rc $(tr '\n' '|' <<< "$out")"; fi
+
+# T39 — 판단 단계나 순수하지 않은 톱니가 든 기어의 예시는 보기용: 돌리지 않는다
+mkproj io-show
+io_teeth
+tooth mark-it effect lines lines ': > ran.marker; cat'
+mkdir -p scv/gears/g-j scv/gears/g-e
+printf 'flow: upper | @ | head-n\nin: lines\nout: lines\n예: "a" → "A"\ndoes: 판단이 든 기어\n\nJ-TEXT\n' > scv/gears/g-j/GEAR.md
+printf 'flow: upper | mark-it\nin: lines\nout: lines\n예: "a" → "A"\ndoes: 부수효과가 든 기어\n\n# g-e\n' > scv/gears/g-e/GEAR.md
+bash "$G" index >/dev/null
+out="$(bash "$G" check 2>&1)"; rc=$?
+if [[ $rc == 0 && ! -e ran.marker ]] && grep -q '보기용 예시 2개' <<< "$out"; then ok "T39 보기용 예시 2개 — 돌리지 않음, 검사 통과"
+else bad "T39 rc=$rc marker=$([[ -e ran.marker ]] && echo yes || echo no) $(tr '\n' '|' <<< "$out")"; fi
+
+# T40 — 0.100.0 모양의 기어와 톱니 사전(in · out · 예 · arg · 인자 줄 없음)은 그대로 돈다 — 빠진 줄은 알림만
+mkproj old
+mkdir -p scv/gears/teeth scv/gears/g-old
+printf '# 톱니 사전\n\n### up\n- 역할: 대문자로\n- 표시: pure\n- 값: text → text\n- 예: "ab" → "AB"\n\n### cnt\n- 역할: 센다\n- 표시: pure\n- 값: text → number\n- 예: "abc" → "3"\n' > scv/gears/teeth/TEETH.md
+printf '#!/usr/bin/env bash\ntr a-z A-Z\n' > scv/gears/teeth/up.sh
+printf '#!/usr/bin/env bash\nwc -c | tr -d " "\n' > scv/gears/teeth/cnt.sh
+printf 'flow: up | cnt\ndoes: 대문자로 바꾸고 센다\nwords: 세기\n\n# g-old\n' > scv/gears/g-old/GEAR.md
+bash "$G" index >/dev/null
+o="$(printf 'hello\n' | bash "$G" run g-old 2>/dev/null)"; r1=$?
+out="$(bash "$G" check 2>&1)"; r2=$?
+if [[ $r1 == 0 && "$o" == 6 && $r2 == 0 ]] && grep -q '^GEAR_WARN: g-old' <<< "$out"; then ok "T40 옛 모양 기어 — 실행 결과 6, 검사 통과, 빠진 줄은 알림"
+else bad "T40 r1=$r1 o=$o r2=$r2 $(tr '\n' '|' <<< "$out")"; fi
+
+# T42 — 뜻이 이미 있는 이름 · 틀린 모양의 인자 이름은 만들 때(2)와 검사(1)에서 거부한다
+mkproj io-badarg
+t42=1
+for a in 'http_proxy=x' 'Count=1' '1st=1'; do
+  bash "$G" new bad1 --kind tooth --arg "$a" >/dev/null 2>&1; rc=$?
+  [[ $rc == 2 && ! -e scv/gears/teeth/bad1.sh ]] || t42=0
+done
+mkdir -p scv/gears/teeth
+printf '# 톱니 사전\n\n### px\n- 역할: 그대로 낸다\n- 표시: pure\n- 값: text → text\n- 인자: no_proxy=x\n- 예: "a" → "a"\n' > scv/gears/teeth/TEETH.md
+printf '#!/usr/bin/env bash\ncat\n' > scv/gears/teeth/px.sh
+bash "$G" index >/dev/null
+out="$(bash "$G" check 2>&1)"; rc=$?
+[[ $t42 == 1 && $rc == 1 ]] && grep -q 'no_proxy' <<< "$out" && ok "T42 인자 이름 — 만들 때 거부(2 · 파일 없음), 검사에서 실패(1)" || bad "T42 t42=$t42 rc=$rc $(tr '\n' '|' <<< "$out")"
 
 if [[ $fail -ne 0 ]]; then echo "test-gear-run: FAIL" >&2; exit 1; fi
 echo "test-gear-run: all passed"
