@@ -404,8 +404,10 @@ Every call adds one entry to PLAN.md's `## 변경 이력` (headline first, detai
 files (code, or docs outside `scv/`) cannot end until a plan record carries this turn's request — the
 stop hook says which command to run. Work inside the plan is one line:
 `plan-link.sh progress <slug> --step <N> --note "<what was done>"` — the state defaults to `doing` (0.87.4+); add `--state done` only when the step is finished, so a dashboard never shows a step in progress as done. A release or a Core sync with no
-plan is `plan-link.sh exempt --kind release|sync --why "<one line>"`. Choice answers are written to
-`## 변경 이력` by the hook itself.
+plan is `plan-link.sh exempt --kind release|sync --why "<one line>"`. Choice answers are written by
+the hook itself to the `## 변경 이력` of the plan this turn worked on — a plan whose PLAN.md this turn changed or
+created; an answer given before any plan was touched is held until the turn ends, and goes to the turn log
+(`.turn-plan.log` in the journal folder) when the turn touched no plan.
 A message the user sends while the turn is still running — or after stopping it — continues that turn: the
 record already made still counts, and files changed before the message still need one.
 Step 9c-2 brings A back when B is archived.

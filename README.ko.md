@@ -177,6 +177,7 @@ bash "$CORE/scripts/metrics.sh"                                 # 과정 숫자
 | `/scv:channel` | SCV 개발·스테이징·운영 전환 — 릴리스 전 새 작업 확인 |
 | `/scv:ask-mode` | 처음과 끝에만 묻기 ↔ 매번 묻기 |
 | `/scv:catalog-source` | 코드 주석 없이 순수 함수 사전이 원본 |
+| `/scv:gear` | 기어 실행 · 만들기 — `scv/gears/` 의 재사용 작업 단위 |
 
 ## 가드레일
 
