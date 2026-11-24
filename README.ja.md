@@ -177,6 +177,7 @@ bash "$CORE/scripts/metrics.sh"                                 # プロセス�
 | `/scv:channel` | SCV 開発·ステージング·本番の切替 — リリース前に新作業を確認 |
 | `/scv:ask-mode` | 最初と最後だけ尋ねる ↔ 毎回尋ねる |
 | `/scv:catalog-source` | コードにコメントを置かず純粋関数辞書を原本に |
+| `/scv:gear` | ギアの実行・作成 — `scv/gears/` の再利用できる作業単位 |
 
 ## ガードレール
 
