@@ -84,6 +84,7 @@ flowchart LR
 | `action:channel` | 開発 · ステージング · 本番チャンネル入れ替え — リリース前に新作業確認 | ラッパー |
 | `action:ask-mode` | 最初と最後だけ尋ねる ↔ 毎回尋ねる | Core |
 | `action:catalog-source` | コードにコメントを置かず純粋関数辞書を原本に | Core |
+| `action:gear` | ギアの実行・作成 — `scv/gears/` の再利用できる作業単位 | Core |
 
 ### ループ
 

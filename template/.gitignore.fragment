@@ -39,3 +39,5 @@ scv/journal/
 # v0.63.0+ — 저널을 공유하더라도(위 줄을 지워도) 세션 표식 파일은 올리지 않는다. 세션마다 바뀌는 잡음이라
 # PR 마다 충돌한다(.help-state · .help-turn · .help-rewrite …).
 scv/journal/.help-*
+# 기어 실행 도중의 상태(이어가기 표마다 한 폴더) — 실행이 끝나면 지워지는 임시 자리다.
+scv/journal/.gear-run/
