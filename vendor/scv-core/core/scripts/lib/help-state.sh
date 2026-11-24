@@ -531,6 +531,43 @@ scv_hs_picture_shown() {
 }
 
 # @pure
+# 역할: 답 글이 흐름을 화살표 줄로 적었는지 가린다 — 화살표(→ · ->)가 둘 이상인 줄이 하나라도 있으면 yes. 코드 블록 · 표 · 인용 줄은 보지 않는다
+# 종류: 판정/answer
+# 예: $'흐름: 읽기 → 나누기 → 쓰기' → "yes"
+# 예: $'읽기 → 나누기\n그다음 쓰기' → "no"
+# 예: $'\x3e 요청: a → b → c\n결과만 적음' → "no"
+# 예: $'```\na -\x3e b -\x3e c\n```' → "no"
+# 예: $'| a → b → c | 1 |' → "no"
+# 예: "" → "no"
+scv_hs_flow_line() {
+  local text="${1:-}" line t rest n incode=0 quote=$'\x3e' ascii=$'-\x3e'
+  while IFS= read -r line; do
+    t="${line#"${line%%[![:space:]]*}"}"
+    if [[ "$t" == '```'* ]]; then incode=$((1 - incode)); continue; fi
+    (( incode )) && continue
+    [[ "$t" == "|"* || "${t:0:1}" == "$quote" ]] && continue
+    rest="${t//$ascii/→}"; n=0
+    while [[ "$rest" == *→* ]]; do n=$((n + 1)); rest="${rest#*→}"; done
+    (( 2 <= n )) && { printf 'yes'; return 0; }
+  done <<< "$text"
+  printf 'no'
+}
+
+# @pure
+# 역할: 그림 도구가 있는 세션에서 흐름을 글로만 보였는지 정한다 — 화살표 줄이 있고, 그 턴에 그림 도구를 0번 불렀고, 이 세션이 그 도구를 쓴 적이 있고(있다는 증거), 답이 600바이트 이상일 때만 picture=tool. 짧은 답은 글 그대로 둔다
+# 종류: 판정/answer
+# 예: yes 0 yes 900 → "picture=tool"
+# 예: yes 1 yes 900 → ""
+# 예: yes 0 no 900 → ""
+# 예: yes 0 yes 200 → ""
+# 예: no 0 yes 900 → ""
+# 예: yes "" yes 900 → ""
+scv_hs_picture_tool_due() {
+  [[ "${1:-}" == yes && "${2:-}" == 0 && "${3:-}" == yes && "${4:-0}" =~ ^[0-9]+$ ]] && (( ${4:-0} >= 600 )) && printf 'picture=tool'
+  return 0
+}
+
+# @pure
 # 역할: 그림이 있어야 했는데 없었는지 정한다 — 긴 순서 글이고, 그 턴에 그림 도구를 0번 불렀고, 그림을 대신하는 것도 없을 때만 picture=1. 도구 호출 수를 모르면(빈 값) 잡지 않는다
 # 종류: 판정/answer
 # 예: yes 0 no → "picture=1"

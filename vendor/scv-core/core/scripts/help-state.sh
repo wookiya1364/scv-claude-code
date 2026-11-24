@@ -130,7 +130,7 @@ case "$cmd" in
           fi
           printf '%s\n' "$json" ;;
   stop)   # 인자: --echo on|off · --lint on|off · --cap N · --now ISO · --src host|transcript|none. stdin = 직전 답 본문(없으면 린트 생략).
-          _esw=on; _lsw=on; _cap=0; _now=""; _src=""; _lang=""; _ltf=""; _psw=off; _dc=""
+          _esw=on; _lsw=on; _cap=0; _now=""; _src=""; _lang=""; _ltf=""; _psw=off; _dc=""; _dk=""
           while [[ $# -gt 0 ]]; do
             case "$1" in
               --src)  _src="${2:-}"; shift 2 ;;   # v0.51.0+: 본문 출처 host|transcript|none — 드리프트 줄 끝에 남긴다
@@ -142,6 +142,7 @@ case "$cmd" in
               --now)  _now="${2:-}"; shift 2 ;;
               --picture) [[ "${2:-}" == on ]] && _psw=on; shift 2 ;;   # 0.101.0+: 글 대신 그림 알림(설정 SCV_PICTURE_NOTICE)
               --draw-calls) _dc="${2:-}"; shift 2 ;;                    # 이번 턴에 그림 도구를 부른 횟수(모르면 빈 값)
+              --draw-known) _dk="${2:-}"; shift 2 ;;                    # 0.103.0+: 이 세션이 그림 도구를 쓴 적이 있는가(yes — 도구가 있다는 증거)
               *) shift ;;
             esac
           done
@@ -176,6 +177,15 @@ case "$cmd" in
             if [[ -n "$_pic" ]]; then
               mkdir -p "${WARN_FILE%/*}" 2>/dev/null
               [[ -L "$WARN_FILE" ]] || printf '%s\n' "[SCV 그림] 직전 답이 순서 · 갈래를 글로만 길게 적었다 — 흐름 · 구조 · 수치 비교는 그림 먼저(그림 도구가 없으면 화살표 한 줄 · 표)." >> "$WARN_FILE" 2>/dev/null
+            fi
+            # 0.103.0+ — 그림 도구가 있는 세션(이 세션이 그 도구를 쓴 적이 있음)에서 흐름을 화살표 줄로만 보였으면 한 줄로 알린다.
+            # 도구가 있는지 모르는 세션(쓴 적 없음 · 다른 호스트)은 잡지 않는다 — 화살표 한 줄이 맞는 모양인 세션에 틀린 알림을 내지 않게.
+            if [[ -z "$_pic" ]] && declare -F scv_hs_picture_tool_due >/dev/null 2>&1; then
+              _pic="$(scv_hs_picture_tool_due "$(scv_hs_flow_line "$_text")" "$_dc" "${_dk:-}" "$(printf '%s' "$_text" | LC_ALL=C wc -c | tr -d '[:space:]')")"
+              if [[ -n "$_pic" ]]; then
+                mkdir -p "${WARN_FILE%/*}" 2>/dev/null
+                [[ -L "$WARN_FILE" ]] || printf '%s\n' "[SCV 그림] 직전 답이 흐름을 화살표 줄로만 보였다 — 이 세션에는 그림 도구가 있다: 흐름 · 구조 · 수치 비교는 그 도구로 그려라(화살표 줄 · 표는 도구가 없는 세션에서만)." >> "$WARN_FILE" 2>/dev/null
+              fi
             fi
           fi
           mkdir -p "$JOURNAL_DIR" 2>/dev/null && [[ ! -L "$DRIFT_FILE" ]] && { scv_drift_line "$_now" "${_t:-0}" "$_echo" "$_viol" "$_reload" "$_src"; echo; } >> "$DRIFT_FILE" 2>/dev/null

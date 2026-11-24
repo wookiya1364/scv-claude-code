@@ -23,7 +23,7 @@ case "${1:-}" in
       status="$(awk '/^---/{n++; next} n==1 && /^status:/{sub(/^status:[ \t]*/, ""); print; exit}' "$plan" 2>/dev/null)"
       rows="$rows$(basename "$(dirname "$plan")")"$'\t'"$status"$'\n'
     done
-    out="$(scv_step_line "$TOOL" "$(scv_step_active_plan "$rows")")"
+    out="$(scv_step_line "$TOOL" "$(scv_step_active_plan "$rows")" "$(scv_step_active_count "$rows")")"
     [[ -n "$out" ]] && printf '%s\n' "$out"
     ;;
   *) echo "usage: step-report.sh line [<scv dir>]" >&2 ;;

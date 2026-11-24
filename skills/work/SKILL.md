@@ -331,6 +331,9 @@ older than the step's start. A `doing` for long-running work names its `log` (a 
 when one exists, the `url` of a page that shows its progress. The per-turn hook reminds you while a plan is
 `in_progress` or `testing`. Where the host handles that tool itself and no tool-before hook runs for it, the
 turn-end check counts this turn's calls of the tool in the transcript instead (0.93.2+). No tool: skip this — the step list in your report still says it.
+Report only in a turn that works on that plan's step (0.103.0+): a turn that does other work, records only a release
+or sync exemption, or writes to a plan archived in that turn is not asked for a step report — the tool takes plans in
+progress only.
 
 ### Step 6 — Implement
 
@@ -423,7 +426,9 @@ Every call adds one entry to PLAN.md's `## 변경 이력` (headline first, detai
 files (code, or docs outside `scv/`) cannot end until a plan record carries this turn's request — the
 stop hook says which command to run. Work inside the plan is one line:
 `plan-link.sh progress <slug> --step <N> --note "<what was done>"` — the state defaults to `doing` (0.87.4+); add `--state done` only when the step is finished, so a dashboard never shows a step in progress as done. A release or a Core sync with no
-plan is `plan-link.sh exempt --kind release|sync --why "<one line>"`. Choice answers are written by
+plan is `plan-link.sh exempt --kind release|sync --why "<one line>"`. The command leaves the turn's receipt itself
+(0.92.2+), so a path held in a variable or a call chained after another command counts; exit code 3 means nothing was
+written (the note overlaps a Non-Goal — reword it, or ask and pass `--accept-conflict`). Choice answers are written by
 the hook itself to the `## 변경 이력` of the plan this turn worked on — a plan whose PLAN.md this turn changed or
 created; an answer given before any plan was touched is held until the turn ends, and goes to the turn log
 (`.turn-plan.log` in the journal folder) when the turn touched no plan.

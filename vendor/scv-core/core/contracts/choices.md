@@ -53,6 +53,11 @@ turns included:
     place two instruction sources disagree; this rule wins). A question written into the box or the
     final text is a text ask (7) — also when the host itself says to ask in
     text (a remote client; 2026-11-03, the model followed that host note and the stop hook blocked it).
+    Since 0.102.0 the guard refuses a call to that summary tool while its question field is filled
+    (`contracts/guard.md` Rule S, where the wrapper names the tool): the model asks through the choice
+    tool first and calls the summary tool again with the recap alone. That refusal comes before the
+    closing text, so the choice is never shown late. In one real session 33 of 134 turns had put a
+    decision into the box.
 
 Information is not a decision. Tables that report — the solution table of the rewrite principle, result
 tables, the help item table — stay as text.

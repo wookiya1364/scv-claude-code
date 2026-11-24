@@ -47,13 +47,30 @@ _scv_read() {  # <KEY> — 라이브러리가 없으면 기본값으로 간다.
 
 # 표준입력은 여기서 한 번만 읽는다(0.96.0+ 맨 앞으로 옮김 — 아래 규칙 글 판단이 세션 id 를 쓴다). 저널 기록은 이 값을 그대로 쓴다.
 INPUT="$(cat 2>/dev/null || true)"
+# 0.103.0+ — 기어 턴(계획 gear-direct-light-turn): 요청이 저장해 둔 기어를 돌리라는 것이면(기어 액션 꼴 · 창이 붙인 "[SCV 기어]" 줄) 이 턴은
+# 가벼운 길로 간다 — 규칙 글 · 도움말 지시 · 진단 대신 세 줄 안내만 싣고, 턴 끝 검사는 인용 · 끝 보고를 요구하지 않는다. 판정은 순수 함수
+# (lib/gear.sh scv_gear_turn), 기어 이름은 이 프로젝트의 기어 사전에 있어야 한다. 기어 사전이 없거나 글에 gear 가 없으면 아무것도 읽지 않는다.
+# 자동 알림 턴 · 항상-켬을 끈 프로젝트(SCV_ALWAYS_ON=off)는 기어 턴이 아니다. 끄기: 설정 SCV_GEAR_TURN=off — 이 구간을 지운 훅과 출력이 같다.
+_scv_gear=""
+_scv_core0="${SCV_CORE_ROOT:-$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.." 2>/dev/null && pwd )}"
+if [[ "$INPUT" == *gear* && -f scv/gears/INDEX.tsv && ! -L scv/gears/INDEX.tsv && -f "$_scv_core0/scripts/lib/gear.sh" ]] && command -v jq >/dev/null 2>&1 \
+   && [[ "$(_scv_read SCV_GEAR_TURN | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]')" != off ]] \
+   && [[ "$(_scv_read SCV_ALWAYS_ON | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]')" != off ]]; then
+  _scv_gp="$(printf '%s' "$INPUT" | jq -r 'try (if (.prompt | type) == "string" then .prompt else "" end) catch ""' 2>/dev/null | head -c 8192 || true)"
+  if [[ "$_scv_gp" == *gear* ]]; then
+    _scv_gear="$( source "$_scv_core0/scripts/lib/gear.sh" 2>/dev/null || exit 0
+      scv_gear_turn "$_scv_gp" "$(awk -F'\t' '$2 == "gear" { print $1 }' scv/gears/INDEX.tsv 2>/dev/null | head -n 500)" 2>/dev/null )"
+    if [[ -n "$_scv_gear" && -f "$_scv_core0/scripts/model-prompting.sh" ]] \
+       && [[ "$(printf '%s' "$_scv_gp" | bash "$_scv_core0/scripts/model-prompting.sh" kind 2>/dev/null || true)" == "auto" ]]; then _scv_gear=""; fi
+  fi
+fi
 # 0.96.0+ — 매 턴 규칙 글(언어 · 확인 범위 · 답 모양 · 선택 · 실물 보여 주기)은 규약 지문마다 한 번만 전문으로 싣고, 그 밖의 턴은
 # 한 줄로 줄인다(계획 rules-once-no-caps). 같은 글이 매 턴 쌓이면 조심 규칙이 불어난다(Fable 5.2 가이드). 지문은 첫 턴 · 대화 요약
 # 뒤 · 비움 · 재개 때 다시 전문이다(0.97.1+ 맥락 표시 — 지문 아님), 직전 답에 규칙 어김 경고가 남은 턴도 전문이다. 판단은 model-prompting.sh rules
 # (원칙 글의 한 번만 싣기와 같은 지문). 판단할 수 없으면 full — 이 기능 전과 같다. 끄기: SCV_RULES_ONCE=off.
 _scv_rules="full"
 _scv_mp0="${SCV_CORE_ROOT:-$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.." 2>/dev/null && pwd )}/scripts/model-prompting.sh"
-if [[ -f "$_scv_mp0" && -n "$INPUT" ]] && command -v jq >/dev/null 2>&1; then
+if [[ -z "$_scv_gear" && -f "$_scv_mp0" && -n "$INPUT" ]] && command -v jq >/dev/null 2>&1; then   # 기어 턴은 규칙 글을 싣지 않으니 '실었다'고 적지도 않는다
   _scv_rsid="$(printf '%s' "$INPUT" | jq -r 'try (.session_id // empty)' 2>/dev/null || true)"
   if [[ -n "$_scv_rsid" ]]; then
     _scv_rules="$(bash "$_scv_mp0" rules --session "$_scv_rsid" 2>/dev/null || true)"
@@ -72,19 +89,23 @@ fi
 # 0.82.0+ — 끝 보고 확인 범위 안내 한 줄(계획 finish-report-evidence, 본문 contracts/finish-report.md). 종료 훅이 빠진 줄을 한 턴에
 # 한 번 막는다 — 미리 알려 막힘을 줄인다. 설정 SCV_FINISH_REPORT=off 면 싣지 않는다(이 구간을 지운 훅과 출력이 같다).
 _scv_frlib="$(dirname "$_scv_langlib")/finish-report.sh"
-if [[ "$_scv_rules" == "full" && -f "$_scv_frlib" && "$(_scv_read SCV_FINISH_REPORT | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]')" != off ]]; then
+if [[ -z "$_scv_gear" && "$_scv_rules" == "full" && -f "$_scv_frlib" && "$(_scv_read SCV_FINISH_REPORT | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]')" != off ]]; then
   # shellcheck disable=SC1090
   source "$_scv_frlib" 2>/dev/null && scv_finish_rule_line "$(_scv_read SCV_LANG | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]')" 2>/dev/null || true
 fi
 
 _scv_plain="$(_scv_read SCV_PLAIN_LANGUAGE | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]' || true)"
-if [[ "${_scv_plain:-on}" != "off" && "$_scv_rules" == "short" ]]; then
+if [[ -n "$_scv_gear" ]]; then
+  :   # 기어 턴 — 규칙 글을 싣지 않는다(아래 세 줄 안내가 이 턴의 전부다)
+elif [[ "${_scv_plain:-on}" != "off" && "$_scv_rules" == "short" ]]; then
   echo "[SCV 규칙] 이 세션에 실은 규칙(언어 · 확인 범위 · 답 모양 · 선택 · 실물 보여 주기 · 원칙)이 그대로 유효하다 — 경고가 있거나 대화가 요약 · 재개된 턴에 전문을 다시 싣는다."
 elif [[ "${_scv_plain:-on}" != "off" ]]; then
   # 0.96.0+ — 문장 수 · 길이 상한 없음(숫자로 박은 길이 규칙은 글을 뚝뚝 끊는다 — 계획 rules-once-no-caps).
   # 0.101.0+ — 글 대신 그림(contracts/writing.md 10): 그림 도구 이름은 호스트 프로필(SCV_DRAW_TOOL)이 준다. 없으면 화살표 한 줄 · 표.
   _scv_draw="$( source "${SCV_CORE_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)/../..}/scripts/lib/host-profile.sh" 2>/dev/null; printf '%s' "${SCV_DRAW_TOOL:-}" )"
-  if [[ -n "$_scv_draw" ]]; then _scv_draw="with the ${_scv_draw} tool when this session has it, else as one arrow line (A → B → C) or a short table"
+  # 0.103.0+ — 그림 도구가 있는 세션에서는 표 · 화살표 줄이 그 도구를 대신하지 못한다고 못 박는다: 규칙이 실린 실제 세션 22턴에서 그림 도구는
+  # 2턴뿐이고 표 11턴 · 화살표 줄 5턴으로 갈음했다(2026-11-24 잼 — "차트를 아예 안 쓴다", 계획 gear-direct-light-turn 의 변경 이력).
+  if [[ -n "$_scv_draw" ]]; then _scv_draw="if ${_scv_draw} is among your tools (loaded or deferred), draw with it — an arrow line or a table does not replace it; only without that tool, one arrow line (A → B → C) or a short table"
   else _scv_draw="as one arrow line (A → B → C) or a short table"; fi
   cat <<PLAIN
 [SCV plain language] Answer shape: (1) a **bold topic** line, the result first in a
@@ -124,16 +145,16 @@ if [[ -f "$_scv_cgs" ]]; then
   if [[ "$_scv_cg_head" == "CG_STATE"$'\t'*$'\t'* && "$_scv_cg_out" == *$'\n'* ]]; then
     _scv_cg_ok=1; _scv_cg_head="${_scv_cg_head#CG_STATE$'\t'}"
     _scv_cg_tool="${_scv_cg_head%%$'\t'*}"; _scv_cg_un="${_scv_cg_head#*$'\t'}"
-    [[ "$_scv_rules" == "full" ]] && printf '%s' "${_scv_cg_out#*$'\n'}"
+    [[ "$_scv_rules" == "full" && -z "$_scv_gear" ]] && printf '%s' "${_scv_cg_out#*$'\n'}"
   else
-    [[ "$_scv_rules" == "full" ]] && { bash "$_scv_cgs" line 2>/dev/null || true; }
+    [[ "$_scv_rules" == "full" && -z "$_scv_gear" ]] && { bash "$_scv_cgs" line 2>/dev/null || true; }
   fi
 fi
 
 # v0.75.0+ — 단계 보고(protocols/work.md "Step progress"): 호스트 설정에 단계 보고 도구가 있고 구현 중인 계획이 있으면 한 줄.
 # 도구가 없거나(기본 · 코덱스) 구현 중인 계획이 없으면 아무것도 싣지 않는다 — 이 구간을 지운 훅과 출력이 같다.
 _scv_srp="$CORE_HOME/scripts/step-report.sh"
-[[ -f "$_scv_srp" ]] && { bash "$_scv_srp" line 2>/dev/null || true; }
+[[ -z "$_scv_gear" && -f "$_scv_srp" ]] && { bash "$_scv_srp" line 2>/dev/null || true; }
 
 # ---------- auto turns — 판별 (v0.63.0+, 한 번만 v0.72.3+) -------------------
 # 이번 입력이 사람 메시지인지 자동 알림인지 — 이 턴에 한 번만 가른다. 실체 보여 주기(_scv_sr_kind)와 아래 자동 턴 처리가 이 값을 쓴다.
@@ -152,7 +173,7 @@ _scv_sr_kind="$_scv_kind"
 # 통로가 그 규칙의 판단과 같다). 자동 알림 턴 · 사람 없는 실행에는 묻지 않는 문구다 — 위에서 구한 판별 · 선택 창 상태를 넘긴다.
 # 막는 검사는 없다. 설정 SCV_SHOW_REAL=off 면 아무것도 싣지 않는다 — 이 구간을 지운 훅과 바이트 단위로 같다(test-show-real 이 견준다).
 _scv_srs="$CORE_HOME/scripts/show-real.sh"
-if [[ "$_scv_rules" == "full" && -f "$_scv_srs" ]]; then
+if [[ -z "$_scv_gear" && "$_scv_rules" == "full" && -f "$_scv_srs" ]]; then
   if [[ -n "$_scv_cg_ok" ]]; then
     bash "$_scv_srs" line --kind "${_scv_sr_kind:-human}" --tool "$_scv_cg_tool" --unattended "$_scv_cg_un" < /dev/null 2>/dev/null || true
   else
@@ -223,6 +244,12 @@ if [[ "$_scv_kind" != "auto" ]]; then
     _scv_af="${SCV_JOURNAL_DIR:-scv/journal}/.help-turn-auto"
     if [[ -f "$_scv_af" && ! -L "$_scv_af" ]]; then rm -f "$_scv_af" 2>/dev/null || true; fi
   fi
+  # 기어 턴 표시 — 턴 끝 훅이 이 표시를 보고 인용 · 끝 보고 · 계획 기록 검사를 요구하지 않는다. 보통 사람 턴은 지난 표시를 지운다.
+  _scv_gtf="$_scv_tdir/.gear-turn"
+  if [[ -n "$_scv_gear" ]]; then
+    if [[ ! -L "$_scv_gtf" && ! -L "$_scv_tdir" ]] && mkdir -p "$_scv_tdir" 2>/dev/null; then printf '%s\n' "$_scv_gear" > "$_scv_gtf" 2>/dev/null || true; fi
+  elif [[ -e "$_scv_gtf" || -L "$_scv_gtf" ]]; then rm -f "$_scv_gtf" 2>/dev/null || true
+  fi
 fi
 # ---------- turn plan check (0.87.0+) ---------------------------------------
 # 사람 턴의 시작에 작업 공간 사진을 찍는다 — 턴 끝 훅이 이 사진과 견줘 '고쳤는데 계획 기록이 없는 턴'을 막는다.
@@ -240,7 +267,7 @@ if [[ "$_scv_kind" != "auto" && -f "$_scv_tc_sh" ]] && command -v jq >/dev/null 
       _scv_ccn="$(grep -c . "$_scv_ccs/changed" 2>/dev/null || true)"
       _scv_ccl="$(scv_correction_notice "$(scv_show_real_is_correction "$_scv_tcp")" "$_scv_cce" "${_scv_ccn:-0}" \
         "$(_scv_read SCV_LANG | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]')" 2>/dev/null || true)"
-      [[ -n "$_scv_ccl" ]] && printf '%s\n' "$_scv_ccl"
+      [[ -n "$_scv_ccl" && -z "$_scv_gear" ]] && printf '%s\n' "$_scv_ccl"
     fi
     printf '%s' "$_scv_tcp" | bash "$_scv_tc_sh" start --dir "$_scv_tdir" >/dev/null 2>&1 || true
   fi
@@ -251,7 +278,7 @@ fi
 # (2) 지난 드림 날짜가 오늘이 아니면 드림을 배경으로 띄우고 바로 돌아온다. 설정 SCV_DREAMS=off 면 아무것도 하지 않는다 — 이 구간을
 # 지운 훅과 바이트 단위로 같다(test-dreams 가 견준다).
 _scv_dr_lib="$CORE_HOME/scripts/lib/dreams.sh"; _scv_dr_sh="$CORE_HOME/scripts/dreams.sh"
-if [[ "$_scv_kind" != "auto" && -f "$_scv_dr_lib" && -f "$_scv_dr_sh" ]] && command -v jq >/dev/null 2>&1 \
+if [[ -z "$_scv_gear" && "$_scv_kind" != "auto" && -f "$_scv_dr_lib" && -f "$_scv_dr_sh" ]] && command -v jq >/dev/null 2>&1 \
    && source "$_scv_dr_lib" 2>/dev/null && [[ "$(scv_dreams_switch "$(_scv_read SCV_DREAMS)")" == "on" ]]; then
   _scv_dl="scv/dreams/latest.json"
   if [[ -f "$_scv_dl" && ! -L "$_scv_dl" && ! -L scv/dreams ]]; then
@@ -278,6 +305,19 @@ if [[ "$_scv_kind" == "auto" ]]; then
 # 전체 스위치가 꺼져 있으면 여기서 끝난다 — 지시도 진단도 없다. 대체된 계획의
 # 검사에 있던 성질이고, 새 검사가 이어받는다. (위임 블록만은 자기 스위치로 따로 실린다.)
 elif [[ "${_scv_always:-on}" != "off" ]] && declare -F scv_force_routing >/dev/null 2>&1; then
+ if [[ -n "$_scv_gear" ]]; then
+  # 기어 턴 — 세 줄 안내만. 이번 턴 표는 그대로 쓴다(쓰기 전 등록 검사가 그 표를 본다 — 가벼운 길이 쓰기 검사를 풀지 않는다).
+  # 도움말을 부른 것으로 표시해, 첫 도구가 무엇이든 도움말 먼저 규칙에 걸리지 않게 한다.
+  if [[ -f "$_scv_mp_sh" ]]; then
+    bash "$_scv_mp_sh" prompt --session "$_scv_sid0" --transcript "$_scv_tr0" >/dev/null 2>&1 || true
+    if [[ -n "$_scv_sid0" ]]; then bash "$_scv_mp_sh" helped --agent "" --session "$_scv_sid0" >/dev/null 2>&1 || true
+    else bash "$_scv_mp_sh" helped --agent "" >/dev/null 2>&1 || true; fi
+  fi
+  # 값 안내는 훅이 미리 읽어 싣는다 — 모델이 값 안내 명령을 따로 부르는 한 번을 아낀다(재 본 값: 호출 4번 중 1번이 이 읽기였다).
+  _scv_gask="$(bash "$_scv_core0/scripts/gear.sh" ask "$_scv_gear" 2>/dev/null | sed 1d | head -n 40 || true)"
+  ( source "$_scv_core0/scripts/lib/gear.sh" 2>/dev/null && scv_gear_turn_text "$_scv_gear" "$_scv_core0/scripts/gear.sh" "${_scv_cg_tool:-}" "$_scv_gask" "${_scv_cg_un:-}" ) 2>/dev/null || true
+  printf '\n'
+ else   # 보통 턴 — 아래는 0.102.0 그대로(기어 턴 갈래를 이 가지 안에 둬, 가지의 if · elif 모양은 바뀌지 않는다)
   _scv_pre="$(scv_force_switch "$(_scv_read SCV_FORCE_HELP)")"
   # 지시가 먼저, 진단이 나중이다. 0.40.0 은 반대였고 명령이 40줄 뒤에 묻혀
   # 무시됐다. 읽는 쪽에서 명령은 맨 앞에 와야 한다.
@@ -392,6 +432,7 @@ except Exception:
     fi
     printf '\n'
   fi
+ fi   # /기어 턴이 아닌 보통 턴
 else
   # 항상-켬이 꺼진 프로젝트 — 지시도 진단도 없지만 위임 블록은 자기 스위치대로.
   _scv_emit_delegate
