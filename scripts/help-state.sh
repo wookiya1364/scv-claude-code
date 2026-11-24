@@ -130,7 +130,7 @@ case "$cmd" in
           fi
           printf '%s\n' "$json" ;;
   stop)   # 인자: --echo on|off · --lint on|off · --cap N · --now ISO · --src host|transcript|none. stdin = 직전 답 본문(없으면 린트 생략).
-          _esw=on; _lsw=on; _cap=0; _now=""; _src=""; _lang=""; _ltf=""
+          _esw=on; _lsw=on; _cap=0; _now=""; _src=""; _lang=""; _ltf=""; _psw=off; _dc=""
           while [[ $# -gt 0 ]]; do
             case "$1" in
               --src)  _src="${2:-}"; shift 2 ;;   # v0.51.0+: 본문 출처 host|transcript|none — 드리프트 줄 끝에 남긴다
@@ -140,11 +140,13 @@ case "$cmd" in
               --lang) _lang="${2:-}"; shift 2 ;;   # 0.77.0+: 설정 SCV_LANG — 답 언어 검사
               --lang-text) _ltf="${2:-}"; shift 2 ;;   # 0.78.0+: 이번 턴 글 전체가 든 파일 — 언어 검사는 중간 보고까지 본다
               --now)  _now="${2:-}"; shift 2 ;;
+              --picture) [[ "${2:-}" == on ]] && _psw=on; shift 2 ;;   # 0.101.0+: 글 대신 그림 알림(설정 SCV_PICTURE_NOTICE)
+              --draw-calls) _dc="${2:-}"; shift 2 ;;                    # 이번 턴에 그림 도구를 부른 횟수(모르면 빈 값)
               *) shift ;;
             esac
           done
           # 둘 다 꺼져 있으면 아무 것도 읽지도 쓰지도 않는다 — 0.49 와 같은 동작.
-          [[ "$_esw" == "off" && "$_lsw" == "off" ]] && exit 0
+          [[ "$_esw" == "off" && "$_lsw" == "off" && "$_psw" == "off" ]] && exit 0
           [[ -n "$_now" ]] || _now="$(date -Iseconds 2>/dev/null || date +%Y-%m-%dT%H:%M:%S)"
           _text="$(head -c 65536 2>/dev/null || true)"
           IFS=$'\x1f' read -r _s _p _t _d _at _n <<<"$st"
@@ -167,9 +169,18 @@ case "$cmd" in
             st="$(scv_hstate_reload "$st" "" reset 0)"   # protocol=0 · 지문 비움 — 다음 mark 가 새 지문을 만든다
             _write "$(scv_hstate_render "$st")"; _put "$WARN_FILE" "$_warn"
           fi
+          # 0.101.0+ — 긴 순서 글인데 그림도 화살표 한 줄도 표도 없었으면 다음 턴에 한 줄로 알린다. 규약은 다시 싣지 않는다(알림일 뿐).
+          _pic=""
+          if [[ "$_psw" == "on" && "$_text" == *[![:space:]]* ]] && declare -F scv_hs_picture_due >/dev/null 2>&1; then
+            _pic="$(scv_hs_picture_due "$(scv_hs_seq_prose "$_text")" "$_dc" "$(scv_hs_picture_shown "$_text")")"
+            if [[ -n "$_pic" ]]; then
+              mkdir -p "${WARN_FILE%/*}" 2>/dev/null
+              [[ -L "$WARN_FILE" ]] || printf '%s\n' "[SCV 그림] 직전 답이 순서 · 갈래를 글로만 길게 적었다 — 흐름 · 구조 · 수치 비교는 그림 먼저(그림 도구가 없으면 화살표 한 줄 · 표)." >> "$WARN_FILE" 2>/dev/null
+            fi
+          fi
           mkdir -p "$JOURNAL_DIR" 2>/dev/null && [[ ! -L "$DRIFT_FILE" ]] && { scv_drift_line "$_now" "${_t:-0}" "$_echo" "$_viol" "$_reload" "$_src"; echo; } >> "$DRIFT_FILE" 2>/dev/null
           _nv=0; [[ "$_viol" == *[![:space:]]* ]] && _nv="$(printf '%s\n' "$_viol" | grep -c . || true)"
-          printf 'echo=%s lint=%s reload=%s\n' "$_echo" "$_nv" "$_reload" ;;
+          printf 'echo=%s lint=%s reload=%s%s\n' "$_echo" "$_nv" "$_reload" "${_pic:+ $_pic}" ;;
   diag)   text="$(cat 2>/dev/null || true)"; r="$(scv_hstate_diag "$st" "$text" "${1:-}")"; mode="${r%%$'\x1f'*}"; st="${r#*$'\x1f'}"
           json="$(scv_hstate_render "$st")"; _write "$json"
           if [[ "$mode" == "brief" ]]; then IFS=$'\x1f' read -r _s _p _t _d _at _n <<<"$st"; printf 'brief %s\n' "${_at:-}"; else printf 'full\n'; fi ;;

@@ -53,6 +53,9 @@ SCV_STEP_TOOL=""
 # 비면 강제하지 않는다 — 진행은 계획 파일의 진행 줄로만 남고, 대시보드는 그 줄로 단계를 센다.
 SCV_STEP_TOOL_ON_FILE=""
 SCV_STEP_TOOL_ON_MARK=""
+# 0.101.0+ 선택 키: 그림(흐름도 · 구성 그림 · 차트)을 그리는 호스트 도구 이름. 있으면 매 턴 글의 "글 대신 그림" 구절이 그 도구를
+# 이름으로 말하고(contracts/writing.md 10), 턴 끝 검사가 그 턴의 호출 수를 센다. 비면 화살표 한 줄 · 표로 대신하라고 싣는다.
+SCV_DRAW_TOOL=""
 # 0.89.0+ 선택 키: 호스트의 세션 기록(매 턴 훅이 넘기는 대화 기록 파일)에서 그 턴의 effort 값을 담는 JSON 키 이름. 있으면
 # 권장 effort 요청(scripts/model-prompting.sh prompt)이 기록의 마지막 "<키>":"<값>" 을 지금 값으로 읽는다. 비면 도움말이
 # 받은 값(--effort)만 쓰고, 그것도 없으면 묻지 않는다.
@@ -85,6 +88,7 @@ _scv_profile_assign() {
     SCV_STEP_TOOL) SCV_STEP_TOOL="$value" ;;
     SCV_STEP_TOOL_ON_FILE) SCV_STEP_TOOL_ON_FILE="$value" ;;
     SCV_STEP_TOOL_ON_MARK) SCV_STEP_TOOL_ON_MARK="$value" ;;
+    SCV_DRAW_TOOL) SCV_DRAW_TOOL="$value" ;;
     SCV_EFFORT_LOG_KEY) SCV_EFFORT_LOG_KEY="$value" ;;
   esac
 }

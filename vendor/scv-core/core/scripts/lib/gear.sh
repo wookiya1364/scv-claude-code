@@ -6,6 +6,9 @@
 # 기어(gear)는 스킬이다 — scv/gears/<이름>/GEAR.md 의 맨 위 flow 줄에 톱니를 합성함수처럼 순서대로 적고,
 #   글은 판단이 필요한 자리(@)만 맡는다. flow 에 다른 기어 이름을 적으면 그 기어의 흐름이 그 자리에 펼쳐진다.
 # 만든 사전(INDEX.tsv) 한 줄은 탭으로 나눈 일곱 칸: 이름 · 종류(tooth|gear) · 표시 · 받는 값 · 돌려주는 값 · 하는 일 · 낱말
+#   — 인자가 있으면 여덟째 칸에 "이름=기본값; 이름=기본값"(보는 용도 — 실제 값은 톱니 사전과 기어 글에서 다시 읽는다)
+# 인자: 톱니 사전의 "- 인자: 이름=기본값 — 설명", 기어 글 맨 위의 "arg: 이름=값", 실행할 때 준 "이름=값" — 뒤가 앞을 이긴다.
+#   인자 묶음은 어디서나 "이름=값" 줄들이다(계획 20261124-wookiya1364-gears-io-args).
 # bash 3.2(맥 기본)에서도 돈다. 계획 20261124-wookiya1364-gears-run.
 
 # @pure
@@ -104,14 +107,20 @@ scv_gear_example_split() {
 # 예: $'# 톱니 사전\n\n### a\n- 역할: 하나\n\n### b \r\n- 표시:  effect \r\n- 역할: 둘\r\n- 값: x  →  y ' → $'a\ttooth\t?\t*\t*\t하나\t\nb\ttooth\teffect\tx\ty\t둘\t'
 # 예: "" → ""
 scv_gear_teeth_parse() {
-  local text="${1:-}" line name="" mark="" gin="" gout="" does="" out="" v
+  local text="${1:-}" line name="" mark="" gin="" gout="" does="" out="" v args="" T=$'\t'
+  local re_arg='^-[[:space:]]+인자[[:space:]]*:(.*)$'
   local re_does='^-[[:space:]]+역할[[:space:]]*:(.*)$' re_mark='^-[[:space:]]+표시[[:space:]]*:(.*)$' re_val='^-[[:space:]]+값[[:space:]]*:(.*)$'
   while IFS= read -r line; do
     line="${line%$'\r'}"
     if [[ "$line" == "### "* ]]; then
-      [[ -z "$name" ]] || out+="${out:+$'\n'}$name"$'\t'"tooth"$'\t'"${mark:-?}"$'\t'"${gin:-*}"$'\t'"${gout:-*}"$'\t'"$does"$'\t'
+      [[ -z "$name" ]] || out+="${out:+$'\n'}$name"$'\t'"tooth"$'\t'"${mark:-?}"$'\t'"${gin:-*}"$'\t'"${gout:-*}"$'\t'"$does"$'\t'"${args:+$T$args}"
       name="${line#"### "}"; name="${name#"${name%%[![:space:]]*}"}"; name="${name%"${name##*[![:space:]]}"}"
-      mark=""; gin=""; gout=""; does=""
+      mark=""; gin=""; gout=""; does=""; args=""
+    elif [[ "$line" =~ $re_arg ]]; then
+      v="${BASH_REMATCH[1]}"; v="${v%% — *}"; v="${v#"${v%%[![:space:]]*}"}"; v="${v%"${v##*[![:space:]]}"}"
+      [[ -n "$v" ]] || continue
+      [[ "$v" == *=* ]] || v="$v="
+      args+="${args:+; }$v"
     elif [[ "$line" =~ $re_does ]]; then
       v="${BASH_REMATCH[1]}"; v="${v#"${v%%[![:space:]]*}"}"; v="${v%"${v##*[![:space:]]}"}"; does="$(scv_gear_one_line "$v")"
     elif [[ "$line" =~ $re_mark ]]; then
@@ -125,7 +134,7 @@ scv_gear_teeth_parse() {
       fi
     fi
   done <<< "$text"
-  [[ -z "$name" ]] || out+="${out:+$'\n'}$name"$'\t'"tooth"$'\t'"${mark:-?}"$'\t'"${gin:-*}"$'\t'"${gout:-*}"$'\t'"$does"$'\t'
+  [[ -z "$name" ]] || out+="${out:+$'\n'}$name"$'\t'"tooth"$'\t'"${mark:-?}"$'\t'"${gin:-*}"$'\t'"${gout:-*}"$'\t'"$does"$'\t'"${args:+$T$args}"
   printf '%s' "$out"
 }
 
@@ -155,7 +164,11 @@ scv_gear_tooth_examples() {
 # 예: "up" "대문자로" "pure" "text" "text" "\"a\" → \"A\"" → $'### up\n- 역할: 대문자로\n- 표시: pure\n- 값: text → text\n- 예: "a" → "A"'
 # 예: "log" "커밋을 모은다" "effect" "none" "subjects" "" → $'### log\n- 역할: 커밋을 모은다\n- 표시: effect\n- 값: none → subjects'
 scv_gear_tooth_entry() {
+  local l
   printf '### %s\n- 역할: %s\n- 표시: %s\n- 값: %s → %s' "${1:-}" "${2:-}" "${3:-}" "${4:-}" "${5:-}"
+  if [[ -n "${7:-}" ]]; then
+    while IFS= read -r l; do [[ -z "$l" ]] || printf '\n- 인자: %s' "$l"; done <<< "$7"
+  fi
   [[ -z "${6:-}" ]] || printf '\n- 예: %s' "$6"
 }
 
@@ -168,7 +181,7 @@ scv_gear_tooth_entry() {
 scv_gear_front_get() {
   local text="${1:-}" key="${2:-}" line v
   while IFS= read -r line; do
-    [[ "$line" =~ ^[abcdefghijklmnopqrstuvwxyz]+: ]] || return 0
+    [[ "$line" =~ ^[abcdefghijklmnopqrstuvwxyz]+: || "$line" == 예:* ]] || return 0
     if [[ "$line" == "$key:"* ]]; then
       v="${line#"$key":}"; v="${v#"${v%%[![:space:]]*}"}"
       printf '%s' "${v%"${v##*[![:space:]]}"}"
@@ -188,7 +201,7 @@ scv_gear_body() {
   local text="${1:-}" line infront=1 started=0 out=""
   while IFS= read -r line; do
     if (( infront )); then
-      [[ "$line" =~ ^[abcdefghijklmnopqrstuvwxyz]+: ]] && continue
+      [[ "$line" =~ ^[abcdefghijklmnopqrstuvwxyz]+: || "$line" == 예:* ]] && continue
       infront=0
     fi
     if (( ! started )); then [[ -n "$line" ]] || continue; started=1; out="$line"; continue; fi
@@ -233,7 +246,7 @@ scv_gear_index_build() {
 # 예: $'up\ttooth\tpure\ttext\tnumber\t대문자로\t낱말' "upper" "kind" → ""
 scv_gear_index_get() {
   local idx="${1:-}" name="${2:-}" col="${3:-}" line rest f i want=0
-  case "$col" in kind) want=2 ;; mark) want=3 ;; in) want=4 ;; out) want=5 ;; does) want=6 ;; words) want=7 ;; *) return 0 ;; esac
+  case "$col" in kind) want=2 ;; mark) want=3 ;; in) want=4 ;; out) want=5 ;; does) want=6 ;; words) want=7 ;; args) want=8 ;; *) return 0 ;; esac
   [[ -n "$name" ]] || return 0
   while IFS= read -r line; do
     [[ "$line" == "$name"$'\t'* ]] || continue
@@ -422,6 +435,7 @@ scv_gear_handoff_text() {
 scv_gear_confirm_text() {
   printf 'GEAR_CONFIRM: %s\nGEAR_STEP: %s\n=== 밖으로 나가는 단계 ===\n사용자에게 선택 도구로 물어라 — 질문 글 끝에 [기어 확인 %s:%s] 를 그대로 넣고, 보기는 "실행" 과 "실행하지 않음" 둘.\n"실행" 답이 온 뒤에만: %s\n=== 이 단계가 돌릴 글 ===\n%s' \
     "${1:-}" "${2:-}" "${1:-}" "${5:-}" "${4:-}" "${3:-}"
+  [[ -z "${6:-}" ]] || printf '\n=== 이 단계에 들어갈 인자 ===\n%s' "$6"
 }
 
 # @pure
@@ -457,4 +471,198 @@ scv_gear_confirm_ok() {
     "실행 ("*")"|"Run ("*")") printf 'yes' ;;
     *) printf 'no' ;;
   esac
+}
+
+# @pure
+# 역할: 인자 이름이 쓸 수 있는 모양인지 가린다 — 영문 소문자로 시작, 영문 소문자 · 숫자 · 밑줄, 32자까지. _proxy 로 끝나는 이름은 이미 뜻이 있는 환경 변수라 못 쓴다
+# 종류: 판정/gear
+# 예: "count" → "yes"
+# 예: "since_tag2" → "yes"
+# 예: "Count" → "no"
+# 예: "1st" → "no"
+# 예: "http_proxy" → "no"
+# 예: "" → "no"
+scv_gear_arg_name_ok() {
+  local n="${1:-}"
+  [[ "$n" != *_proxy ]] || { printf 'no'; return 0; }
+  if [[ "$n" =~ ^[abcdefghijklmnopqrstuvwxyz][0-9abcdefghijklmnopqrstuvwxyz_]{0,31}$ ]]; then printf 'yes'; else printf 'no'; fi
+}
+
+# @pure
+# 역할: 톱니 사전 글에서 톱니 한 개의 인자 줄들을 꺼낸다 — "- 인자: 이름=기본값 — 설명" 에서 "이름=기본값" 만, 한 줄에 하나(= 가 없으면 기본값이 빈 인자)
+# 종류: 꺼내기/gear
+# 예: $'### a\n- 인자: count=3 — 낼 줄 수\n- 인자: since\n### b\n- 인자: x=1' "a" → $'count=3\nsince='
+# 예: $'### a\n- 역할: 그대로' "a" → ""
+# 예: $'### a\n- 인자: sep=a b — 사이에 넣을 글' "a" → "sep=a b"
+scv_gear_args_parse() {
+  local text="${1:-}" want="${2:-}" line cur="" out="" v re_arg='^-[[:space:]]+인자[[:space:]]*:(.*)$'
+  while IFS= read -r line; do
+    line="${line%$'\r'}"
+    if [[ "$line" == "### "* ]]; then
+      cur="${line#"### "}"; cur="${cur#"${cur%%[![:space:]]*}"}"; cur="${cur%"${cur##*[![:space:]]}"}"
+    elif [[ "$cur" == "$want" && "$line" =~ $re_arg ]]; then
+      v="${BASH_REMATCH[1]}"; v="${v%% — *}"; v="${v#"${v%%[![:space:]]*}"}"; v="${v%"${v##*[![:space:]]}"}"
+      [[ -n "$v" ]] || continue
+      [[ "$v" == *=* ]] || v="$v="
+      out+="${out:+$'\n'}$v"
+    fi
+  done <<< "$text"
+  printf '%s' "$out"
+}
+
+# @pure
+# 역할: 실행할 때 받은 낱말들(한 줄에 하나)을 인자 줄들로 가린다 — "이름=값" 모양이고 이름이 쓸 수 있으면 그대로, 아니면 앞에 ! 를 붙인다
+# 종류: 판정/gear
+# 예: $'count=2\nsince=v1 beta' → $'count=2\nsince=v1 beta'
+# 예: $'Count=1\n=1\ncount' → $'!Count=1\n!=1\n!count'
+# 예: "" → ""
+scv_gear_args_split() {
+  local words="${1:-}" line out=""
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    if [[ "$line" == *=* && "$(scv_gear_arg_name_ok "${line%%=*}")" == yes ]]; then out+="${out:+$'\n'}$line"
+    else out+="${out:+$'\n'}!$line"; fi
+  done <<< "$words"
+  printf '%s' "$out"
+}
+
+# @pure
+# 역할: 준 인자 줄들 가운데 선언된 인자 줄들에 없는 이름을 찾는다 — 이름만, 한 줄에 하나
+# 종류: 판정/gear
+# 예: $'count=2\nnope=1' $'count=3\nsince=' → "nope"
+# 예: "count=2" $'count=3' → ""
+# 예: "x=1" "" → "x"
+scv_gear_args_unknown() {
+  local given="${1:-}" decl="${2:-}" line n out=""
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    n="${line%%=*}"
+    case $'\n'"$decl" in *$'\n'"$n="*) ;; *) out+="${out:+$'\n'}$n" ;; esac
+  done <<< "$given"
+  printf '%s' "$out"
+}
+
+# @deterministic
+# 역할: 인자 줄 두 묶음을 합친다 — 같은 이름은 뒤 묶음의 값이 이기고, 순서는 처음 나온 차례
+# 종류: 조립/gear
+# 예: $'count=3\nsince=' "count=5" → $'count=5\nsince='
+# 예: "count=3" "sep=," → $'count=3\nsep=,'
+# 예: "" "" → ""
+scv_gear_args_merge() {
+  [[ -n "${1:-}${2:-}" ]] || return 0
+  printf '%s\n%s\n' "${1:-}" "${2:-}" | LC_ALL=C awk '
+    { i = index($0, "="); if (!i || i == 1) next; n = substr($0, 1, i - 1); if (!(n in v)) ord[++c] = n; v[n] = $0 }
+    END { for (k = 1; k != c + 1; k++) printf "%s%s", (k == 1 ? "" : "\n"), v[ord[k]] }'
+}
+
+# @deterministic
+# 역할: 톱니가 선언한 인자 줄들에 덮는 값을 얹는다 — 선언한 이름만 남고, 덮는 묶음에 있으면 그 값, 없으면 기본값
+# 종류: 조립/gear
+# 예: $'count=3\nsince=' $'count=5\nother=1' → $'count=5\nsince='
+# 예: "count=3" "" → "count=3"
+# 예: "" "count=5" → ""
+scv_gear_args_apply() {
+  [[ -n "${1:-}" ]] || return 0
+  printf '%s\n\036\n%s\n' "${2:-}" "$1" | LC_ALL=C awk '
+    $0 == "\036" { d = 1; next }
+    { i = index($0, "="); if (!i || i == 1) next; n = substr($0, 1, i - 1) }
+    !d { v[n] = $0; next }
+    { printf "%s%s", (c++ ? "\n" : ""), ((n in v) ? v[n] : $0) }'
+}
+
+# @pure
+# 역할: 기어 글의 맨 위 줄들에서 같은 칸의 값을 모두 꺼낸다 — 한 줄에 하나(arg · 예 처럼 여러 번 적는 칸)
+# 종류: 꺼내기/gear
+# 예: $'flow: a | b\narg: count=4\narg: sep=,\ndoes: x\n\narg: body' "arg" → $'count=4\nsep=,'
+# 예: $'flow: a\n예: "a" → "A"\ndoes: x' "예" → '"a" → "A"'
+# 예: $'flow: a' "arg" → ""
+scv_gear_front_all() {
+  local text="${1:-}" key="${2:-}" line v out=""
+  while IFS= read -r line; do
+    [[ "$line" =~ ^[abcdefghijklmnopqrstuvwxyz]+: || "$line" == 예:* ]] || break
+    if [[ "$line" == "$key:"* ]]; then
+      v="${line#"$key":}"; v="${v#"${v%%[![:space:]]*}"}"; v="${v%"${v##*[![:space:]]}"}"
+      out+="${out:+$'\n'}$v"
+    fi
+  done <<< "$text"
+  printf '%s' "$out"
+}
+
+# @pure
+# 역할: 기어 글의 in · out 줄 값에서 값의 종류 이름만 꺼낸다 — " — " 뒤의 설명은 뗀다
+# 종류: 꺼내기/gear
+# 예: "lines — 글 줄들" → "lines"
+# 예: "number" → "number"
+# 예: "" → ""
+scv_gear_sig_name() {
+  local v="${1:-}"
+  v="${v%% — *}"; v="${v#"${v%%[![:space:]]*}"}"
+  printf '%s' "${v%"${v##*[![:space:]]}"}"
+}
+
+# @pure
+# 역할: 기어에 적은 받는 값 · 돌려주는 값의 이름을 첫 톱니 · 끝 톱니의 이름과 맞춰 본다 — 다르면 오류 줄(어느 쪽이든 비었거나 * 이면 보지 않는다)
+# 종류: 판정/gear
+# 예: "lines" "lines" "lines" "lines" → ""
+# 예: "number" "lines" "lines" "lines" → "in number — 첫 톱니가 받는 값 lines 와 다르다"
+# 예: "lines" "number" "lines" "lines" → "out number — 끝 톱니가 돌려주는 값 lines 와 다르다"
+# 예: "" "lines" "text" "*" → ""
+scv_gear_sig_check() {
+  local gin="${1:-}" gout="${2:-}" tin="${3:-}" tout="${4:-}" out=""
+  if [[ -n "$gin" && "$gin" != "*" && -n "$tin" && "$tin" != "*" && "$gin" != "$tin" ]]; then
+    out="in $gin — 첫 톱니가 받는 값 $tin 와 다르다"
+  fi
+  if [[ -n "$gout" && "$gout" != "*" && -n "$tout" && "$tout" != "*" && "$gout" != "$tout" ]]; then
+    out+="${out:+$'\n'}out $gout — 끝 톱니가 돌려주는 값 $tout 와 다르다"
+  fi
+  printf '%s' "$out"
+}
+
+# @pure
+# 역할: 예시 한 줄에서 앞에 적은 인자 낱말들과 나머지(입력 → 출력)를 두 줄로 나눈다 — 첫 줄은 빈칸으로 이은 인자들(없으면 빈 줄). 따옴표나 $ 가 든 낱말, 바로 뒤가 → 인 낱말은 인자가 아니다
+# 종류: 꺼내기/gear
+# 예: "count=2 sep=, \"a\" → \"b\"" → $'count=2 sep=,\n"a" → "b"'
+# 예: "\"a\" → \"b\"" → $'\n"a" → "b"'
+# 예: "a=b → c" → $'\na=b → c'
+scv_gear_example_args() {
+  local s="${1:-}" tok rest args="" re='^[abcdefghijklmnopqrstuvwxyz][0-9abcdefghijklmnopqrstuvwxyz_]*=[^"$]*$'
+  while [[ "$s" == *" "* ]]; do
+    tok="${s%% *}"; rest="${s#* }"
+    [[ "$tok" =~ $re && "$tok" != *\'* && "$rest" != "→"* ]] || break
+    args+="${args:+ }$tok"; s="$rest"
+  done
+  printf '%s\n%s' "$args" "$s"
+}
+
+# @pure
+# 역할: 기어의 예시를 실제로 돌려 맞출지(run) 보기용으로 둘지(show) 정한다 — 펼친 흐름이 순수 톱니로만 되어 있을 때만 돌린다
+# 종류: 판정/gear
+# 예: $'tooth\tup\ntooth\tcount' $'count\ttooth\tpure\ttext\tnumber\t센다\t\nup\ttooth\tpure\ttext\ttext\t대문자\t' → "run"
+# 예: $'tooth\tup\ntext\tg' $'up\ttooth\tpure\ttext\ttext\t대문자\t' → "show"
+# 예: $'tooth\tup\ntooth\twrite' $'up\ttooth\tpure\t*\t*\t대문자\t\nwrite\ttooth\teffect\t*\t*\t쓴다\t' → "show"
+# 예: "" "" → "show"
+scv_gear_example_mode() {
+  local steps="${1:-}" idx="${2:-}" line k s n=0
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    k="${line%%$'\t'*}"; s="${line#*$'\t'}"
+    [[ "$k" == tooth && "$(scv_gear_index_get "$idx" "$s" mark)" == pure ]] || { printf 'show'; return 0; }
+    n=$((n + 1))
+  done <<< "$steps"
+  if (( n )); then printf 'run'; else printf 'show'; fi
+}
+
+# @deterministic
+# 역할: 사전 글에서 목록에 낼 줄들을 만든다 — 톱니는 이름 · 표시 · 값 · 인자 · 하는 일, 기어는 이름 · 값 · 인자 · 하는 일(인자가 없으면 -)
+# 종류: 조립/gear
+# 예: $'g\tgear\t-\tlines\tlines\t앞 줄\t\tcount=3\nup\ttooth\tpure\ttext\ttext\t대문자\t' "gear" → $'g\tlines → lines\tcount=3\t앞 줄'
+# 예: $'g\tgear\t-\tlines\tlines\t앞 줄\t\tcount=3\nup\ttooth\tpure\ttext\ttext\t대문자\t' "tooth" → $'up\tpure\ttext → text\t-\t대문자'
+# 예: "" "gear" → ""
+scv_gear_list_rows() {
+  [[ -n "${1:-}" ]] || return 0
+  printf '%s\n' "$1" | LC_ALL=C awk -F'\t' -v k="${2:-}" '
+    $2 != k { next }
+    { a = ($8 == "" ? "-" : $8) }
+    k == "tooth" { printf "%s%s\t%s\t%s → %s\t%s\t%s", (c++ ? "\n" : ""), $1, $3, $4, $5, a, $6; next }
+    { printf "%s%s\t%s → %s\t%s\t%s", (c++ ? "\n" : ""), $1, $4, $5, a, $6 }'
 }
