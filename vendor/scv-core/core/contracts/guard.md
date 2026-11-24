@@ -258,6 +258,23 @@ answer is written.
 - A turn that uses no tool at all has no place to be stopped before its text; the Stop hook blocks that
   turn once (`help` in the once-per-turn record).
 
+## Rule S — a question goes to the choice tool, not the closing-summary tool (v0.102.0+)
+
+Some hosts give the model a closing-summary tool that can carry a question and reply buttons. In one real
+session 12 of 134 turns ended by asking the user in text; in 10 of them the model had put that question into
+the summary tool instead of the choice tool, so the person answered by typing. The turn-end check saw all 12,
+but it only leaves a note for the next turn (holding the turn there would show the choice 10–40 seconds late).
+
+- In `gate-any` mode, when the wrapper sets `SCV_SUMMARY_ASK="<tool>=<field>"` and the tool being called is
+  `<tool>` and its input field `<field>` is not blank, the call is refused. The reason tells the model to ask
+  through the choice tool first and to call the summary tool again without a question. This is before the
+  closing text exists, so nothing is shown late and nothing is written twice.
+- The reason comes from `scripts/choice-gate.sh summary` (`scv_summary_ask_reason`). It is empty — and the
+  call passes — when this run has no choice tool: the host names none, the project sets
+  `SCV_CHOICE_GATE=off`, or the host's unattended condition holds.
+- The rule is checked before the `SCV_HELP_FIRST_ALLOW` list, because wrappers list the summary tool there.
+- Core names no tool and no field. Without `SCV_SUMMARY_ASK`, or with a malformed value, nothing changes.
+
 ## Rule D — every function declares pure or effect (v0.81.0+)
 
 In `gate-write` mode the guard rebuilds the target as it will be after the edit (a Write's content, an Edit or

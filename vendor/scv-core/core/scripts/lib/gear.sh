@@ -666,3 +666,154 @@ scv_gear_list_rows() {
     k == "tooth" { printf "%s%s\t%s\t%s → %s\t%s\t%s", (c++ ? "\n" : ""), $1, $3, $4, $5, a, $6; next }
     { printf "%s%s\t%s → %s\t%s\t%s", (c++ ? "\n" : ""), $1, $4, $5, a, $6 }'
 }
+
+# @pure
+# 역할: 펼친 흐름에서 가장 센 표시 하나를 고른다 — 밖으로 나가는 톱니가 있으면 outward, 판단 단계가 있으면 judge, 부작용 톱니가 있으면 effect, 순수 톱니뿐이면 pure, 흐름이 비었거나 모르는 이름이 있으면 -
+# 종류: 판정/gear
+# 예: $'tooth\tup\ntooth\tcount' $'count\ttooth\tpure\ttext\tnumber\t센다\t\nup\ttooth\tpure\ttext\ttext\t대문자\t' → "pure"
+# 예: $'tooth\tup\ntooth\twrite' $'up\ttooth\tpure\t*\t*\t대문자\t\nwrite\ttooth\teffect\t*\t*\t쓴다\t' → "effect"
+# 예: $'tooth\tup\ntext\tg' $'up\ttooth\tpure\ttext\ttext\t대문자\t' → "judge"
+# 예: $'tooth\tsend\ntext\tg' $'send\ttooth\toutward\t*\t*\t보낸다\t' → "outward"
+# 예: $'tooth\tup\nunknown\tnope' $'up\ttooth\tpure\ttext\ttext\t대문자\t' → "-"
+# 예: "" "" → "-"
+scv_gear_flow_mark() {
+  local steps="${1:-}" idx="${2:-}" line k s o=0 j=0 e=0 n=0
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    k="${line%%$'\t'*}"; s="${line#*$'\t'}"; s="${s%%$'\t'*}"
+    case "$k" in
+      text) j=1 ;;
+      tooth)
+        case "$(scv_gear_index_get "$idx" "$s" mark)" in
+          pure) ;;
+          effect) e=1 ;;
+          outward) o=1 ;;
+          *) printf '%s' '-'; return 0 ;;
+        esac ;;
+      *) printf '%s' '-'; return 0 ;;
+    esac
+    n=$((n + 1))
+  done <<< "$steps"
+  if (( n == 0 )); then printf '%s' '-'
+  elif (( o )); then printf 'outward'
+  elif (( j )); then printf 'judge'
+  elif (( e )); then printf 'effect'
+  else printf 'pure'; fi
+}
+
+# @pure
+# 역할: 톱니 사전 글에서 톱니 한 개의 인자 설명들을 꺼낸다 — "- 인자: 이름=기본값 — 설명" 에서 "이름<TAB>설명", 한 줄에 하나(설명이 없으면 빈 설명)
+# 종류: 꺼내기/gear
+# 예: $'### a\n- 인자: count=3 — 낼 줄 수\n- 인자: since\n### b\n- 인자: x=1 — 다른 것' "a" → $'count\t낼 줄 수\nsince\t'
+# 예: $'### a\n- 역할: 그대로' "a" → ""
+scv_gear_args_desc() {
+  local text="${1:-}" want="${2:-}" line cur="" out="" v d re_arg='^-[[:space:]]+인자[[:space:]]*:(.*)$'
+  while IFS= read -r line; do
+    line="${line%$'\r'}"
+    if [[ "$line" == "### "* ]]; then
+      cur="${line#"### "}"; cur="${cur#"${cur%%[![:space:]]*}"}"; cur="${cur%"${cur##*[![:space:]]}"}"
+    elif [[ "$cur" == "$want" && "$line" =~ $re_arg ]]; then
+      v="${BASH_REMATCH[1]}"; d=""
+      [[ "$v" != *" — "* ]] || d="${v#* — }"
+      v="${v%% — *}"; v="${v#"${v%%[![:space:]]*}"}"; v="${v%"${v##*[![:space:]]}"}"
+      [[ -n "$v" ]] || continue
+      d="${d#"${d%%[![:space:]]*}"}"; d="${d%"${d##*[![:space:]]}"}"
+      out+="${out:+$'\n'}${v%%=*}"$'\t'"$d"
+    fi
+  done <<< "$text"
+  printf '%s' "$out"
+}
+
+# @pure
+# 역할: 기어나 톱니를 쓸 때 정해야 할 값을 줄로 만든다 — 인자마다 "arg<TAB>이름<TAB>지금 값<TAB>open|fixed<TAB>설명"(기어가 정해 둔 인자는 fixed), 받는 값이 있으면 끝에 "input<TAB>값 이름"
+# 종류: 조립/gear
+# 예: $'count=5\nsince=' "count=5" $'count\t낼 줄 수\nsince\t어디부터' "lines" → $'arg\tcount\t5\tfixed\t낼 줄 수\narg\tsince\t\topen\t어디부터\ninput\tlines'
+# 예: "os=mac" "" $'os\t돌릴 곳: mac · linux' "none" → $'arg\tos\tmac\topen\t돌릴 곳: mac · linux'
+# 예: "" "" "" "none" → ""
+# 예: "" "" "" "text" → $'input\ttext'
+scv_gear_ask_rows() {
+  local args="${1:-}" fixed="${2:-}" descs="${3:-}" gin="${4:-}" line n v st d dl out="" T=$'\t'
+  while IFS= read -r line; do
+    [[ "$line" == *=* ]] || continue
+    n="${line%%=*}"; v="${line#*=}"; st=open; d=""
+    case $'\n'"$fixed" in *$'\n'"$n="*) st=fixed ;; esac
+    while IFS= read -r dl; do
+      [[ "$dl" == "$n$T"* ]] || continue
+      d="${dl#*"$T"}"; break
+    done <<< "$descs"
+    out+="${out:+$'\n'}arg$T$n$T$v$T$st$T$d"
+  done <<< "$args"
+  case "$gin" in ""|none|"*") ;; *) out+="${out:+$'\n'}input$T$gin" ;; esac
+  printf '%s' "$out"
+}
+
+# @pure
+# 역할: 요청 글이 기어를 돌리라는 것인지 가려 그 기어 이름을 낸다 — 글 첫 줄이 기어 액션 꼴(… gear run 이름)이거나, "[SCV 기어]" 로 시작하는 줄에 "gear run 이름" 이 있을 때. 이름은 주어진 기어 목록에 있어야 한다
+# 종류: 판정/gear
+# 예: "action:gear run release-ci os=mac" $'release-ci\nmake-list' → "release-ci"
+# 예: $'목록 만들어 줘\n\n[SCV 기어] 이 요청에 맞는 저장해 둔 방법이 있음: make-list — 이 기어로 해 주세요(action:gear run make-list). 값은 위 요청에서 읽고, 없는 값은 물어 주세요.' $'release-ci\nmake-list' → "make-list"
+# 예: "릴리스 검사 돌려 줘" $'release-ci\nmake-list' → ""
+# 예: "기어가 뭐야? gear run 은 어떻게 써?" $'release-ci\nmake-list' → ""
+# 예: "[SCV 기어] 이 요청에 맞는 저장해 둔 방법이 있음: nope — 이 기어로 해 주세요(action:gear run nope)." $'release-ci\nmake-list' → ""
+# 예: "action:gear run release-ci" "" → ""
+scv_gear_turn() {
+  local text="${1:-}" names="${2:-}" line t first=1 name="" nl=$'\n'
+  local re_act='^[/$]?([A-Za-z]+[:-])?gear[[:space:]]+run[[:space:]]+([a-z0-9][a-z0-9-]*)([[:space:]]|$)'
+  local re_line='gear[[:space:]]+run[[:space:]]+([a-z0-9][a-z0-9-]*)'
+  [[ -n "$names" ]] || return 0
+  while IFS= read -r line; do
+    t="${line#"${line%%[![:space:]]*}"}"
+    [[ -n "$t" ]] || continue
+    if (( first )); then
+      first=0
+      if [[ "$t" =~ $re_act ]]; then name="${BASH_REMATCH[2]}"; break; fi
+    fi
+    if [[ "$t" == "[SCV 기어]"* && "$t" =~ $re_line ]]; then name="${BASH_REMATCH[1]}"; break; fi
+  done <<< "$text"
+  [[ -n "$name" ]] || return 0
+  case "$nl$names$nl" in *"$nl$name$nl"*) printf '%s' "$name" ;; esac
+  return 0
+}
+
+# @pure
+# 역할: 기어 턴에 실을 짧은 안내 글을 만든다 — 값 · 실행 · 답 세 줄. 첫 줄은 요청이 그 기어의 일이 아니면(낱말만 겹쳐 붙은 경우) 돌리지 말고 그대로 답하라고 일러 둔다. 값 줄은 값 안내 줄들(arg · input)을 쉬운 말로 옮기고(넣을 자료가 요청에 없으면 돌리기 전에 묻게 한다 — 물을 사람이 없으면 돌리지 않게), 실행 줄은 넣을 자료가 있으면 표준 입력으로 넣는 꼴을 보인다. 값 안내가 비면 값 안내 명령을 먼저 돌리게 한다. 선택 도구 이름이 있으면 빠진 값은 그 도구로 묻게 하고, 물을 사람이 없는 실행(다섯째 인자 1)이면 기본값을 쓰게 한다
+# 종류: 조립/gear
+# 예: "make-list" "/c/gear.sh" "" $'input\ttext' → $'[SCV 기어 턴] 이 요청은 저장해 둔 기어 make-list 를 돌리라는 것이다 — 가벼운 길: 도움말 · 요청 등록 · 다시 쓴 요청 인용 · 세 줄 끝 보고를 하지 않는다. 요청이 이 기어가 하는 일이 아니면(질문 · 다른 일 — 낱말만 겹쳐 붙은 경우) 기어를 돌리지 말고 요청에 그대로 답한다.\n1) 값: 넣을 자료는 표준 입력으로(text) — 인자가 아니다, 요청에 자료가 없으면 돌리기 전에 묻는다. 요청에 있는 값은 그대로 쓰고, 빠진 열린 값만 한 번에 묻는다(기본값으로 되면 묻지 않는다).\n2) 실행: printf \'%s\' \'넣을 자료\' | bash /c/gear.sh run make-list — 멈추면(확인 · 판단 단계) 그 안내를 따르고, 오래 걸릴 일이면 뒤에서 돌린다.\n3) 답: 무엇을 돌렸고 결과가 무엇인지 두세 줄. 파일을 직접 고치지 않는다 — 고칠 일이면 그렇다고 말하고 끝낸다.'
+# 예: "ci" "/c/gear.sh" "Pick" $'arg\tos\tmac\topen\t돌릴 곳: mac · linux\narg\tjobs\t4\tfixed\t겹쳐 돌릴 수' → $'[SCV 기어 턴] 이 요청은 저장해 둔 기어 ci 를 돌리라는 것이다 — 가벼운 길: 도움말 · 요청 등록 · 다시 쓴 요청 인용 · 세 줄 끝 보고를 하지 않는다. 요청이 이 기어가 하는 일이 아니면(질문 · 다른 일 — 낱말만 겹쳐 붙은 경우) 기어를 돌리지 말고 요청에 그대로 답한다.\n1) 값: 인자 os=mac(열림 — 돌릴 곳: mac · linux) · 인자 jobs=4(정해 둠 — 바꾸지 않는다). 요청에 있는 값은 그대로 쓰고, 빠진 열린 값만 Pick 로 한 번에 묻는다(기본값으로 되면 묻지 않는다).\n2) 실행: bash /c/gear.sh run ci 이름=값 … — 멈추면(확인 · 판단 단계) 그 안내를 따르고, 오래 걸릴 일이면 뒤에서 돌린다.\n3) 답: 무엇을 돌렸고 결과가 무엇인지 두세 줄. 파일을 직접 고치지 않는다 — 고칠 일이면 그렇다고 말하고 끝낸다.'
+# 예: "make-list" "/c/gear.sh" "" "" → $'[SCV 기어 턴] 이 요청은 저장해 둔 기어 make-list 를 돌리라는 것이다 — 가벼운 길: 도움말 · 요청 등록 · 다시 쓴 요청 인용 · 세 줄 끝 보고를 하지 않는다. 요청이 이 기어가 하는 일이 아니면(질문 · 다른 일 — 낱말만 겹쳐 붙은 경우) 기어를 돌리지 말고 요청에 그대로 답한다.\n1) 값: bash /c/gear.sh ask make-list 로 읽는다(arg 줄은 인자, input 줄은 표준 입력으로 넣을 자료). 요청에 있는 값은 그대로 쓰고, 빠진 열린 값만 한 번에 묻는다(기본값으로 되면 묻지 않는다).\n2) 실행: bash /c/gear.sh run make-list 이름=값 … (넣을 자료는 표준 입력) — 멈추면(확인 · 판단 단계) 그 안내를 따르고, 오래 걸릴 일이면 뒤에서 돌린다.\n3) 답: 무엇을 돌렸고 결과가 무엇인지 두세 줄. 파일을 직접 고치지 않는다 — 고칠 일이면 그렇다고 말하고 끝낸다.'
+# 예: "ci" "/c/gear.sh" "Pick" "none" 1 → $'[SCV 기어 턴] 이 요청은 저장해 둔 기어 ci 를 돌리라는 것이다 — 가벼운 길: 도움말 · 요청 등록 · 다시 쓴 요청 인용 · 세 줄 끝 보고를 하지 않는다. 요청이 이 기어가 하는 일이 아니면(질문 · 다른 일 — 낱말만 겹쳐 붙은 경우) 기어를 돌리지 말고 요청에 그대로 답한다.\n1) 값: 정할 값 없음. 요청에 있는 값은 그대로 쓰고, 물을 사람이 없는 실행이다 — 빠진 열린 값은 기본값을 쓰고, 쓴 기본값을 답에 적는다.\n2) 실행: bash /c/gear.sh run ci — 멈추면(확인 · 판단 단계) 그 안내를 따르고, 오래 걸릴 일이면 뒤에서 돌린다.\n3) 답: 무엇을 돌렸고 결과가 무엇인지 두세 줄. 파일을 직접 고치지 않는다 — 고칠 일이면 그렇다고 말하고 끝낸다.'
+# 예: "" "/c/gear.sh" "" "" → ""
+scv_gear_turn_text() {
+  local name="${1:-}" sh="${2:-gear.sh}" tool="${3:-}" rows="${4:-}" nobody="${5:-}" ask="한 번에 묻는다" miss nodata line k n v st d vals="" hasarg=0 hasin=0 run T=$'\t'
+  [[ -n "$name" ]] || return 0
+  [[ -z "$tool" ]] || ask="$tool 로 한 번에 묻는다"
+  miss="빠진 열린 값만 $ask(기본값으로 되면 묻지 않는다)"
+  nodata="돌리기 전에 묻는다"
+  if [[ "$nobody" == 1 ]]; then
+    miss="물을 사람이 없는 실행이다 — 빠진 열린 값은 기본값을 쓰고, 쓴 기본값을 답에 적는다"
+    nodata="돌리지 않고 그렇다고 답한다"
+  fi
+  while IFS= read -r line; do
+    k="${line%%"$T"*}"
+    case "$k" in
+      arg)
+        IFS="$T" read -r k n v st d <<< "$line"
+        hasarg=1
+        if [[ "$st" == fixed ]]; then vals+="${vals:+ · }인자 $n=$v(정해 둠 — 바꾸지 않는다)"
+        else vals+="${vals:+ · }인자 $n=$v(열림${d:+ — $d})"; fi ;;
+      input) hasin=1; vals+="${vals:+ · }넣을 자료는 표준 입력으로(${line#*"$T"}) — 인자가 아니다, 요청에 자료가 없으면 $nodata" ;;
+      none) vals+="${vals:+ · }정할 값 없음" ;;
+    esac
+  done <<< "$rows"
+  printf '%s\n' "[SCV 기어 턴] 이 요청은 저장해 둔 기어 $name 를 돌리라는 것이다 — 가벼운 길: 도움말 · 요청 등록 · 다시 쓴 요청 인용 · 세 줄 끝 보고를 하지 않는다. 요청이 이 기어가 하는 일이 아니면(질문 · 다른 일 — 낱말만 겹쳐 붙은 경우) 기어를 돌리지 말고 요청에 그대로 답한다."
+  if [[ -z "$vals" ]]; then
+    printf '%s\n' "1) 값: bash $sh ask $name 로 읽는다(arg 줄은 인자, input 줄은 표준 입력으로 넣을 자료). 요청에 있는 값은 그대로 쓰고, $miss."
+    run="bash $sh run $name 이름=값 … (넣을 자료는 표준 입력)"
+  else
+    printf '%s\n' "1) 값: $vals. 요청에 있는 값은 그대로 쓰고, $miss."
+    run="bash $sh run $name"; (( hasarg )) && run+=" 이름=값 …"
+    (( hasin )) && run="printf '%s' '넣을 자료' | $run"
+  fi
+  printf '%s\n' "2) 실행: $run — 멈추면(확인 · 판단 단계) 그 안내를 따르고, 오래 걸릴 일이면 뒤에서 돌린다."
+  printf '%s' "3) 답: 무엇을 돌렸고 결과가 무엇인지 두세 줄. 파일을 직접 고치지 않는다 — 고칠 일이면 그렇다고 말하고 끝낸다."
+}
