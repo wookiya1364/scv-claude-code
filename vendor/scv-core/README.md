@@ -84,6 +84,7 @@ rules are resolved; every protocol defers to it.
 | `action:ask-mode` | Ask only at the start and the end, or everywhere | Core |
 | `action:catalog-source` | No comments in code — the catalog is the source | Core |
 | `action:gear` | Run or make gears — reusable work units in `scv/gears/` | Core |
+| `action:words` | Word dictionary — say B instead of A, inflections included | Core |
 
 ### The loop
 

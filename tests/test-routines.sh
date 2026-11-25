@@ -213,7 +213,7 @@ echo "── [7] action catalog — routine is the 15th action, exactly once ─
 ACTIONS="$CORE_PAYLOAD/actions.json"
 [[ -f "$ACTIONS" ]] || fail "action catalog not found (looked in $CORE_PAYLOAD)"
 N_IDS="$(grep -c '"id":' "$ACTIONS")"
-[[ "$N_IDS" -eq 22 ]] && ok "actions.json declares 22 actions" || fail "expected 22 actions, got $N_IDS"
+[[ "$N_IDS" -eq 23 ]] && ok "actions.json declares 23 actions" || fail "expected 23 actions, got $N_IDS"
 N_ROUTINE="$(grep -c '"id": "routine"' "$ACTIONS")"
 [[ "$N_ROUTINE" -eq 1 ]] && ok "routine appears exactly once" || fail "routine appears $N_ROUTINE times"
 grep -A4 '"id": "routine"' "$ACTIONS" | grep -q '"owner": "core"' \

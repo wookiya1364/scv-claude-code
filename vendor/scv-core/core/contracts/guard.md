@@ -88,6 +88,7 @@ channel
 ask-mode
 catalog-source
 gear
+words
 ```
 
 Six of these (`update`, `set-models`, `mods`, `mods-install`, `mods-remove`, `channel`) have `entrypoint: null` in
@@ -138,6 +139,7 @@ write, or the guard blocks the action it exists to protect. Verified by hand on
 | help | 64 (`settings-set.sh`) | no — the settings write *is* the first script call |
 | catalog-source | 46 | no — its writes (settings, catalog, the moved code) are made by the minting script itself |
 | gear | 49 | no — the list call comes first; a tooth body or a gear text is edited only after `gear.sh new` created it |
+| words | 50 | no — the list call comes first, and its only write (the dictionary file) is made by the minting script itself |
 | ask-mode | 45 | no — its only write (the settings file) is made by the minting script itself |
 | install-deps | 36 | no |
 | promote | 12 | no |

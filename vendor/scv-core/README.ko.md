@@ -85,6 +85,7 @@ flowchart LR
 | `action:ask-mode` | 처음과 끝에만 묻기 ↔ 매번 묻기 | Core |
 | `action:catalog-source` | 코드 주석 없이 순수 함수 사전이 원본 | Core |
 | `action:gear` | 기어 실행 · 만들기 — `scv/gears/` 의 재사용 작업 단위 | Core |
+| `action:words` | 낱말 사전 — 피할 말과 그 활용을 정한 말로 바꿔 말하기 | Core |
 
 ### 루프
 

@@ -251,6 +251,17 @@ if [[ "$_scv_kind" != "auto" ]]; then
   elif [[ -e "$_scv_gtf" || -L "$_scv_gtf" ]]; then rm -f "$_scv_gtf" 2>/dev/null || true
   fi
 fi
+# ---------- words ------------------------------------------------------------
+# 낱말 사전(계획 20261125-wookiya1364-words): 프로젝트에 사전(scv/words/WORDS.tsv)이 있으면 "이 말과 그 계열의 말 대신 이 말" 안내 묶음을
+# 이 맥락에 한 번 싣는다 — 규칙 글의 한 번만 싣기와 같은 길이다(세션 자리의 표시 .words-seen, 요약 · 비움 · 재개 때 초기화가 지운다).
+# 사전 파일이 바뀌면 다시 싣는다. 기어 턴에도 싣는다(그 답도 사용자가 읽는다). 자동 알림 턴에는 싣지 않는다 — 다음 사람 턴이 싣는다.
+# 사전이 없으면 아무것도 띄우지 않고 한 글자도 싣지 않는다 — 이 구간을 지운 훅과 출력이 같다. 세션 id 가 없으면 표시를 남길 자리가 없어
+# 매 턴 싣는다(규칙 글과 같다). 끄기: 설정 SCV_WORDS=off. 판단은 순수 함수(lib/words.sh), 읽기 · 쓰기는 words.sh turn.
+if [[ "$_scv_kind" != "auto" && -s scv/words/WORDS.tsv && ! -L scv/words/WORDS.tsv && -f "$_scv_core0/scripts/words.sh" ]]; then
+  if [[ -n "$_scv_sid0" ]]; then bash "$_scv_core0/scripts/words.sh" turn --dir "$_scv_tdir" 2>/dev/null || true
+  else bash "$_scv_core0/scripts/words.sh" text 2>/dev/null || true; fi
+fi
+# ---------- /words -----------------------------------------------------------
 # ---------- turn plan check (0.87.0+) ---------------------------------------
 # 사람 턴의 시작에 작업 공간 사진을 찍는다 — 턴 끝 훅이 이 사진과 견줘 '고쳤는데 계획 기록이 없는 턴'을 막는다.
 # 규칙 · 설정은 scripts/turn-check.sh 머리말(SCV_TURN_PLAN_CHECK=off 면 아무것도 하지 않음). 어떤 실패도 막지 않는다.

@@ -129,3 +129,5 @@ core/tests/test-evidence-card.sh	3
 core/tests/test-guard-wait.sh	8
 core/tests/test-retired-coach.sh	5
 core/tests/test-gear-detect.sh	60
+core/tests/test-words.sh	50
+core/tests/test-resume-tail.sh	3
