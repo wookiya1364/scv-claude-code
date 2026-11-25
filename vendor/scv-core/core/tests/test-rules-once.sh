@@ -15,7 +15,8 @@ fail=0
 ok() { echo "ok $1"; }
 bad() { echo "✖ $1" >&2; fail=1; }
 
-mkproj() { local p="$WORK/$1"; mkdir -p "$p/scv/raw" "$p/scv/conversations"; printf '%s\n' "${2:-{\"SCV_LANG\":\"korean\"\}}" > "$p/scv/scv_settings.json"; echo "$p"; }
+DEFAULT_SETTINGS='{"SCV_LANG":"korean"}'   # 기본값을 변수로 둔다 — 옛 셸(3.2)은 ${2:-{…\}} 안의 닫는 괄호 앞 역슬래시를 글자로 남긴다
+mkproj() { local p="$WORK/$1"; mkdir -p "$p/scv/raw" "$p/scv/conversations"; printf '%s\n' "${2:-$DEFAULT_SETTINGS}" > "$p/scv/scv_settings.json"; echo "$p"; }
 hook() { ( cd "$1" && printf '{"prompt":"안녕","session_id":"%s"}' "$2" | CLAUDE_PLUGIN_ROOT="$CORE" SCV_GUARD_STATE="$WORK/gs" bash "$PROMPT_HOOK" 2>/dev/null ); }
 mark() { ( cd "$1" && bash "$STATE_SH" mark >/dev/null 2>&1 ); }
 is_full() { grep -qF '[SCV plain language]' <<<"$1" && grep -qF '[SCV 확인 범위]' <<<"$1" && ! grep -qF '[SCV 규칙]' <<<"$1"; }

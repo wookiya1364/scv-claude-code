@@ -14,10 +14,11 @@ fail=0
 ok() { echo "ok $1"; }
 bad() { echo "✖ $1" >&2; fail=1; }
 
+DEFAULT_SETTINGS='{"SCV_LANG":"korean"}'   # 기본값을 변수로 둔다 — 옛 셸(3.2)은 ${2:-{…\}} 안의 닫는 괄호 앞 역슬래시를 글자로 남긴다
 mkrepo() {  # <이름> [설정 JSON] → 저장소 경로 (sh · ts · rs · py 함수 넷, 표식 · 설명 · 도구 표시 주석이 섞임)
   local d="$WORK/$1"; mkdir -p "$d/scv/raw" "$d/src"
   ( cd "$d" && git init -q . && git config user.email t@t && git config user.name t
-    printf '%s\n' "${2:-{\"SCV_LANG\":\"korean\"\}}" > scv/scv_settings.json
+    printf '%s\n' "${2:-$DEFAULT_SETTINGS}" > scv/scv_settings.json
     printf '%s\n' '#!/usr/bin/env bash' '# shellcheck disable=SC2034' '# @pure' '# 역할: 센다' '# 종류: 세기' '# 예: "ab" → "2"' \
       'cnt() { printf "%s" "${#1}"; }   # 길이' '# 메모: 이건 설명' 'x="a # b"' 'cat <<EOF' '# 여기 문서는 글' 'EOF' > src/a.sh
     printf '%s\n' '// @pure add' '// 역할: 더한다' '// 종류: 세기' '// 예: add(1, 2) → 3' \

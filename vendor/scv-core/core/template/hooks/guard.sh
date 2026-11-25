@@ -28,6 +28,11 @@
 #   SCV_GUARD_RULE_D    off        skip the function-declaration check (Rule D, 0.81.0+)
 #   SCV_SUMMARY_ASK     <tool>=<field>  the host's closing-summary tool and the input field that carries
 #                                  a question for the user (Rule S, 0.102.0+ — gate-any only)
+#   SCV_WAIT_FIELD      <field>    the tool-input field that carries a wait in milliseconds
+#                                  (Rule W, 0.104.0+ — default wait_for_output_ms)
+#   SCV_BACKGROUND_FIELD <field>   the tool-input field that says a command runs in the background
+#                                  (Rule W — default run_in_background)
+#   SCV_BACKGROUND_FIRST off       skip Rule W (also a project setting)
 #
 # Failure policy: open on two inputs, and only those two — an empty payload, and no
 # JSON reader on the machine. Both print one line to stderr and allow. The host
@@ -152,7 +157,7 @@ store_deny_reason() {
   printf 'SCV guard: the receipt store at %s cannot be written, so no action can record itself and every guarded write is refused. This is a machine problem, not a workflow one — fix the directory permissions or point SCV_GUARD_STATE at a writable path.' "$STATE_DIR"
 }
 
-ACTIONS_RE="${SCV_GUARD_ACTIONS:-help|status|promote|work|codegen|deck|update|regression|report|sync|install-deps|workspace|handoff|set-models|routine|dreams|mods-install|mods-remove|mods|channel|ask-mode|catalog-source|gear}"
+ACTIONS_RE="${SCV_GUARD_ACTIONS:-help|status|promote|work|codegen|deck|update|regression|report|sync|install-deps|workspace|handoff|set-models|routine|mods-install|mods-remove|mods|channel|ask-mode|catalog-source|gear}"
 
 # ---------- help mark (0.80.0+) ---------------------------------------------
 # Rule H needs to know that this person's turn has called help (or carried another SCV action).
@@ -288,6 +293,22 @@ PLAN_FILES='PLAN.md TESTS.md WRAPUP.md FEATURE_ARCHITECTURE.md'
 # SCV_HELP_FIRST_ALLOW pass. Everything else is refused until the turn is marked — at the first
 # tool, before any answer is written, so nothing has to be redone.
 if [[ "$MODE" == "gate-any" ]]; then
+  # ---------- Rule W (0.104.0+): long work runs in the background, not behind a foreground wait ----
+  # While the model sits in a long wait, a new message from the person interrupts the work and the plan
+  # does not reach its end (a real session, 2026-11-25: a 200-second wait was cut off). A tool call that
+  # carries a long wait value, or a shell command not sent to the background that sleeps to wait, is
+  # refused here — before it runs, so nothing is redone — with the way out: run it in the background and
+  # read the result when the notice comes. The decision is a pure function (lib/wait-gate.sh). The wait
+  # field and the background field are named by the wrapper when its host uses other names
+  # (SCV_WAIT_FIELD, SCV_BACKGROUND_FIELD). Off: project setting or environment SCV_BACKGROUND_FIRST=off.
+  _scv_wf="${SCV_WAIT_FIELD:-wait_for_output_ms}"; _scv_bf="${SCV_BACKGROUND_FIELD:-run_in_background}"
+  if [[ "$PAYLOAD" == *sleep* || "$PAYLOAD" == *"\"$_scv_wf\""* ]] && [[ "$_scv_wf" =~ ^[A-Za-z_][A-Za-z0-9_]*$ && "$_scv_bf" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] \
+     && [[ "${SCV_BACKGROUND_FIRST:-}" != off && -f "$_scv_mp_dir/lib/wait-gate.sh" ]] \
+     && ! grep -qE '"SCV_BACKGROUND_FIRST"[[:space:]]*:[[:space:]]*"[Oo][Ff][Ff]"' "$SCV_ROOT/scv_settings.json" 2>/dev/null; then
+    _scv_wwhy="$( source "$_scv_mp_dir/lib/wait-gate.sh" 2>/dev/null || exit 0
+      scv_wait_reason "$(scv_wait_kind "$(field ".tool_input.$_scv_wf")" "$(field ".tool_input.$_scv_bf")" "$(field '.tool_input.command')")" )"
+    [[ -n "${_scv_wwhy//[[:space:]]/}" ]] && deny "$_scv_wwhy"
+  fi
   _scv_skill="$(field '.tool_input.skill')"
   if [[ -n "$_scv_skill" ]] && printf '%s' "$_scv_skill" | grep -qE "(^|[^a-z-])(${ACTIONS_RE})([^a-z-]|$)"; then
     help_mark; allow

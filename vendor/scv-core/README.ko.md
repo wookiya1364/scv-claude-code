@@ -78,7 +78,6 @@ flowchart LR
 | `action:handoff` | 다른 저장소가 해야 할 일 선언 | Core |
 | `action:set-models` | 액션별 모델 정책 고르기 | 래퍼 |
 | `action:routine` | 파일 하나짜리 정비 루틴 실행 | Core |
-| `action:dreams` | 지난 세션 돌아보기 · 더 나은 요청 코칭 | Core |
 | `action:mods` | 설치된 SCV 모드 업데이트 + 목록 | 래퍼 |
 | `action:mods-install` | SCV 모드 하나 설치 | 래퍼 |
 | `action:mods-remove` | SCV 모드 하나 삭제 | 래퍼 |

@@ -77,7 +77,6 @@ rules are resolved; every protocol defers to it.
 | `action:handoff` | Declare work another repo must do | Core |
 | `action:set-models` | Pick the model policy per action | wrapper |
 | `action:routine` | Run a one-file maintenance routine | Core |
-| `action:dreams` | Look back at past sessions · coach better prompts | Core |
 | `action:mods` | Update installed SCV mods + list them | wrapper |
 | `action:mods-install` | Install one SCV mod | wrapper |
 | `action:mods-remove` | Remove one SCV mod | wrapper |

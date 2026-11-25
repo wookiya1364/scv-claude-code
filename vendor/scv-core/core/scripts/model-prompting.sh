@@ -57,7 +57,7 @@ STATE_FILE="$JOURNAL_DIR/.help-state"
 TURNS_DIR="$JOURNAL_DIR/.help-turns"          # v0.65.0+: 세션별 턴 상태 폴더들
 
 cmd="${1:-guide}"; shift || true
-EFFORT_ARG=""; MODEL_RAW=""; SESSION_ARG=""; SESSION_SET=0; ACTIVE_ARG="0"; AUTO_ARG=0; KEEP_ARG=0; AGENT_ARG=""; CODE_ARG="0"; TRANSCRIPT_ARG=""; OPENED_AUTO=0
+EFFORT_ARG=""; MODEL_RAW=""; SESSION_ARG=""; SESSION_SET=0; ACTIVE_ARG="0"; AUTO_ARG=0; KEEP_ARG=0; AGENT_ARG=""; CODE_ARG="0"; TRANSCRIPT_ARG=""; OPENED_AUTO=0; NO_PRINCIPLE=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --session) SESSION_ARG="${2:-}"; SESSION_SET=1; shift 2 || shift ;;
@@ -68,6 +68,7 @@ while [[ $# -gt 0 ]]; do
     --code)    CODE_ARG="${2:-0}"; shift 2 || shift ;;
     --transcript) TRANSCRIPT_ARG="${2:-}"; shift 2 || shift ;;
     --opened-auto) OPENED_AUTO="${2:-0}"; shift 2 || shift ;;
+    --no-principle) NO_PRINCIPLE=1; shift ;;
     --model)   MODEL_RAW="${2:-}"; shift 2 || shift ;;
     --model=*) MODEL_RAW="${1#--model=}"; shift ;;
     --effort)  EFFORT_ARG="${2:-}"; shift 2 || shift ;;
@@ -154,17 +155,33 @@ _lean() {
 # @effect _principle_block
 # 이유: 이 세션의 원칙 실음 표시 파일(.principle-seen)을 쓴다
 _principle_block() {
-  local psec pf="" pseen="" hl
+  local psec pf="" pseen="" hl pw pwarn=0
   [[ "$(scv_mp_switch "$(_setting SCV_REWRITE_PRINCIPLE)")" == "on" ]] || return 0
   psec="$(scv_mp_principle_section "$(_principle_body)" "$(_setting SCV_LANG)")"
   [[ -n "$psec" ]] || return 0
   [[ -n "$TDIR" && -d "$TDIR" ]] && pf="$TDIR/.principle-seen"
   [[ -n "$pf" && -f "$pf" && ! -L "$pf" ]] && pseen="$(_first_line "$pf")"
-  if [[ "$(scv_mp_principle_show "$pseen" "$NONCE")" == "short" ]]; then
-    echo "PRINCIPLE: (이 세션에 이미 실음 — 규칙 그대로, 규약을 다시 읽을 때 전문을 다시 싣는다)"
-    return 0
+  # 0.104.0+ — 판단 근거는 규약 지문이 아니라 '이 맥락에 원칙 전문을 실었다'는 표시다(규칙 글의 0.97.1 과 같은 길, 계획
+  # principle-once-context). 지문은 종료 검사가 규약을 다시 읽게 할 때마다 바뀌어, 실제 긴 세션에서 원칙 전문이 한 줄 턴
+  # 108개 중 105개에 실렸다. 표시는 세션 시작 훅의 초기화(요약 · 비움 · 재개)만 지운다. 직전 답에 원칙 경고가 남았으면 전문.
+  # 끄면(SCV_RULES_ONCE=off) 이 일 전의 지문 비교 그대로다.
+  if [[ "$(scv_mp_switch "$(_setting SCV_RULES_ONCE)")" == "on" ]]; then
+    for pw in "$WARN_FILE" "$JOURNAL_DIR/.help-warn"; do
+      [[ -s "$pw" && ! -L "$pw" ]] || continue
+      [[ "$(scv_mp_warn_has_principle "$(head -c 4096 "$pw" 2>/dev/null)")" == "1" ]] && pwarn=1
+    done
+    if [[ "$(scv_mp_rules_show "$pseen" "$pseen" "$pwarn")" == "short" ]]; then
+      echo "PRINCIPLE: (이 세션에 이미 실음 — 규칙 그대로, 대화가 요약 · 재개되면 전문을 다시 싣는다)"
+      return 0
+    fi
+    [[ -n "$pf" && ! -L "$pf" ]] && printf 'ctx\n' > "$pf" 2>/dev/null
+  else
+    if [[ "$(scv_mp_principle_show "$pseen" "$NONCE")" == "short" ]]; then
+      echo "PRINCIPLE: (이 세션에 이미 실음 — 규칙 그대로, 규약을 다시 읽을 때 전문을 다시 싣는다)"
+      return 0
+    fi
+    [[ -n "$pf" && -n "$NONCE" && ! -L "$pf" ]] && printf '%s\n' "$NONCE" > "$pf" 2>/dev/null
   fi
-  [[ -n "$pf" && -n "$NONCE" && ! -L "$pf" ]] && printf '%s\n' "$NONCE" > "$pf" 2>/dev/null
   echo "PRINCIPLE:"
   printf '%s\n' "$(scv_mp_principle_text "$psec")"
   # (2026-10-08+) 해로운 변경 줄 — 이번 실행의 확인 통로에 맞는 한 줄. 통로 판단은 실체 보여 주기와 같다(입구: choice-gate.sh).
@@ -478,7 +495,7 @@ case "$cmd" in
       scv_mp_turn_block "$SWITCH" "$_tok" "$_lm" "$SCRIPT_DIR/model-prompting.sh" "$SKEY"
     fi
     scv_mp_first_turn_lines "$SWITCH" "$_read" "$_warned" "$_rec"
-    (( _haslist )) && _principle_block
+    (( _haslist )) && (( ! NO_PRINCIPLE )) && _principle_block   # 기어 턴은 출력을 버린다 — 실었다고 적지 않게 건너뛴다
     if (( _haslist )); then
       _etr="$TRANSCRIPT_ARG"; [[ -n "$_etr" ]] || _etr="$(_first_line "$TRANS_FILE")"
       _effort_block "$(scv_mp_normalize_id "${_lm%%$'\n'*}")" "$_etr"
