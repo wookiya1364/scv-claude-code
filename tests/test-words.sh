@@ -168,9 +168,11 @@ for f in "$CORE"/template/*; do [[ "${f##*/}" == hooks ]] || ln -s "$f" "$PLAIN/
 cp "$CORE/template/hooks/"*.sh "$PLAIN/template/hooks/"
 PLAIN_HOOK="$PLAIN/template/hooks/on-user-prompt.sh"
 awk '/^# ---------- words -/ { skip = 1 } !skip { print } /^# ---------- \/words -/ { skip = 0 }' "$HOOK" > "$PLAIN_HOOK"
-samepath() {  # 진단에 실리는 프로젝트 경로와 본뜬 코어의 경로만 같은 말로 바꾼다
+# 시각도 가린다(test-gear-turn 의 norm 과 같은 방식): 둘째 턴의 '마지막 전체 진단 HH:MM' 은 그 프로젝트의 첫 턴이 돈 분이라,
+# 두 프로젝트의 첫 턴이 분 경계에 걸치면 사전과 상관없이 한 글자가 달라진다 — 느린 기계에서 가끔 떨어졌다.
+samepath() {  # 진단에 실리는 프로젝트 경로 · 본뜬 코어의 경로 · 시각만 같은 말로 바꾼다
   LC_ALL=C awk -v a="$PLAIN" -v b="$CORE" '{ out = ""; while ((i = index($0, a)) > 0) { out = out substr($0, 1, i - 1) b; $0 = substr($0, i + length(a)) } print out $0 }' \
-    | sed -E 's#/[^ ()]*/t14[a-z]*([^A-Za-z0-9]|$)#PROJ\1#g'
+    | sed -E -e 's#/[^ ()]*/t14[a-z]*([^A-Za-z0-9]|$)#PROJ\1#g' -e 's/[0-9]{2}:[0-9]{2}/HH:MM/g'
 }
 P="$(mkproj t14new)"; Q="$(mkproj t14old)"; R="$(mkproj t14note)"; mkdir -p "$R/scv/words"; printf '# 주석 줄만 있는 사전\n\n' > "$R/scv/words/WORDS.tsv"
 same=0
