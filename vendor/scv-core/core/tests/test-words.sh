@@ -20,6 +20,8 @@ source "$CORE/scripts/lib/words.sh"
 fail=0
 ok() { echo "ok $1"; }
 bad() { echo "✖ $1" >&2; fail=1; }
+skipped=0
+skip() { echo "skip $1"; skipped=$(( skipped + 1 )); }   # 건너뛴 항목 — 통과로 세지 않는다
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/scv-words.XXXXXX")"; trap 'rm -rf "$WORK"' EXIT
 cp -R "$FIX/guides" "$WORK/guides"
@@ -156,17 +158,28 @@ if [[ "$n1$n2$n3$n4$n5$n6$n7$n8$n9" == "101010101" && "$o5" == *"- 로그 → �
 else bad "T13 $n1$n2$n3$n4$n5$n6$n7$n8$n9 끔=$m1$m2"; fi
 
 # ---------- T14 — 사전이 없는 프로젝트의 훅 출력은 낱말 구간을 지운 훅과 바이트까지 같다 ----------
-mkdir -p "$WORK/plain-hooks"; cp "$CORE/template/hooks/"*.sh "$WORK/plain-hooks/"
-awk '/^# ---------- words -/ { skip = 1 } !skip { print } /^# ---------- \/words -/ { skip = 0 }' "$HOOK" > "$WORK/plain-hooks/on-user-prompt.sh"
-samepath() { sed -E 's#/[^ ()]*/t14[a-z]*([^A-Za-z0-9]|$)#PROJ\1#g'; }   # 진단에 실리는 프로젝트 경로만 같은 말로 바꾼다
+# 낱말 구간을 지운 훅은 코어를 본뜬 폴더(<본뜬 코어>/template/hooks) 안에 둔다(test-show-real-b 의 기능 없는 코어와 같은 방식) —
+# 래퍼에 실린 사본에서는 코어 자리를 넘기는 환경 변수의 이름이 바뀌어 훅에 닿지 않고, 그때 훅은 제 자리에서 코어를 찾는다.
+# 훅 말고는 모두 진짜 코어로 가는 링크라 같은 스크립트가 돈다. 출력에 실리는 본뜬 코어의 경로는 samepath 가 진짜 코어의 경로로 바꾼다.
+PLAIN="$WORK/plain-core"; mkdir -p "$PLAIN/template/hooks"
+PLAIN="$(cd "$PLAIN" && pwd)"   # 훅이 찍는 모양으로 — 임시 폴더 경로에 겹친 빗금이 있으면 글자 그대로는 찾지 못한다
+for f in "$CORE"/*; do [[ "${f##*/}" == template ]] || ln -s "$f" "$PLAIN/${f##*/}"; done
+for f in "$CORE"/template/*; do [[ "${f##*/}" == hooks ]] || ln -s "$f" "$PLAIN/template/${f##*/}"; done
+cp "$CORE/template/hooks/"*.sh "$PLAIN/template/hooks/"
+PLAIN_HOOK="$PLAIN/template/hooks/on-user-prompt.sh"
+awk '/^# ---------- words -/ { skip = 1 } !skip { print } /^# ---------- \/words -/ { skip = 0 }' "$HOOK" > "$PLAIN_HOOK"
+samepath() {  # 진단에 실리는 프로젝트 경로와 본뜬 코어의 경로만 같은 말로 바꾼다
+  LC_ALL=C awk -v a="$PLAIN" -v b="$CORE" '{ out = ""; while ((i = index($0, a)) > 0) { out = out substr($0, 1, i - 1) b; $0 = substr($0, i + length(a)) } print out $0 }' \
+    | sed -E 's#/[^ ()]*/t14[a-z]*([^A-Za-z0-9]|$)#PROJ\1#g'
+}
 P="$(mkproj t14new)"; Q="$(mkproj t14old)"; R="$(mkproj t14note)"; mkdir -p "$R/scv/words"; printf '# 주석 줄만 있는 사전\n\n' > "$R/scv/words/WORDS.tsv"
 same=0
 for q in "로그인 흐름을 설명해 줘" "이어서 설명해 줘 다음 부분"; do
-  turn "$P" "$q" s1 "$HOOK" | samepath > "$WORK/t14.new"; turn "$Q" "$q" s1 "$WORK/plain-hooks/on-user-prompt.sh" | samepath > "$WORK/t14.old"
+  turn "$P" "$q" s1 "$HOOK" | samepath > "$WORK/t14.new"; turn "$Q" "$q" s1 "$PLAIN_HOOK" | samepath > "$WORK/t14.old"
   turn "$R" "$q" s1 "$HOOK" | samepath > "$WORK/t14.note"
   cmp -s "$WORK/t14.new" "$WORK/t14.old" && cmp -s "$WORK/t14.note" "$WORK/t14.old" && [[ -s "$WORK/t14.new" ]] && same=$(( same + 1 ))
 done
-cut_ok=no; ! grep -q 'words\.sh\|WORDS\.tsv' "$WORK/plain-hooks/on-user-prompt.sh" && grep -q 'words\.sh" turn' "$HOOK" && cut_ok=yes
+cut_ok=no; ! grep -q 'words\.sh\|WORDS\.tsv' "$PLAIN_HOOK" && grep -q 'words\.sh" turn' "$HOOK" && cut_ok=yes
 if [[ $same == 2 && $cut_ok == yes && ! -e "$P/scv/words" ]]; then ok "T14 사전 없음 · 주석뿐인 사전: 첫 턴과 둘째 턴의 출력이 낱말 구간 없는 훅과 같음($(wc -c < "$WORK/t14.new" | tr -d ' ') B), 폴더도 만들지 않음"
 else bad "T14 같음=$same/2 구간지움=$cut_ok ($(wc -c < "$WORK/t14.new" | tr -d ' ') B · $(wc -c < "$WORK/t14.old" | tr -d ' ') B)"; fi
 
@@ -231,11 +244,23 @@ else
 fi
 
 # ---------- T17 — 액션 목록과 순수성 ----------
-n="$(jq '.actions | length' "$CORE/actions.json" 2>/dev/null)"
-if [[ "$n" == 23 ]] && jq -e '.actions[] | select(.id == "words" and .owner == "core" and .protocol == "protocols/words.md" and .entrypoint == "scripts/words.sh")' "$CORE/actions.json" >/dev/null 2>&1 \
+# 액션 목록(actions.json)은 래퍼에 실린 사본에서는 래퍼 뿌리가 아니라 실어 온 코어 안에만 있다(test-routines.sh 와 같은 찾기).
+# 어디에도 없는 사본에서는 목록 항목만 건너뛴다 — 통과로 세지 않는다.
+ACTIONS=""
+for c in "$CORE" "$CORE/vendor/scv-core/core" "$CORE/plugins/scv/vendor/scv-core/core"; do
+  [[ -f "$c/actions.json" ]] && { ACTIONS="$c/actions.json"; break; }
+done
+if [[ -z "$ACTIONS" ]]; then skip "T17 액션 목록 — actions.json 이 없는 사본"; n="없음"; act=skip
+else
+  n="$(jq '.actions | length' "$ACTIONS" 2>/dev/null)"; act=bad
+  [[ "$n" == 23 ]] && jq -e '.actions[] | select(.id == "words" and .owner == "core" and .protocol == "protocols/words.md" and .entrypoint == "scripts/words.sh")' "$ACTIONS" >/dev/null 2>&1 && act=ok
+fi
+if [[ "$act" != bad ]] \
    && grep -q 'words.sh" list' "$CORE/protocols/words.md" && grep -q 'words.sh" add ' "$CORE/protocols/words.md" && grep -q 'words.sh" remove ' "$CORE/protocols/words.md" \
    && grep -qE '^ACTIONS_RE=.*\|words\}' "$CORE/template/hooks/guard.sh" && bash "$CORE/scripts/check-purity.sh" "$CORE/scripts/lib/words.sh" "$W" >/dev/null 2>&1; then
-  ok "T17 액션 23개 · words 의 규약과 입구가 맞음 · 가드의 액션 이름 목록에 있음 · 순수성 검사 통과"
+  if [[ "$act" == ok ]]; then ok "T17 액션 23개 · words 의 규약과 입구가 맞음 · 가드의 액션 이름 목록에 있음 · 순수성 검사 통과"
+  else ok "T17 words 의 규약이 명령을 부름 · 가드의 액션 이름 목록에 있음 · 순수성 검사 통과"; fi
 else bad "T17 actions=$n"; fi
 
+(( skipped > 0 )) && echo "건너뜀 $skipped"
 exit "$fail"

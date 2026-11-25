@@ -126,7 +126,10 @@ conv() {  # <프로젝트> <파일명> <본문> — 진행 중(active) 대화 �
   printf -- '---\nslug: %s\nstatus: active\n---\n%s\n' "${2%.md}" "$3" > "$1/scv/conversations/$2"
 }
 run_hook() {  # <프로젝트> <stdin> [<코어 자리>] — stdout 은 OUT 에, 종료 코드는 RC 에
-  OUT="$( cd "$1" && CLAUDE_PLUGIN_ROOT="${3:-$CORE}" bash "$HOOK" 2>"$WORK/err" <<<"$2" )"; RC=$?
+  # 훅은 그 코어 안의 것을 돌린다(test-show-real-b 의 기능 없는 코어와 같은 방식) — 래퍼에 실린 사본에서는 코어 자리를 넘기는
+  # 환경 변수의 이름이 바뀌어 훅에 닿지 않는다. 그때 훅은 제 자리(<코어>/template/hooks)에서 코어를 찾는다.
+  local core="${3:-$CORE}"
+  OUT="$( cd "$1" && CLAUDE_PLUGIN_ROOT="$core" bash "$core/template/hooks/on-session-start.sh" 2>"$WORK/err" <<<"$2" )"; RC=$?
   return 0
 }
 # 훅 출력에서 기록 부분 — 자리 줄 다음부터 끝까지.
@@ -154,7 +157,8 @@ run_hook "$P2" '{"source":"clear"}'; O="$OUT"
 [[ "$RC" == "0" && "$O" == *"FIRST-TURN-MARK"* && "$O" == *"LAST-TURN-MARK"* && "$(count "$O" "$PLACE")" == "0" && "$O" == *"its full text follows"* ]] \
   && ok "T4 짧은 기록은 비운 뒤에도 전체 — 자리 줄 없음" || fail "T4 짧은 기록: rc=$RC 자리 줄 $(count "$O" "$PLACE")번"
 # 자르기가 실패하면 전과 같이 전체를 찍는다 — 훅은 세션을 막지 않는다.
-BROKEN="$WORK/core-broken"; mkdir -p "$BROKEN/scripts/lib"
+BROKEN="$WORK/core-broken"; mkdir -p "$BROKEN/scripts/lib" "$BROKEN/template/hooks"
+cp "$HOOK" "$BROKEN/template/hooks/on-session-start.sh"
 for f in "$CORE"/scripts/*; do [[ "${f##*/}" == lib ]] || ln -s "$f" "$BROKEN/scripts/${f##*/}"; done
 for f in "$CORE"/scripts/lib/*; do [[ "${f##*/}" == resume-recap.sh ]] || ln -s "$f" "$BROKEN/scripts/lib/${f##*/}"; done
 { cat "$LIB"; printf '\nscv_resume_tail() { return 1; }\n'; } > "$BROKEN/scripts/lib/resume-recap.sh"
