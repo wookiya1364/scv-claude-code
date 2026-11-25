@@ -155,6 +155,13 @@
       "execution_class": "deep",
       "protocol": "protocols/gear.md",
       "entrypoint": "scripts/gear.sh"
+    },
+    {
+      "id": "words",
+      "owner": "core",
+      "execution_class": "economy",
+      "protocol": "protocols/words.md",
+      "entrypoint": "scripts/words.sh"
     }
   ]
 }

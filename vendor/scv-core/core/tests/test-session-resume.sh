@@ -85,9 +85,13 @@ run_hook "$WORK/t2"; O="$OUT"
 
 # ---------- T3 진행 중 계획이 실린다 ----------
 P="$(mkproj t3)"; plan "$P" 20260911-x-demo "데모 계획"
-run_hook "$P" '{"source":"clear"}'; O="$OUT"
+run_hook "$P" '{"source":"compact"}'; O="$OUT"
 [[ "$O" == *"$MARK"* && "$O" == *"20260911-x-demo"* && "$O" == *"데모 계획"* && "$RC" == "0" ]] \
   && ok "T3 표식 + 계획 slug + 제목이 실린다" || fail "T3 계획이 안 실린다 (rc=$RC)"
+# 비운 뒤에는 되찾기 묶음을 싣지 않는다(계획 20261125-wookiya1364-clear-lighten, 사용자 결정 2026-11-25) — 부를 명령 한 줄만.
+run_hook "$P" '{"source":"clear"}'; O="$OUT"
+[[ "$O" == *"$MARK"* && "$O" != *"데모 계획"* && "$O" == *"recap left out after a clear"* && "$RC" == "0" ]] \
+  && ok "T3 비운 뒤에는 계획 묶음 대신 부를 명령 한 줄이 실린다" || fail "T3 비운 뒤: 계획 묶음이 실렸거나 안내 줄이 없다 (rc=$RC)"
 [[ ! -f "$P/scv/scv_settings.json" ]] || grep -q RESUME "$P/scv/scv_settings.json" || true
 run_hook "$P" '{"source":"clear"}'; O2="$OUT"
 [[ -n "$O2" ]] && ok "T3 스위치 키가 없어도(기본) 켜져 있다" || fail "T3 기본값이 off 로 동작"
