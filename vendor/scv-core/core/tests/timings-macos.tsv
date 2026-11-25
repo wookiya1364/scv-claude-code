@@ -22,7 +22,6 @@ core/tests/test-deck-picture-spots.sh	0
 core/tests/test-deck-source.sh	0
 core/tests/test-deck-static-mermaid.sh	0
 core/tests/test-delegate-effort.sh	10
-core/tests/test-dreams.sh	29
 core/tests/test-effort-ask.sh	22
 core/tests/test-effort-class.sh	2
 core/tests/test-env-load.sh	2
@@ -124,3 +123,8 @@ core/tests/test-gear-run.sh	40
 core/tests/test-picture-rule.sh	27
 core/tests/test-choice-block.sh	16
 core/tests/test-gear-turn.sh	30
+core/tests/test-principle-once.sh	12
+core/tests/test-evidence-card.sh	4
+core/tests/test-guard-wait.sh	10
+core/tests/test-retired-coach.sh	6
+core/tests/test-gear-detect.sh	90

@@ -2,6 +2,21 @@
 
 All notable changes to SCV Core are documented here.
 
+## [0.104.0] - 2026-11-25
+
+### Added
+- 가드 규칙 W — 오래 도는 일은 뒤에서. 앞에서 오래 기다리는 호출(도구 입력의 60초 이상 대기 값, 뒤로 보내지 않은 셸 명령의 30초 이상 잠자기나 기다림 루프)을 도구를 부르기 전에 거절하고, 뒤에서 돌려 끝 알림을 받으라고 알린다. 래퍼가 대기 값 칸과 뒤로 보내기 칸의 이름을 `SCV_WAIT_FIELD` · `SCV_BACKGROUND_FIELD` 로 정할 수 있다(기본 `wait_for_output_ms` · `run_in_background`). 끄기: 설정 `SCV_BACKGROUND_FIRST=off`.
+- `scripts/evidence-card.sh card` — 이름과 값의 줄(`"이름=값"`)로 막대 그림 파일(SVG)을 만든다. 숫자뿐인 결과도 눈에 보이는 증거로 낼 수 있다.
+- 반복 알아채기. 매 턴 훅이 사람 요청을 비밀 가림 뒤 기록 폴더(`scv/journal/.gear-requests`, 커밋되지 않음)에 한 줄씩 쌓고, 지난 요청 · 기어 사전과 맞춰 본다. 겹칠 때만 알림 한 줄을 싣는다 — 이미 있는 기어면 그 기어로 하라고, 지난 요청과 같은 일이면 기어로 만들지 묻게 한다. 같은 일인지는 모델이 본다. 끄기: 설정 `SCV_GEAR_DETECT=off`.
+- `core/tests/test-guard-wait.sh`, `test-evidence-card.sh`, `test-gear-detect.sh`, `test-principle-once.sh`, `test-retired-coach.sh`.
+
+### Changed
+- 일 규약의 단계 보고: 단계의 증거는 사람이 볼 수 있는 것(그림 · 영상 · 열어 볼 페이지)이고 소스코드 · 글 파일은 증거가 아니다. 화면이 없는 단계는 계획 줄에 적은 순수 함수 목록이 증거다. 오래 도는 일은 뒤에서 돌리고 그렇게 알린다.
+- 원칙 글도 규칙 글처럼 맥락에 한 번만 싣는다. 판정을 규약 지문 비교에서 '이 맥락에 실었다는 표시'로 옮겼다 — 지문이 바뀌어도 한 줄이고, 대화가 요약 · 비움 · 재개된 뒤 첫 턴과 원칙 경고가 남은 턴에만 전문을 싣는다(`SCV_RULES_ONCE=off` 면 전과 같다).
+
+### Removed
+- dreams 액션(지난 세션을 돌아보는 코칭 보고서)을 걷어냈다: 스크립트 · 규약 · 설정 · 매 턴 훅과 세션 시작 훅의 구간 · 시험. 액션은 23개에서 22개가 됐다. 이미 만들어진 보고서 폴더(`scv/dreams`)는 건드리지 않는다 — 필요 없으면 지우면 된다.
+
 ## [0.103.0] - 2026-11-25
 
 ### Added

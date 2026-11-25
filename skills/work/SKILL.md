@@ -324,11 +324,29 @@ must face the next one with this run in it.
 When the host names a step-report tool (host profile `SCV_STEP_TOOL`) and this session has it, report
 each `Suggested path` step through it as you go — no question, no extra turn: `doing` when you start
 the step, `done` when it is finished, `blocked` with a one-line reason when you cannot go on. `plan`
-is the folder name, `step` the line's number. `done` carries its proof (0.95.0+): `evidence` — project files the
-step made or changed (a screenshot, a result file) — and/or `output`, an excerpt of the command output that
-shows the result; a tool that checks proof refuses a `done` without it, or with a file outside the project or
-older than the step's start. A `doing` for long-running work names its `log` (a project file it writes) and,
-when one exists, the `url` of a page that shows its progress. The per-turn hook reminds you while a plan is
+is the folder name, `step` the line's number. `done` carries its proof, and proof is something a person can
+look at (0.104.0+): `evidence` — a picture, a recording, a chart or a page (image · video · html · pdf) inside the
+project. **Never source code**: the person does not read code — they check the first step (requirements) and the
+proof that the thing works, and nothing in between. A step that has no screen to show and whose `Suggested path`
+line names its pure functions needs no file — the function list (made new / reused) is its proof and stays
+visible after the step is done. Numbers alone (tests passed, a before and an after) become a chart without
+spending tokens:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/evidence-card.sh" card --out "<SCV_DIR>/promote/<slug>/evidence/step-<N>.svg" --title "<제목>" "<이름>=<값>" …
+```
+
+`output`, an excerpt of the command output, may ride along but is not proof by itself. A tool that checks proof
+refuses a `done` without it, or with a file outside the project or older than the step's start.
+
+**Long work runs in the background (0.104.0+).** A test suite, a build, a wait for a remote check, a measurement
+run: start it so that its end is announced to you (a background command, a background agent), say so in one
+line, and go on with other work or end the turn — never sit in a foreground wait (a long wait value on a tool, a
+`sleep`, a polling loop). While you wait in the foreground, the person's next message interrupts the work and the
+plan does not reach its end; the guard refuses such calls before they run. Report the step as `doing` with
+`background: true` (or its `log` — a project file it writes — and, when one exists, the `url` of a page that
+shows its progress) so the pane shows it as running in the background, and read the result when the notice
+arrives. Asking the person and acts that need their confirmation are never sent to the background. The per-turn hook reminds you while a plan is
 `in_progress` or `testing`. Where the host handles that tool itself and no tool-before hook runs for it, the
 turn-end check counts this turn's calls of the tool in the transcript instead (0.93.2+). No tool: skip this — the step list in your report still says it.
 Report only in a turn that works on that plan's step (0.103.0+): a turn that does other work, records only a release

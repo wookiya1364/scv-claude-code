@@ -5,9 +5,7 @@
 # hand the model back what this project was in the middle of: active plans,
 # recent decisions, and the active conversation. Everything printed here is
 # ASSEMBLED from files that are already written (promote/, INDEX.tsv,
-# conversations/); this hook writes nothing anywhere. (v0.69.0+: after a clear /
-# compact it also launches the dream in the background — the dream writes only
-# scv/dreams/; rule in protocols/dreams.md.)
+# conversations/); this hook writes nothing anywhere.
 #
 # Contract (see docs/wrapper-integration.md §6 "Hook seam" in scv-core):
 #   - The host's session-start event pipes ONE JSON object to stdin. When it
@@ -78,16 +76,6 @@ if [[ -n "$INPUT" && -f "$_scv_tc_sh" ]] && command -v jq >/dev/null 2>&1; then
   fi
 fi
 # ---------- /turn plan check -------------------------------------------------
-# ---------- dreams (v0.69.0+) ------------------------------------------------
-# 대화를 비우거나(clear) 압축(compact)한 직후 드림을 배경으로 한 번 띄우고 바로 돌아온다 — 재개 · 새 시작에는 띄우지 않는다.
-# 규칙 전문은 protocols/dreams.md. 아무것도 출력하지 않는다. 설정 SCV_DREAMS=off 면 띄우지 않는다(되찾기 스위치와 무관).
-_scv_dr_lib="$CORE_HOME/scripts/lib/dreams.sh"; _scv_dr_sh="$CORE_HOME/scripts/dreams.sh"
-if [[ -n "$INPUT" && -f "$_scv_dr_lib" && -f "$_scv_dr_sh" ]] && command -v jq >/dev/null 2>&1 && source "$_scv_dr_lib" 2>/dev/null \
-   && [[ "$(scv_dreams_switch "$(_scv_read SCV_DREAMS)")" == "on" ]] \
-   && [[ "$(scv_dreams_start_trigger "$(printf '%s' "$INPUT" | jq -r 'try (.source // empty)' 2>/dev/null)")" == "1" ]]; then
-  ( bash "$_scv_dr_sh" --auto </dev/null >/dev/null 2>&1 & ) >/dev/null 2>&1 || true
-fi
-# ---------- /dreams ----------------------------------------------------------
 _scv_resume_lib="$CORE_HOME/scripts/lib/resume-recap.sh"
 [[ -f "$_scv_resume_lib" ]] || exit 0
 # shellcheck disable=SC1090

@@ -127,4 +127,12 @@ if [[ "$out" == AB && "$o" != *'"decision"'* && -z "${w//[[:space:]]/}" && -n "$
   ok "T6 기어 턴의 끝 — 막힘 0 · 알림 0줄(보통 턴이면 알림), 저널 줄 1개"
 else bad "T6 out=[$out] stop=[$o] warn=[$w] normal-warn=[${w2:0:80}] journal=$jl"; fi
 
+# ---------- T7 — 기어 턴은 원칙 글을 '실었다'고 적지 않는다(계획 principle-once-context) ----------
+# 기어 턴은 훅이 등록 안내의 출력을 버린다. 그때 원칙 표시가 남으면 그 맥락에서는 원칙 전문이 끝내 실리지 않는다.
+R="$(new_repo t7 '{"SCV_LANG":"korean"}')"; turn "$R" "action:gear run make-list" s7 >/dev/null
+seen=no; [[ -e "$R/scv/journal/.help-turns/s7/.principle-seen" ]] && seen=yes
+after="$(turn "$R" "목록은 어디에 생겨?" s7)"
+if [[ "$seen" == no ]] && grep -q '^PRINCIPLE:$' <<<"$after"; then ok "T7 기어 턴 뒤 첫 보통 턴에 원칙 전문이 실림(표시 없음)"
+else bad "T7 표시=$seen 원칙=$(grep -c '^PRINCIPLE' <<<"$after")"; fi
+
 [[ "$fail" == 0 ]] && echo "test-gear-turn: all passed" || { echo "test-gear-turn: FAIL"; exit 1; }

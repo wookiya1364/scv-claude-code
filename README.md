@@ -174,7 +174,6 @@ You never need this table — conversation routes for you. For explicit control:
 | `/scv:report` | Post a phase result to Slack/Discord with artifacts |
 | `/scv:sync` | Refresh SCV templates + detect code↔plan drift |
 | `/scv:routine [<name>]` | Run a one-file maintenance routine |
-| `/scv:dreams` | Look back at past sessions · coach better prompts |
 | `/scv:workspace` · `/scv:handoff` | Multi-repo: umbrella setup · cross-repo work declaration |
 | `/scv:update` · `/scv:set-models` · `/scv:install-deps` | Plugin + mods update · model policy · CLI deps |
 | `/scv:mods` · `/scv:mods-install` · `/scv:mods-remove` | Update + list SCV mods · install one · remove one |

@@ -108,13 +108,6 @@
       "entrypoint": "scripts/routine.sh"
     },
     {
-      "id": "dreams",
-      "owner": "core",
-      "execution_class": "economy",
-      "protocol": "protocols/dreams.md",
-      "entrypoint": "scripts/dreams.sh"
-    },
-    {
       "id": "mods",
       "owner": "adapter",
       "execution_class": "economy",

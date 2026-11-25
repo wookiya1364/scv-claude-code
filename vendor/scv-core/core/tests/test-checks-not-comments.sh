@@ -65,7 +65,7 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/scv-cnc.XXXXXX")"; trap 'rm -rf "$WORK"' EXIT
 cp -R "$FIX/guides" "$WORK/guides"
 { cat "$FIX/profile.env"; printf 'SCV_PROMPTING_GUIDES=%s\nSCV_CHOICE_TOOL=PickTool\n' "$WORK/guides"; } > "$WORK/profile.env"
 R="$WORK/r"; mkdir -p "$R/scv/journal"; (cd "$R" && git init -q && git config user.email t@t && git config user.name t)
-printf '{"SCV_LANG": "korean", "SCV_DREAMS": "off"}\n' > "$R/scv/scv_settings.json"
+printf '{"SCV_LANG": "korean"}\n' > "$R/scv/scv_settings.json"
 (cd "$R" && printf 'a\n' > a.txt && git add -A && git commit -qm init)
 hookp() { (cd "$R" && jq -cn --arg p "$1" '{prompt:$p,session_id:"s1"}' \
   | CLAUDE_PLUGIN_ROOT="$CORE" SCV_HOST_PROFILE="$WORK/profile.env" bash "$HOOK" 2>/dev/null); }

@@ -784,6 +784,22 @@ scv_mp_rules_show() {
 }
 
 # @pure
+# 역할: 경고 글에 원칙 검사가 남긴 줄("[SCV 원칙]")이 있는지 가른다
+# 종류: 판정/gate
+# 예: $'[SCV 직전 답] [SCV 원칙] 문제 표 없이 다시 써라.\n' → "1"
+# 예: $'[SCV 확인 범위] 끝 보고에 고칠 것\n' → "0"
+# 예: "" → "0"
+# <이 세션의 경고 글> → 1 | 0. 원칙 글 전문을 다시 실을 턴을 가른다 — 직전 답이 원칙을 어겼을 때만이다. 다른 경고(확인 범위 ·
+# 글로 물음)는 세지 않는다: 실제 세션에서 경고 턴이 32% 라, 모두 세면 원칙 글이 줄지 않는다(계획 principle-once-context).
+scv_mp_warn_has_principle() {
+  local line
+  while IFS= read -r line; do
+    [[ "$line" == *"[SCV 원칙]"* ]] && { printf '1'; return 0; }
+  done <<< "${1:-}"
+  printf '0'
+}
+
+# @pure
 # 역할: 등록 · 보임 · 이미 전달 · 맨 위 인용으로 종료를 허용할지(ok · block · warn) 정한다
 # 종류: 판정/gate
 # 예: 1 1 0 1 → "ok"

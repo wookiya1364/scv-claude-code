@@ -79,6 +79,30 @@ h = json.load(open("hooks/hooks.json"))["hooks"]
 cmds = [x.get("command", "") for e in h.get("PreToolUse", []) if "matcher" not in e for x in e.get("hooks", [])]
 assert any("SCV_GUARD_MODE=gate-any" in c and 'SCV_SUMMARY_ASK="mcp__ccd_turn__wrap_up=ask"' in c for c in cmds), cmds
 PY
+# Core 0.104.0+: Rule W — a foreground wait of 60 s or more is refused before it runs. The gate-any entry has
+# no matcher, so the app's terminal-read tool and Bash both reach the guard, and it names no wait or
+# background field: the guard's defaults are Claude Code's own (wait_for_output_ms, run_in_background).
+python3 - <<'PY' || fail "hooks.json: the gate-any entry must let Rule W see wait_for_output_ms and run_in_background (guard defaults, not renamed, not switched off)"
+import json, re
+h = json.load(open("hooks/hooks.json"))["hooks"]
+cmds = [x.get("command", "") for e in h.get("PreToolUse", []) if "matcher" not in e for x in e.get("hooks", [])]
+cmds = [c for c in cmds if "SCV_GUARD_MODE=gate-any" in c]
+assert cmds, "no gate-any entry without a matcher"
+for c in cmds:
+    assert 'SCV_GUARD_SCRIPTS="${CLAUDE_PLUGIN_ROOT}/vendor/scv-core/core/scripts"' in c, c
+    assert "SCV_BACKGROUND_FIRST=" not in c, c
+    for key, want in (("SCV_WAIT_FIELD", "wait_for_output_ms"), ("SCV_BACKGROUND_FIELD", "run_in_background")):
+        m = re.search(key + r'="?([^" ]*)', c)
+        assert m is None or m.group(1) == want, (key, c)
+guard = open("vendor/scv-core/core/template/hooks/guard.sh", encoding="utf-8").read()
+assert "${SCV_WAIT_FIELD:-wait_for_output_ms}" in guard and "${SCV_BACKGROUND_FIELD:-run_in_background}" in guard, "guard defaults changed"
+PY
+[[ -f vendor/scv-core/core/scripts/lib/wait-gate.sh ]] || fail "Rule W: vendored lib/wait-gate.sh is absent"
+wait_kind() { bash -c 'source vendor/scv-core/core/scripts/lib/wait-gate.sh && scv_wait_kind "$1" "$2" "$3"' _ "$1" "$2" "$3"; }
+[[ "$(wait_kind 200000 '' '')" == wait ]] || fail "Rule W: a 200-second wait value must count as a foreground wait"
+[[ "$(wait_kind 5000 '' '')" == none ]] || fail "Rule W: a 5-second wait value must pass"
+[[ "$(wait_kind '' '' 'sleep 120 && tail log')" == sleep ]] || fail "Rule W: a foreground sleep must count as a foreground wait"
+[[ "$(wait_kind '' true 'sleep 120 && tail log')" == none ]] || fail "Rule W: a command sent to the background must pass"
 # Core 0.79.0+: language correction after every tool (PostToolUse with no matcher runs on-lang-check.sh).
 python3 - <<'PY' || fail "hooks.json: PostToolUse with no matcher must run on-lang-check.sh"
 import json
@@ -103,7 +127,7 @@ fi
 
 [[ ! -e commands ]] || fail "legacy commands/ still present — skills/<action>/SKILL.md is the only layout (core 0.47.0+)"
 for action in \
-  ask-mode catalog-source channel codegen deck dreams gear handoff help install-deps mods mods-install mods-remove promote \
+  ask-mode catalog-source channel codegen deck gear handoff help install-deps mods mods-install mods-remove promote \
   regression report routine set-models status sync update work workspace; do
   [[ -f "skills/$action/SKILL.md" ]] || fail "missing skills/$action/SKILL.md"
   grep -q "^name: $action\$" "skills/$action/SKILL.md" || fail "skills/$action/SKILL.md lacks name: $action (without it the skill is named after the install directory)"

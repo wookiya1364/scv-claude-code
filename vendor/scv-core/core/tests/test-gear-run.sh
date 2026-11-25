@@ -137,9 +137,9 @@ hk="$(jq -cn '{prompt:"action:gear run nope",session_id:"s9"}' | CLAUDE_PLUGIN_R
   && grep -q -- '-f scv/gears/INDEX.tsv' "$CORE/template/hooks/on-user-prompt.sh" && ! grep -q 'gear\.sh' "$CORE/template/hooks/on-stop.sh" "$CORE/template/hooks/guard.sh" \
   && ok "T9 기어 없음 한 줄(0), 폴더를 만들지 않음, 훅은 기어 쪽을 건드리지 않음" || bad "T9 rc=$rc out=$out"
 
-# T10 — 명령 글이 있고 명령 개수가 23 이다
+# T10 — 명령 글이 있고 명령 개수가 22 이다
 n="$(jq '.actions | length' "$CORE/actions.json" 2>/dev/null)"
-if [[ "$n" == 23 ]] && jq -e '.actions[] | select(.id == "gear" and .protocol == "protocols/gear.md" and .entrypoint == "scripts/gear.sh")' "$CORE/actions.json" >/dev/null 2>&1 \
+if [[ "$n" == 22 ]] && jq -e '.actions[] | select(.id == "gear" and .protocol == "protocols/gear.md" and .entrypoint == "scripts/gear.sh")' "$CORE/actions.json" >/dev/null 2>&1 \
    && grep -q 'gear.sh" list' "$CORE/protocols/gear.md" && grep -q ' new ' "$CORE/protocols/gear.md" && grep -q ' check' "$CORE/protocols/gear.md" && grep -q ' run ' "$CORE/protocols/gear.md"; then ok "T10 명령 23개, gear 명령 글이 목록 · 만들기 · 검사 · 실행을 안내"
 else bad "T10 actions=$n"; fi
 
