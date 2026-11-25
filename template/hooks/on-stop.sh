@@ -385,6 +385,27 @@ if [[ "$_scv_human" == 1 && -z "$_scv_gt" && "${_scv_open:-0}" != 1 && -n "$_scv
     fi
   fi
 fi
+# ---------- words ------------------------------------------------------------
+# 낱말 사전(계획 20261125-wookiya1364-words): 직전 답(끝 메시지)에 사전의 피할 말이 있으면 다음 턴 안내(.help-warn)에 한 줄을 남긴다.
+# 턴을 막지 않고, 답을 다시 쓰라고 하지 않는다 — 이미 보인 답을 고치느라 사용자가 기다리게 하지 않는다(사용자 결정 2026-11-25).
+# 스크립트는 글자만 본다: 같은 뜻으로 쓴 것인지는 다음 턴의 모델이 본다. 사람 턴의 첫 멈춤에서만 본다 — 하위 세션 · 자동 알림 턴 ·
+# 다른 세션이 보낸 메시지로 열린 턴 · 막혀서 이어진 멈춤은 보지 않는다. 사전이 없으면 아무것도 띄우지 않는다. 끄기: 설정 SCV_WORDS=off.
+if [[ "$_scv_human" == 1 && "$_scv_active" != 1 && "${_scv_open:-0}" != 1 && -s scv/words/WORDS.tsv && ! -L scv/words/WORDS.tsv && -f "$_scv_core/scripts/words.sh" ]] \
+   && ! { [[ -n "$_scv_tok" ]] && [[ "$(_scv_line1 "$_scv_tdir/.help-turn-auto")" == "$_scv_tok" ]]; }; then
+  _scv_wa="${_scv_lastmsg:-${_scv_last:-}}"
+  if [[ "$_scv_wa" == *[![:space:]]* ]]; then
+    _scv_wh="$(printf '%s' "$_scv_wa" | bash "$_scv_core/scripts/words.sh" check 2>/dev/null | sed -n 's/^WORDS_HIT: //p' | head -n 50)"
+    # shellcheck disable=SC1090
+    if [[ -n "$_scv_wh" ]] && source "$_scv_core/scripts/lib/words.sh" 2>/dev/null; then
+      _scv_wn="$(scv_words_note "$_scv_wh")"
+      if [[ -n "$_scv_wn" && ! -L "$_scv_tdir/.help-warn" ]] && { [[ "$_scv_tdir" == "$_scv_jdir" ]] || [[ ! -L "$_scv_jdir/.help-turns" && ! -L "$_scv_tdir" ]]; } \
+         && mkdir -p "$_scv_tdir" 2>/dev/null && ! grep -qxF -- "$_scv_wn" "$_scv_tdir/.help-warn" 2>/dev/null; then
+        printf '%s\n' "$_scv_wn" >> "$_scv_tdir/.help-warn" 2>/dev/null || true
+      fi
+    fi
+  fi
+fi
+# ---------- /words -----------------------------------------------------------
 # 막은 검사들 → 막는 이유 하나 · 이번 턴 전달 기록(막을 때만 쓴다, 첫 멈춤에서는 같은 세션의 지난 기록을 지운다).
 # 순수부가 없으면 이 기능 전처럼 첫 이유 하나만.
 _scv_blocked=""

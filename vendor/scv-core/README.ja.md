@@ -84,6 +84,7 @@ flowchart LR
 | `action:ask-mode` | 最初と最後だけ尋ねる ↔ 毎回尋ねる | Core |
 | `action:catalog-source` | コードにコメントを置かず純粋関数辞書を原本に | Core |
 | `action:gear` | ギアの実行・作成 — `scv/gears/` の再利用できる作業単位 | Core |
+| `action:words` | 用語辞書 — 避けたい語とその活用形を決めた語に言い換える | Core |
 
 ### ループ
 
