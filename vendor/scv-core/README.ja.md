@@ -77,7 +77,6 @@ flowchart LR
 | `action:handoff` | 別リポジトリがすべき作業を宣言 | Core |
 | `action:set-models` | アクションごとのモデル方針を選ぶ | ラッパー |
 | `action:routine` | ファイル一つの保守ルーチンを実行 | Core |
-| `action:dreams` | 過去のセッションを振り返る · よりよい依頼をコーチ | Core |
 | `action:mods` | インストール済み SCV mod の更新 + 一覧 | ラッパー |
 | `action:mods-install` | SCV mod を一つインストール | ラッパー |
 | `action:mods-remove` | SCV mod を一つ削除 | ラッパー |

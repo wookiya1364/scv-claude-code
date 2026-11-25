@@ -273,32 +273,6 @@ if [[ "$_scv_kind" != "auto" && -f "$_scv_tc_sh" ]] && command -v jq >/dev/null 
   fi
 fi
 # ---------- /turn plan check -------------------------------------------------
-# ---------- dreams (v0.69.0+) ------------------------------------------------
-# 드림(규칙 전문 protocols/dreams.md) — 사람 턴에서만: (1) 아직 안 알린 보고서가 있으면 요약 한 줄을 싣고 알린 것으로 표시한다,
-# (2) 지난 드림 날짜가 오늘이 아니면 드림을 배경으로 띄우고 바로 돌아온다. 설정 SCV_DREAMS=off 면 아무것도 하지 않는다 — 이 구간을
-# 지운 훅과 바이트 단위로 같다(test-dreams 가 견준다).
-_scv_dr_lib="$CORE_HOME/scripts/lib/dreams.sh"; _scv_dr_sh="$CORE_HOME/scripts/dreams.sh"
-if [[ -z "$_scv_gear" && "$_scv_kind" != "auto" && -f "$_scv_dr_lib" && -f "$_scv_dr_sh" ]] && command -v jq >/dev/null 2>&1 \
-   && source "$_scv_dr_lib" 2>/dev/null && [[ "$(scv_dreams_switch "$(_scv_read SCV_DREAMS)")" == "on" ]]; then
-  _scv_dl="scv/dreams/latest.json"
-  if [[ -f "$_scv_dl" && ! -L "$_scv_dl" && ! -L scv/dreams ]]; then
-    _scv_ds="$(jq -r 'try (if .announced == false and (.summary | type) == "string" then .summary else empty end) catch empty' "$_scv_dl" 2>/dev/null | head -n 1 | head -c 600)"
-    if [[ -n "$_scv_ds" ]]; then
-      printf '%s (다시 쓴 요청 바로 아래에 이 한 줄을 사용자에게 그대로 알려라)\n' "$_scv_ds"
-      { jq -c '.announced = true' "$_scv_dl" > "$_scv_dl.tmp" && mv -f "$_scv_dl.tmp" "$_scv_dl"; } 2>/dev/null || rm -f "$_scv_dl.tmp" 2>/dev/null
-    fi
-  fi
-  _scv_dlast=""; [[ -f scv/dreams/.last && ! -L scv/dreams/.last ]] && _scv_dlast="$(head -c 16 scv/dreams/.last 2>/dev/null)"
-  _scv_dtoday="$(date +%Y%m%d 2>/dev/null)"
-  if [[ "$(scv_dreams_day_trigger "$_scv_dlast" "$_scv_dtoday")" == "1" ]] && mkdir -p scv/dreams 2>/dev/null \
-     && [[ ! -L scv/dreams && ! -L scv/dreams/.last ]]; then
-    # 날짜를 먼저 적는다 — 같은 날 다음 턴이 다시 띄우지 않게(드림이 실패해도 하루 한 번). 무시 목록은 dreams.sh 와 같다.
-    [[ -f scv/dreams/.gitignore ]] || printf '.lock\n.last\n*.tmp\n' > scv/dreams/.gitignore 2>/dev/null || true
-    printf '%s\n' "$_scv_dtoday" > scv/dreams/.last 2>/dev/null || true
-    ( bash "$_scv_dr_sh" --auto </dev/null >/dev/null 2>&1 & ) >/dev/null 2>&1 || true
-  fi
-fi
-# ---------- /dreams ----------------------------------------------------------
 if [[ "$_scv_kind" == "auto" ]]; then
   if [[ "${_scv_always:-on}" != "off" ]]; then bash "$_scv_mp_sh" prompt --auto --session "$_scv_sid0" >/dev/null 2>&1 || true; fi
 # ---------- /auto turns ------------------------------------------------------
@@ -309,7 +283,7 @@ elif [[ "${_scv_always:-on}" != "off" ]] && declare -F scv_force_routing >/dev/n
   # 기어 턴 — 세 줄 안내만. 이번 턴 표는 그대로 쓴다(쓰기 전 등록 검사가 그 표를 본다 — 가벼운 길이 쓰기 검사를 풀지 않는다).
   # 도움말을 부른 것으로 표시해, 첫 도구가 무엇이든 도움말 먼저 규칙에 걸리지 않게 한다.
   if [[ -f "$_scv_mp_sh" ]]; then
-    bash "$_scv_mp_sh" prompt --session "$_scv_sid0" --transcript "$_scv_tr0" >/dev/null 2>&1 || true
+    bash "$_scv_mp_sh" prompt --session "$_scv_sid0" --transcript "$_scv_tr0" --no-principle >/dev/null 2>&1 || true
     if [[ -n "$_scv_sid0" ]]; then bash "$_scv_mp_sh" helped --agent "" --session "$_scv_sid0" >/dev/null 2>&1 || true
     else bash "$_scv_mp_sh" helped --agent "" >/dev/null 2>&1 || true; fi
   fi
@@ -360,6 +334,14 @@ elif [[ "${_scv_always:-on}" != "off" ]] && declare -F scv_force_routing >/dev/n
       rm -f "$_scv_wf" 2>/dev/null || true
     fi
   done
+  # 0.104.0+ — 반복 알아채기(계획 gears-detect): 요청을 기록 폴더에 한 줄씩 쌓고, 지난 요청 · 기어 사전과 맞춰 본다. 겹칠 때만 알림
+  # 한 줄이 실린다 — 맞는 기어가 있으면 그 기어를, 없고 비슷한 요청이 전에도 있었으면 기어로 만들지 묻게 한다. 겹치지 않는 턴에는 한 글자도
+  # 더 싣지 않는다. 판정은 순수 함수(lib/gear.sh), 읽기 · 쓰기는 gear.sh detect. 끄기: 설정 SCV_GEAR_DETECT=off — 이 구간을 지운 훅과 출력이 같다.
+  if [[ -f "$_scv_core0/scripts/gear.sh" && -n "$INPUT" ]] && command -v jq >/dev/null 2>&1 \
+     && [[ "$(_scv_read SCV_GEAR_DETECT | tr -d '"[:space:]' | tr -d "'" | tr '[:upper:]' '[:lower:]')" != off ]]; then
+    printf '%s' "$INPUT" | jq -r 'try (if (.prompt | type) == "string" then .prompt else "" end) catch ""' 2>/dev/null \
+      | bash "$_scv_core0/scripts/gear.sh" detect --kind human 2>/dev/null || true
+  fi
   [[ -n "${_scv_guide_first//[[:space:]]/}" ]] && printf '%s\n\n' "$_scv_guide_first"
   _scv_emit_delegate
   if [[ "$_scv_pre" == "on" ]]; then

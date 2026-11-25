@@ -108,7 +108,6 @@ jobs:
           bash tests/test-update.sh
           bash tests/test-channel-engine.sh
           SCV_SKILLS_DIR="$PWD/skills" bash tests/test-skill-descriptions.sh
-          bash tests/test-dreams.sh
           bash tests/test-help-workspace.sh
           bash tests/test-workspace.sh
           bash tests/test-guard.sh

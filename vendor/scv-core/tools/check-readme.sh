@@ -101,7 +101,7 @@ diagrams() {  # <profile> <set> → 필수 그림: "mermaid <최소 수>" · "se
 }
 extra_docs() {  # <profile> → 그 밖에 볼 문서 "<경로>|<표식,표식…>|<머메이드 최소 수>" — 영어 한 판
   case "$1" in
-    core) echo 'docs/architecture.md|SCV_ALWAYS_ON,SCV_RESUME_RECAP,SCV_SHOW_REAL,SCV_MODEL_PROMPTING,SCV_DREAMS,SCV_JUDGE_COMMAND,action:mods,action:channel|2' ;;
+    core) echo 'docs/architecture.md|SCV_ALWAYS_ON,SCV_RESUME_RECAP,SCV_SHOW_REAL,SCV_MODEL_PROMPTING,SCV_JUDGE_COMMAND,action:mods,action:channel|2' ;;
   esac
 }
 

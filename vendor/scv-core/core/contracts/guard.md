@@ -81,7 +81,6 @@ workspace
 handoff
 set-models
 routine
-dreams
 mods
 mods-install
 mods-remove
@@ -135,7 +134,6 @@ write, or the guard blocks the action it exists to protect. Verified by hand on
 |---|---|---|
 | codegen | 47 | no |
 | deck | 75 | no |
-| dreams | 51 | no — its only writes (scv/dreams/) are made by the minting script itself |
 | handoff | 62 | no — its writes target a temp dir, outside the working tree |
 | help | 64 (`settings-set.sh`) | no — the settings write *is* the first script call |
 | catalog-source | 46 | no — its writes (settings, catalog, the moved code) are made by the minting script itself |
@@ -274,6 +272,22 @@ but it only leaves a note for the next turn (holding the turn there would show t
   `SCV_CHOICE_GATE=off`, or the host's unattended condition holds.
 - The rule is checked before the `SCV_HELP_FIRST_ALLOW` list, because wrappers list the summary tool there.
 - Core names no tool and no field. Without `SCV_SUMMARY_ASK`, or with a malformed value, nothing changes.
+
+## Rule W — long work runs in the background, not behind a foreground wait (v0.104.0+)
+
+While the model sits in a long foreground wait, a new message from the person interrupts the work, and a plan
+does not reach its end (one real session, 2026-11-25: a 200-second wait was cut off). The turn-end check would
+see it only after the wait is over, so the call is refused before it runs.
+
+- In `gate-any` mode, a tool call is refused when its input carries a wait of 60 seconds or more (the field
+  `wait_for_output_ms`), or when its shell command is not sent to the background (the field
+  `run_in_background`) and waits by sleeping — one sleep of 30 seconds or more, or a sleep inside an
+  `until` / `while` loop of any length. A command sent to the background is never refused.
+- The reason tells the model to run the work in the background and read the result when its notice comes.
+  The decision and the text are pure functions: `lib/wait-gate.sh` (`scv_wait_kind`, `scv_wait_reason`).
+- A wrapper whose host names the two fields differently sets `SCV_WAIT_FIELD` and `SCV_BACKGROUND_FIELD`.
+  Core names no tool.
+- Off: the project setting or the environment value `SCV_BACKGROUND_FIRST=off`.
 
 ## Rule D — every function declares pure or effect (v0.81.0+)
 

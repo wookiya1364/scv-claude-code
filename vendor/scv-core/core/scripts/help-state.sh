@@ -99,7 +99,8 @@ case "$cmd" in
           # 지문은 컨텍스트에 묶인 값 — 컨텍스트가 비워졌으니 파일도 비운다. 예약된 경고도 의미를 잃는다.
           # v0.59.0+: 모델별 가이드 읽음 기록도 컨텍스트에 묶인 값 — 비워서 다음 help 가 원문을 다시 읽게 한다.
           # 0.97.1+: 규칙 전문을 이 맥락에 실었다는 표시(.rules-seen)도 — 다음 사람 턴이 규칙 전문을 다시 싣는다.
-          for _f in "$NONCE_FILE" "$JOURNAL_DIR/.help-guide" "$TURN_DIR/.help-guide-turn" "$TURN_DIR/.rules-seen"; do [[ -f "$_f" && ! -L "$_f" ]] && rm -f "$_f" 2>/dev/null; done
+          # 0.104.0+: 원칙 전문을 실었다는 표시(.principle-seen)도 같다 — 다음 사람 턴이 원칙 전문을 다시 싣는다.
+          for _f in "$NONCE_FILE" "$JOURNAL_DIR/.help-guide" "$TURN_DIR/.help-guide-turn" "$TURN_DIR/.rules-seen" "$TURN_DIR/.principle-seen"; do [[ -f "$_f" && ! -L "$_f" ]] && rm -f "$_f" 2>/dev/null; done
           # v0.60.1+: 경고는 가이드 경고 블록만 남긴다 — 원문을 건너뛴 사실은 초기화로 사라지지 않는다(재개마다 지워져
           # 다음 턴 모델에게 닿지 않던 0.60.0 실측). 남길 것이 없거나 라이브러리가 없으면 이전처럼 지운다.
           if [[ -f "$WARN_FILE" && ! -L "$WARN_FILE" ]]; then

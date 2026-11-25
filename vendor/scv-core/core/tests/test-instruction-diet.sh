@@ -28,16 +28,20 @@ hook() { (cd "$R" && jq -cn '{prompt:"로그인 버그 고쳐 줘",session_id:"s
 reg() { (cd "$R" && printf 'scope | - | src/login.js\nrewrite | - | 로그인 버그를 고쳐 줘\n' \
   | SCV_HOST_PROFILE="$WORK/profile.env" bash "$MP" register --model vendor-model-a --session s1 2>/dev/null); }
 
-# T1b — 원칙 전문은 첫 턴과 규약을 다시 읽은 뒤에만(0.88.0+: 등록이 아니라 매 턴 훅이 싣는다)
+# T1b — 원칙 전문은 첫 턴과 대화 초기화(요약 · 비움 · 재개) 뒤에만(0.88.0+: 등록이 아니라 매 턴 훅이 싣는다).
+# 0.104.0+: 규약 지문이 바뀌어도 한 줄이다 — 판정이 맥락 표시로 옮겨졌다(계획 principle-once-context).
 r1="$(hook)"; reg >/dev/null
 r2="$(hook)"; reg >/dev/null
 sed -i.bak 's/abcd1234/ef567890/' "$R/scv/journal/.help-state"
 r3="$(hook)"; reg >/dev/null
-n1="$(grep -c . <<<"$r1")"; n2="$(grep -c . <<<"$r2")"; n3="$(grep -c . <<<"$r3")"
-if grep -q '^PRINCIPLE:$' <<<"$r1" && grep -q '^PRINCIPLE: (이 세션에 이미 실음' <<<"$r2" && grep -q '^PRINCIPLE:$' <<<"$r3" && (( n2 < n1 )); then
-  ok "T1b principle full → one line → full again after reload ($n1 · $n2 · $n3 lines)"
+(cd "$R" && bash "$CORE/scripts/help-state.sh" reset --turn-dir scv/journal/.help-turns/s1 >/dev/null 2>&1)
+r4="$(hook)"; reg >/dev/null
+n1="$(grep -c . <<<"$r1")"; n2="$(grep -c . <<<"$r2")"; n3="$(grep -c . <<<"$r3")"; n4="$(grep -c . <<<"$r4")"
+if grep -q '^PRINCIPLE:$' <<<"$r1" && grep -q '^PRINCIPLE: (이 세션에 이미 실음' <<<"$r2" && grep -q '^PRINCIPLE: (이 세션에 이미 실음' <<<"$r3" \
+   && grep -q '^PRINCIPLE:$' <<<"$r4" && (( n2 < n1 )); then
+  ok "T1b principle full → one line → one line after a new fingerprint → full again after a reset ($n1 · $n2 · $n3 · $n4 lines)"
 else
-  bad "T1b principle lines: $n1 · $n2 · $n3"
+  bad "T1b principle lines: $n1 · $n2 · $n3 · $n4"
 fi
 [[ "$(scv_mp_principle_show "" abc)" == full && "$(scv_mp_principle_show abc abc)" == short && "$(scv_mp_principle_show abc "")" == full ]] \
   && ok "T1b pure decision" || bad "T1b pure decision"
