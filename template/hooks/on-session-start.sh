@@ -6,6 +6,12 @@
 # recent decisions, and the active conversation. Everything printed here is
 # ASSEMBLED from files that are already written (promote/, INDEX.tsv,
 # conversations/); this hook writes nothing anywhere.
+# After a clear (`source` is `clear`) the active conversation is printed as its
+# last part only (12,000 characters, starting at a turn heading) plus one line
+# naming the full record file — a clear is meant to empty the context, and the
+# whole record would fill it again. The recap (active plans, recent decisions)
+# is left out after a clear as well: one line names the command that prints it.
+# Compact, resume and an unknown source keep the recap and the whole text.
 #
 # Contract (see docs/wrapper-integration.md §6 "Hook seam" in scv-core):
 #   - The host's session-start event pipes ONE JSON object to stdin. When it
@@ -112,7 +118,13 @@ printf '\n'
 # 훅 템플릿도 같다. 여기만 SCV_DIR 을 따르면 스위치는 한 폴더에서 읽고 내용은 다른
 # 폴더에서 싣는 어긋남이 생긴다 (적대 검증에서 재현).
 _scv_recap="$CORE_HOME/scripts/recap.sh"
-if [[ -f "$_scv_recap" ]]; then
+if [[ "$SOURCE" == clear ]]; then
+  # 비운 뒤에는 되찾기 묶음을 싣지 않는다(사용자 결정 2026-11-25) — 비우기는 컨텍스트를 가볍게 하려는 것이고,
+  # 진행 중인 계획은 매 턴 글이 싣는다. 필요할 때 부를 명령 한 줄만 남긴다.
+  if [[ -f "$_scv_recap" ]]; then
+    printf '%s\n\n' "[SCV resume] recap left out after a clear (active plans · recent decisions) — the per-turn text names the plans in progress; run it when you need it: SCV_DIR=scv bash ${_scv_recap}"
+  fi
+elif [[ -f "$_scv_recap" ]]; then
   SCV_DIR=scv bash "$_scv_recap" 2>/dev/null || true
   printf '\n'
 fi
@@ -122,6 +134,7 @@ fi
 # 않는다 (저장소 밖 파일을 실을 수 있다 — 설정 파일 읽기와 같은 규칙). 탭·개행이 든
 # 파일명은 건너뛴다 — 아래 줄 목록의 구분자라서.
 # 전문은 가림 필터를 거쳐서만 나간다. 필터가 없으면 경로만 싣고 본문은 싣지 않는다.
+# 비운 뒤(source 가 clear)에는 가림을 거친 글의 끝부분만 싣는다 — 가림이 먼저, 자르기가 나중이다.
 # 파일마다 프로세스를 띄우지 않는다 — status 는 awk 한 번, mtime 은 stat 한 번으로
 # 전부 읽는다 (파일 3천 개에서 21초 → 래퍼 제한 30초에 닿았다).
 _scv_conv_dir="scv/conversations"
@@ -175,14 +188,32 @@ if [[ -d "$_scv_conv_dir" ]]; then
   # 3일 넘게 손대지 않은 active 대화는 전문을 싣지 않고 경로만 알린다 — 끝났는데 표시가 남은 대화다(사용자 결정 2026-11-13).
   _scv_now="$(date +%s 2>/dev/null || echo 0)"; _scv_stale_secs=259200
   _scv_pick="$(scv_resume_pick "$_scv_lines" "$_scv_linked" "$_scv_now" "$_scv_stale_secs")"
+  # 비운 뒤인데 고른 것이 없으면 표시와 상관없이 가장 최근에 손댄 기록(같은 기준 안)을 싣는다 — 대시보드가 그 기록을
+  # 보고 비웠다. 일하던 대화가 계획으로 넘어가 표시가 바뀌면 위의 고르기에서 빠진다.
+  if [[ -z "$_scv_pick" && "$SOURCE" == clear ]] && declare -F scv_resume_pick_recent >/dev/null 2>&1; then
+    _scv_pick="$(scv_resume_pick_recent "$_scv_lines" "$_scv_now" "$_scv_stale_secs")"
+  fi
   _scv_stale="$(scv_resume_stale "$_scv_lines" "$_scv_pick" "$_scv_now" "$_scv_stale_secs")"
   # 고른 경로가 정말 그 폴더의 일반 파일인지 한 번 더 — 줄 목록이 깨졌어도 엉뚱한
   # 파일을 싣지 않는다.
   _scv_pick_ok=0
   [[ -n "$_scv_pick" && -f "$_scv_pick" && ! -L "$_scv_pick" && "$_scv_pick" == "$_scv_conv_dir"/*.md ]] && _scv_pick_ok=1
   _scv_others="$(scv_resume_other_active "$_scv_lines" "$_scv_pick" "$_scv_now" "$_scv_stale_secs")"
+  # 비운 뒤에는 기록 전체가 아니라 끝부분(12,000자, 턴 머리 줄에서 시작)을 싣는다 — 전체를 실으면 방금 비운 컨텍스트가
+  # 다시 찬다. 요약 · 재개 · 종류를 모르는 시작은 전과 같이 전체다. 가림 필터를 먼저 거친 글을 자른다(잘린 자리에 걸친
+  # 비밀값을 필터가 놓치지 않게). 자르지 못하면(함수 없음 · 빈 결과) 아래에서 전과 같이 전체를 찍는다.
+  _scv_tail_max=12000; _scv_body=""; _scv_cut=0
+  if (( _scv_pick_ok )) && [[ "$SOURCE" == clear && -f "$_scv_redact" ]] && declare -F scv_resume_tail >/dev/null 2>&1; then
+    _scv_full="$(bash "$_scv_redact" --redact-only < "$_scv_pick" 2>/dev/null || true)"
+    _scv_body="$(scv_resume_tail "$_scv_full" "$_scv_tail_max" 2>/dev/null || true)"
+    [[ -n "$_scv_body" && "$_scv_body" != "$_scv_full" ]] && _scv_cut=1
+  fi
   if (( _scv_pick_ok )); then
-    printf '%s\n' "[SCV resume] active conversation — ${_scv_pick} (most recent; its full text follows)"
+    if (( _scv_cut )); then
+      printf '%s\n' "[SCV resume] active conversation — ${_scv_pick} (most recent; its last part follows)"
+    else
+      printf '%s\n' "[SCV resume] active conversation — ${_scv_pick} (most recent; its full text follows)"
+    fi
   fi
   if [[ -n "$_scv_others" ]]; then
     printf '%s\n' "[SCV resume] other active conversations (path only):"
@@ -193,7 +224,14 @@ if [[ -d "$_scv_conv_dir" ]]; then
     printf '%s\n' "$_scv_stale" | sed 's/^/  · /'
   fi
   if (( _scv_pick_ok )) && [[ -f "$_scv_redact" ]]; then
-    bash "$_scv_redact" --redact-only < "$_scv_pick" 2>/dev/null || true
+    if [[ -n "$_scv_body" ]]; then
+      if (( _scv_cut )); then
+        printf '%s\n' "[SCV resume] full record: ${_scv_pick} — only its last part follows (the context was cleared); read that file when you need an earlier turn."
+      fi
+      printf '%s\n' "$_scv_body"
+    else
+      bash "$_scv_redact" --redact-only < "$_scv_pick" 2>/dev/null || true
+    fi
     printf '\n'
   fi
 fi

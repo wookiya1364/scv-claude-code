@@ -117,38 +117,20 @@ record_index_lookup() {
 # 종류: 고르기
 # 예: $'decision\tk1\tf\t0\t5\tt\ts1\nplan\tk2\tf\t5\t5\tt\ts2' plan → $'plan\tk2\tf\t5\t5\tt\ts2'
 record_index_filter() {
-  local index="${1:-}" want="${2:-}" line
+  local index="${1:-}" want="${2:-}"
   [[ -n "$index" ]] || return 0
   want="$(record_kind_normalize "$want")"
 
-  local keys="" out=""
-  # 뒤에서 앞으로 볼 수 없으므로, 최신이 이기도록 두 번 지난다.
-  while IFS= read -r line; do
-    [[ -n "$line" ]] || continue
-    local mark="${line%%$'\t'*}"
-    [[ -z "$want" || "$mark" == "$want" ]] || continue
-    local rest="${line#*$'\t'}"
-    local key="${rest%%$'\t'*}"
-    keys="$keys$key"$'\n'
-  done <<< "$index"
-
-  local seen=""
-  while IFS= read -r line; do
-    [[ -n "$line" ]] || continue
-    local mark="${line%%$'\t'*}"
-    [[ -z "$want" || "$mark" == "$want" ]] || continue
-    local rest="${line#*$'\t'}"
-    local key="${rest%%$'\t'*}"
-    # 이 키의 마지막 등장인가
-    local after="${index#*"$line"}"
-    case $'\n'"$after" in
-      *$'\n'*$'\t'"$key"$'\t'*) continue ;;
-    esac
-    case $'\n'"$seen" in *$'\n'"$key"$'\n'*) continue ;; esac
-    seen="$seen$key"$'\n'
-    out="$out$line"$'\n'
-  done <<< "$index"
-  [[ -n "$out" ]] && printf '%s' "$out"
+  # 한 번 훑는다: 줄마다 키의 마지막 자리를 적어 두고, 끝에서 그 자리의 줄만 낸다.
+  # 전에는 줄마다 색인 전체를 글자 무늬로 다시 훑어, 색인 80줄에 11초 · 282줄에 4분을 넘겼다
+  # (비운 뒤 훅의 제한 30초를 넘겨 아무것도 실리지 않았다 — 계획 20261125-wookiya1364-clear-lighten).
+  # 같은 키의 나중 줄은 종류가 달라도 앞 줄을 가린다(전과 같다). 바이트로 본다 — 잘린 글자가 있어도 멈추지 않는다.
+  # awk 안에서 부등호를 쓰지 않는다(같다 · 다르다로만 견준다): 순수성 검사가 부등호를 파일 읽기 · 쓰기와 가르지 못한다.
+  printf '%s\n' "$index" | LC_ALL=C awk -F'\t' -v want="$want" '
+    $0 == "" { next }
+    { n++; line[n] = $0; mark[n] = $1; key[n] = (NF == 1 ? $0 : $2); last[key[n]] = n }
+    END { for (i = 1; i != n + 1; i++) if ((want == "" || mark[i] == want) && last[key[i]] == i) print line[i] }
+  '
   return 0
 }
 

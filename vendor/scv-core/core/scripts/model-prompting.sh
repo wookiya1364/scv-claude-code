@@ -49,6 +49,8 @@ source "$SCRIPT_DIR/lib/host-profile.sh" 2>/dev/null || true
 source "$SCRIPT_DIR/lib/settings.sh" 2>/dev/null || true
 # shellcheck source=lib/show-real.sh
 source "$SCRIPT_DIR/lib/show-real.sh" 2>/dev/null || true   # (2026-10-08+) 확인 통로 판단 scv_show_real_channel 을 함께 쓴다
+# shellcheck source=lib/words.sh
+source "$SCRIPT_DIR/lib/words.sh" 2>/dev/null || true       # 낱말 알림 줄을 규칙 어김 경고에서 빼는 scv_words_note_drop 을 쓴다
 
 JOURNAL_DIR="${SCV_JOURNAL_DIR:-scv/journal}"
 READ_FILE="$JOURNAL_DIR/.help-guide"
@@ -516,7 +518,10 @@ case "$cmd" in
     _rwarn=0
     for _rw in "$WARN_FILE" "$JOURNAL_DIR/.help-warn"; do
       [[ -s "$_rw" && ! -L "$_rw" ]] || continue
-      _rwt="$(head -c 4096 "$_rw" 2>/dev/null)"; _rwk="$(scv_mp_warn_keep "$_rwt")"
+      _rwt="$(head -c 4096 "$_rw" 2>/dev/null)"
+      # 낱말 알림 줄(계획 20261125-wookiya1364-words)은 규칙 어김으로 세지 않는다 — 그 한 줄이 할 말을 다 하고, 글자만 같은 말에 뜬 알림이 규칙 전문을 다시 싣게 하지 않는다.
+      declare -F scv_words_note_drop >/dev/null 2>&1 && _rwt="$(scv_words_note_drop "$_rwt")"
+      _rwk="$(scv_mp_warn_keep "$_rwt")"
       [[ "${_rwt//[[:space:]]/}" == "${_rwk//[[:space:]]/}" ]] || _rwarn=1
     done
     _rm="$(scv_mp_rules_show "$_rseen" "$_rseen" "$_rwarn")"
