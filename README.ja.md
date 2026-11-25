@@ -170,7 +170,6 @@ bash "$CORE/scripts/metrics.sh"                                 # プロセス�
 | `/scv:report` | フェーズ結果を Slack/Discord へ証跡つきで報告 |
 | `/scv:sync` | SCV テンプレート更新 + コード↔計画のドリフト検知 |
 | `/scv:routine [<name>]` | 1 ファイルのメンテナンスルーチンを実行 |
-| `/scv:dreams` | 過去のセッションを振り返り、より良いプロンプトを助言 |
 | `/scv:workspace` · `/scv:handoff` | マルチレポ: アンブレラ構成 · 他リポジトリ作業の宣言 |
 | `/scv:update` · `/scv:set-models` · `/scv:install-deps` | プラグイン・モッド更新 · モデルポリシー · CLI 依存 |
 | `/scv:mods` · `/scv:mods-install` · `/scv:mods-remove` | SCV モッド更新 + 一覧 · 一つインストール · 一つ削除 |
