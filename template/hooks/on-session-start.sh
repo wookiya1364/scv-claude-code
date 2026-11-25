@@ -9,8 +9,9 @@
 # After a clear (`source` is `clear`) the active conversation is printed as its
 # last part only (12,000 characters, starting at a turn heading) plus one line
 # naming the full record file — a clear is meant to empty the context, and the
-# whole record would fill it again. Compact, resume and an unknown source keep
-# the whole text.
+# whole record would fill it again. The recap (active plans, recent decisions)
+# is left out after a clear as well: one line names the command that prints it.
+# Compact, resume and an unknown source keep the recap and the whole text.
 #
 # Contract (see docs/wrapper-integration.md §6 "Hook seam" in scv-core):
 #   - The host's session-start event pipes ONE JSON object to stdin. When it
@@ -117,7 +118,13 @@ printf '\n'
 # 훅 템플릿도 같다. 여기만 SCV_DIR 을 따르면 스위치는 한 폴더에서 읽고 내용은 다른
 # 폴더에서 싣는 어긋남이 생긴다 (적대 검증에서 재현).
 _scv_recap="$CORE_HOME/scripts/recap.sh"
-if [[ -f "$_scv_recap" ]]; then
+if [[ "$SOURCE" == clear ]]; then
+  # 비운 뒤에는 되찾기 묶음을 싣지 않는다(사용자 결정 2026-11-25) — 비우기는 컨텍스트를 가볍게 하려는 것이고,
+  # 진행 중인 계획은 매 턴 글이 싣는다. 필요할 때 부를 명령 한 줄만 남긴다.
+  if [[ -f "$_scv_recap" ]]; then
+    printf '%s\n\n' "[SCV resume] recap left out after a clear (active plans · recent decisions) — the per-turn text names the plans in progress; run it when you need it: SCV_DIR=scv bash ${_scv_recap}"
+  fi
+elif [[ -f "$_scv_recap" ]]; then
   SCV_DIR=scv bash "$_scv_recap" 2>/dev/null || true
   printf '\n'
 fi
@@ -181,6 +188,11 @@ if [[ -d "$_scv_conv_dir" ]]; then
   # 3일 넘게 손대지 않은 active 대화는 전문을 싣지 않고 경로만 알린다 — 끝났는데 표시가 남은 대화다(사용자 결정 2026-11-13).
   _scv_now="$(date +%s 2>/dev/null || echo 0)"; _scv_stale_secs=259200
   _scv_pick="$(scv_resume_pick "$_scv_lines" "$_scv_linked" "$_scv_now" "$_scv_stale_secs")"
+  # 비운 뒤인데 고른 것이 없으면 표시와 상관없이 가장 최근에 손댄 기록(같은 기준 안)을 싣는다 — 대시보드가 그 기록을
+  # 보고 비웠다. 일하던 대화가 계획으로 넘어가 표시가 바뀌면 위의 고르기에서 빠진다.
+  if [[ -z "$_scv_pick" && "$SOURCE" == clear ]] && declare -F scv_resume_pick_recent >/dev/null 2>&1; then
+    _scv_pick="$(scv_resume_pick_recent "$_scv_lines" "$_scv_now" "$_scv_stale_secs")"
+  fi
   _scv_stale="$(scv_resume_stale "$_scv_lines" "$_scv_pick" "$_scv_now" "$_scv_stale_secs")"
   # 고른 경로가 정말 그 폴더의 일반 파일인지 한 번 더 — 줄 목록이 깨졌어도 엉뚱한
   # 파일을 싣지 않는다.

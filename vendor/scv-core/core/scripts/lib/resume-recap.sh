@@ -81,6 +81,33 @@ scv_resume_pick() {
 }
 
 # @pure
+# 역할: 비운 뒤에 실을 대화 하나를 표시와 상관없이 고른다 — 기준 초 안에 손댄 것 가운데 가장 최근 것(동률이면 뒤 줄), 손댄 시각을 모르는 것은 고르지 않는다
+# 종류: 고르기
+# 예: $'a.md\tactive\t100\nb.md\tpromoted\t150' 200 300 → "b.md"
+# 예: $'a.md\tpromoted\t100' 1000 300 → ""
+# 예: $'a.md\tpromoted\t0' 1000 300 → ""
+# <"경로<TAB>표시<TAB>손댄 시각" 줄들> <지금 시각(에포크 초)> <기준 초> → 경로 하나(없으면 빈 글).
+# scv_resume_pick 이 아무것도 고르지 못한 비운 뒤에만 쓴다. 대시보드는 가장 최근 대화 기록이 있으면 대화를 비우는데,
+# 그 기록이 계획으로 넘어가 표시가 promoted 로 바뀌고 계획의 원자료 목록에도 없으면 고를 것이 없어, 새 대화가 기록 없이
+# 시작했다(2026-11-25 실제 세션: 29턴 · 31,914자 기록이 실리지 않았다). 표시 칸이 비면 읽을 때 칸이 당겨진다 — 그때는
+# 표시 자리의 숫자를 손댄 시각으로 본다. 기준 초가 0 이하면 날짜를 보지 않는다.
+scv_resume_pick_recent() {
+  local lines="${1:-}" now="${2:-0}" max="${3:-0}" path status mtime best="" best_m=-1
+  case "$now" in ''|*[!0-9]*) now=0 ;; esac
+  case "$max" in ''|*[!0-9]*) max=0 ;; esac
+  while IFS=$'\t' read -r path status mtime; do
+    [[ -n "$path" ]] || continue
+    if [[ -z "$mtime" ]]; then case "$status" in ''|*[!0-9]*) ;; *) mtime="$status" ;; esac; fi
+    case "$mtime" in ''|*[!0-9]*) mtime=0 ;; esac
+    (( mtime > 0 )) || continue
+    (( max > 0 && now - mtime > max )) && continue
+    if (( mtime >= best_m )); then best="$path"; best_m="$mtime"; fi
+  done <<< "$lines"
+  [[ -n "$best" ]] && printf '%s' "$best"
+  return 0
+}
+
+# @pure
 # 역할: 고른 경로를 뺀 나머지 active 경로들을 한 줄씩 낸다 — 기준 초보다 오래 손대지 않은 것은 빼고(그것은 따로 알린다)
 # 종류: 고르기
 # 예: $'a.md\tactive\t5\nb.md\tactive\t9' b.md → "a.md"

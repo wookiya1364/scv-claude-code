@@ -151,6 +151,9 @@ PART="$(record_part "$O")"; n="$(nchars "$PART")"
 [[ "$O" != *"FIRST-TURN-MARK"* && "$O" == *"LAST-TURN-MARK"* ]] && ok "T4 첫 턴의 글은 없고 마지막 턴의 글은 있다" || fail "T4 첫 턴 $(count "$O" FIRST-TURN-MARK)번 · 마지막 턴 $(count "$O" LAST-TURN-MARK)번"
 [[ "$O" != *"abc123secret"* && "$O" == *"[REDACTED]"* ]] && ok "T4 끝부분도 가림 필터를 거친다" || fail "T4 비밀값이 그대로 나간다"
 [[ "$O" == *"its last part follows"* && "$O" != *"its full text follows"* ]] && ok "T4 머리 줄이 전체가 아니라 끝부분이라고 적는다" || fail "T4 머리 줄이 전체라고 적는다"
+# 비운 뒤에는 되찾기 묶음(진행 중 계획 · 최근 결정)을 싣지 않는다 — 부를 명령 한 줄만 남긴다.
+[[ "$(count "$O" "[SCV resume] recap left out after a clear")" == "1" && "$O" != *"Recap — "* && "$O" == *"scripts/recap.sh"* ]] \
+  && ok "T4 비운 뒤에는 되찾기 묶음이 없고, 부를 명령 한 줄이 있다" || fail "T4 되찾기 묶음: 안내 줄 $(count "$O" "recap left out after a clear")번 · 묶음 머리 $(count "$O" "Recap — ")번"
 # 짧은 기록은 비운 뒤에도 그대로 — 자르지 않았으니 자리 줄도 없다.
 P2="$(mkproj short)"; conv "$P2" 20261125-000002-short.md "$(record 6)"
 run_hook "$P2" '{"source":"clear"}'; O="$OUT"
@@ -171,9 +174,32 @@ for s in compact resume; do
   run_hook "$P" "{\"source\":\"$s\"}"; O="$OUT"
   [[ "$RC" == "0" && "$O" == *"FIRST-TURN-MARK"* && "$O" == *"LAST-TURN-MARK"* ]] && ok "T5 source=$s → 첫 턴과 마지막 턴이 모두 있다" || fail "T5 source=$s: rc=$RC 첫 턴 $(count "$O" FIRST-TURN-MARK)번 · 마지막 턴 $(count "$O" LAST-TURN-MARK)번"
   [[ "$(count "$O" "$PLACE")" == "0" && "$O" == *"its full text follows"* && "$O" != *"abc123secret"* ]] && ok "T5 source=$s → 자리 줄 없이 전체라고 적는다 (가림 그대로)" || fail "T5 source=$s 에 자리 줄이 있거나 머리 줄이 다르다"
+  [[ "$O" == *"Recap — "* && "$(count "$O" "recap left out after a clear")" == "0" ]] && ok "T5 source=$s → 되찾기 묶음이 전과 같이 실린다" || fail "T5 source=$s: 묶음 머리 $(count "$O" "Recap — ")번 · 안내 줄 $(count "$O" "recap left out after a clear")번"
 done
 run_hook "$P" '{}'; O="$OUT"
 [[ "$RC" == "0" && "$O" == *"FIRST-TURN-MARK"* && "$O" == *"LAST-TURN-MARK"* && "$(count "$O" "$PLACE")" == "0" ]] && ok "T5 source 가 없어도 전체를 찍는다" || fail "T5 source 없음: rc=$RC"
+
+# ---------- T13 비운 뒤, 진행 중 표시의 대화가 없으면 가장 최근에 손댄 기록을 싣는다 ----------
+# 일하던 대화가 계획으로 넘어가면 표시가 promoted 로 바뀐다. 대시보드는 그 기록을 보고 비우므로, 훅도 그 끝부분을 싣는다.
+[[ "$(scv_resume_pick_recent $'a.md\tactive\t100\nb.md\tpromoted\t150' 200 300)" == "b.md" \
+   && -z "$(scv_resume_pick_recent $'a.md\tpromoted\t100' 1000 300)" \
+   && -z "$(scv_resume_pick_recent $'a.md\tpromoted\t0' 1000 300)" \
+   && "$(scv_resume_pick_recent $'a.md\t\t150' 200 300)" == "a.md" \
+   && -z "$(scv_resume_pick_recent "" 200 300)" ]] \
+  && ok "T13 고르기 — 표시와 상관없이 기준 안의 가장 최근 것, 오래됐거나 시각을 모르면 고르지 않는다" || fail "T13 고르기 함수의 결과가 다르다"
+MOVED="20261125-000003-moved.md"
+P3="$(mkproj moved)"; mkdir -p "$P3/scv/conversations"
+printf -- '---\nslug: moved\nstatus: promoted\n---\n%s\n' "$REC" > "$P3/scv/conversations/$MOVED"
+run_hook "$P3" '{"source":"clear"}'; O="$OUT"
+[[ "$RC" == "0" && "$O" == *"LAST-TURN-MARK"* && "$O" != *"FIRST-TURN-MARK"* && "$(count "$O" "${PLACE}scv/conversations/$MOVED")" == "1" && "$O" != *"abc123secret"* ]] \
+  && ok "T13 비운 뒤 — 계획으로 넘어간 기록의 끝부분과 자리 줄이 실린다 (가림 그대로)" || fail "T13 비운 뒤: rc=$RC 마지막 턴 $(count "$O" LAST-TURN-MARK)번 · 자리 줄 $(count "$O" "$PLACE")번"
+for s in compact resume; do
+  run_hook "$P3" "{\"source\":\"$s\"}"; O="$OUT"
+  [[ "$RC" == "0" && "$O" != *"LAST-TURN-MARK"* ]] && ok "T13 source=$s → 계획으로 넘어간 기록은 전과 같이 싣지 않는다" || fail "T13 source=$s 에 기록이 실렸다"
+done
+touch -t 202001010000 "$P3/scv/conversations/$MOVED"
+run_hook "$P3" '{"source":"clear"}'; O="$OUT"
+[[ "$RC" == "0" && "$O" != *"LAST-TURN-MARK"* ]] && ok "T13 3일 넘게 손대지 않은 기록은 비운 뒤에도 싣지 않는다" || fail "T13 오래된 기록이 실렸다"
 
 echo
 echo "test-resume-tail: PASS=$PASS FAIL=$FAIL"

@@ -84,6 +84,20 @@ N_PLAN="$(record_index_filter "$IDX" plan | grep -c . || true)"
 eq "plan 만" "1" "$N_PLAN"
 N_NONE="$(record_index_filter "$IDX" blocker | grep -c . || true)"
 eq "없는 표시" "0" "$N_NONE"
+# 같은 키의 나중 줄은 종류가 달라도 앞 줄을 가린다 — decision 으로 거르면 k2 만 남는다.
+eq "decision 만 (k1 은 나중의 plan 이 가린다)" "decision	k2	f	30	40	t2	다른것" "$(record_index_filter "$IDX" decision)"
+# 줄이 통째로 같은 레코드 둘 — 하나만 남는다.
+DUP="$(printf 'decision\tk9\tf\t1\t2\tt\ts\ndecision\tk9\tf\t1\t2\tt\ts\n')"
+eq "통째로 같은 줄 둘 → 하나" "1" "$(record_index_filter "$DUP" decision | grep -c . || true)"
+# 큰 색인 — 300줄(키 260가지, 40개는 두 번 나온다). 줄마다 색인 전체를 다시 훑던 때는 이 크기에서 몇 분이 걸려
+# 비운 뒤 훅이 제한 시간 30초를 넘겼다(계획 20261125-wookiya1364-clear-lighten). 시간은 측정하지 않는다 — 결과만 본다.
+BIG=""
+for i in $(seq 1 260); do BIG+="decision"$'\t'"키-$i"$'\t'"scv/DECISIONS.md"$'\t'"$i"$'\t'"5"$'\t'"t"$'\t'"한글 요약 $i 옛것"$'\n'; done
+for i in $(seq 1 40); do BIG+="decision"$'\t'"키-$i"$'\t'"scv/DECISIONS.md"$'\t'"$((i + 1000))"$'\t'"5"$'\t'"t"$'\t'"한글 요약 $i 최신"$'\n'; done
+BIG_OUT="$(record_index_filter "$BIG" decision)"
+eq "큰 색인 300줄 → 키마다 하나, 260줄" "260" "$(printf '%s\n' "$BIG_OUT" | grep -c . || true)"
+eq "큰 색인 — 두 번 나온 키 40개는 최신이 남는다" "40" "$(printf '%s\n' "$BIG_OUT" | grep -c '최신$' || true)"
+eq "큰 색인 — 색인의 순서대로 낸다 (첫 줄의 키)" "키-41" "$(printf '%s\n' "$BIG_OUT" | LC_ALL=C awk -F'\t' 'NR == 1 { print $2 }')"
 echo "OK [T4]"
 
 # ============================================================ T5. 순수성
