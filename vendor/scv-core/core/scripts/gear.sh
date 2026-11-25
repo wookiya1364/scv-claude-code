@@ -16,6 +16,9 @@
 #   gear.sh check                        사전 · 파일 · 흐름 · 순수 톱니의 예시 · 표시 없는 위험 명령을 검사한다
 #   gear.sh run <이름> [<인자>=<값>]…      기어나 톱니를 돌린다 — 처음 입력은 표준 입력, 조절 값은 이름 붙은 인자
 #   gear.sh resume <표>                   멈춘 실행을 잇는다 — 판단 단계 뒤에는 그 단계의 결과를 표준 입력으로(인자는 처음 준 그대로)
+#   gear.sh detect [--kind human|auto]   매 턴 훅이 부른다 — 표준 입력의 요청 글을 지난 요청 · 기어 사전과 맞춰 보고, 겹칠 때만
+#                                        알림 한 줄을 낸 뒤 요청을 기록에 쌓는다(계획 gears-detect). 겹치지 않으면 아무것도 내지 않는다
+#   gear.sh decline                      방금 알린 요청을 "기어로 만들지 않음"으로 적는다 — 그 요청은 다시 알리지 않는다
 #   gear.sh confirm --question <글> --answer <글>
 #                                        선택 답 훅이 부른다 — 질문에 [기어 확인 <표>] 가 있고 답이 "실행"이면 확인으로 적는다
 #
@@ -688,6 +691,39 @@ case "$CMD" in
     esac
     ;;
 
+  detect)
+    # 매 턴 훅이 부른다. 판정은 lib/gear.sh 의 순수 함수가 하고, 여기는 읽기(요청 · 사전 · 기록)와 쓰기(기록 한 줄 · 알린 표시)만 한다.
+    # 요청 글은 비밀 가림을 거친 것만 견주고 쌓는다 — 맞춰 보기용 글도 가린 글에서 만든다(원문의 비밀이 조각으로 남지 않게).
+    _dk="human"; [[ "${1:-}" == "--kind" ]] && _dk="${2:-human}"
+    _dreq="$(head -c 8192 2>/dev/null || true)"
+    [[ "$(scv_gear_request_keep "$_dreq" "$_dk" "${SCV_GEAR_DETECT_MIN:-18}")" == "1" ]] || exit 0
+    [[ -d "$JDIR" ]] || mkdir -p "$JDIR" 2>/dev/null || exit 0
+    _dlog="$JDIR/.gear-requests"; _ddec="$JDIR/.gear-declined"; _dlast="$JDIR/.gear-noticed"
+    [[ -L "$_dlog" || -L "$_ddec" || -L "$_dlast" ]] && exit 0
+    _dred="$(printf '%s' "$_dreq" | bash "$SCRIPT_DIR/journal-append.sh" --redact-only 2>/dev/null || true)"
+    [[ -n "$_dred" ]] || exit 0
+    _dline="$(scv_gear_request_line "$_dred" "$(date +%Y-%m-%d)")"
+    [[ -n "$_dline" ]] || exit 0
+    _dnorm="${_dline#*$'\t'}"; _dnorm="${_dnorm%%$'\t'*}"
+    _dgear=""; _dpast=""
+    [[ -f "$GDIR/INDEX.tsv" && ! -L "$GDIR/INDEX.tsv" ]] && _dgear="$(scv_gear_match_index "$_dnorm" "$(head -n 500 "$GDIR/INDEX.tsv" 2>/dev/null)")"
+    if [[ -z "$_dgear" && -s "$_dlog" ]]; then
+      _ddl=""; [[ -s "$_ddec" ]] && _ddl="$(tail -n 200 "$_ddec" 2>/dev/null)"
+      _dpast="$(scv_gear_match_requests "$_dnorm" "$(tail -n "${SCV_GEAR_DETECT_LINES:-200}" "$_dlog" 2>/dev/null)" "${SCV_GEAR_DETECT_SCORE:-55}" "$_ddl")"
+    fi
+    _dout="$(scv_gear_notice_line "$_dgear" "$_dpast" "$SCRIPT_DIR/gear.sh")"
+    if [[ -n "$_dout" ]]; then
+      printf '%s\n' "$_dout"
+      if [[ -n "$_dpast" ]]; then printf '%s\n' "$_dnorm" > "$_dlast" 2>/dev/null || true; else rm -f "$_dlast" 2>/dev/null || true; fi
+    fi
+    printf '%s\n' "$_dline" >> "$_dlog" 2>/dev/null || true
+    exit 0 ;;
+  decline)
+    _dlast="$JDIR/.gear-noticed"; _ddec="$JDIR/.gear-declined"
+    [[ -L "$_dlast" || -L "$_ddec" ]] && { echo "✖ 기록 자리가 링크라 쓰지 않는다" >&2; exit 2; }
+    [[ -s "$_dlast" ]] || { echo "알린 요청이 없다 — 적을 것이 없음"; exit 0; }
+    head -n 1 "$_dlast" >> "$_ddec" 2>/dev/null && rm -f "$_dlast" 2>/dev/null
+    echo "적음: 이 요청은 기어로 만들지 않음 — 다시 알리지 않는다"; exit 0 ;;
   confirm)
     Q=""; A=""
     while [[ $# -gt 0 ]]; do

@@ -22,9 +22,10 @@ cp -R "$FIX/guides" "$WORK/guides"
 PROF="$WORK/profile.env"
 QUOTE=$'> **다시 쓴 요청**: 로그인 버그를 로그인 시험이 통과할 때까지 고친다.'
 
+DEFAULT_SETTINGS='{"SCV_LANG":"korean"}'   # 기본값을 변수로 둔다 — 옛 셸(3.2)은 ${2:-{…\}} 안의 닫는 괄호 앞 역슬래시를 글자로 남긴다
 mkproj() {  # <이름> [설정 JSON] → 프로젝트 경로
   local p="$WORK/$1"; mkdir -p "$p/scv/raw" "$p/scv/conversations"
-  printf '%s\n' "${2:-{\"SCV_LANG\":\"korean\"\}}" > "$p/scv/scv_settings.json"; echo "$p"
+  printf '%s\n' "${2:-$DEFAULT_SETTINGS}" > "$p/scv/scv_settings.json"; echo "$p"
 }
 hook() {  # <프로젝트> [프롬프트] → 매 턴 훅 출력
   ( cd "$1" && jq -cn --arg p "${2:-로그인 고쳐}" '{prompt:$p,session_id:"s1"}' \

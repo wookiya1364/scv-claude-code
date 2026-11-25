@@ -58,8 +58,9 @@ ago() {  # <일> [<시간>] → touch -t 에 줄 시각 — 맥 BSD date · 리�
   local s=$(( $(date +%s) - $1 * 86400 - ${2:-0} * 3600 ))
   date -r "$s" +%Y%m%d%H%M 2>/dev/null || date -d "@$s" +%Y%m%d%H%M
 }
+DEFAULT_INPUT='{"source":"compact"}'   # 기본값을 변수로 둔다 — 옛 셸(3.2)은 ${2:-{…\}} 안의 닫는 괄호 앞 역슬래시를 글자로 남긴다
 run_hook() {  # <프로젝트> [<stdin>] — stdout 은 OUT 에, 종료 코드는 RC 에 (서브셸이 아니라 전역)
-  local p="$1" in="${2:-{\"source\":\"compact\"\}}"
+  local p="$1" in="${2:-$DEFAULT_INPUT}"
   # 0.81.0+ — 파이프 대신 직접 입력: 훅이 입력을 읽기 전에 끝나면(scv/ 없음) printf 가 파이프 끊김으로 실패해
   # 결과가 흔들렸다(코어 0.80.0 릴리스 검증에서 T2 실패).
   OUT="$( cd "$p" && CLAUDE_PLUGIN_ROOT="$CORE" bash "$HOOK" 2>"$WORK/err" <<<"$in" )"; RC=$?
@@ -192,12 +193,11 @@ run_hook "$P"; O="$OUT"
 # ---------- T10 아무 것도 쓰지 않는다 (v0.49.0: scv/journal/.help-state 표식 하나만 예외) ----------
 # 되찾기 훅은 recap 을 조립할 뿐 아무 것도 쓰지 않는다. 0.49.0 부터 단 하나의 예외 — "규약은 세션당
 # 한 번" 표식(scv/journal/.help-state, ignore 대상)의 protocol 을 0 으로 되돌리는 쓰기. 그 밖의 파일은
-# 바이트 단위로 그대로여야 한다. (v0.69.0+) 압축 · 비움 직후 훅이 배경으로 띄우는 드림의 출력 폴더(scv/dreams/ —
-# protocols/dreams.md)는 훅이 쓰는 것이 아니라 드림이 쓰는 것이라 견주지 않는다.
+# 바이트 단위로 그대로여야 한다.
 P="$(mkproj t10)"; plan "$P" 20260911-x-demo "데모 계획"; conv "$P" 20260911-000010-c.md active "BODY"
-before="$( cd "$P" && find scv -type f ! -name .help-state ! -path 'scv/dreams/*' | LC_ALL=C sort | xargs cksum )"
+before="$( cd "$P" && find scv -type f ! -name .help-state | LC_ALL=C sort | xargs cksum )"
 run_hook "$P" >/dev/null; run_hook "$P" >/dev/null
-after="$( cd "$P" && find scv -type f ! -name .help-state ! -path 'scv/dreams/*' | LC_ALL=C sort | xargs cksum )"
+after="$( cd "$P" && find scv -type f ! -name .help-state | LC_ALL=C sort | xargs cksum )"
 [[ "$before" == "$after" ]] && ok "T10 두 번 돌려도 scv/ 아래 파일이 그대로다 (표식 제외)" || fail "T10 훅이 무언가 썼다"
 
 # ---------- T11 순수부 · 호스트 중립 ----------

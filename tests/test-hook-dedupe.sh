@@ -78,7 +78,7 @@ mkdir -p "$WORK/shim"; printf '#!/bin/sh\necho jq >> "%s"\nexec "%s" "$@"\n' "$W
 : > "$WORK/jq.count"
 ( cd "$WORK/s-secret" && PATH="$WORK/shim:$PATH" bash -c '
     source "$1/settings.sh"; settings_preload
-    for k in SCV_LANG SCV_PR_BASE SCV_GRAPH SCV_DIR GITLAB_TOKEN SCV_SHOW_REAL SCV_CHOICE_GATE SCV_DREAMS SCV_ALWAYS_ON PROJECT_NAME; do
+    for k in SCV_LANG SCV_PR_BASE SCV_GRAPH SCV_DIR GITLAB_TOKEN SCV_SHOW_REAL SCV_CHOICE_GATE SCV_ALWAYS_ON PROJECT_NAME; do
       v="$(settings_get "$k")"
     done' _ "$LIB" >/dev/null 2>&1 )
 c="$(grep -c . "$WORK/jq.count")"

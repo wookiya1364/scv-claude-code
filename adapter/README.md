@@ -54,7 +54,17 @@ Adapter-owned behavior:
   app's plan and wrap-up tools). The same entry sets
   `SCV_SUMMARY_ASK="mcp__ccd_turn__wrap_up=ask"` (Core 0.102.0+, Rule S): a
   wrap-up call whose `ask` field is filled is refused, so a decision goes
-  through `AskUserQuestion` before the closing text is written
+  through `AskUserQuestion` before the closing text is written. Rule W
+  (Core 0.104.0+) rides the same entry with no extra variable: the entry has
+  no matcher, so the guard sees every tool, and its default field names are
+  Claude Code's own — `wait_for_output_ms` (the desktop app's
+  `mcp__terminal__read_terminal`) and `run_in_background` (`Bash`). A wait
+  value of 60 seconds or more, or a `Bash` command not sent to the
+  background that sleeps 30 seconds or more or sleeps inside an
+  `until`/`while` loop, is refused before it runs; the project setting
+  `SCV_BACKGROUND_FIRST=off` turns it off. `SCV_WAIT_FIELD` and
+  `SCV_BACKGROUND_FIELD` stay unset on purpose — set them only if Claude
+  Code renames those fields
 
 Core-owned behavior:
 

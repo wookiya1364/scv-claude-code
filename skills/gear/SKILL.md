@@ -176,6 +176,26 @@ When the user asks to turn repeated work into a gear:
    A gear with no judgment step has no `@` and needs no text.
 4. Run the check (Step 1), then run the gear once and show the user the real output (`contracts/show-real.md`).
 
+### The repeat notice (0.104.0+)
+
+The per-turn hook keeps one redacted line per human request in the journal folder and compares each new request with
+the earlier ones and with the gear dictionary — by script, with no model call. Only when something overlaps does the
+turn carry one line that starts with `[SCV 기어 알림]`. The script only finds candidates; whether it is the same work
+is your call:
+
+- **A gear fits** — the line names the gear. If the request is that gear's work, run it (Step 2). If not, ignore the line.
+- **A similar request came before** — if this is the same work again, finish the work first, then ask through the
+  choice tool whether to make it a gear (`contracts/choices.md`; recommended option first). On yes, follow this step.
+  On no, record it so the same request is not raised again:
+
+  ```bash
+  bash "${CLAUDE_PLUGIN_ROOT}/scripts/gear.sh" decline
+  ```
+
+  A different piece of work that only shares words: do not ask, ignore the line.
+
+Never make a gear without that answer. The switch is `SCV_GEAR_DETECT=off` in `scv/scv_settings.json`.
+
 ## Never
 
 - Write a gear or a tooth into the host's own skill folder, or anywhere outside `scv/gears/`.
