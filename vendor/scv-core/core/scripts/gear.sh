@@ -707,7 +707,8 @@ case "$CMD" in
     _dnorm="${_dline#*$'\t'}"; _dnorm="${_dnorm%%$'\t'*}"
     _dgear=""; _dpast=""
     [[ -f "$GDIR/INDEX.tsv" && ! -L "$GDIR/INDEX.tsv" ]] && _dgear="$(scv_gear_match_index "$_dnorm" "$(head -n 500 "$GDIR/INDEX.tsv" 2>/dev/null)")"
-    if [[ -z "$_dgear" && -s "$_dlog" ]]; then
+    # 기어가 맞아도 지난 요청을 함께 본다(계획 gear-notice-unmask): 낱말만 겹치는 다른 기어가 새 기어 질문을 가리지 않게.
+    if [[ -s "$_dlog" ]]; then
       _ddl=""; [[ -s "$_ddec" ]] && _ddl="$(tail -n 200 "$_ddec" 2>/dev/null)"
       _dpast="$(scv_gear_match_requests "$_dnorm" "$(tail -n "${SCV_GEAR_DETECT_LINES:-200}" "$_dlog" 2>/dev/null)" "${SCV_GEAR_DETECT_SCORE:-55}" "$_ddl")"
     fi

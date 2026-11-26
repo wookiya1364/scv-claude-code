@@ -184,15 +184,23 @@ turn carry one line that starts with `[SCV 기어 알림]`. The script only find
 is your call:
 
 - **A gear fits** — the line names the gear. If the request is that gear's work, run it (Step 2). If not, ignore the line.
-- **A similar request came before** — if this is the same work again, finish the work first, then ask through the
-  choice tool whether to make it a gear (`contracts/choices.md`; recommended option first). On yes, follow this step.
-  On no, record it so the same request is not raised again:
+- **A similar request came before** — three cases, and never a silent skip:
+  - The same work again: finish the work first, then ask through the choice tool whether to make it a gear
+    (`contracts/choices.md`; recommended option first). On yes, follow this step. On no, record it so the same
+    request is not raised again:
 
-  ```bash
-  bash "${CLAUDE_PLUGIN_ROOT}/scripts/gear.sh" decline
-  ```
+    ```bash
+    bash "${CLAUDE_PLUGIN_ROOT}/scripts/gear.sh" decline
+    ```
 
-  A different piece of work that only shares words: do not ask, ignore the line.
+  - Not a request to do work (a question about progress or state): do not ask; record it with the same command so
+    it is not raised again.
+  - A different piece of work that only shares words: do not ask.
+
+  Whenever you did not ask, say why in one line at the end of the answer — the user cannot see the notice.
+- **Both in one line** — a gear fits and a similar request came before. If the request is that gear's work, run the
+  gear and stop reading. If the gear does something else (it only shares words), the rest of the line is the case
+  above: a gear that merely looks alike must not hide the question.
 
 Never make a gear without that answer. The switch is `SCV_GEAR_DETECT=off` in `scv/scv_settings.json`.
 
