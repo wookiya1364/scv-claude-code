@@ -933,20 +933,27 @@ scv_gear_match_requests() {
 }
 
 # @pure
-# 역할: 알림 한 줄을 만든다 — 맞는 기어가 있으면 그 기어를, 없고 비슷한 지난 요청이 있으면 기어로 만들지 묻게 하는 줄을. 둘 다 없으면 빈 값
+# 역할: 알림 한 줄을 만든다 — 맞는 기어가 있으면 그 기어를, 비슷한 지난 요청이 있으면 기어로 만들지 묻게 하는 말을, 둘 다 있으면 한 줄에 이어서. 둘 다 없으면 빈 값
 # 종류: 조립/gear
 # 예: $'release-ci\t릴리스 전 검사' "" "/c/gear.sh" → "[SCV 기어 알림] 이 요청과 낱말이 겹치는 기어가 있다: release-ci — 릴리스 전 검사. 같은 일이면 그 기어로 하라(bash /c/gear.sh run release-ci, 값은 bash /c/gear.sh ask release-ci). 다른 일이면 이 줄을 무시한다."
-# 예: "" $'2\t릴리스 노트 써줘' "/c/gear.sh" → "[SCV 기어 알림] 비슷한 요청이 전에도 있었다(2번): \"릴리스 노트 써줘\" — 같은 일의 반복이면 이번 일을 마친 뒤 선택 도구로 \"이것을 별도의 기어로 만들어 재사용할 수 있게 할까요?\"를 물어라(만들기: SCV gear 액션 · 만들지 않음: bash /c/gear.sh decline). 다른 일이면 묻지 말고 이 줄을 무시한다."
+# 예: "" $'2\t릴리스 노트 써줘' "/c/gear.sh" → "[SCV 기어 알림] 비슷한 요청이 전에도 있었다(2번): \"릴리스 노트 써줘\" — 같은 일의 반복이면 이번 일을 마친 뒤 선택 도구로 \"이것을 별도의 기어로 만들어 재사용할 수 있게 할까요?\"를 물어라(만들기: SCV gear 액션 · 만들지 않음: bash /c/gear.sh decline). 일을 시키는 글이 아니면(진행 · 상태를 묻는 말) 묻지 말고 bash /c/gear.sh decline 으로 적어 다시 알리지 않게 하라. 묻지 않았으면 답 끝에 그 이유를 한 줄로 알려라."
+# 예: $'release-ci\t릴리스 전 검사' $'1\t릴리스 노트 써줘' "/c/gear.sh" → "[SCV 기어 알림] 이 요청과 낱말이 겹치는 기어가 있다: release-ci — 릴리스 전 검사. 같은 일이면 그 기어로 하라(bash /c/gear.sh run release-ci, 값은 bash /c/gear.sh ask release-ci). 그 기어가 하는 일과 다르면 — 비슷한 요청이 전에도 있었다(1번): \"릴리스 노트 써줘\" — 같은 일의 반복이면 이번 일을 마친 뒤 선택 도구로 \"이것을 별도의 기어로 만들어 재사용할 수 있게 할까요?\"를 물어라(만들기: SCV gear 액션 · 만들지 않음: bash /c/gear.sh decline). 일을 시키는 글이 아니면(진행 · 상태를 묻는 말) 묻지 말고 bash /c/gear.sh decline 으로 적어 다시 알리지 않게 하라. 묻지 않았으면 답 끝에 그 이유를 한 줄로 알려라."
 # 예: "" "" "/c/gear.sh" → ""
-# <기어 "이름<탭>하는 일"> <지난 요청 "수<탭>보이는 글"> <기어 명령 경로> → 한 줄. 기어가 지난 요청보다 먼저다.
+# <기어 "이름<탭>하는 일"> <지난 요청 "수<탭>보이는 글"> <기어 명령 경로> → 한 줄. 기어가 지난 요청보다 먼저다. 둘 다 있으면 기어 뒤에 반복을 잇는다(계획 gear-notice-unmask) —
+# 낱말만 겹치는 다른 기어가 새 기어 질문을 가리지 않게. 반복의 꼬리는 세 갈래다: 같은 일이면 묻고, 일이 아니면 적어 두고, 묻지 않았으면 이유를 알린다.
 scv_gear_notice_line() {
-  local gear="${1:-}" past="${2:-}" sh="${3:-gear.sh}" T=$'\t' name does n show
+  local gear="${1:-}" past="${2:-}" sh="${3:-gear.sh}" T=$'\t' name does n show head="" tail=""
+  if [[ -n "$past" ]]; then
+    n="${past%%"$T"*}"; show="${past#*"$T"}"
+    tail="비슷한 요청이 전에도 있었다(${n}번): \"$show\" — 같은 일의 반복이면 이번 일을 마친 뒤 선택 도구로 \"이것을 별도의 기어로 만들어 재사용할 수 있게 할까요?\"를 물어라(만들기: SCV gear 액션 · 만들지 않음: bash $sh decline). 일을 시키는 글이 아니면(진행 · 상태를 묻는 말) 묻지 말고 bash $sh decline 으로 적어 다시 알리지 않게 하라. 묻지 않았으면 답 끝에 그 이유를 한 줄로 알려라."
+  fi
   if [[ -n "$gear" ]]; then
     name="${gear%%"$T"*}"; does="${gear#*"$T"}"; [[ "$gear" == *"$T"* ]] || does=""
-    printf '%s' "[SCV 기어 알림] 이 요청과 낱말이 겹치는 기어가 있다: $name${does:+ — $does}. 같은 일이면 그 기어로 하라(bash $sh run $name, 값은 bash $sh ask $name). 다른 일이면 이 줄을 무시한다."
-  elif [[ -n "$past" ]]; then
-    n="${past%%"$T"*}"; show="${past#*"$T"}"
-    printf '%s' "[SCV 기어 알림] 비슷한 요청이 전에도 있었다(${n}번): \"$show\" — 같은 일의 반복이면 이번 일을 마친 뒤 선택 도구로 \"이것을 별도의 기어로 만들어 재사용할 수 있게 할까요?\"를 물어라(만들기: SCV gear 액션 · 만들지 않음: bash $sh decline). 다른 일이면 묻지 말고 이 줄을 무시한다."
+    head="이 요청과 낱말이 겹치는 기어가 있다: $name${does:+ — $does}. 같은 일이면 그 기어로 하라(bash $sh run $name, 값은 bash $sh ask $name)."
+    if [[ -n "$tail" ]]; then printf '%s' "[SCV 기어 알림] $head 그 기어가 하는 일과 다르면 — $tail"
+    else printf '%s' "[SCV 기어 알림] $head 다른 일이면 이 줄을 무시한다."; fi
+  elif [[ -n "$tail" ]]; then
+    printf '%s' "[SCV 기어 알림] $tail"
   fi
 }
 
