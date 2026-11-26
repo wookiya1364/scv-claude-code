@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # scv-test: serial
-# test-gear-detect.sh — 반복 알아채기(계획 20261124-wookiya1364-gears-detect · TESTS.md T1 ~ T11 · T14).
+# test-gear-detect.sh — 반복 알아채기(계획 20261124-wookiya1364-gears-detect · TESTS.md T1 ~ T11 · T14,
+# 계획 20261126-wookiya1364-gear-notice-unmask · T15 ~ T17: 기어가 맞아도 반복을 함께 알림 · 적어 두기 · 반복 꼬리의 세 갈래).
 #
 # 비슷한 요청이 2번째로 오면 알림 한 줄이 뜨는지, 맞는 기어가 있으면 그 기어를 알리는지, 겹치는 것이 없는 턴에는 한 글자도 더
 # 실리지 않는지 본다. 요청 기록은 비밀 가림을 거쳐 기록 폴더에만 쌓여야 하고, 보는 범위에는 한도가 있어야 한다.
@@ -57,6 +58,11 @@ P="$(mkproj t2)"
 turn "$P" "릴리스 노트 써줘 이번 판 것으로" >/dev/null; c="$(turn "$P" "릴리스 노트를 써 줘 이번 판 것으로")"
 [[ "$(marks "$c")" == 1 ]] && ok "T2 조사만 다른 요청에 알림 1" || bad "T2 알림=$(marks "$c")"
 
+# ---------- T17 — 반복만 있으면 꼬리에 세 갈래가 있다: 묻기 · 일이 아니면 적기 · 묻지 않은 이유 ----------
+if grep -q '^\[SCV 기어 알림\] 비슷한 요청이 전에도 있었다' <<<"$b" && grep -qF '선택 도구로' <<<"$b" && grep -qF '일을 시키는 글이 아니면' <<<"$b" && grep -qF 'decline 으로 적어' <<<"$b" && grep -qF '묻지 않았으면 답 끝에 그 이유를 한 줄로' <<<"$b"; then
+  ok "T17 반복 알림의 꼬리: 묻기 · 일이 아니면 적기 · 묻지 않은 이유"
+else bad "T17 $(grep '^\[SCV 기어 알림\]' <<<"$b" | cut -c1-200)"; fi
+
 # ---------- T3 — 겹치는 것이 없는 턴에는 한 글자도 더 실리지 않는다 ----------
 P="$(mkproj t3)"; Q="$(mkproj t3off "$OFF")"
 addgear "$P" make-list "목록 만들기 정리" "목록을 만든다"; addgear "$P" send-mail "메일 보내기 발송" "메일을 보낸다"
@@ -77,11 +83,20 @@ if cmp -s "$WORK/t4.on" "$WORK/t4.off" && [[ "$(log_lines "$Q")" == 0 && "$(log_
 else bad "T4 같음=$(cmp -s "$WORK/t4.on" "$WORK/t4.off" && echo y || echo n) 켬줄=$(log_lines "$P") 끔줄=$(log_lines "$Q")"; fi
 
 # ---------- T5 — 겹치는 기어가 있으면 그 기어를 알린다(지난 요청보다 먼저) ----------
+# 기어만 맞는 첫 요청: 전과 같은 글(만들기 권유 없음). 같은 요청의 두 번째: 한 줄에 기어 · 반복이 함께(계획 gear-notice-unmask T1 · T2).
 P="$(mkproj t5)"; addgear "$P" make-list "목록 만들기 정리" "목록을 만든다"
-turn "$P" "할 일 목록 만들기 부탁해 정리해서" >/dev/null; d="$(turn "$P" "할 일 목록 만들기 부탁해 정리해서")"
-if [[ "$(marks "$d")" == 1 ]] && grep -qF 'make-list' <<<"$d" && grep -qF 'run make-list' <<<"$d" && grep -qF '목록을 만든다' <<<"$d" && ! grep -qF '기어로 만들어 재사용' <<<"$d"; then
-  ok "T5 맞는 기어를 한 줄로 알림(이름 · 하는 일 · 돌리는 명령), 만들기 권유 없음"
-else bad "T5 알림=$(marks "$d")"; fi
+d0="$(turn "$P" "할 일 목록 만들기 부탁해 정리해서")"; d="$(turn "$P" "할 일 목록 만들기 부탁해 정리해서")"
+if [[ "$(marks "$d0")" == 1 ]] && grep -qF 'run make-list' <<<"$d0" && grep -qF '목록을 만든다' <<<"$d0" && grep -q '^\[SCV 기어 알림\].*다른 일이면 이 줄을 무시한다\.$' <<<"$d0" && ! grep -qF '기어로 만들어 재사용' <<<"$d0"; then
+  ok "T5 맞는 기어를 한 줄로 알림(이름 · 하는 일 · 돌리는 명령), 반복이 없으면 만들기 권유 없음"
+else bad "T5 알림=$(marks "$d0") $(grep '^\[SCV 기어 알림\]' <<<"$d0" | cut -c1-120)"; fi
+if [[ "$(marks "$d")" == 1 ]] && grep -q '^\[SCV 기어 알림\].*run make-list.*그 기어가 하는 일과 다르면.*할 일 목록 만들기 부탁해 정리해서.*기어로 만들어 재사용' <<<"$d"; then
+  ok "T15 기어가 맞아도 비슷한 요청이 전에 있었으면 한 줄에 함께 알림(기어 먼저 · 반복 뒤)"
+else bad "T15 알림=$(marks "$d") $(grep '^\[SCV 기어 알림\]' <<<"$d" | cut -c1-160)"; fi
+# 함께 실린 반복도 "만들지 않음"으로 적을 수 있고, 적은 뒤에는 기어만 알린다(T4)
+dd="$( cd "$P" && bash "$G" decline 2>&1 )"; d2="$(turn "$P" "할 일 목록 만들기 부탁해 정리해서")"
+if grep -qF '적음' <<<"$dd" && [[ "$(marks "$d2")" == 1 ]] && grep -qF 'run make-list' <<<"$d2" && ! grep -qF '기어로 만들어 재사용' <<<"$d2"; then
+  ok "T16 기어와 함께 실린 반복을 적어 두면 다음부터는 기어만 알림"
+else bad "T16 적음=[$dd] 알림=$(marks "$d2")"; fi
 
 # ---------- T6 — 후보가 여럿이어도 알림은 한 줄, 가장 많이 겹치는 기어 ----------
 P="$(mkproj t6)"
