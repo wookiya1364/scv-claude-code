@@ -53,10 +53,9 @@ SCV 와 설치된 SCV 모드를 모두 올리고, 앞뒤 버전을 알려 줍니
 "SCV 가 최신이야?"처럼 묻기만 하면 확인만 하고 아무것도 바꾸지 않습니다.
 (터미널 세션에서는 기본 명령 두 개로도 됩니다: `/plugin marketplace update scv-claude-code` 다음 `/reload-plugins`.)
 
-SCV 모드(예: 데스크톱 앱의 SCV 칸 `scv-dashboard`): `/scv:mods` 가 업데이트하고 목록을 보여 주고,
+SCV 모드는 SCV 에 덧붙이는 작은 플러그인입니다 — 지금은 데스크톱 앱의 SCV 창
+[`scv-dashboard`](#대시보드) 하나가 있습니다. `/scv:mods` 가 업데이트하고 목록을 보여 주고,
 `/scv:mods-install` · `/scv:mods-remove` 는 하나를 골라 설치 · 삭제합니다. 인자는 없습니다.
-`scv-hello` 는 `scv-dashboard` 로 이름이 바뀌었습니다: `/scv:mods-install` 로 `scv-dashboard` 를 설치하고,
-목록에 `scv-hello` 가 남아 있으면 `/scv:mods-remove` 로 지웁니다.
 
 ## 쓰는 법
 
@@ -87,7 +86,16 @@ SCV는 매 턴 이런 일도 합니다:
 - **실제로 돌려 보여 줍니다** — 결과물이 바뀌는 턴이면 처음 돌아가는 순간 가장
   작은 것을 실제로 실행해 그 결과(명령 출력 · 화면 · 함수 결과)를 그대로 보이고,
   계속할지 고칠지를 선택 창으로 묻습니다. 바뀌는 것이 없으면 "결과물 변화 없음"이라고
-  적고 묻지 않습니다 (`SCV_SHOW_REAL`).
+  적고 묻지 않습니다 (`SCV_SHOW_REAL`);
+- **확인한 것과 못 한 것을 가릅니다** — 도구를 쓴 턴의 끝 보고에 확인한 것 · 확인 못 한
+  것 · 대신 정한 것을 따로 적습니다 (`SCV_FINISH_REPORT`);
+- **물을 자리를 고를 수 있습니다** — 처음(요구 · 계획 개요)과 끝(검증), 되돌릴 수 없는
+  일 앞에서만 묻게 하면, 나머지는 추천대로 정하고 끝 보고에 남깁니다
+  (`/scv:ask-mode`, `SCV_ASK_MODE`);
+- **반복을 알아챕니다** — 비슷한 요청이 되풀이되면 기어(다시 쓰는 작업 단위)로 만들지
+  묻고, 맞는 기어가 이미 있으면 알려 줍니다 (`/scv:gear`, `SCV_GEAR_DETECT`);
+- **정한 말로 말합니다** — 낱말 사전에 적어 둔 피할 말을, 그 활용까지 정한 말로 바꿔
+  씁니다 (`/scv:words`, `SCV_WORDS`).
 
 대화 뒤에서는 루프 하나가 모든 것을 돌립니다:
 
@@ -111,6 +119,49 @@ flowchart LR
 ```
 
 <img src="assets/the-loop.gif" width="720" alt="SCV 루프 애니메이션" />
+
+## 대시보드
+
+Claude 데스크톱 앱에서는 채팅 옆에 **SCV 창**이 열립니다. 계획이 어디까지 왔는지,
+Claude 가 지금 무엇을 하는지, 무엇이 나를 기다리는지를 대화를 읽지 않고 봅니다.
+창은 별도 모드 `scv-dashboard` 입니다.
+
+<p align="center"><img src="docs/images/dashboard.png" width="420" alt="실제 Claude 데스크톱 앱의 SCV 창: 폴더와 브랜치, 컨텍스트와 사용 한도, 자동 비우기, 언어, 묻기 방식, 기어, 계획의 단계 흐름, 낱말 사전" /></p>
+
+**설치** — 인자 없이 치고, 목록에서 `scv-dashboard` 를 고릅니다:
+
+```bash
+/scv:mods-install
+```
+
+그다음 새 세션을 열거나 `/reload-plugins` 를 칩니다. 셸에서는
+`claude plugin install scv-dashboard --marketplace wookiya1364/scv-mods`,
+데스크톱 앱에서는 입력창 옆 **+** → Plugins → Add marketplace 에
+`wookiya1364/scv-mods` 를 넣어도 됩니다. 업데이트는 `/scv:update` 가 SCV 와 함께 올립니다.
+
+**쓰는 법** — 창은 세션을 열면 스스로 열립니다. 닫았으면 `/scv-dashboard` 로 다시 엽니다.
+
+| 보고 싶은 것 · 하고 싶은 일 | 창에서 |
+|---|---|
+| 어디까지 왔나 | 맨 위 한 줄 요약 · 단계 흐름 |
+| 다음에 할 일 | 버튼을 누르면 명령이 입력창에 |
+| 단계가 한 일 | 단계를 누름 — 그림 · 영상 증거 |
+| Claude 가 지금 하는 일 | 도구 · 걸린 시간 · 뒤에서 도는 일 |
+| 나를 기다리는 것 | 답 · 허락 · 실패한 시험 카드와 알림 |
+| 남은 여유 | 컨텍스트 · 사용 한도 |
+| 기어 돌리기 | 기어 줄의 [실행] — 모델을 거치지 않음 |
+| 묻기 방식 바꾸기 | 버튼 하나 |
+| 긴 대화 줄이기 | 기준(%)을 넘으면 자동으로 비움 |
+| 낱말 사전 | 넣기 · 고치기 · 지우기 |
+| 언어 | 한국어 · English · 日本語 · 직접 적기 |
+| 브랜치 바꾸기 | 브랜치 이름을 누름 |
+| 다른 컴퓨터에서 보기 | `/scv-mirror <주소>` |
+
+- 창은 데스크톱 앱에서 연 세션에만 그려집니다. 터미널과 원격 화면(claude.ai · 휴대폰)에는
+  창이 없습니다 — 다른 컴퓨터에서는 그 컴퓨터의 앱에서 `/scv-mirror` 로 봅니다.
+- 대화를 자동으로 비운 뒤에는 직전 대화와 할 일 목록을 다시 보여 줍니다.
+- 기능 전체 · 거울 쓰는 법 · 판별 바뀐 내용:
+  [scv-mods](https://github.com/wookiya1364/scv-mods#readme).
 
 ## 얻는 것
 
@@ -139,6 +190,12 @@ ID)은 git 무시되는 별도 파일로 갑니다. `.env`는 읽지도 쓰지�
 | `SCV_MODEL_PROMPTING` | `on` | 모델별 프롬프팅: 모델의 가이드를 읽고 매 요청을 비교 · 등록 |
 | `SCV_RESUME_RECAP` | `on` | `/clear` · 압축 · 재개 뒤 진행 상황을 다시 실음 |
 | `SCV_SHOW_REAL` | `on` | 결과물이 바뀌면 가장 작은 것을 실제로 돌려 결과를 보임; `off`면 끔 |
+| `SCV_FINISH_REPORT` | `on` | 끝 보고에 확인한 것 · 못 한 것 · 대신 정한 것을 적음 |
+| `SCV_ASK_MODE` | `all` | 묻는 자리: `all` = 매번, `ends` = 처음 · 끝 · 되돌릴 수 없는 일만 |
+| `SCV_GEAR_DETECT` | `on` | 되풀이되는 요청을 알아채 기어를 권함 |
+| `SCV_WORDS` | `on` | 낱말 사전의 피할 말을 정한 말로 바꿔 씀 |
+| `SCV_CATALOG_SOURCE` | `on` | 코드 주석을 순수 함수 사전으로 옮기고 새 주석을 막음 |
+| `SCV_BACKGROUND_FIRST` | `on` | 오래 도는 일은 뒤에서 돌리게 함 |
 | `SCV_DELEGATE_EFFORT` | `off` | 깊은 질문을 배경 조사 담당에게 넘김; 보고서는 `scv/raw/`에 |
 | `SCV_LANG` | 자동 | 출력 언어: `english` · `korean` · `japanese` |
 | `NOTIFIER_PROVIDER` | 꺼짐 | 팀 보고 채널: `slack` 또는 `discord` |

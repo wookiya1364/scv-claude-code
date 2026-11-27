@@ -53,10 +53,9 @@ session for the update to take effect. After an update, each project refreshes i
 first action — and says so. Asking "is SCV current?" only checks; it changes nothing.
 (In a terminal session the two built-in commands also work: `/plugin marketplace update scv-claude-code`, then `/reload-plugins`.)
 
-SCV mods (e.g. `scv-dashboard`, the SCV pane in the desktop app): `/scv:mods` updates them and lists them,
+SCV mods are small plugins that add to SCV — today there is one, [`scv-dashboard`](#dashboard),
+the SCV pane in the desktop app. `/scv:mods` updates them and lists them,
 `/scv:mods-install` and `/scv:mods-remove` let you pick one. No arguments.
-`scv-hello` was renamed `scv-dashboard`: install `scv-dashboard` with `/scv:mods-install`; if `scv-hello`
-is still listed, remove it with `/scv:mods-remove`.
 
 ## How you use it
 
@@ -90,7 +89,20 @@ Every turn, SCV also:
   moment it runs SCV runs the smallest real thing, shows its actual output
   (command output, screen, function result), and asks continue / fix with the
   choice tool; when nothing changes it writes "no change to the deliverable" and
-  asks nothing (`SCV_SHOW_REAL`).
+  asks nothing (`SCV_SHOW_REAL`);
+- **separates what it checked from what it did not** — the closing report of a
+  turn that used tools lists what was verified, what was not, and what SCV
+  decided for you (`SCV_FINISH_REPORT`);
+- **asks only where you want it to** — set it to ask at the start (requirements,
+  plan outline), at the end (verification) and before anything irreversible; it
+  takes its own recommendation for the rest and lists it in the closing report
+  (`/scv:ask-mode`, `SCV_ASK_MODE`);
+- **notices repetition** — when a similar request comes back, it asks whether
+  to make it a gear (a reusable work unit), and points to a gear that already
+  fits (`/scv:gear`, `SCV_GEAR_DETECT`);
+- **uses your words** — the words your word dictionary says to avoid are
+  replaced with the ones you chose, inflections included (`/scv:words`,
+  `SCV_WORDS`).
 
 Behind the conversation, one loop runs everything:
 
@@ -114,6 +126,53 @@ flowchart LR
 ```
 
 <img src="assets/the-loop.gif" width="720" alt="The SCV loop, animated" />
+
+## Dashboard
+
+In the Claude desktop app an **SCV pane** opens beside the chat. It shows where
+the plan stands, what Claude is doing now, and what waits on you — without
+reading the conversation. The pane is a separate mod, `scv-dashboard`.
+
+<p align="center"><img src="docs/images/dashboard.png" width="420" alt="The SCV pane in the Claude desktop app: folder and branch, context and usage limits, auto-clear, language, ask mode, gears, the plan's step flow, the word dictionary" /></p>
+
+<p align="center"><sub>A real session, shown in Korean — the pane also speaks English and Japanese.</sub></p>
+
+**Install** — type it with no argument and pick `scv-dashboard` from the list:
+
+```bash
+/scv:mods-install
+```
+
+Then open a new session or run `/reload-plugins`. From a shell,
+`claude plugin install scv-dashboard --marketplace wookiya1364/scv-mods` does the same;
+in the desktop app, click **+** next to the prompt box → Plugins → Add marketplace
+with `wookiya1364/scv-mods`. `/scv:update` updates it together with SCV.
+
+**Use** — the pane opens by itself when a session starts. If you closed it,
+`/scv-dashboard` opens it again.
+
+| To see · to do | In the pane |
+|---|---|
+| Where the work stands | one-line summary on top · the step flow |
+| The next thing to do | a button puts its command in the prompt box |
+| What a step did | press the step — picture · video evidence |
+| What Claude is doing now | tool · elapsed time · background work |
+| What waits on you | cards and alerts: answer · permission · failed test |
+| Room left | context · usage limits |
+| Run a gear | [Run] on the gear's line — no model call |
+| Switch the ask mode | one button |
+| Shorten a long conversation | clears by itself past a threshold (%) |
+| Word dictionary | add · edit · delete |
+| Language | 한국어 · English · 日本語 · type another |
+| Switch branch | press the branch name |
+| See it on another computer | `/scv-mirror <address>` |
+
+- The pane is drawn only in a session opened in the desktop app. The terminal and
+  remote views (claude.ai, the phone) have no pane — on another computer, use
+  `/scv-mirror` in that computer's own app.
+- After an automatic clear it shows the last exchanges and the task list again.
+- Every feature, how to mirror, and what each version changed:
+  [scv-mods](https://github.com/wookiya1364/scv-mods#readme).
 
 ## What you get
 
@@ -143,6 +202,12 @@ is never read or written.
 | `SCV_MODEL_PROMPTING` | `on` | per-model guide; compare and register every request |
 | `SCV_RESUME_RECAP` | `on` | re-inject progress after `/clear`, compaction, or resume |
 | `SCV_SHOW_REAL` | `on` | show a real run when the deliverable changes; `off` silences |
+| `SCV_FINISH_REPORT` | `on` | closing report lists verified · not verified · decided for you |
+| `SCV_ASK_MODE` | `all` | where SCV asks: `all` = every decision, `ends` = start · end · irreversible acts |
+| `SCV_GEAR_DETECT` | `on` | notice repeated requests and suggest a gear |
+| `SCV_WORDS` | `on` | replace the word dictionary's avoided words |
+| `SCV_CATALOG_SOURCE` | `on` | move code comments into the pure-function catalog; ban new ones |
+| `SCV_BACKGROUND_FIRST` | `on` | long-running work goes to the background |
 | `SCV_DELEGATE_EFFORT` | `off` | deep questions → background investigator; report in `scv/raw/` |
 | `SCV_LANG` | auto | output language: `english` · `korean` · `japanese` |
 | `NOTIFIER_PROVIDER` | off | `slack` or `discord` for team reports |
