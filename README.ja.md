@@ -196,7 +196,7 @@ Claude デスクトップアプリでは、チャットの横に **SCV ペイン
 | `SCV_RESUME_RECAP` | `on` | `/clear` · 圧縮 · 再開のあとに進捗を載せ直す |
 | `SCV_SHOW_REAL` | `on` | 成果物が変わると最小のものを実際に動かして結果を見せる; `off` で止める |
 | `SCV_FINISH_REPORT` | `on` | 最後の報告に確認したこと · できなかったこと · 代わりに決めたことを書く |
-| `SCV_ASK_MODE` | `all` | 尋ねる場所: `all` = 毎回、`ends` = 最初 · 最後 · 取り消せない操作だけ |
+| `SCV_ASK_MODE` | `all` | `all` 毎回尋ねる · `ends` 最初と最後だけ尋ねる |
 | `SCV_GEAR_DETECT` | `on` | 繰り返される依頼に気づいてギアを勧める |
 | `SCV_WORDS` | `on` | 用語辞書の避けたい語を決めた語に言い換える |
 | `SCV_CATALOG_SOURCE` | `on` | コードのコメントを純粋関数辞書へ移し、新しいコメントを止める |

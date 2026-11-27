@@ -191,7 +191,7 @@ ID)은 git 무시되는 별도 파일로 갑니다. `.env`는 읽지도 쓰지�
 | `SCV_RESUME_RECAP` | `on` | `/clear` · 압축 · 재개 뒤 진행 상황을 다시 실음 |
 | `SCV_SHOW_REAL` | `on` | 결과물이 바뀌면 가장 작은 것을 실제로 돌려 결과를 보임; `off`면 끔 |
 | `SCV_FINISH_REPORT` | `on` | 끝 보고에 확인한 것 · 못 한 것 · 대신 정한 것을 적음 |
-| `SCV_ASK_MODE` | `all` | 묻는 자리: `all` = 매번, `ends` = 처음 · 끝 · 되돌릴 수 없는 일만 |
+| `SCV_ASK_MODE` | `all` | `all` 매번 묻기 · `ends` 처음과 끝에만 묻기 |
 | `SCV_GEAR_DETECT` | `on` | 되풀이되는 요청을 알아채 기어를 권함 |
 | `SCV_WORDS` | `on` | 낱말 사전의 피할 말을 정한 말로 바꿔 씀 |
 | `SCV_CATALOG_SOURCE` | `on` | 코드 주석을 순수 함수 사전으로 옮기고 새 주석을 막음 |

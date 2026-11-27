@@ -202,11 +202,11 @@ is never read or written.
 | `SCV_MODEL_PROMPTING` | `on` | per-model guide; compare and register every request |
 | `SCV_RESUME_RECAP` | `on` | re-inject progress after `/clear`, compaction, or resume |
 | `SCV_SHOW_REAL` | `on` | show a real run when the deliverable changes; `off` silences |
-| `SCV_FINISH_REPORT` | `on` | closing report lists verified · not verified · decided for you |
-| `SCV_ASK_MODE` | `all` | where SCV asks: `all` = every decision, `ends` = start · end · irreversible acts |
+| `SCV_FINISH_REPORT` | `on` | closing report: verified · not verified · decided for you |
+| `SCV_ASK_MODE` | `all` | `all` asks every time; `ends` only at the start and the end |
 | `SCV_GEAR_DETECT` | `on` | notice repeated requests and suggest a gear |
 | `SCV_WORDS` | `on` | replace the word dictionary's avoided words |
-| `SCV_CATALOG_SOURCE` | `on` | move code comments into the pure-function catalog; ban new ones |
+| `SCV_CATALOG_SOURCE` | `on` | code comments move to the function catalog; no new ones |
 | `SCV_BACKGROUND_FIRST` | `on` | long-running work goes to the background |
 | `SCV_DELEGATE_EFFORT` | `off` | deep questions → background investigator; report in `scv/raw/` |
 | `SCV_LANG` | auto | output language: `english` · `korean` · `japanese` |
