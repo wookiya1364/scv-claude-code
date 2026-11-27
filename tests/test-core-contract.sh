@@ -40,9 +40,9 @@ grep -qx 'SCV_ROOT_ENV=CLAUDE_PLUGIN_ROOT' adapter/claude-code.env ||
 # choice-answer signal (PostToolUse on the choice tool runs the core template on-choice-answer.sh).
 grep -qx 'SCV_SESSION_ENV=CLAUDE_CODE_SESSION_ID' adapter/claude-code.env ||
   fail "Claude session id variable (SCV_SESSION_ENV) is missing"
-grep -qx 'SCV_AUTO_PROMPT_TAGS=task-notification teammate-message side-sessions-event ci-monitor-event' adapter/claude-code.env ||
+grep -qx 'SCV_AUTO_PROMPT_TAGS=task-notification teammate-message side-sessions-event ci-monitor-event scv-dashboard' adapter/claude-code.env ||
   fail "automatic input tags must include teammate-message, side-sessions-event and ci-monitor-event"
-grep -qx 'SCV_AUTO_PROMPT_TAGS=task-notification teammate-message side-sessions-event ci-monitor-event' host-profile.env ||
+grep -qx 'SCV_AUTO_PROMPT_TAGS=task-notification teammate-message side-sessions-event ci-monitor-event scv-dashboard' host-profile.env ||
   fail "materialized host-profile.env must carry the same automatic input tags"
 # The desktop app opens a turn with a bare <side-sessions-event> or <ci-monitor-event> block. Read as a human turn, the
 # stop hook blocked it (help first · register · finish report) and the model wrote its answer a second time (2026-11-06).
@@ -54,6 +54,12 @@ auto_kind() { bash -c 'source vendor/scv-core/core/scripts/lib/model-prompting.s
   fail "a bare ci-monitor-event turn must be automatic"
 [[ "$(auto_kind 'fix it <side-sessions-event>x</side-sessions-event>')" == human ]] ||
   fail "a human line next to an app event must stay a human turn"
+# The SCV dashboard mod sends one tagged line right after its clear, so the model shows the task list again. Read as a
+# human turn it would ask for help first and a registered request, and the list would come up seconds later (2026-11-27).
+[[ "$(auto_kind $'<scv-dashboard>\n비우기 전 할 일 목록을 다시 띄우세요\n</scv-dashboard>')" == auto ]] ||
+  fail "a bare scv-dashboard turn must be automatic"
+[[ "$(auto_kind $'고쳐 줘 <scv-dashboard>x</scv-dashboard>')" == human ]] ||
+  fail "a human line next to a dashboard block must stay a human turn"
 grep -qx 'SCV_AUTO_PROMPT_PREFIX=Another Claude session sent a message:' adapter/claude-code.env ||
   fail "peer message prefix (SCV_AUTO_PROMPT_PREFIX) is missing"
 grep -qx 'SCV_AUTO_PROMPT_SUFFIX=This came from another Claude session' adapter/claude-code.env ||
