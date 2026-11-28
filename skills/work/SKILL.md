@@ -431,12 +431,29 @@ makes the plan look stalled with no reason. Decide first, then record with `plan
   Put it after the step it depends on. A finished step (`[x]`) is never rewritten: when its
   requirement changed, `--redo <N>` adds a "다시 하기" step at the end. Add the matching TESTS.md
   scenario in the same edit.
-- **Different goal** — make a new plan B (`/scv:promote`), then pause this plan A and link B back:
-  `plan-link.sh pause <A> --by <B> --resume-at <N> --why "<one line>"`. `<N>` is the step A
-  resumes from. The script first checks B's Goals against A's Non-Goals and A's unfinished steps;
-  on a conflict or overlap it changes nothing and exits 3 — ask the user which side changes
-  (`contracts/choices.md`), then re-run with `--accept-conflict`. Then implement B.
-- Which of the two it was goes into `--why`, so the user can correct a wrong call later.
+- **Different goal** — make a new plan B (`/scv:promote`), then go one of three ways by the files
+  the two jobs change:
+  - **The two may change the same file, or B's files are not known** — pause this plan A and link B back:
+    `plan-link.sh pause <A> --by <B> --resume-at <N> --why "<one line>"`. `<N>` is the step A
+    resumes from. The script first checks B's Goals against A's Non-Goals and A's unfinished steps;
+    on a conflict or overlap it changes nothing and exits 3 — ask the user which side changes
+    (`contracts/choices.md`), then re-run with `--accept-conflict`. Then implement B.
+  - **No file in common, and this host can run an agent in the background** — split, so A does not stop:
+    `plan-link.sh split <A> --with <B> --at <N> --files <a file B will change> [--files …] --why "<one line>"`
+    (`--own <file>` names what A's remaining steps change). The script checks the overlap itself — exit 3
+    means nothing was made: pause instead. Otherwise it runs A's check command and keeps the result in A's
+    folder, then makes a separate folder (a git worktree beside this one) holding the work as it is now,
+    uncommitted changes included; this folder is left as it was. Continue A there with a background agent
+    that records its progress in this folder's plan (`PROMOTE_DIR` set to this `scv/promote`), and do B
+    here. When the script says the check prints no `name: value` line, tell the user: only pass or fail
+    will be compared.
+  - **Anything else** (no background agent on this host, not a git repository) — pause, as in the first way.
+- **Both finished after a split** — `plan-link.sh join <A>` brings the separate folder's work into this
+  one without a commit, runs A's check again and compares it with the kept result. Exit 3: both sides
+  changed the same lines and nothing was changed — show the files and ask (`contracts/choices.md`). A
+  changed result adds a "다시 하기" step to A: do it before A is archived. The script never removes the
+  separate folder or its branch — ask before removing them.
+- Which way it was goes into `--why`, so the user can correct a wrong call later.
 
 Every call adds one entry to PLAN.md's `## 변경 이력` (headline first, details as sub-bullets).
 

@@ -9,12 +9,20 @@
 #   plan-link.sh pause <A> --by <B> --resume-at <N> --why "<이유>" [--accept-conflict]
 #   plan-link.sh check-after <B> --changed <파일> [--changed <파일> …]
 #   plan-link.sh resume <B> [--changed <파일> …] [--accept-overlap]
+#   plan-link.sh split <A> --with <B> --at <N> --files <B 가 고칠 파일> [--files …] [--own <A 가 고칠 파일> …] --why "<이유>"
+#   plan-link.sh join <A>
 #   plan-link.sh progress <A> --step <N> [--state doing|done|blocked] --note "<한 일>" [--accept-conflict]
 #                                                                  (0.87.4+ 상태 기본은 doing — 단계가 끝났을 때만 done)
 #                                                                  (0.87.0+ 계획 안 일의 진행 한 줄 — 대시보드가 이 줄로 단계를 센다)
 #   append · progress 는 0.87.0+ 부터 적으려는 글이 계획의 Non-Goals 와 겹치면 종료 코드 3 (사용자에게 물은 뒤 --accept-conflict)
 #   겹침 = 그 Non-Goals 항목 낱말의 절반 이상이 적으려는 글에 있음(0.88.2+ — 낱말 하나만 같은 글은 통과)
 #   plan-link.sh exempt --kind release|sync --why "<이유>"         (0.87.0+ 계획 없이 해도 되는 정한 예외)
+#   split · join 은 두 일을 가르고 합친다: 두 일이 같은 파일을 고치지 않을 때만, 하던 계획 A 를 따로 만든 폴더(git worktree)로
+#   보내 이어 가게 하고 새 계획 B 는 원래 폴더에서 한다. 가를 때 A 의 확인 명령(TESTS.md 의 실행 블록 · --verify)을 돌려
+#   결과를 계획 폴더에 적어 두고, 합친 뒤 다시 돌려 "이름: 값" 줄끼리 비교한다. 겹치거나 고칠 파일을 모르면 종료 코드 3
+#   (아무것도 만들지 않음 — 지금처럼 pause). 합칠 때 같은 줄 충돌이면 종료 코드 3(아무것도 바꾸지 않음).
+#   가르기는 원래 폴더의 작업 파일 · 색인 · 가지를 건드리지 않고, 합치기는 커밋을 만들지 않는다(달라진 파일만 작업 파일에 옮긴다).
+#   따로 만든 폴더와 가지는 지우지 않는다. SCV_NOW 로 시각을 고정할 수 있다(시험).
 #
 # 턴 끝 계획 기록 검사(turn-check.sh)가 켜진 턴이면 기록 줄마다 "요청: <원문 앞부분> (요청 <번호>)" 가 붙는다.
 # 기록을 실제로 남긴 명령은 그 턴의 영수증도 스스로 남긴다(0.92.2+) — 도구 앞 훅은 명령 글의 첫 줄이 정해진 꼴일 때만
@@ -33,6 +41,8 @@ source "$SCRIPT_DIR/lib/plan-link.sh"
 source "$SCRIPT_DIR/lib/scvroot.sh"
 # shellcheck source=lib/turn-check.sh
 source "$SCRIPT_DIR/lib/turn-check.sh"
+# 가르기 · 합치기만 쓰는 lib/attachment-scope.sh 는 그 갈래에서 읽는다 — 매번 도는 갈래의 시작 시간을 늘리지 않는다.
+# 버전 비교(scv_ver_lt)는 lib/scvroot.sh 가 읽는 lib/template-digest.sh 의 것이다.
 
 # @effect utf8_locale
 # 이유: 지역 설정을 읽고 바꾼다 — 낱말을 바이트가 아니라 글자로 나누려고(조사 떼기 · 2자 미만 빼기). UTF-8 이 아니면 쓸 수 있는 것을 고른다
@@ -51,7 +61,7 @@ utf8_locale
 # @effect usage
 # 이유: 사용법을 표준 오류에 쓰고 끝낸다
 usage() {
-  sed -n '6,11p' "${BASH_SOURCE[0]}" | sed 's/^#   //' >&2
+  sed -n '6,13p' "${BASH_SOURCE[0]}" | sed 's/^#   //' >&2
   exit 2
 }
 
@@ -105,12 +115,45 @@ write_plan() {
   printf '%s' "$after" > "$file"
 }
 
+# @effect git_can_split
+# 이유: 깃의 버전을 읽는다 — 합침을 객체로만 계산하는 명령(merge-tree --write-tree)은 2.38 부터 있다
+git_can_split() {
+  local v; v="$(git version 2>/dev/null | awk '{print $3}')"
+  [[ -n "$v" ]] && ! scv_ver_lt "$v" "2.38.0"
+}
+
+# @effect snapshot_commit
+# 이유: 깃 폴더의 지금 상태(커밋하지 않은 것 · 새 파일 포함, 무시 목록은 지킴)를 임시 색인으로 나무로 만들어 커밋 객체 하나를 쓴다 — 작업 파일 · 원래 색인 · 가지는 건드리지 않는다. 넷째 값으로 자리를 주면 그 임시 색인을 거기에 남긴다
+snapshot_commit() {
+  local root="$1" parent="$2" msg="$3" keep="${4:-}" idx gitdir tree
+  gitdir="$(git -C "$root" rev-parse --absolute-git-dir 2>/dev/null)" || return 1
+  idx="$(mktemp)"
+  if [[ -f "$gitdir/index" ]]; then cp "$gitdir/index" "$idx"; else : > "$idx"; fi
+  [[ -s "$idx" ]] || rm -f "$idx"
+  GIT_INDEX_FILE="$idx" git -C "$root" add -A >/dev/null 2>&1 || { rm -f "$idx"; return 1; }
+  tree="$(GIT_INDEX_FILE="$idx" git -C "$root" write-tree 2>/dev/null)" || { rm -f "$idx"; return 1; }
+  if [[ -n "$keep" ]]; then mv -f "$idx" "$keep"; else rm -f "$idx"; fi
+  GIT_AUTHOR_NAME=scv GIT_AUTHOR_EMAIL=scv@localhost GIT_COMMITTER_NAME=scv GIT_COMMITTER_EMAIL=scv@localhost \
+    git -C "$root" commit-tree "$tree" -p "$parent" -m "$msg"
+}
+
+# @effect run_verify
+# 이유: 계획의 확인 명령을 저장소 폴더에서 돌려, 끝 코드를 적은 첫 줄과 출력을 결과 파일에 쓴다
+run_verify() {
+  local root="$1" cmd="$2" out="$3" now="$4" tmp rc=0
+  tmp="$(mktemp)"
+  ( cd "$root" && bash -c "$cmd" ) > "$tmp" 2>&1 || rc=$?
+  { printf '# 확인 명령 끝 코드 %s · %s\n' "$rc" "$now"; cat "$tmp"; } > "$out"
+  rm -f "$tmp"
+}
+
 [[ $# -ge 2 ]] || usage
 CMD="$1"; shift
 CMD_ARG1=""
 if [[ "$CMD" == exempt ]]; then CMD_ARG1="$1"; shift; fi
 [[ -n "${PROMOTE_DIR:-}" && -n "${ARCHIVE_DIR:-}" ]] || scv_init_paths ""
 DAY="${SCV_TODAY:-$(date +%Y-%m-%d)}"
+NOW="${SCV_NOW:-$DAY $(date +%H:%M)}"
 TURN_ID=""; TURN_REQ=""; TURN_DIR=""; TAG=""
 turn_info
 
@@ -255,6 +298,147 @@ case "$CMD" in
     write_plan "$FA" "$TA" "$NA"
     leave_receipt progress
     echo "PROGRESS: $A (${STEPN}단계 $PSTATE: $NOTE)"
+    ;;
+
+  split)
+    # shellcheck source=lib/attachment-scope.sh
+    source "$SCRIPT_DIR/lib/attachment-scope.sh"
+    A="$1"; shift; B=""; AT=""; WHY=""; VERIFY=""; DIR=""; FILES=""; OWN=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --with) B="${2:-}"; shift 2 ;;
+        --at) AT="${2:-}"; shift 2 ;;
+        --why) WHY="${2:-}"; shift 2 ;;
+        --files) FILES="$FILES${FILES:+$'\n'}${2:-}"; shift 2 ;;
+        --own) OWN="$OWN${OWN:+$'\n'}${2:-}"; shift 2 ;;
+        --verify) VERIFY="${2:-}"; shift 2 ;;
+        --dir) DIR="${2:-}"; shift 2 ;;
+        *) usage ;;
+      esac
+    done
+    [[ -n "$B" && -n "$WHY" && "$AT" =~ ^[0-9]+$ ]] || usage
+    [[ -z "$TAG" ]] || WHY="$WHY"$'\n'"$TAG"
+    FA="$(find_plan "$A")" || exit 1; FB="$(find_plan "$B")" || exit 1
+    TA="$(read_plan "$FA"; printf x)"; TA="${TA%x}"; TB="$(read_plan "$FB"; printf x)"; TB="${TB%x}"
+    if [[ -n "$(scv_plan_fm_get "$TA" split_with)" ]]; then
+      echo "✖ $A 는 이미 갈라져 있다 (split_with: $(scv_plan_fm_get "$TA" split_with)) — 둘까지만 다룬다" >&2; exit 1
+    fi
+    ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "✖ 깃 저장소 안이 아니다 — 가르지 않는다" >&2; exit 1; }
+    OUT="$(scv_plan_split_check "$TA" "$OWN" "$FILES")"
+    git_can_split || OUT="$OUT${OUT:+$'\n'}알 수 없음 · 깃이 2.38 보다 낮아 합침을 미리 계산할 수 없다"
+    if [[ -n "$OUT" ]]; then
+      printf '%s\n' "$OUT"
+      echo "STOPPED: 가르지 않았다(아무것도 만들지 않음) — 지금처럼 멈추고 돌아오기(pause)로 간다" >&2
+      exit 3
+    fi
+    [[ -n "$VERIFY" ]] || VERIFY="$(attachment_scope_read_test_command "$(dirname "$FA")/TESTS.md" 2>/dev/null || true)"
+    if [[ -z "${VERIFY//[[:space:]]/}" ]]; then
+      echo "✖ $A 의 확인 명령이 없다(TESTS.md 의 실행 블록, 또는 --verify) — 가르지 않는다" >&2; exit 1
+    fi
+    DIR="${DIR:-$(dirname "$ROOT")/$(basename "$ROOT").split-$A}"; BR="scv-split/$A"
+    if [[ -e "$DIR" ]]; then echo "✖ 따로 만들 폴더의 자리에 이미 무엇이 있다: $DIR" >&2; exit 1; fi
+    if git -C "$ROOT" show-ref --verify --quiet "refs/heads/$BR"; then echo "✖ 가지가 이미 있다: $BR" >&2; exit 1; fi
+    HEADC="$(git -C "$ROOT" rev-parse --verify -q HEAD)" || { echo "✖ 커밋이 하나도 없는 저장소다 — 가르지 않는다" >&2; exit 1; }
+    RES="$(dirname "$FA")/split-result.txt"
+    run_verify "$ROOT" "$VERIFY" "$RES" "$NOW"
+    BASE="$(snapshot_commit "$ROOT" "$HEADC" "scv split: $A")" || { echo "✖ 지금 상태를 사진으로 남기지 못했다" >&2; exit 1; }
+    if ! git -C "$ROOT" worktree add -q -b "$BR" "$DIR" "$BASE" >/dev/null 2>&1; then
+      echo "✖ 폴더를 따로 만들지 못했다: $DIR" >&2; exit 1
+    fi
+    # 계획 파일에는 저장소 옆자리면 저장소 기준(../이름)으로 적는다 — 이 컴퓨터의 전체 경로를 기록에 남기지 않는다.
+    DIR_NOTE="$DIR"
+    [[ "$(dirname "$DIR")" == "$(dirname "$ROOT")" ]] && DIR_NOTE="../$(basename "$DIR")"
+    NA="$(scv_plan_mark_split "$TA" "$B" "$(plan_title "$TB" "$B")" "$AT" "$NOW" "$WHY" "$DIR_NOTE" "$BR" "$BASE"; printf x)"; NA="${NA%x}"
+    NB="$(scv_plan_mark_split "$TB" "$A" "$(plan_title "$TA" "$A")" "$AT" "$NOW" "$WHY"; printf x)"; NB="${NB%x}"
+    write_plan "$FA" "$TA" "$NA"; write_plan "$FB" "$TB" "$NB"
+    leave_receipt split
+    RTEXT="$(cat "$RES")"
+    echo "SPLIT: $A ↔ $B (${AT}단계에서 가름)"
+    echo "FOLDER: $DIR (가지 $BR)"
+    echo "RESULT: $RES (끝 코드 $(scv_plan_result_code "$RTEXT"))"
+    [[ -n "$(scv_plan_result_values "$RTEXT")" ]] || echo "비교할 값이 없음 — 통과 여부만 비교함"
+    ;;
+
+  join)
+    # shellcheck source=lib/attachment-scope.sh
+    source "$SCRIPT_DIR/lib/attachment-scope.sh"
+    A="$1"; shift; VERIFY=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --verify) VERIFY="${2:-}"; shift 2 ;;
+        *) usage ;;
+      esac
+    done
+    FA="$(find_plan "$A")" || exit 1
+    TA="$(read_plan "$FA"; printf x)"; TA="${TA%x}"
+    B="$(scv_plan_fm_get "$TA" split_with)"; DIR="$(scv_plan_fm_get "$TA" split_dir)"
+    BASE="$(scv_plan_fm_get "$TA" split_base)"; BR="$(scv_plan_fm_get "$TA" split_branch)"
+    if [[ -z "$B" || -z "$DIR" || -z "$BASE" ]]; then
+      echo "NOT_SPLIT: $A 는 따로 만든 폴더로 갈라진 계획이 아니다 — 바꾸지 않음"; exit 0
+    fi
+    ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "✖ 깃 저장소 안이 아니다" >&2; exit 1; }
+    [[ "$DIR" == /* ]] || DIR="$ROOT/$DIR"
+    [[ -d "$DIR" ]] || { echo "✖ 따로 만든 폴더가 없다: $DIR" >&2; exit 1; }
+    DIR="$(cd "$DIR" && pwd -P)"
+    git_can_split || { echo "✖ 깃이 2.38 보다 낮아 합침을 미리 계산할 수 없다" >&2; exit 1; }
+    # 두 폴더의 지금 상태를 가를 때 사진의 자식으로 남기면, 세 갈래 합침의 공통 조상이 가를 때 사진이 된다.
+    # 원래 폴더의 사진을 만든 임시 색인은 남겨 둔다 — 합친 결과를 작업 파일에 옮길 때 깃이 그것으로 "지금과 같은지"를 본다.
+    IDX="$(mktemp)"
+    OURS="$(snapshot_commit "$ROOT" "$BASE" "scv join: 원래 폴더" "$IDX")" || { rm -f "$IDX"; echo "✖ 원래 폴더의 지금 상태를 사진으로 남기지 못했다" >&2; exit 1; }
+    THEIRS="$(snapshot_commit "$DIR" "$BASE" "scv join: 따로 만든 폴더")" || { rm -f "$IDX"; echo "✖ 따로 만든 폴더의 지금 상태를 사진으로 남기지 못했다" >&2; exit 1; }
+    MRC=0; MERGED="$(git -C "$ROOT" merge-tree --write-tree --name-only "$OURS" "$THEIRS" 2>/dev/null)" || MRC=$?
+    if (( MRC == 1 )); then
+      rm -f "$IDX"
+      printf '%s\n' "$MERGED" | awk 'NR == 1 { next } /^$/ { exit } { print "충돌 · " $0 }'
+      echo "STOPPED: 같은 줄을 두 쪽이 다르게 고쳤다 — 아무것도 바꾸지 않았다. 충돌을 푼 뒤 다시 합친다" >&2
+      exit 3
+    elif (( MRC != 0 )); then
+      rm -f "$IDX"; echo "✖ 합침을 계산하지 못했다(깃 끝 코드 $MRC)" >&2; exit 1
+    fi
+    TREE="${MERGED%%$'\n'*}"
+    MOVED="$(git -C "$ROOT" diff --no-renames --name-only "$OURS" "$TREE" | wc -l | tr -d ' ')"
+    git -C "$ROOT" update-ref "refs/scv/join/$A" "$OURS" 2>/dev/null || true
+    # 합친 나무로 작업 파일을 옮긴다: 원래 폴더의 사진에서 합친 나무로 가는 두 나무 옮기기를 임시 색인으로 한다 —
+    # 달라진 파일만 쓰고 지우며, 사진을 찍은 뒤 작업 파일이 바뀌었으면 깃이 멈춘다. 커밋 · 원래 색인 · 가지는 그대로다.
+    if ! GIT_INDEX_FILE="$IDX" git -C "$ROOT" read-tree -m -u "$OURS" "$TREE" >/dev/null 2>&1; then
+      rm -f "$IDX"; echo "✖ 합친 결과를 작업 파일에 옮기지 못했다 — 사진을 찍은 뒤 파일이 바뀐 것으로 보임. 아무 계획 파일도 바꾸지 않았다" >&2; exit 1
+    fi
+    rm -f "$IDX"
+    [[ -n "$VERIFY" ]] || VERIFY="$(attachment_scope_read_test_command "$(dirname "$FA")/TESTS.md" 2>/dev/null || true)"
+    OLD="$(cat "$(dirname "$FA")/split-result.txt" 2>/dev/null || true)"; NEW=""
+    if [[ -n "${VERIFY//[[:space:]]/}" ]]; then
+      RES="$(dirname "$FA")/join-result.txt"
+      run_verify "$ROOT" "$VERIFY" "$RES" "$NOW"
+      NEW="$(cat "$RES")"
+    fi
+    DIFF="$(scv_plan_results_diff "$OLD" "$NEW")"
+    NOTE=""
+    [[ -n "$(scv_plan_result_values "$OLD")$(scv_plan_result_values "$NEW")" ]] || NOTE="비교할 값이 없음 — 통과 여부만 비교함"
+    COUNT=0; FLAT=""
+    while IFS= read -r LINE; do
+      [[ -n "$LINE" ]] || continue
+      COUNT=$((COUNT + 1)); FLAT="$FLAT${FLAT:+ · }$LINE"
+    done <<< "$DIFF"
+    TB=""; FB="$(find_plan "$B" 2>/dev/null)" || FB=""
+    if [[ -n "$FB" ]]; then TB="$(read_plan "$FB"; printf x)"; TB="${TB%x}"; fi
+    NA="$(scv_plan_mark_join "$TA" "$B" "$(plan_title "$TB" "$B")" "$NOW" "$DIFF" "$NOTE"; printf x)"; NA="${NA%x}"
+    if (( COUNT )); then
+      NA="$(scv_plan_insert_step "$NA" 99999 "다시 하기: 달라진 결과 맞추기 — $FLAT"; printf x)"; NA="${NA%x}"
+      # 더한 단계의 번호를 머리말에 적는다(joined_redo) — 창이 그 단계를 합친 기록 안에 그리고, 일이 그 단계에 서 있다고 본다
+      REDO=0; while IFS= read -r ROW; do [[ -n "$ROW" ]] && REDO="${ROW%%$'\t'*}"; done <<< "$(scv_plan_steps "$NA")"
+      NA="$(scv_plan_fm_set "$NA" joined_redo "$REDO"; printf x)"; NA="${NA%x}"
+    fi
+    write_plan "$FA" "$TA" "$NA"
+    if [[ -n "$FB" ]]; then
+      NB="$(scv_plan_mark_join "$TB" "$A" "$(plan_title "$TA" "$A")" "$NOW" "$DIFF" "$NOTE"; printf x)"; NB="${NB%x}"
+      write_plan "$FB" "$TB" "$NB"
+    fi
+    leave_receipt join
+    echo "같은 줄 충돌 없음"
+    [[ -z "$NOTE" ]] || echo "$NOTE"
+    if (( COUNT )); then echo "달라진 결과 ${COUNT}개: $FLAT"; else echo "달라진 결과 없음"; fi
+    echo "JOINED: $A ↔ $B (바뀐 파일 ${MOVED}개를 원래 폴더의 작업 파일에 옮김 — 커밋하지 않음)"
+    echo "KEPT: $DIR · 가지 $BR — 지울지는 사용자에게 묻는다"
     ;;
 
   exempt)

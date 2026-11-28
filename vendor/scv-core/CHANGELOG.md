@@ -2,6 +2,20 @@
 
 All notable changes to SCV Core are documented here.
 
+## [0.106.0] - 2026-11-28
+
+### Added
+- 두 일을 동시에 — `plan-link.sh split` · `join`. 진행 중인 계획 A 가 있는데 목표가 다른 일 B 가 오고 두 일이 같은 파일을 고치지 않으면, A 를 멈추지 않고 가른다: A 는 분기(옆에 만드는 git worktree 폴더 — 커밋하지 않은 변경까지 지금 상태 그대로)에서 이어 가고 B 는 원본에서 한다. 가를 때 A 의 확인 명령을 돌려 결과를 계획 폴더에 적어 두고, 합친 뒤 다시 돌려 `이름: 값` 줄끼리 비교한다 — 달라진 값이 있으면 다시 하기 단계가 A 에 붙는다. 같은 파일을 고치거나 고칠 파일을 모르면 가르지 않고(종료 코드 3 — 아무것도 만들지 않음) 지금처럼 멈추고 돌아오기로 간다. 합칠 때 같은 줄 충돌이면 아무것도 바꾸지 않고 멈춘다(종료 코드 3). 가르기는 원본의 작업 파일 · 색인 · 가지를 건드리지 않고, 합치기는 커밋을 만들지 않는다(달라진 파일만 작업 파일에 옮긴다). 분기의 폴더와 가지는 스스로 지우지 않는다.
+- 계획 앞머리의 새 칸: 가른 동안 `split_with` · `split_on` · `split_at` · `split_dir` · `split_branch` · `split_base`, 합친 뒤 `joined_with` · `joined_on` · `joined_at` · `joined_changed` · `joined_redo`. 변경 이력에는 "가름" · "합침" 사건이 하나씩 남는다. 대시보드(scv-dashboard 0.8.0)가 이 칸으로 두 일을 나란히 그린다.
+- 순수 함수 여섯: `scv_plan_split_check` · `scv_plan_mark_split` · `scv_plan_result_values` · `scv_plan_result_code` · `scv_plan_results_diff` · `scv_plan_mark_join`.
+- `core/tests/test-plan-link.sh` 에 시험 일곱(T20 ~ T25b)과 절차 글 검사.
+
+### Changed
+- 일 규약의 "목표가 다른 일이 왔을 때"가 세 갈래가 됐다. 두 일이 같은 파일을 고칠 수 있거나 새 일이 고칠 파일을 모르면 멈춘다(전과 같다). 겹치는 파일이 없고 호스트가 뒤에서 에이전트를 돌릴 수 있으면 가른다. 그 밖(뒤에서 도는 에이전트가 없는 호스트 · 깃 저장소가 아닌 곳)은 멈춘다. 가른 두 일이 다 끝나면 합친다.
+
+### Fixed
+- 계획 글을 다시 쓰는 함수 다섯(`scv_plan_fm_set` · `scv_plan_fm_drop` · `scv_plan_history_add` · `scv_plan_insert_step` · `scv_plan_shift_progress`)이 글이 길어지면 줄 수의 제곱으로 느려지던 것. 줄마다 글 전체를 다시 펼쳐 붙였고, 끝의 줄바꿈을 떼는 방식이 줄바꿈으로 끝나지 않는 글을 처음까지 훑었다. 줄은 덧붙이기로 붙이고 끝 줄바꿈은 마지막 글자만 보고 뗀다(합침을 적는 함수: 입력 4배에 시간 9.0배 → 2.5배 · 멈춤 · 재개 · 단계 넣기: 0.63 ~ 0.93배). 결과는 그대로다.
+
 ## [0.105.1] - 2026-11-26
 
 ### Fixed
