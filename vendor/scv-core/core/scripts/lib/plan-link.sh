@@ -36,9 +36,12 @@ scv_plan_fm_get() {
 # 예: "# a" "status" "paused" → "# a"
 # 앞머리가 없으면(첫 줄이 --- 가 아니면) 글을 그대로 돌려준다.
 scv_plan_fm_set() {
-  local text="${1:-}" key="${2:-}" val="${3:-}" line out="" n=0 in_fm=0 has=0 placed=0
+  local text="${1:-}" key="${2:-}" val="${3:-}" line out="" n=0 in_fm=0 has=0 placed=0 body
   [[ "$text" == ---* ]] || { printf '%s' "$text"; return 0; }
   [[ -n "$(scv_plan_fm_has "$text" "$key")" ]] && has=1
+  # 줄은 += 로 붙이고 끝의 줄바꿈은 마지막 글자만 보고 뗀다 — out="$out…" 은 붙일 때마다 글 전체를 다시 펼치고,
+  # ${text%줄바꿈} 은 줄바꿈으로 끝나지 않는 글을 처음까지 훑어, 글이 4배면 시간이 8배를 넘었다(아래 네 함수도 같다).
+  body="$text"; [[ "${text: -1}" == $'\n' ]] && body="${text%?}"
   while IFS= read -r line; do
     n=$((n + 1))
     if (( n == 1 )); then out="$line"; in_fm=1; continue; fi
@@ -50,8 +53,8 @@ scv_plan_fm_set() {
         line="$key: $val"
       fi
     fi
-    out="$out"$'\n'"$line"
-  done <<< "${text%$'\n'}"
+    out+=$'\n'"$line"
+  done <<< "$body"
   [[ "$text" == *$'\n' ]] && out="$out"$'\n'
   printf '%s' "$out"
 }
@@ -80,8 +83,9 @@ scv_plan_fm_has() {
 # 예: $'---\nstatus: paused\n---' "paused_by" → $'---\nstatus: paused\n---'
 # 예: "# a" "status" → "# a"
 scv_plan_fm_drop() {
-  local text="${1:-}" key="${2:-}" line out="" n=0 in_fm=0
+  local text="${1:-}" key="${2:-}" line out="" n=0 in_fm=0 body
   [[ "$text" == ---* ]] || { printf '%s' "$text"; return 0; }
+  body="$text"; [[ "${text: -1}" == $'\n' ]] && body="${text%?}"
   while IFS= read -r line; do
     n=$((n + 1))
     if (( n == 1 )); then out="$line"; in_fm=1; continue; fi
@@ -89,8 +93,8 @@ scv_plan_fm_drop() {
       [[ "$line" == "---" ]] && in_fm=0
       (( in_fm )) && [[ "$line" == "$key:"* ]] && continue
     fi
-    out="$out"$'\n'"$line"
-  done <<< "${text%$'\n'}"
+    out+=$'\n'"$line"
+  done <<< "$body"
   [[ "$text" == *$'\n' ]] && out="$out"$'\n'
   printf '%s' "$out"
 }
@@ -102,13 +106,14 @@ scv_plan_fm_drop() {
 # 예: $'# a\n\n## Links\n' "1" → $'# a\n\n## 변경 이력\n\n- 1\n\n## Links\n'
 # 예: "# a" "1" → $'# a\n\n## 변경 이력\n\n- 1'
 scv_plan_history_add() {
-  local text="${1:-}" entry="${2:-}" line out="" first=1 in_hist=0 has_hist=0 has_links=0 pending="" done_ins=0 block="" el n=0
+  local text="${1:-}" entry="${2:-}" line out="" first=1 in_hist=0 has_hist=0 has_links=0 pending="" done_ins=0 block="" el n=0 body
   while IFS= read -r el; do
     n=$((n + 1))
     if (( n == 1 )); then block="- $el"; else block="$block"$'\n'"  - $el"; fi
   done <<< "$entry"
   case "$text" in *$'\n'"## 변경 이력"*|"## 변경 이력"*) has_hist=1 ;; esac
   case "$text" in *$'\n'"## Links"*|"## Links"*) has_links=1 ;; esac
+  body="$text"; [[ "${text: -1}" == $'\n' ]] && body="${text%?}"
   while IFS= read -r line; do
     if (( has_hist )); then
       if (( in_hist )) && (( ! done_ins )) && [[ "$line" == "## "* ]]; then
@@ -116,7 +121,7 @@ scv_plan_history_add() {
       elif (( in_hist )) && [[ -z "$line" ]]; then
         pending="$pending"$'\n'; continue
       elif (( in_hist )) && [[ -n "$pending" ]]; then
-        out="$out$pending"; pending=""
+        out+="$pending"; pending=""
       fi
       [[ "$line" == "## 변경 이력" ]] && in_hist=1
     elif (( has_links )) && (( ! done_ins )) && [[ "$line" == "## Links" ]]; then
@@ -124,8 +129,8 @@ scv_plan_history_add() {
       done_ins=1
       out="$out"$'\n'"$line"; first=0; continue
     fi
-    if (( first )); then out="$line"; first=0; else out="$out"$'\n'"$line"; fi
-  done <<< "${text%$'\n'}"
+    if (( first )); then out="$line"; first=0; else out+=$'\n'"$line"; fi
+  done <<< "$body"
   if (( ! done_ins )); then
     if (( has_hist )); then
       out="$out"$'\n\n'"$block"
@@ -177,11 +182,12 @@ scv_plan_steps() {
 # 예: $'## Suggested path\n1. a' 0 "c" → $'## Suggested path\n1. c\n2. a'
 # 단계 글은 바꾸지 않는다 — 번호만 민다. 끝난 단계([x])도 글은 그대로다.
 scv_plan_insert_step() {
-  local text="${1:-}" after="${2:-0}" step="${3:-}" line out="" first=1 in_sec=0 last=0 num rest
+  local text="${1:-}" after="${2:-0}" step="${3:-}" line out="" first=1 in_sec=0 last=0 num rest body
   local re='^([0-9]+)\. (.*)$'
   local row
   while IFS= read -r row; do [[ -n "$row" ]] && last="${row%%$'\t'*}"; done <<< "$(scv_plan_steps "$text")"
   (( after > last )) && after="$last"
+  body="$text"; [[ "${text: -1}" == $'\n' ]] && body="${text%?}"
   while IFS= read -r line; do
     if [[ "$line" == "## "* ]]; then
       in_sec=0
@@ -196,8 +202,8 @@ scv_plan_insert_step() {
         line="$line"$'\n'"$((after + 1)). $step"
       fi
     fi
-    if (( first )); then out="$line"; first=0; else out="$out"$'\n'"$line"; fi
-  done <<< "${text%$'\n'}"
+    if (( first )); then out="$line"; first=0; else out+=$'\n'"$line"; fi
+  done <<< "$body"
   [[ "$text" == *$'\n' ]] && out="$out"$'\n'
   printf '%s' "$out"
 }
@@ -209,15 +215,16 @@ scv_plan_insert_step() {
 # 예: $'- **d 추가** — 1단계 뒤에 새 단계' 0 → $'- **d 추가** — 1단계 뒤에 새 단계'
 # 예: $'# a\n본문 3단계' 1 → $'# a\n본문 3단계'
 scv_plan_shift_progress() {
-  local text="${1:-}" after="${2:-0}" line out="" first=1 head num tail
+  local text="${1:-}" after="${2:-0}" line out="" first=1 head num tail body
   local re='^(- \*\*[^*]* 진행\*\* — )([0-9]+)([a-z]?단계 .*)$'
+  body="$text"; [[ "${text: -1}" == $'\n' ]] && body="${text%?}"
   while IFS= read -r line; do
     if [[ "$line" =~ $re ]]; then
       head="${BASH_REMATCH[1]}"; num="${BASH_REMATCH[2]}"; tail="${BASH_REMATCH[3]}"
       (( num > after )) && line="$head$((num + 1))$tail"
     fi
-    if (( first )); then out="$line"; first=0; else out="$out"$'\n'"$line"; fi
-  done <<< "${text%$'\n'}"
+    if (( first )); then out="$line"; first=0; else out+=$'\n'"$line"; fi
+  done <<< "$body"
   [[ "$text" == *$'\n' ]] && out="$out"$'\n'
   printf '%s' "$out"
 }
@@ -403,4 +410,157 @@ scv_plan_conflict_after() {
       fi
     done
   done <<< "$(scv_plan_steps "$a")"
+}
+
+# ── 두 일을 가르고 합친다 (계획 20261127-wookiya1364-dashboard-motion-cards-two-jobs) ──
+# 진행 중인 계획 A 가 있는데 목표가 다른 일 B 가 오고 두 일이 같은 파일을 고치지 않으면, A 를 멈추지 않고 가른다:
+# A 는 따로 만든 폴더에서 이어 가고 B 는 원래 폴더에서 한다. 둘 다 끝나면 합치고, 가를 때 적어 둔 확인 결과와
+# 합친 뒤의 결과를 비교한다. 깃 · 확인 명령 · 파일 쓰기는 scripts/plan-link.sh.
+
+# @pure
+# 역할: 두 일을 갈라도 되는지 본다 — 새 일이 고칠 파일이 하던 계획의 남은 단계 글에 나오거나 하던 일이 고칠 파일과 같으면 "겹침 · …" 줄을, 새 일의 파일 목록이 비어 있으면 "알 수 없음 · …" 줄을 낸다(줄이 없으면 가를 수 있다)
+# 종류: 판정
+# 예: $'## Suggested path\n1. [x] a.sh 준비\n2. b.sh 손봄' "" "b.sh" → "겹침 · A 2단계 · b.sh"
+# 예: $'## Suggested path\n1. 문서' "x.sh" $'x.sh\ny.sh' → "겹침 · 두 일이 함께 고침 · x.sh"
+# 예: $'## Suggested path\n1. 문서' "" "" → "알 수 없음 · 새 일이 고칠 파일 목록이 비어 있다"
+# 예: $'## Suggested path\n1. 문서' "a.sh" "b.sh" → ""
+scv_plan_split_check() {
+  local a="${1:-}" own="${2:-}" theirs="${3:-}" f g hits first=1 n=0
+  while IFS= read -r f; do [[ -n "$f" ]] && n=$((n + 1)); done <<< "$theirs"
+  if (( n == 0 )); then printf '%s' "알 수 없음 · 새 일이 고칠 파일 목록이 비어 있다"; return 0; fi
+  hits="$(scv_plan_conflict_after "$a" "$theirs")"
+  if [[ -n "$hits" ]]; then printf '%s' "$hits"; first=0; fi
+  while IFS= read -r f; do
+    [[ -n "$f" ]] || continue
+    while IFS= read -r g; do
+      [[ -n "$g" && "$f" == "$g" ]] || continue
+      if (( first )); then first=0; else printf '\n'; fi
+      printf '%s' "겹침 · 두 일이 함께 고침 · $f"
+    done <<< "$own"
+  done <<< "$theirs"
+}
+
+# @pure
+# 역할: 계획 글에 가름을 적는다 — split_with · split_on 칸과 변경 이력 "가름" 사건 하나. 따로 만든 폴더로 가는 계획(자리를 넘겨받음)에는 split_at · split_dir · split_branch · split_base 칸도 적는다
+# 종류: 변환
+# 예: $'---\nstatus: in_progress\n---\n# a' "b" "피해" 2 "2026-11-09 10:30" "다른 목표" "/w/r.split-a" "scv-split/a" "abc" → $'---\nstatus: in_progress\nsplit_with: b\nsplit_on: 2026-11-09 10:30\nsplit_at: 2\nsplit_dir: /w/r.split-a\nsplit_branch: scv-split/a\nsplit_base: abc\n---\n# a\n\n## 변경 이력\n\n- **2026-11-09 가름** — 함께 하는 일: 피해\n  - 가른 단계: 2단계\n  - 갈라진 때: 10:30\n  - 이 일의 자리: 따로 만든 폴더 /w/r.split-a\n  - 이유: 다른 목표'
+# 예: $'---\nstatus: planned\n---\n# b' "a" "체력" 2 "2026-11-09 10:30" "다른 목표" → $'---\nstatus: planned\nsplit_with: a\nsplit_on: 2026-11-09 10:30\n---\n# b\n\n## 변경 이력\n\n- **2026-11-09 가름** — 함께 하는 일: 체력\n  - 갈라진 때: 10:30\n  - 이 일의 자리: 원래 폴더\n  - 이유: 다른 목표'
+scv_plan_mark_split() {
+  local text="${1:-}" with="${2:-}" title="${3:-}" at="${4:-}" on="${5:-}" why="${6:-}" dir="${7:-}" branch="${8:-}" base="${9:-}" entry
+  text="$(scv_plan_fm_set "$text" split_with "$with"; printf x)"; text="${text%x}"
+  text="$(scv_plan_fm_set "$text" split_on "$on"; printf x)"; text="${text%x}"
+  entry="**${on%% *} 가름** — 함께 하는 일: $title"
+  if [[ -n "$dir" ]]; then
+    text="$(scv_plan_fm_set "$text" split_at "$at"; printf x)"; text="${text%x}"
+    text="$(scv_plan_fm_set "$text" split_dir "$dir"; printf x)"; text="${text%x}"
+    text="$(scv_plan_fm_set "$text" split_branch "$branch"; printf x)"; text="${text%x}"
+    text="$(scv_plan_fm_set "$text" split_base "$base"; printf x)"; text="${text%x}"
+    entry="$entry"$'\n'"가른 단계: ${at}단계"$'\n'"갈라진 때: ${on#* }"$'\n'"이 일의 자리: 따로 만든 폴더 $dir"
+  else
+    entry="$entry"$'\n'"갈라진 때: ${on#* }"$'\n'"이 일의 자리: 원래 폴더"
+  fi
+  scv_plan_history_add "$text" "$entry"$'\n'"이유: $why"
+}
+
+# @pure
+# 역할: 확인 명령의 출력에서 값 줄("이름: 숫자로 시작하는 값")을 "이름<탭>값" 줄로 꺼낸다 — '#' 로 시작하는 줄과 이름이 60자를 넘는 줄은 건너뛰고, 같은 이름이 여러 번이면 마지막 값만 남긴다
+# 종류: 꺼내기
+# 예: $'보스: 10\n시험 통과' → $'보스\t10'
+# 예: $'# 확인 명령 끝 코드 0 · 2026-11-09 10:30\n체력: 1,000\n체력: 900 남음' → $'체력\t900 남음'
+# 예: $'12:30 시작\n상태: 통과' → ""
+scv_plan_result_values() {
+  local text="${1:-}" line name value i found out=""
+  local -a names=() values=()
+  local re='^[[:space:]]*([^:#[:space:]][^:]*):[[:space:]]+([-+]?[0-9].*)$'
+  while IFS= read -r line; do
+    [[ "$line" =~ $re ]] || continue
+    name="${BASH_REMATCH[1]}"; value="${BASH_REMATCH[2]}"
+    name="${name%"${name##*[![:space:]]}"}"; value="${value%"${value##*[![:space:]]}"}"
+    (( ${#name} <= 60 )) || continue
+    found=0
+    for (( i = 0; i != ${#names[@]}; i++ )); do
+      if [[ "${names[i]}" == "$name" ]]; then values[i]="$value"; found=1; break; fi
+    done
+    (( found )) || { names[${#names[@]}]="$name"; values[${#values[@]}]="$value"; }
+  done <<< "$text"
+  for (( i = 0; i != ${#names[@]}; i++ )); do
+    [[ -n "$out" ]] && out="$out"$'\n'
+    out="$out${names[i]}"$'\t'"${values[i]}"
+  done
+  printf '%s' "$out"
+}
+
+# @pure
+# 역할: 적어 둔 확인 결과 글의 첫 줄("# 확인 명령 끝 코드 N · …")에서 끝 코드를 꺼낸다 — 그 줄이 없으면 빈 값
+# 종류: 꺼내기
+# 예: $'# 확인 명령 끝 코드 0 · 2026-11-09 10:30\n보스: 10' → "0"
+# 예: $'# 확인 명령 끝 코드 12 · x' → "12"
+# 예: "보스: 10" → ""
+scv_plan_result_code() {
+  local first="${1%%$'\n'*}"
+  local re='^# 확인 명령 끝 코드 ([0-9]+)( |$)'
+  [[ "$first" =~ $re ]] && printf '%s' "${BASH_REMATCH[1]}"
+  return 0
+}
+
+# @pure
+# 역할: 가를 때와 합친 뒤의 확인 결과를 비교한다 — 값 줄의 값이 달라진 것을 "이름 옛값 → 새값" 줄로 내고(한쪽에만 있는 이름은 없는 쪽을 "(없음)"으로), 통과와 실패가 바뀌었으면 "확인 명령 통과 → 실패" 줄을 낸다
+# 종류: 판정
+# 예: "보스: 10" "보스: 5" → "보스 10 → 5"
+# 예: $'보스: 10\n체력: 1000' $'체력: 1000\n보스: 10' → ""
+# 예: "보스: 10" "ok" → "보스 10 → (없음)"
+# 예: $'# 확인 명령 끝 코드 0 · t\nok' $'# 확인 명령 끝 코드 1 · t\nok' → "확인 명령 통과 → 실패"
+scv_plan_results_diff() {
+  local old="${1:-}" new="${2:-}" ov nv row r2 name value other first=1 oc nc
+  ov="$(scv_plan_result_values "$old")"; nv="$(scv_plan_result_values "$new")"
+  while IFS= read -r row; do
+    [[ -n "$row" ]] || continue
+    name="${row%%$'\t'*}"; value="${row#*$'\t'}"; other="(없음)"
+    while IFS= read -r r2; do
+      [[ "${r2%%$'\t'*}" == "$name" ]] && { other="${r2#*$'\t'}"; break; }
+    done <<< "$nv"
+    [[ "$other" == "$value" ]] && continue
+    if (( first )); then first=0; else printf '\n'; fi
+    printf '%s' "$name $value → $other"
+  done <<< "$ov"
+  while IFS= read -r row; do
+    [[ -n "$row" ]] || continue
+    name="${row%%$'\t'*}"; value="${row#*$'\t'}"; other=""
+    while IFS= read -r r2; do
+      [[ "${r2%%$'\t'*}" == "$name" ]] && { other=1; break; }
+    done <<< "$ov"
+    [[ -n "$other" ]] && continue
+    if (( first )); then first=0; else printf '\n'; fi
+    printf '%s' "$name (없음) → $value"
+  done <<< "$nv"
+  oc="$(scv_plan_result_code "$old")"; nc="$(scv_plan_result_code "$new")"
+  if [[ -n "$oc" && -n "$nc" ]] && { [[ "$oc" == 0 && "$nc" != 0 ]] || [[ "$oc" != 0 && "$nc" == 0 ]]; }; then
+    if (( first )); then first=0; else printf '\n'; fi
+    if [[ "$oc" == 0 ]]; then printf '%s' "확인 명령 통과 → 실패"; else printf '%s' "확인 명령 실패 → 통과"; fi
+  fi
+}
+
+# @pure
+# 역할: 계획 글에 합침을 적는다 — split_* 칸을 지우고 joined_with · joined_on 칸(달라진 결과가 있으면 joined_changed, 가른 단계가 있던 계획에는 joined_at 칸도)과 변경 이력 "합침" 사건 하나(함께 한 일 제목 · 같은 줄 충돌 없음 · 달라진 결과)를 둔다
+# 종류: 변환
+# 예: $'---\nstatus: in_progress\nsplit_with: b\nsplit_on: 2026-11-09 10:30\nsplit_at: 2\nsplit_dir: /w\nsplit_branch: s\nsplit_base: abc\n---\n# a' "b" "피해" "2026-11-09 11:00" "보스 10 → 5" → $'---\nstatus: in_progress\njoined_with: b\njoined_on: 2026-11-09 11:00\njoined_changed: 보스 10 → 5\njoined_at: 2\n---\n# a\n\n## 변경 이력\n\n- **2026-11-09 합침** — 함께 한 일: 피해\n  - 합친 때: 11:00\n  - 같은 줄 충돌 없음\n  - 달라진 결과 1개: 보스 10 → 5'
+# 예: $'---\nstatus: planned\nsplit_with: a\nsplit_on: 2026-11-09 10:30\n---\n# b' "a" "체력" "2026-11-09 11:00" "" → $'---\nstatus: planned\njoined_with: a\njoined_on: 2026-11-09 11:00\n---\n# b\n\n## 변경 이력\n\n- **2026-11-09 합침** — 함께 한 일: 체력\n  - 합친 때: 11:00\n  - 같은 줄 충돌 없음\n  - 달라진 결과 없음'
+scv_plan_mark_join() {
+  local text="${1:-}" with="${2:-}" title="${3:-}" on="${4:-}" changed="${5:-}" note="${6:-}" at key line n=0 flat="" entry
+  at="$(scv_plan_fm_get "$text" split_at)"
+  for key in split_with split_on split_at split_dir split_branch split_base; do
+    text="$(scv_plan_fm_drop "$text" "$key"; printf x)"; text="${text%x}"
+  done
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    n=$((n + 1)); flat="$flat${flat:+ · }$line"
+  done <<< "$changed"
+  text="$(scv_plan_fm_set "$text" joined_with "$with"; printf x)"; text="${text%x}"
+  text="$(scv_plan_fm_set "$text" joined_on "$on"; printf x)"; text="${text%x}"
+  if (( n )); then text="$(scv_plan_fm_set "$text" joined_changed "$flat"; printf x)"; text="${text%x}"; fi
+  if [[ -n "$at" ]]; then text="$(scv_plan_fm_set "$text" joined_at "$at"; printf x)"; text="${text%x}"; fi
+  entry="**${on%% *} 합침** — 함께 한 일: $title"$'\n'"합친 때: ${on#* }"$'\n'"같은 줄 충돌 없음"
+  [[ -n "$note" ]] && entry="$entry"$'\n'"$note"
+  if (( n )); then entry="$entry"$'\n'"달라진 결과 ${n}개: $flat"; else entry="$entry"$'\n'"달라진 결과 없음"; fi
+  scv_plan_history_add "$text" "$entry"
 }
